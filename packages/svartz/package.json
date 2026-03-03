@@ -1,0 +1,23 @@
+{
+  "name": "svartz",
+  "version": "0.0.0-placeholder.1",
+  "description": "Package name reserved. Svartz — SvelteKit-based site generator for Obsidian vaults (in development).",
+  "main": "index.js",
+  "type": "commonjs",
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mia-cx/svartz.git"
+  },
+  "keywords": [
+    "obsidian",
+    "markdown",
+    "site-generator",
+    "sveltekit",
+    "digital-garden"
+  ],
+  "license": "MIT"
+}

@@ -1,17 +1,22 @@
-# Quartz v4
+# Svartz
 
-> “[One] who works with the door open gets all kinds of interruptions, but [they] also occasionally gets clues as to what the world is and what might be important.” — Richard Hamming
+A SvelteKit rewrite of [Quartz](https://github.com/jackyzha0/quartz).
 
-Quartz is a set of tools that helps you publish your [digital garden](https://jzhao.xyz/posts/networked-thought) and notes as a website for free.
+Svartz is a set of tools that helps you publish your [digital garden](https://jzhao.xyz/posts/networked-thought) and notes as a website for free.
 
-🔗 Read the documentation and get started: https://quartz.jzhao.xyz/
+Some notable differences from Quartz are:
 
-[Join the Discord Community](https://discord.gg/cRFFHYye7t)
+- More robust theming, with some first-party themes for:
+  - Notes (standard quartz-like)
+  - Package docs (scanning JSdoc & linking to source on github)
+  - API docs (input & output examples, route discovery for sveltekit & hono)
+  - (TTRPG) Wikis.
+- MDSveX by default, so you *can* use svelte components in your vault. (Can use [obsidian-markdown-file-suffix](https://github.com/git-no/obsidian-markdown-file-suffix) if you want to support different markdown extensions in Obsidian).
 
-## Sponsors
+## Usage
 
-<p align="center">
-  <a href="https://github.com/sponsors/jackyzha0">
-    <img src="https://cdn.jsdelivr.net/gh/jackyzha0/jackyzha0/sponsorkit/sponsors.svg" />
-  </a>
-</p>
+Start using Svartz by either using this repository as a template, forking it, or using our init cli.
+
+```bash
+pnpm dlx svartz init
+```
