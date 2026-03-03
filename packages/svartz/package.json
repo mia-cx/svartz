@@ -1,6 +1,6 @@
 {
   "name": "svartz",
-  "version": "0.0.0-placeholder.1",
+  "version": "0.0.1",
   "description": "Package name reserved. Svartz — SvelteKit-based site generator for Obsidian vaults (in development).",
   "main": "index.js",
   "type": "commonjs",
