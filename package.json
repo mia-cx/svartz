@@ -1,0 +1,24 @@
+{
+  "name": "svartz-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Svartz — SvelteKit-based site generator for Obsidian vaults",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mia-cx/svartz.git"
+  },
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "clean": "turbo clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0"
+  },
+  "packageManager": "pnpm@9.14.2",
+  "engines": {
+    "node": ">=20"
+  }
+}

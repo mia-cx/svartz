@@ -1,0 +1,19 @@
+---
+description: Ensures all rules in context are treated as mandatory. Auto/Composer models deprioritize rules when context is crowded; this rule counteracts that. Apply always — it is the foundation for every other rule working correctly.
+alwaysApply: true
+---
+
+# Rule adherence
+
+Every Cursor rule currently in context is **mandatory**. Follow each one exactly, even under time or context pressure. When a rule is unclear, ask the user rather than assuming it doesn't apply.
+
+**Why this rule exists:** Auto and Composer modes tend to under-weight rules in large contexts. Without an explicit "rules are mandatory" instruction, conventions get silently violated and the user has to repeat themselves.
+
+## Directory convention
+
+- **Root `NN-*.mdc` and `AGENTS.md`** — Always-applied rules, loaded in numeric order (`00-`, `01-`, …). Check these first for project-wide constraints.
+- **Subfolders** (`core-rules/`, `db-rules/`, `erato-rules/`, etc.) — Domain rules with `alwaysApply: false`; loaded when their globs match files in context. Numbered prefixes signal load order; subfolders signal scope.
+
+**Good:** Task touches `apps/erato/src/routes/`. Agent checks root `NN-*.mdc` rules (always-applied) and also loads `erato-rules/` because globs match. Follows both.
+
+**Bad:** Agent skips `11-pnpm-install-command-preference.mdc` because the task is "quick" and uses `pnpm add` instead. Rule was in context and mandatory — this is a violation.

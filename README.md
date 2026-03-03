@@ -12,6 +12,7 @@ Some notable differences from Quartz are:
   - API docs (input & output examples, route discovery for sveltekit & hono)
   - (TTRPG) Wikis.
 - MDSveX by default, so you *can* use svelte components in your vault. (Can use [obsidian-markdown-file-suffix](https://github.com/git-no/obsidian-markdown-file-suffix) if you want to support different markdown extensions in Obsidian).
+- Deploy multiple vaults from the same repo, by defining them in config
 
 ## Usage
 

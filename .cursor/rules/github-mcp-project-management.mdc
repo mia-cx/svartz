@@ -1,0 +1,46 @@
+---
+title: GitHub MCP for project management
+description: When to proactively create GitHub issues, the duplicate-check workflow, issue types, epic/sub-issue linking, and search vs list tool selection.
+alwaysApply: true
+---
+
+Use the **GitHub MCP** server (`user-GitHub`), and the **GitHub Projects MCP** server (`user-github-projects`). Create issues proactively — they keep work visible and linkable from plans and docs.
+
+### GitHub Projects MCP tools
+
+- `list_projects` — fetch all projects in the org
+- `get_project_fields` — read field definitions in a project
+- `get_project_items` — read items in a project
+- `add_issue_to_project` — add an existing issue to a project
+- `update_project_item_field` — update a field value (e.g. Status, Priority) on a project item
+- `create_draft_issue` — create a draft issue directly in a project
+- `delete_project_item` — remove an item from a project
+
+## Triggers (create an issue)
+
+- **Plans:** Actionable items in `.cursor/plans/*.plan.md` → one issue per coherent scope; note issue numbers in the plan.
+- **Deferred / out-of-scope:** "We'll do X later" → create an issue so it isn't lost.
+- **Bugs or follow-ups:** Found but not fixing now → create an issue unless trivial or already tracked.
+- **TODO.md or task lists:** Changes to project task lists → sync to GitHub issues. Get user confirmation before closing.
+- **User asks** to create, track, or manage issues → use the MCP.
+
+Skip issues for one-off, trivial, or exploratory work. Infer `owner`/`repo` from git remote; ask if ambiguous.
+
+## Workflow
+
+1. **Context:** `get_me` for permissions.
+2. **Dedupe:** `search_issues` with keywords before creating. If a match exists, link or comment instead.
+3. **Types:** `list_issue_types` → set `type` in `issue_write` (e.g. `Task`, `Feature`, `Epic`).
+4. **Close:** Always set `state_reason` (`completed`, `not_planned`, or `duplicate` + `duplicate_of`). GitHub uses this for history and tracking — omitting it loses signal on why an issue was closed.
+
+**`search_issues` vs `list_issues`:** Use `search_issues` for targeted lookups and type filtering (e.g. `repo:owner/repo type:Epic`). Use `list_issues` only for broad paginated lists — it has no issue-type filter. Prefer several well-scoped issues over one large "do everything" issue.
+
+## Epic and sub-issues
+
+Use GitHub's native parent/child relationship (not just body references):
+
+1. Create the parent epic with `issue_write`. Note the returned **`id`** (node ID) and **issue number**.
+2. Create each sub-issue with `issue_write`. Note each returned **`id`**.
+3. Link with `sub_issue_write`: `method: 'add'`, `issue_number`: parent's number, `sub_issue_id`: sub-issue's **`id`**. **Gotcha:** `sub_issue_id` is the GraphQL node ID (from the `id` field), not the issue number — using the number silently fails.
+
+To link existing issues: get the `id` via `issue_read` (method: `get`), then `sub_issue_write` as above. List sub-issues with `issue_read` (method: `get_sub_issues`).

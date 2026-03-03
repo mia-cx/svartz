@@ -31,6 +31,10 @@ This branch is a from-scratch rewrite of Quartz’s site generator using SvelteK
 - Multi-vault support.
 - Full Quartz plugin compatibility.
 - A full theme marketplace (just a solid theming mechanism).
+- Obsidian plugin for mdsvex support (long-term future).
+
+## Long-term ideas (post-MVP)
+- **Obsidian plugin for Svartz mdsvex support:** Render `.md` files in Obsidian with Svelte component syntax, live preview. Requires Svelte renderer in Obsidian; speculative but cool.
 
 ## High-level architecture
 - SvelteKit app for routing/layouts/UI.

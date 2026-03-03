@@ -8,13 +8,13 @@ High-level sequence before diving into M0. Align here, then implement.
 
 **Goal:** Repo root becomes a Turborepo monorepo; current Quartz code lives in a reference folder for consultation only.
 
-| Step | What |
-|------|------|
+| Step   | What                                                                                                                                                                                                                                                                                                                                   |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **1a** | Move existing Quartz tree into **`reference/quartz/`**. Include `quartz/`, `quartz.config.ts`, `quartz.layout.ts`, `docs/` (Quartz docs), and any root files that are purely Quartz (e.g. `index.d.ts`). Optionally keep `README.md` at root and add a short “This is the Svartz rewrite; see `reference/quartz` for original Quartz.” |
-| **1b** | Add **monorepo root**: `package.json` (workspaces), `pnpm-workspace.yaml`, `turbo.json`, root `tsconfig.json` (references). Use pnpm. |
-| **1c** | Create **`apps/site/`** — SvelteKit app (scaffold with `pnpm create svelte@latest`). Configure for static adapter + prerender. |
-| **1d** | Create **`packages/`** placeholders as in TODO: `content-pipeline/`, `markdown/` (and optionally `themes/`). Each has its own `package.json` and minimal exports so Turborepo can build them. |
-| **1e** | Add **`vault/`** — small fixture vault (a few `.md` files with wikilinks) for development and tests. |
+| **1b** | Add **monorepo root**: `package.json` (workspaces), `pnpm-workspace.yaml`, `turbo.json`, root `tsconfig.json` (references). Use pnpm.                                                                                                                                                                                                  |
+| **1c** | Create **`apps/site/`** — SvelteKit app (scaffold with `pnpm create svelte@latest`). Configure for static adapter + prerender.                                                                                                                                                                                                         |
+| **1d** | Create **`packages/`** placeholders as in TODO: `content-pipeline/`, `markdown/` (and optionally `themes/`). Each has its own `package.json` and minimal exports so Turborepo can build them.                                                                                                                                          |
+| **1e** | Add **`vault/`** — small fixture vault (a few `.md` files with wikilinks) for development and tests.                                                                                                                                                                                                                                   |
 
 **Result:** Root is Turborepo; Svartz app and packages live under `apps/` and `packages/`; Quartz is read-only under `reference/quartz/`.
 
@@ -26,11 +26,11 @@ High-level sequence before diving into M0. Align here, then implement.
 
 Decide early so M0 doesn’t block:
 
-| Decision | Options | Suggested |
-|----------|---------|-----------|
-| **Vault root** | `vault/` at repo root vs. configurable path | `vault/` at repo root by default; allow override in config. |
+| Decision        | Options                                             | Suggested                                                            |
+| --------------- | --------------------------------------------------- | -------------------------------------------------------------------- |
+| **Vault root**  | `vault/` at repo root vs. configurable path         | `vault/` at repo root by default; allow override in config.          |
 | **Config file** | Reuse `quartz.config.ts` vs. new `svartz.config.ts` | New **`svartz.config.ts`** to avoid confusion and allow a clean API. |
-| **Adapter** | Default static only vs. document multiple | Default **`adapter-static`**; document Node/Cloudflare later. |
+| **Adapter**     | Default static only vs. document multiple           | Default **`adapter-static`**; document Node/Cloudflare later.        |
 
 No need to implement full config in step 1; just agree so the SvelteKit app and pipeline can assume “vault at `vault/`” and “config will live in `svartz.config.ts`”.
 

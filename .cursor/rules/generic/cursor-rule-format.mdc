@@ -1,0 +1,47 @@
+---
+description: When creating or editing any .cursor/rules/**/*.mdc file, follow these formatting and content requirements. Ensures rules are discoverable, scoped correctly, and effective. For full audit workflow and refactoring patterns (Vague→Specific, Negative→Positive, Imprecise→Precise), use the optimize-agent-rules skill.
+globs: .cursor/rules/**/*.mdc
+---
+
+# Cursor Rule Formatting
+
+## Content quality
+
+1. **Tribal only**: Include what agents cannot discover from code, tests, or lint config. If inferrable, delete it. Capture failure modes and gotchas — if a mistake caused the rule, say so.
+2. **Explain the "why"**: "Use X because Y constraint", not just "use X". A rule without a reason gets ignored.
+3. **Focused**: Under ~50 lines; 2–3 core concepts. Extract reference material to docs and link.
+4. **Scoped**: Domain rules in subfolders need `globs`. Without globs, the rule silently never loads for non-always rules.
+5. **Apply refactoring patterns** from `.cursor/skills/optimize-agent-rules/SKILL.md`: Vague→Specific, Negative→Positive, Imprecise→Precise.
+
+## Description (frontmatter)
+
+Detailed enough that the agent can confidently decide when to apply the rule. Include: when to apply, key scenarios, impacted areas, and the constraint or gotcha.
+
+```yaml
+# Good
+description: Drizzle ORM + Cloudflare D1 patterns. Apply when editing db code, drizzle.config, or migrations. Ensures correct getDb factory (no module-level singleton) and shared schema usage; D1 binding is request-scoped so a factory is required.
+
+# Bad
+description: Use Drizzle correctly.
+```
+
+## Globs (frontmatter)
+
+Non-quoted, comma-separated, single-line string. Cursor's parser silently fails on YAML arrays, quoted strings, and JSON arrays — the rule loads but the glob is ignored.
+
+```yaml
+# Correct
+globs: apps/*/src/**, packages/*/src/**
+
+# Incorrect (silently ignored)
+globs: ["apps/*/src/**"]
+globs: "apps/*/src/**"
+```
+
+## Editor setting
+
+Cursor's built-in `.mdc` view can silently discard agent edits. Open `.mdc` as the default text editor:
+
+```json
+"workbench.editorAssociations": { "*.mdc": "default" }
+```
