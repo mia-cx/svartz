@@ -1,5 +1,5 @@
 # SvelteKit Rewrite (Quartz-inspired) — TODO
-This branch is a from-scratch rewrite of Quartz’s site generator using SvelteKit, using Quartz v4 as a reference implementation for parsing/transforms, graph/backlinks, and search.
+This branch is a from-scratch rewrite of Quartz's site generator using SvelteKit, using Quartz v4 as a reference implementation for parsing/transforms, graph/backlinks, and search.
 
 ## Goals
 - Publish an Obsidian vault as a website (mdsvex-first).
@@ -17,7 +17,7 @@ This branch is a from-scratch rewrite of Quartz’s site generator using SvelteK
 - A clean themeable UI implemented in Svelte (Quartz-like UX, not necessarily identical).
 - Provide a small set of default themes.
   - Themes are *product-level presets*, not just CSS: they can fully change layout, navigation, page types, routes, components, and ship/bundle recommended plugins + default config.
-  - Notes vault theme: similar to Quartz default / Obsidian Publish “collection of notes”.
+  - Notes vault theme: similar to Quartz default / Obsidian Publish "collection of notes".
   - Package docs theme: geared towards JS/TS package documentation (JSDoc/TSDoc), with optional GitHub source links; may bundle a docs plugin that parses JSDoc/TSDoc from a configured codebase.
   - API docs theme: REST and/or GraphQL docs; bundles API-specific plugins (schema import, example generation, endpoint modeling) and supports switching API versions while staying on the same relative page.
   - TTRPG wiki theme: worldbuilding wiki (regions, nature, cities, politics), lore, monsters, characters; bundles taxonomy + entity page plugins.
@@ -28,7 +28,7 @@ This branch is a from-scratch rewrite of Quartz’s site generator using SvelteK
 
 ## Non-goals (initially)
 - Perfect 1:1 compatibility with every Obsidian plugin syntax.
-- Multi-vault support.
+- ~~Multi-vault support.~~ *(Now supported: `svartz.config.mjs` `vaults[]`.)*
 - Full Quartz plugin compatibility.
 - A full theme marketplace (just a solid theming mechanism).
 - Obsidian plugin for mdsvex support (long-term future).
@@ -53,16 +53,10 @@ This branch is a from-scratch rewrite of Quartz’s site generator using SvelteK
 - `vault/` (sample content fixture for development/testing)
 - Turborepo for task running + caching across packages/apps.
 
-(If we prefer not to monorepo, collapse these into top-level `src/` + `scripts/`.)
-
 ## Milestones
-### M0 — Spike (1–2 days)
-- Lock in Markdown strategy: mdsvex-first everywhere (treat `.md` as mdsvex).
-- Prove we can:
-  - read a vault directory
-  - resolve wikilinks
-  - prerender one note page with a Svelte layout
-- Prove the plugin shape with one trivial plugin (e.g., add a generated “reading time” field).
+### M0 — Spike (remaining)
+- Wire one prerendered note page with a Svelte layout (app has no `/notes/[...slug]` yet).
+- Optionally formalize plugin shape (currently config/vault options drive behavior).
 
 ### M1 — Minimal usable site
 - Build and deploy a static site that:
@@ -82,59 +76,29 @@ This branch is a from-scratch rewrite of Quartz’s site generator using SvelteK
 - Theming, performance, accessibility, documentation, migration guides.
 
 ## Detailed TODO
-### 0) Decide the rewrite shape
-- Commit to monorepo layout and scaffold Turborepo.
-- Decide whether this branch should be an “in-repo rewrite” or a clean subdir (recommended: `apps/site`).
-- Decide what we keep from Quartz config UX:
-  - reuse `quartz.config.ts` semantics?
-  - or define a new `svartz.config.ts`?
-- Decide adapter strategy:
-  - default `adapter-static`
-  - provide documented recipes for Node/Cloudflare/etc.
 
 ### 1) Define Svartz plugin system (core)
-- Define a plugin interface and pipeline phases.
-- Define core data models (types):
-  - `VaultFile`, `Note`, `LinkRef`, `Graph`, `SearchDoc`, `RenderArtifact`
+- Define a plugin interface and pipeline phases (data models exist in `@svartz/vault`).
+  - *Config:* `plugins[]` on `svartz.config` (top-level or per-vault). In config you import each plugin’s default export and pass options to it; that export returns a “configured plugin” (e.g. a function). The Vite plugin then calls that function with `VaultFile[]` as input.
+  - *Note:* `@svartz/vault` (traverse + buildIndex) is conceptually a Svartz plugin too — likely the first/default one, taking vault path + config and producing the `VaultFile[]` (or Index) that downstream plugins consume.
 - Define plugin ordering rules + composition:
   - explicit phase ordering
   - ability to insert before/after named plugins
-- Define config format for enabling/disabling plugins + plugin options.
+- Define config format for enabling/disabling plugins + plugin options (per-plugin options passed when importing in config).
 - Add a minimal plugin runner with good error messages.
 
 ### 2) Bootstrap SvelteKit
-- Add SvelteKit scaffold (likely under `apps/site`).
-- Configure for static output:
-  - use static adapter
+- Configure for static output in `apps/web`:
+  - use static adapter (or document adapter choice)
   - enable prerendering
 - Add basic routes:
-  - `/` (home)
   - `/notes/[...slug]` (note pages)
   - `/tags/[tag]` (optional early)
 
-### 3) Content pipeline (vault -> manifest)
-- Implement vault discovery:
-  - configurable vault root
-  - ignore `.obsidian/`, templates, etc.
-- Implement canonical slugging rules:
-  - path-based slugs vs title-based slugs
-  - handle collisions deterministically
-- Parse frontmatter:
-  - title override
-  - description
-  - created/updated dates
-  - tags
-- Produce a build manifest:
-  - list of notes
-  - per-note metadata
-  - outbound link refs (pre-resolve)
-
 ### 4) Obsidian Markdown support (mdsvex + plugins)
-- Add mdsvex integration.
-- Configure mdsvex to process `.md` files (treat Obsidian’s default markdown files as mdsvex).
 - Implement remark plugins (or unified pipeline) for:
   - wikilinks -> `<a href>` with correct resolved slugs
-  - embeds `![[…]]` -> inline rendered note preview (v1 can be “include full note” or “include excerpt”)
+  - embeds `![[…]]` -> inline rendered note preview (v1 can be "include full note" or "include excerpt")
   - callouts -> HTML structure with classes
   - block refs (optional) `^blockid` + `[[note#^blockid]]`
 - Decide how to handle:
@@ -143,11 +107,7 @@ This branch is a from-scratch rewrite of Quartz’s site generator using SvelteK
   - syntax highlighting
 
 ### 5) Graph + backlinks
-- Build link graph from manifest:
-  - nodes: notes
-  - edges: resolved note-to-note links
-- Compute backlinks per note.
-- Expose graph + backlinks to SvelteKit pages via generated JSON.
+- Expose graph + backlinks to SvelteKit pages via generated JSON (graph data already in `Index`).
 
 ### 6) Search
 - Generate a search index at build time:
@@ -175,7 +135,7 @@ This branch is a from-scratch rewrite of Quartz’s site generator using SvelteK
     - provide/override routes and page templates (within a stable Svartz route contract)
     - register navigation structure (sidebars, sections, landing pages)
     - ship/bundle recommended plugins (and their default config)
-    - add new “content types” beyond notes (e.g., endpoints, symbols, monsters)
+    - add new "content types" beyond notes (e.g., endpoints, symbols, monsters)
   - Themes are *not* only CSS; however, they should still support basic color/typography theming.
   - Shared data contracts from the pipeline:
     - notes + frontmatter schema
@@ -219,15 +179,7 @@ This branch is a from-scratch rewrite of Quartz’s site generator using SvelteK
 - Caching:
   - content hashing
   - incremental graph/index recompute
-
-### 11) Testing + fixtures
-- Add a small fixture vault under `vault/`.
-- Unit tests for:
-  - wikilink resolution
-  - slugging
-  - graph/backlinks
-  - embed expansion
-  - plugin ordering/compat
+- **CI / GitHub workflows:** Document GitHub Actions workflow YAMLs so people can set up their Svartz instance with CI (see `planning/cli-turbo-orchestration.md` for cache strategy: pnpm store + `**/node_modules` + `.turbo` with constant key for Turbo).
 
 ### 12) Migration notes
 - Document mapping from Quartz v4 to this rewrite:
@@ -236,16 +188,15 @@ This branch is a from-scratch rewrite of Quartz’s site generator using SvelteK
   - unsupported features
 
 ## Open questions
-- Do we want “notes can import Svelte components” (mdsvex power-user feature) or keep notes purely content?
-- What’s the canonical slug policy (path vs title)?
-- How much Obsidian parity is required for embeds/block refs?
-- Do we keep Quartz’s existing content folder conventions or adopt a new vault root?
-- Which SSR adapters do we want to officially validate first (Node vs Cloudflare vs Vercel)?
+- **l10n/i18n:** Look into a shared package that themes and `apps/web` can import for community translations. Evaluate Paraglide (or similar) for runtime + compare TMS options (Tolgee, Weblate, Lokalise, etc.). *(Tracked in GitHub.)*
+
+## Resolved
+- **Notes can import Svelte components:** Yes. Vault notes can import Svelte components; the Vite plugin preprocesses vault `.md` with mdsvex (see `planning/component-resolution-mdsvex-themes.md`).
+- **Canonical slug policy:** Path-based, matching Quartz (e.g. `path/to/file.md`).
+- **Embeds / block refs (Obsidian parity):** Match Quartz. Image embeds (`![[image]]`, optional dimensions); note embeds — full page (`![[file]]`), section under header (`![[file#Anchor]]`), block ref (`![[file#^block-id]]`); callouts (Obsidian admonition syntax, e.g. `> [!info]`). See `packages/reference/docs/features/wikilinks.md`, `callouts.md`, and `ObsidianFlavoredMarkdown` plugin.
+- **Content folder / vault root:** New config pattern (not Quartz's single folder). `svartz.config.mjs` supports **multiple vaults**; each vault has `id`, `path`, `include`/`exclude`, `frontmatter`, `target`. See `packages/config/` and `packages/vault/tests/fixtures/config-mode/svartz.config.mjs`.
+- **SSR / deployment adapters:** Validate first: **static** (GitHub Pages), **Node**, **Cloudflare**. Supporting all SvelteKit adapters (Netlify, Vercel, etc.) should be relatively trivial since the adapter API is uniform; document recipes as needed.
 
 ## Suggested next action
-- Agree on:
-  - vault root location
-  - slug policy
-  - whether embeds should inline full notes or excerpts
-  - whether mdsvex should allow component imports
-Then implement M0 spike and iterate.
+- Wire note routes and one prerendered note page (finish M0).
+- *After vault changes are done:* Define an implementation contract and plan for `@svartz/plugins` (plugin model), then implement that for vault.
