@@ -1,0 +1,39 @@
+{
+  "name": "@svartz/config",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Schema, validation, and resolution for svartz.config.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mia-cx/svartz.git",
+    "directory": "packages/config"
+  },
+  "keywords": [
+    "svartz",
+    "config",
+    "obsidian",
+    "schema"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "effect": "^3.19.19"
+  }
+}
