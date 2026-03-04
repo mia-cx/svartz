@@ -229,3 +229,9 @@ If user says no:
 - **User control** — Pick and choose themes, or use custom local themes
 - **Flexibility** — Local + npm modules can coexist
 - **Easy discovery** — Themes are discoverable as npm packages
+
+## Relationship to @svartz/config
+
+Theme resolution is **consumer-owned**, not part of `@svartz/config`. The config package validates theme references syntactically (via Effect Schema decode of `VaultThemeConfig`) and normalizes `theme: "string"` to `{ base: string, config: {} }` during path resolution. Actual theme module loading, export inspection, and installation are handled by CLI commands and Vite plugin integration.
+
+Future shared theme-resolution helpers may be added as optional utilities if multiple consumers need identical resolution logic. This is not yet part of the config contract.
