@@ -21,3 +21,7 @@ Start using Svartz by either using this repository as a template, forking it, or
 ```bash
 pnpm dlx svartz init
 ```
+
+## TODO
+
+- [ ] Everything
