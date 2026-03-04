@@ -23,3 +23,7 @@ coverage
 
 # OS
 .DS_Store
+
+# Private vault fixtures (do not commit)
+packages/vault/tests/fixtures/obsidian-journal/
+packages/vault/tests/fixtures/vault/
