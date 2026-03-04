@@ -67,7 +67,7 @@ vaults: [
 If switching themes is common, provide a CLI command to bulk-update imports:
 
 ```bash
-pnpm svartz theme:migrate --vault docs --from default --to minimal
+pnpm svartz theme:migrate --vault docs --to minimal
 ```
 
 ### Downside
