@@ -1,31 +1,25 @@
 import { Effect, Schema } from "effect";
-import { createRequire } from "node:module";
-import { resolve, dirname } from "node:path";
+import { access, stat } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { major as semverMajor } from "semver";
 import { SvartzConfigSchema } from "./schema.js";
 import type { SvartzConfig } from "./types.js";
 import {
-  ConfigNotFound,
-  ConfigImportFailed,
   ConfigDecodeFailed,
+  ConfigImportFailed,
+  ConfigNotFound,
 } from "./types.js";
-import { searchUpward, fileExists } from "./utils/path-resolver.js";
+import { getPackageVersion } from "./utils/package-version.js";
 
-const require = createRequire(import.meta.url);
-const { version: PKG_VERSION } = require("../package.json") as {
-  version: string;
-};
-
-const parseMajor = (version: string): number =>
-  Number.parseInt(version.split(".")[0]!, 10);
-
-const SUPPORTED_MAJOR_VERSION = parseMajor(PKG_VERSION);
+const CONFIG_FILENAMES = ["svartz.config", ".svartzrc"];
+const CONFIG_EXTENSIONS = [".ts", ".mjs", ".js"] as const;
 
 /**
- * Decode a raw JS object against the config schema, then check that the
+ * Parse (validate) a raw JS object against the config schema, then check that the
  * major version matches the version this package supports.
  */
-export const decodeConfigEffect = (
+export const parseConfig = (
   raw: unknown,
 ): Effect.Effect<SvartzConfig, ConfigDecodeFailed> =>
   Effect.gen(function* () {
@@ -39,11 +33,12 @@ export const decodeConfigEffect = (
       ),
     );
 
-    const major = parseMajor(config.version);
-    if (major !== SUPPORTED_MAJOR_VERSION) {
+    const supportedMajor = semverMajor(getPackageVersion(import.meta.url));
+    const major = semverMajor(config.version);
+    if (major !== supportedMajor) {
       return yield* new ConfigDecodeFailed({
         issues: [],
-        message: `Incompatible config version: major ${major} (expected ${SUPPORTED_MAJOR_VERSION}). Config version "${config.version}" is not compatible with this version of @svartz/config.`,
+        message: `Incompatible config version: major ${major} (expected ${supportedMajor}). Config version "${config.version}" is not compatible with this version of @svartz/config.`,
       });
     }
 
@@ -51,36 +46,63 @@ export const decodeConfigEffect = (
   });
 
 /**
- * Resolve the config file path from an explicit path or by searching upward.
+ * Validate and resolve the config file path from an explicit path or from CWD.
  * Respects SVARTZ_CONFIG env var.
+ * - Explicit path to a directory: look for default config names in that dir.
+ * - Explicit path to a file: use it.
+ * - Explicit path that is neither, or no path: look in process.cwd().
  */
-const resolveConfigPath = (
+const validateConfigPath = (
   configPath?: string,
 ): Effect.Effect<string, ConfigNotFound> =>
   Effect.gen(function* () {
     const envOverride = process.env["SVARTZ_CONFIG"];
     const explicit = configPath ?? envOverride;
 
+    let searchDir: string;
     if (explicit) {
       const resolved = resolve(explicit);
-      const exists = yield* Effect.promise(() => fileExists(resolved));
-      if (!exists) {
+      const isDir = yield* Effect.promise(() =>
+        stat(resolved).then(
+          (s) => s.isDirectory(),
+          () => false,
+        ),
+      );
+      if (isDir) {
+        searchDir = resolved;
+      } else {
+        const isFile = yield* Effect.promise(() =>
+          access(resolved).then(
+            () => true,
+            () => false,
+          ),
+        );
+        if (isFile) return resolved;
         return yield* new ConfigNotFound({
           searchPath: resolved,
           message: `Config file not found: ${resolved}`,
         });
       }
-      return resolved;
+    } else {
+      searchDir = process.cwd();
     }
 
-    const found = yield* Effect.promise(() => searchUpward(process.cwd()));
-    if (!found) {
-      return yield* new ConfigNotFound({
-        searchPath: process.cwd(),
-        message: `No svartz.config.{ts,js,mjs} found searching upward from ${process.cwd()}`,
-      });
+    for (const base of CONFIG_FILENAMES) {
+      for (const ext of CONFIG_EXTENSIONS) {
+        const candidate = resolve(searchDir, `${base}${ext}`);
+        const exists = yield* Effect.promise(() =>
+          access(candidate).then(
+            () => true,
+            () => false,
+          ),
+        );
+        if (exists) return candidate;
+      }
     }
-    return found;
+    return yield* new ConfigNotFound({
+      searchPath: searchDir,
+      message: `No config file (${CONFIG_FILENAMES.join(" or ")} with ${CONFIG_EXTENSIONS.join(", ")}) found in ${searchDir}`,
+    });
   });
 
 /**
@@ -103,18 +125,18 @@ const importConfig = (
   });
 
 /**
- * Load, import, and decode a svartz config file.
- * Returns the decoded SvartzConfig and the directory containing the config file.
+ * Load, import, and parse a svartz config file.
+ * Returns the parsed SvartzConfig and the directory containing the config file.
  */
-export const loadConfigEffect = (
+export const loadConfig = (
   configPath?: string,
 ): Effect.Effect<
   { config: SvartzConfig; configDir: string },
   ConfigNotFound | ConfigImportFailed | ConfigDecodeFailed
 > =>
   Effect.gen(function* () {
-    const resolvedPath = yield* resolveConfigPath(configPath);
+    const resolvedPath = yield* validateConfigPath(configPath);
     const raw = yield* importConfig(resolvedPath);
-    const config = yield* decodeConfigEffect(raw);
+    const config = yield* parseConfig(raw);
     return { config, configDir: dirname(resolvedPath) };
   });
