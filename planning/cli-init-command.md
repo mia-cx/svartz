@@ -60,7 +60,12 @@ $ pnpm create svartz
 
 ? Project name: my-docs
 ? Description: My documentation site
-? Would you like to include any themes? (multi-select prompt with default themes) default
+? Which adapter do you want to use? (Use arrow keys)
+  ❯ Static (default; deploy anywhere)
+    Cloudflare Workers
+    Cloudflare Pages
+    Node (SSR)
+? Would you like to include any themes? (multi-select) default
 ? Use git for version control? (Y/n) Y
 ? Git remote URL: https://github.com/myuser/my-docs.git
 
@@ -76,6 +81,16 @@ Next steps:
 
 Happy publishing! 🌱
 ```
+
+## Adapter step
+
+- **Prompt:** “Which adapter do you want to use?” with options: Static, Cloudflare Workers, Cloudflare Pages, Node (SSR).
+- **Effect:**
+  - **Static** — `@sveltejs/adapter-static` in `svelte.config.js`; no `wrangler.jsonc`.
+  - **Cloudflare Workers** — `@sveltejs/adapter-cloudflare-workers`; include `wrangler.jsonc` in the template (or generate it).
+  - **Cloudflare Pages** — `@sveltejs/adapter-cloudflare`; optional `wrangler.jsonc` or document Pages deploy separately.
+  - **Node** — `@sveltejs/adapter-node`.
+- Template can ship one base + small adapter-specific snippets, or separate template dirs per adapter (e.g. `templates/static/`, `templates/cloudflare-workers/`). Same app code; only adapter and deploy config differ.
 
 ## Git integration
 
