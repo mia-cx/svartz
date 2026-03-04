@@ -200,3 +200,7 @@ Output:
 - **Dynamic import:** Uses `import()` to load the resolved module at runtime, avoiding static bundling.
 - **Named exports:** Filters out `default` and private keys (`_*`) to get clean component lists.
 - **Filtering:** Excludes default exports and private exports (by convention, names starting with `_`).
+
+### Relationship to @svartz/config
+
+Project root discovery (`findProjectRoot`) is currently CLI-owned. The `@svartz/config` package owns config loading, decoding (via Effect Schema), and path resolution but does not own root discovery. If multiple consumers need identical root-finding logic, it may be unified under config in a future iteration. Error handling in CLI should use `instanceof` checks on config's tagged errors (`ConfigNotFound`, `ConfigImportFailed`, etc.).
