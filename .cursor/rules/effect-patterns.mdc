@@ -1,0 +1,96 @@
+---
+description: Effect patterns and conventions used across Svartz packages
+globs:
+  - packages/*/src/**
+alwaysApply: false
+---
+
+# Effect Patterns in Svartz
+
+All Svartz packages use Effect internally with Promise-based public APIs.
+
+## Boundary Adapter
+
+Every package's `index.ts` exposes Promise adapters using this pattern:
+
+```ts
+const runEffect = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
+  Effect.runPromise(effect.pipe(Effect.either)).then((result) => {
+    if (Either.isRight(result)) return result.right;
+    throw result.left;
+  });
+```
+
+This throws the tagged error directly (not wrapped in `FiberFailure`), so consumers can use `instanceof` checks without depending on Effect.
+
+## Tagged Errors
+
+Use `Data.TaggedError` for all expected errors. Include `message: string` in every error so the Error.message is always meaningful:
+
+```ts
+export class MyError extends Data.TaggedError("MyError")<{
+  readonly someField: string;
+  readonly message: string;
+}> {}
+```
+
+Export a union type covering all error variants: `export type PackageError = ErrorA | ErrorB | ...;`
+
+## Effect Programs
+
+Internal functions return `Effect.Effect<Success, Error>`. Use `Effect.gen` for composition:
+
+```ts
+export const myFunction = (args): Effect.Effect<Result, MyError> =>
+  Effect.gen(function* () {
+    const x = yield* someEffect;
+    return transform(x);
+  });
+```
+
+Yield tagged errors directly to fail: `return yield* new MyError({ ... });`
+
+## Concurrency
+
+Use `Effect.forEach` with `{ concurrency }` for bounded parallel work (sliding window, not batch-then-wait):
+
+```ts
+yield* Effect.forEach(items, (item) => processItem(item), { concurrency: 10 });
+```
+
+## Retries
+
+Use `Effect.retry` with composed Schedule for jittered exponential backoff:
+
+```ts
+Effect.retry(
+  myEffect,
+  Schedule.exponential("100 millis").pipe(
+    Schedule.jittered,
+    Schedule.intersect(Schedule.recurs(maxRetries - 1)),
+  ),
+)
+```
+
+## Schema Validation
+
+Use Effect Schema as the source of truth for data shapes. Infer TypeScript types from schemas:
+
+```ts
+export const MySchema = Schema.Struct({ ... });
+export type MyType = Schema.Type<typeof MySchema>;
+```
+
+Decode with error mapping:
+
+```ts
+Schema.decode(MySchema)(raw).pipe(
+  Effect.mapError((e) => new MyDecodeError({ issues: e.issues, message: e.message })),
+)
+```
+
+## Naming
+
+- Internal Effect programs: `traverseVault`, `buildIndex` (no suffix)
+- Public Promise adapters: same names in `index.ts`
+- Optional Effect exports: suffix with `Effect` (`traverseVaultEffect`, `buildIndexEffect`)

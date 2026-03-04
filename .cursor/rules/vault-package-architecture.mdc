@@ -1,0 +1,35 @@
+---
+description: Architecture and conventions for the @svartz/vault package
+globs:
+  - packages/vault/**
+alwaysApply: false
+---
+
+# @svartz/vault Architecture
+
+`@svartz/vault` is a TypeScript package that traverses Obsidian vaults and extracts structured metadata into an `Index`. Uses **Effect** internally for typed error handling, structured concurrency, and retry logic. Exposes **Promise-based public APIs** so consumers don't need Effect.
+
+## Key Design Decisions
+
+- **Effect internally, Promise externally.** All core logic (`traverseVault`, `buildIndex`) is an Effect program. `index.ts` exports Promise-based adapters using the `runEffect` pattern (`Effect.either` → throw left). Effect programs are also exported as `traverseVaultEffect` / `buildIndexEffect` for consumers who use Effect directly.
+- **Tagged errors via `Data.TaggedError`.** Error types: `VaultNotFound`, `FileReadError`, `SlugConflict`, `ParseError`. Each extends `Error` with a `_tag` discriminant. Consumers use `instanceof` checks. The union type `VaultError` covers all error variants.
+- **Structured concurrency.** `Effect.forEach` with `{ concurrency }` replaces the old `Promise.all` batch loop. Sliding window — doesn't wait for a batch to complete before starting next items.
+- **Jittered exponential retry.** File reads use `Effect.retry` with `Schedule.exponential("100 millis").pipe(Schedule.jittered, Schedule.intersect(Schedule.recurs(maxRetries - 1)))`. Replaces manual `setTimeout` retry loop.
+- **Single file read per note.** `buildIndex` reads each `.md` file once via `gray-matter`, extracting frontmatter + body in one pass. Raw links are extracted from the body immediately, then resolved after the global `SlugMap` is built.
+- **Two-phase link resolution.** Phase 1: extract raw `LinkMatch[]` from body text. Phase 2: after `buildSlugMap()`, resolve raw links to canonical slugs using the map. `buildSlugMap` returns `Effect<SlugMap, SlugConflict>`.
+- **Link resolution strategies.** `linkResolution` option controls how ambiguous bare basenames resolve: `"closest"` (default, prefers shared path prefix with source), `"shallowest"` (prefers least nesting), `"absolute"` (exact full-path only). Exact slug matches always resolve regardless of strategy.
+- **Quartz-aligned slugification.** `fileToSlug` follows Quartz conventions: spaces→hyphens, `&`→`-and-`, `%`→`-percent`, remove `?`/`#`, lowercase.
+- **Graph is top-level.** `Index.graph` maps `slug → string[]` (outgoing link slugs). Backlinks are computed at runtime by consumers, not stored.
+- **Traversal filtering mirrors deploy scope.** `traverseVault` supports `include`/`exclude` glob patterns (relative to vault root).
+
+## Public API
+
+Promise adapters: `traverseVault()`, `buildIndex()`. Effect programs: `traverseVaultEffect`, `buildIndexEffect`. Tagged errors: `VaultNotFound`, `FileReadError`, `SlugConflict`, `ParseError`. Plus all data types.
+
+## CLI
+
+`svartz-vault index <vault-path>` outputs to `.svartz/vaults/<name>/index.json` by default. Uses `commander`. Validates `--concurrency` and `--max-retries` flags with fallback to defaults on invalid input.
+
+## Build
+
+`tsup` with dual entry (`src/index.ts`, `src/cli.ts`), ESM format, `.dts` generation. Rebuild after any edit: `pnpm --filter @svartz/vault build`.
