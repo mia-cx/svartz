@@ -256,26 +256,26 @@ export function emitArtifacts(): SvartzPlugin {
 ## All Plugins by ID
 
 ### Discover Stage
-- **`core:discover-files`** [[plugin-discover-files]]
+- **`core:discover-files`** [[plugins/plugin-discover-files]]
 
 ### Filter Unpublished Stage
-- **`core:filter-unpublished`** [[plugin-filter-unpublished]]
+- **`core:filter-unpublished`** [[plugins/plugin-filter-unpublished]]
 
-### Transform Content Stage (3 plugins, parallel)
-- **`core:transform-ofm`** [[plugin-transform-ofm]] — Obsidian markdown features
-- **`core:transform-gfm`** [[plugin-transform-gfm]] — GitHub Flavored Markdown
-- **`core:transform-syntax`** [[plugin-transform-syntax]] — Syntax highlighting prep
-- **`core:transform-latex`** [[plugin-transform-latex]] — LaTeX/math blocks
+### Transform Content Stage (4 plugins, can run in parallel)
+- **`core:transform-ofm`** [[plugins/plugin-transform#Plugin Transform OFM]] — Obsidian markdown features
+- **`core:transform-gfm`** [[plugins/plugin-transform#Plugin Transform GFM]] — GitHub Flavored Markdown
+- **`core:transform-syntax`** [[plugins/plugin-transform#Plugin Transform Syntax]] — Syntax highlighting prep
+- **`core:transform-latex`** [[plugins/plugin-transform#Plugin Transform LaTeX]] — LaTeX/math blocks
 
 ### Index Content Stage (2 plugins)
-- **`core:transform-description`** [[plugin-transform-description]] — Extract summaries
-- **`core:index-content`** [[plugin-index-content]] — Build search index
+- **`core:transform-description`** [[plugins/plugin-index#Plugin Transform Description]] — Extract summaries
+- **`core:index-content`** [[plugins/plugin-index#Plugin Index Content]] — Build search index
 
 ### Resolve Links Stage
-- **`core:resolve-links`** [[plugin-resolve-links]] — Wikilink resolution (stub)
+- **`core:resolve-links`** [[plugins/plugin-resolve-emit#Plugin Resolve Links]] — Wikilink resolution (stub)
 
 ### Emit Stage
-- **`core:emit-artifacts`** [[plugin-emit-artifacts]] — Write artifacts
+- **`core:emit-artifacts`** [[plugins/plugin-resolve-emit#Plugin Emit Artifacts]] — Write artifacts
 
 ---
 
