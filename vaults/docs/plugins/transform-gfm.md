@@ -62,4 +62,4 @@ export function transformGfm(): SvartzPlugin {
 ## See Also
 
 - [[contracts/plugin-contract]] — Plugin system contract
-- [[plugins/plugins-overview]] — All core plugins overview
+- [[plugins/overview]] — All core plugins overview

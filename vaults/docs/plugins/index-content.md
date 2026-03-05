@@ -13,7 +13,7 @@ Aggregates all processed files into structured index for search, manifest, and m
 
 ## Function Signature
 
-```typescript
+````typescript
 /**
  * Create the index-building plugin.
  *
@@ -38,25 +38,26 @@ export function indexContent(): SvartzPlugin {
     id: "core:index-content",
     indexContent: {
       run: (ctx) => {
-        const index = ctx.files.map(file => ({
+        const index = ctx.files.map((file) => ({
           slug: file.slug,
           title: file.frontmatter.title || file.slug,
           description: file.description,
           tags: file.frontmatter.tags || [],
           createdAt: file.createdAt,
-          updatedAt: file.updatedAt
+          updatedAt: file.updatedAt,
         }));
         ctx.artifacts = { ...ctx.artifacts, index };
       },
-      options: { fatal: true, enforce: "post" }
-    }
+      options: { fatal: true, enforce: "post" },
+    },
   }));
 }
-```
+````
 
 ## Output Structure
 
 **In-memory index (used by emit plugin):**
+
 ```typescript
 {
   artifacts: {
@@ -67,14 +68,15 @@ export function indexContent(): SvartzPlugin {
         description: "An introduction to the project...",
         tags: ["tutorial", "beginner"],
         createdAt: "2024-01-15T00:00:00Z",
-        updatedAt: "2024-01-20T10:30:00Z"
-      }
-    ]
+        updatedAt: "2024-01-20T10:30:00Z",
+      },
+    ];
   }
 }
 ```
 
 **Written to disk by emit plugin:**
+
 ```json
 {
   "index": [
@@ -108,6 +110,6 @@ export function indexContent(): SvartzPlugin {
 ## See Also
 
 - [[contracts/plugin-contract]] — Plugin system contract
-- [[plugins/plugins-overview]] — All core plugins overview
-- [[plugins/plugin-transform-description]] — Extracts descriptions
-- [[plugins/plugin-emit-artifacts]] — Writes index to disk
+- [[plugins/overview]] — All core plugins overview
+- [[plugins/transform-description]] — Extracts descriptions
+- [[plugins/emit-artifacts]] — Writes index to disk

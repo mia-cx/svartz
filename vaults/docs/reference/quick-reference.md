@@ -7,23 +7,32 @@ Fast lookup for common tasks and function signatures.
 ### Plugin System
 
 ```typescript
-import { definePlugin, normalizePlugin, mergePlugins, sortPluginsForStage } from "@svartz/core";
+import {
+  definePlugin,
+  normalizePlugin,
+  mergePlugins,
+  sortPluginsForStage,
+} from "@svartz/core";
 import {
   discoverFiles,
   filterUnpublished,
   transformGfm,
   indexContent,
-  emitArtifacts
+  emitArtifacts,
 } from "@svartz/plugins";
 
 // Create a plugin
 export const myPlugin = definePlugin(() => ({
   id: "my:plugin",
-  discover: (ctx) => { /* ... */ },
+  discover: (ctx) => {
+    /* ... */
+  },
   transformContent: {
-    run: (ctx) => { /* ... */ },
-    options: { enforce: "post", parallel: false }
-  }
+    run: (ctx) => {
+      /* ... */
+    },
+    options: { enforce: "post", parallel: false },
+  },
 }));
 
 // Validate plugin
@@ -33,7 +42,12 @@ const normalized = normalizePlugin(myPlugin);
 const sorted = sortPluginsForStage(plugins, "transformContent");
 
 // Merge plugins from multiple layers
-const merged = mergePlugins([corePlugins, themePlugins, defaultPlugins, vaultPlugins]);
+const merged = mergePlugins([
+  corePlugins,
+  themePlugins,
+  defaultPlugins,
+  vaultPlugins,
+]);
 ```
 
 ---
@@ -50,18 +64,16 @@ export default defineTheme({
   contractVersion: "1.0.0",
   layouts: {
     defaultPage: { default: DefaultLayout },
-    notePage: { default: NoteLayout }
+    notePage: { default: NoteLayout },
   },
-  routes: [
-    { id: "note", pattern: "/[...slug]", layoutSlot: "notePage" }
-  ]
+  routes: [{ id: "note", pattern: "/[...slug]", layoutSlot: "notePage" }],
 });
 
 // Factory theme (with options)
 export default defineTheme((opts = {}) => ({
   id: "@myorg/theme-configurable",
   // ... fields ...
-  contractVersion: "1.0.0"
+  contractVersion: "1.0.0",
 }));
 ```
 
@@ -70,7 +82,11 @@ export default defineTheme((opts = {}) => ({
 ### Config System
 
 ```typescript
-import { loadConfig, resolveConfig, loadAndResolveConfig } from "@svartz/config";
+import {
+  loadConfig,
+  resolveConfig,
+  loadAndResolveConfig,
+} from "@svartz/config";
 
 // Load config
 const config = await loadConfig("./svartz.config.ts");
@@ -82,8 +98,8 @@ const resolved = await resolveConfig(config);
 const config = await loadAndResolveConfig("./svartz.config.ts");
 
 // Access resolved data
-config.vaults.forEach(vault => {
-  console.log(vault.path);  // Absolute path
+config.vaults.forEach((vault) => {
+  console.log(vault.path); // Absolute path
 });
 ```
 
@@ -99,10 +115,10 @@ import { definePlugin } from "@svartz/core";
 export const customHighlight = definePlugin(() => ({
   id: "custom:highlight",
   transformContent: (ctx) => {
-    ctx.files.forEach(file => {
+    ctx.files.forEach((file) => {
       file.content = addHighlighting(file.content);
     });
-  }
+  },
 }));
 ```
 
@@ -117,16 +133,16 @@ export const customHighlight = definePlugin(() => ({
   id: "custom:highlight",
   transformContent: {
     run: (ctx) => {
-      ctx.files.forEach(file => {
+      ctx.files.forEach((file) => {
         file.content = addHighlighting(file.content);
       });
     },
     options: {
       fatal: false,
-      enforce: "post",     // Run after default transformers
-      parallel: false      // Run sequentially
-    }
-  }
+      enforce: "post", // Run after default transformers
+      parallel: false, // Run sequentially
+    },
+  },
 }));
 ```
 
@@ -147,23 +163,23 @@ export default defineTheme({
   layouts: {
     defaultPage: { default: DefaultLayout },
     notePage: { default: NoteLayout },
-    notFoundPage: { default: NotFoundLayout }
+    notFoundPage: { default: NotFoundLayout },
   },
   routes: [
     { id: "note", pattern: "/[...slug]" },
-    { id: "tag", pattern: "/tags/[tag]" }
+    { id: "tag", pattern: "/tags/[tag]" },
   ],
   artifactRequirements: {
     index: true,
     graph: false,
-    backlinks: false
+    backlinks: false,
   },
   renderCapabilities: {
     wikilinks: true,
     codeBlocks: true,
     syntaxHighlighting: true,
-    math: true
-  }
+    math: true,
+  },
 });
 ```
 
@@ -184,25 +200,29 @@ export default defineConfig({
       exclude: ["node_modules/**", ".git/**"],
       frontmatterFields: {
         titleField: "title",
-        publishedField: "published"
-      }
+        publishedField: "published",
+      },
     },
     theme: "@svartz/theme-minimal",
-    plugins: []
+    plugins: [],
   },
 
   vaults: {
     docs: {
-      path: "./docs"
+      path: "./docs",
     },
     wiki: {
       path: "./wiki",
       theme: {
         base: "@svartz/theme-minimal",
-        tailwind: { extend: { /* ... */ } }
-      }
-    }
-  }
+        tailwind: {
+          extend: {
+            /* ... */
+          },
+        },
+      },
+    },
+  },
 });
 ```
 
@@ -254,7 +274,7 @@ import { loadConfig } from "@svartz/config";
 import {
   ConfigLoadError,
   ConfigValidationError,
-  ConfigResolutionError
+  ConfigResolutionError,
 } from "@svartz/config";
 
 try {
@@ -263,7 +283,7 @@ try {
   if (err instanceof ConfigLoadError) {
     console.error(`Failed to load config: ${err.message}`);
   } else if (err instanceof ConfigValidationError) {
-    err.details.forEach(d => console.error(`  ${d.field}: ${d.message}`));
+    err.details.forEach((d) => console.error(`  ${d.field}: ${d.message}`));
   } else if (err instanceof ConfigResolutionError) {
     console.error(`Resolution failed: ${err.message}`);
   }
@@ -276,7 +296,7 @@ try {
 
 ### Plugin JSDoc Template
 
-```typescript
+````typescript
 /**
  * Description of what the plugin does.
  *
@@ -298,13 +318,13 @@ export function myPlugin(): SvartzPlugin {
     // ...
   }));
 }
-```
+````
 
 ---
 
 ### Theme JSDoc Template
 
-```typescript
+````typescript
 /**
  * Description of the theme.
  *
@@ -324,7 +344,7 @@ export function myPlugin(): SvartzPlugin {
 export default defineTheme({
   // ...
 });
-```
+````
 
 ---
 
@@ -364,18 +384,39 @@ emit
 
 ```typescript
 // Core types
-type SvartzPlugin = { id: string; disabled?: boolean; /* hooks */ };
-type SvartzTheme = { id: string; version: string; contractVersion: string; layouts; routes; };
-type PluginContext = { stage: string; files: ProcessedFile[]; config: ResolvedSvartzConfig; };
-type ProcessedFile = { path: string; slug: string; content: string; frontmatter: Record<string, any>; };
+type SvartzPlugin = { id: string; disabled?: boolean /* hooks */ };
+type SvartzTheme = {
+  id: string;
+  version: string;
+  contractVersion: string;
+  layouts;
+  routes;
+};
+type PluginContext = {
+  stage: string;
+  files: ProcessedFile[];
+  config: ResolvedSvartzConfig;
+};
+type ProcessedFile = {
+  path: string;
+  slug: string;
+  content: string;
+  frontmatter: Record<string, any>;
+};
 type HookInput = (ctx: PluginContext) => void | Promise<void> | HookObject;
 type ThemeComponentLoader = () => Promise<{ default: any }> | { default: any };
 
 // Errors
-type PluginValidationError = { _tag: "PluginValidationError"; pluginId: string; };
-type ThemeValidationError = { _tag: "ThemeValidationError"; themeId: string; };
-type ConfigLoadError = { _tag: "ConfigLoadError"; filePath: string; };
-type ConfigValidationError = { _tag: "ConfigValidationError"; details: ValidationErrorDetail[]; };
+type PluginValidationError = {
+  _tag: "PluginValidationError";
+  pluginId: string;
+};
+type ThemeValidationError = { _tag: "ThemeValidationError"; themeId: string };
+type ConfigLoadError = { _tag: "ConfigLoadError"; filePath: string };
+type ConfigValidationError = {
+  _tag: "ConfigValidationError";
+  details: ValidationErrorDetail[];
+};
 ```
 
 ---
@@ -385,5 +426,5 @@ type ConfigValidationError = { _tag: "ConfigValidationError"; details: Validatio
 - [[contracts/plugin-contract]] — Full plugin system spec
 - [[contracts/theme-contract]] — Full theme system spec
 - [[contracts/config-contract]] — Full config spec
-- [[plugins/plugins-overview]] — All core plugins
-- [[plugins/plugin-utilities]] — Utility functions
+- [[plugins/overview]] — All core plugins
+- [[plugins/utilities]] — Utility functions

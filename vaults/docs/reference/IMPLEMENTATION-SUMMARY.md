@@ -17,9 +17,9 @@ Svartz documentation vault (`vaults/docs`) containing complete reference for @sv
 
 ### Plugin System
 
-6. **[[plugins/plugins-overview]]** — All 12 core plugins reference with quick lookup table
-7. **[[plugins/plugin-discover-files]]** — Core discover plugin (first stage)
-8. **[[plugins/plugin-utilities]]** — Plugin utilities and internal modules
+6. **[[plugins/overview]]** — All 12 core plugins reference with quick lookup table
+7. **[[plugins/discover-files]]** — Core discover plugin (first stage)
+8. **[[plugins/utilities]]** — Plugin utilities and internal modules
 
 ## Coverage
 

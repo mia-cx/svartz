@@ -29,17 +29,17 @@ export function transformSyntax(): SvartzPlugin {
   return definePlugin(() => ({
     id: "core:transform-syntax",
     transformContent: (ctx) => {
-      ctx.files.forEach(file => {
+      ctx.files.forEach((file) => {
         file.content = processSyntaxBlocks(file.content);
       });
-    }
+    },
   }));
 }
 ```
 
 ## Features
 
-- **Code block parsing** — Extracts language tags (```python, ```ts, etc.)
+- **Code block parsing** — Extracts language tags (`python, `ts, etc.)
 - **Line highlighting** — Marks important lines for emphasis
 - **Language detection** — Falls back to auto-detection if not specified
 
@@ -52,4 +52,4 @@ export function transformSyntax(): SvartzPlugin {
 ## See Also
 
 - [[contracts/plugin-contract]] — Plugin system contract
-- [[plugins/plugins-overview]] — All core plugins overview
+- [[plugins/overview]] — All core plugins overview

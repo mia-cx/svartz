@@ -62,4 +62,4 @@ Math blocks are processed first (with `enforce: "pre"`) to prevent other transfo
 ## See Also
 
 - [[contracts/plugin-contract]] — Plugin system contract
-- [[plugins/plugins-overview]] — All core plugins overview
+- [[plugins/overview]] — All core plugins overview

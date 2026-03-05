@@ -29,10 +29,10 @@ export function transformOfm(): SvartzPlugin {
   return definePlugin(() => ({
     id: "core:transform-ofm",
     transformContent: (ctx) => {
-      ctx.files.forEach(file => {
+      ctx.files.forEach((file) => {
         file.content = processObsidianMarkdown(file.content);
       });
-    }
+    },
   }));
 }
 ```
@@ -53,4 +53,4 @@ export function transformOfm(): SvartzPlugin {
 ## See Also
 
 - [[contracts/plugin-contract]] — Plugin system contract
-- [[plugins/plugins-overview]] — All core plugins overview
+- [[plugins/overview]] — All core plugins overview

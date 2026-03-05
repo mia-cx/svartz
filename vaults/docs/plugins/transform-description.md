@@ -79,5 +79,5 @@ file.description = "This is the introduction. It explains the concept."
 ## See Also
 
 - [[contracts/plugin-contract]] — Plugin system contract
-- [[plugins/plugins-overview]] — All core plugins overview
-- [[plugins/plugin-index-content]] — Builds index with descriptions
+- [[plugins/overview]] — All core plugins overview
+- [[plugins/index-content]] — Builds index with descriptions

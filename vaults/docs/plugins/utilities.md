@@ -6,7 +6,7 @@ Reference for utility functions and internal modules used across `@svartz/plugin
 
 ### `normalizePlugin(plugin: SvartzPlugin): NormalizedSvartzPlugin`
 
-Validates and normalizes a plugin to standard form. See [[plugin-contract#Utility Functions]].
+Validates and normalizes a plugin to standard form. See [[contracts/plugin-contract#Utility Functions]].
 
 ```typescript
 /**
@@ -37,9 +37,9 @@ export function normalizePlugin(plugin: SvartzPlugin): NormalizedSvartzPlugin {
 
 ### `sortPluginsForStage(plugins: SvartzPlugin[], stage: string): SvartzPlugin[]`
 
-Sorts plugins by `enforce` level for a stage. See [[plugin-contract#Utility Functions]].
+Sorts plugins by `enforce` level for a stage. See [[contracts/plugin-contract#Utility Functions]].
 
-```typescript
+````typescript
 /**
  * Sort plugins for a given stage based on enforce level.
  *
@@ -64,19 +64,19 @@ Sorts plugins by `enforce` level for a stage. See [[plugin-contract#Utility Func
  */
 export function sortPluginsForStage(
   plugins: SvartzPlugin[],
-  stage: string
+  stage: string,
 ): SvartzPlugin[] {
   // Implementation in packages/core/src/plugin/utils.ts
 }
-```
+````
 
 ---
 
 ### `mergePlugins(layers: SvartzPlugin[][]): SvartzPlugin[]`
 
-Merges plugins from 4 layers with specificity-based conflict resolution. See [[plugin-contract#Utility Functions]].
+Merges plugins from 4 layers with specificity-based conflict resolution. See [[contracts/plugin-contract#Utility Functions]].
 
-```typescript
+````typescript
 /**
  * Merge plugins from multiple layers with conflict resolution.
  *
@@ -107,7 +107,7 @@ Merges plugins from 4 layers with specificity-based conflict resolution. See [[p
 export function mergePlugins(layers: SvartzPlugin[][]): SvartzPlugin[] {
   // Implementation in packages/core/src/plugin/merge.ts
 }
-```
+````
 
 ---
 
@@ -117,7 +117,7 @@ export function mergePlugins(layers: SvartzPlugin[][]): SvartzPlugin[] {
 
 Generates canonical, deterministic, conflict-free slugs for vault files.
 
-```typescript
+````typescript
 /**
  * Generate canonical slug from file path.
  *
@@ -170,9 +170,9 @@ export function generateSlug(filePath: string): string {
 export function resolveSlugConflicts(files: ProcessedFile[]): ProcessedFile[] {
   // Implementation
 }
-```
+````
 
-**See:** [[plugin-discover-files]] for integration
+**See:** [[plugins/discover-files]] for integration
 
 ---
 
@@ -180,7 +180,7 @@ export function resolveSlugConflicts(files: ProcessedFile[]): ProcessedFile[] {
 
 Parses `.gitignore` and config patterns for file filtering.
 
-```typescript
+````typescript
 /**
  * Create ignore matcher from .gitignore and patterns.
  *
@@ -206,11 +206,11 @@ Parses `.gitignore` and config patterns for file filtering.
 export function createIgnoreMatcher(
   vaultPath: string,
   include: string[],
-  exclude: string[]
+  exclude: string[],
 ): (filePath: string) => boolean {
   // Implementation
 }
-```
+````
 
 ---
 
@@ -218,7 +218,7 @@ export function createIgnoreMatcher(
 
 ISO timestamp parsing and formatting.
 
-```typescript
+````typescript
 /**
  * Parse datetime string to ISO format.
  *
@@ -257,7 +257,7 @@ export function toISOString(input: unknown): string | undefined {
 export function fileStatsToISO(stats: fs.Stats): string {
   // Implementation
 }
-```
+````
 
 ---
 
@@ -265,7 +265,7 @@ export function fileStatsToISO(stats: fs.Stats): string {
 
 YAML frontmatter extraction and parsing.
 
-```typescript
+````typescript
 /**
  * Parse YAML frontmatter from markdown content.
  *
@@ -291,9 +291,10 @@ YAML frontmatter extraction and parsing.
  * // content = "# Content here"
  * ```
  */
-export function parseFrontmatter(
-  content: string
-): { frontmatter: Record<string, unknown>; content: string } {
+export function parseFrontmatter(content: string): {
+  frontmatter: Record<string, unknown>;
+  content: string;
+} {
   // Implementation
 }
 
@@ -316,11 +317,11 @@ export function parseFrontmatter(
  */
 export function getFrontmatterField(
   frontmatter: Record<string, unknown>,
-  fieldName: string
+  fieldName: string,
 ): unknown {
   // Implementation
 }
-```
+````
 
 ---
 
@@ -328,7 +329,7 @@ export function getFrontmatterField(
 
 Wikilink parsing and resolution helpers.
 
-```typescript
+````typescript
 /**
  * Parse wikilinks from markdown content.
  *
@@ -385,16 +386,16 @@ export function parseWikilinks(content: string): RawLink[] {
 export function resolveWikilink(
   target: string,
   files: ProcessedFile[],
-  strategy: "closest" | "shallowest" | "absolute"
+  strategy: "closest" | "shallowest" | "absolute",
 ): string | undefined {
   // Implementation
 }
-```
+````
 
 ---
 
 ## See Also
 
-- [[plugins/plugins-overview]] — All core plugins reference
+- [[plugins/overview]] — All core plugins reference
 - [[contracts/plugin-contract]] — Plugin system contract
-- [[plugins/plugin-discover-files]] — Uses slug + ignore utilities
+- [[plugins/discover-files]] — Uses slug + ignore utilities

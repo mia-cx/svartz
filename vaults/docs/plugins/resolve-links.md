@@ -93,5 +93,5 @@ export const customLinkResolver = definePlugin(() => ({
 ## See Also
 
 - [[contracts/plugin-contract]] — Plugin system contract
-- [[plugins/plugins-overview]] — All core plugins overview
-- [[plugins/plugin-emit-artifacts]] — Follows this stage
+- [[plugins/overview]] — All core plugins overview
+- [[plugins/emit-artifacts]] — Follows this stage

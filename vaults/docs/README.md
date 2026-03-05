@@ -23,9 +23,9 @@ Deep dives into each component:
 
 Reference for all core plugins:
 
-- **[[plugins/plugins-overview]]** — Quick lookup table, stage breakdown
-- **[[plugins/plugin-discover-files]]** — Vault discovery and slug generation
-- **[[plugins/plugin-utilities]]** — Internal utilities (slug, ignore, parse, resolve)
+- **[[plugins/overview]]** — Quick lookup table, stage breakdown
+- **[[plugins/discover-files]]** — Vault discovery and slug generation
+- **[[plugins/utilities]]** — Internal utilities (slug, ignore, parse, resolve)
 
 ### 📖 Reference
 
@@ -46,9 +46,9 @@ vaults/docs/
 │   ├── theme-contract.md        # Theme system spec
 │   └── config-contract.md       # Config schema & API
 ├── plugins/
-│   ├── plugins-overview.md      # All plugins at a glance
-│   ├── plugin-discover-files.md # Deep dive: discover stage
-│   └── plugin-utilities.md      # Internal helpers
+│   ├── overview.md              # All plugins at a glance
+│   ├── discover-files.md        # Deep dive: discover stage
+│   └── utilities.md             # Internal helpers
 ├── guides/
 │   ├── setup-config.md          # Setup guide (0→production)
 │   ├── create-plugin.md         # Plugin authoring guide
@@ -73,7 +73,7 @@ Plugins hook into 6 sequential stages:
 5. **resolveLinks** — Resolve wikilinks to slugs (stub)
 6. **emit** — Write artifacts to disk
 
-See [[plugins/plugins-overview#Stages Breakdown]] for details.
+See [[plugins/overview#Stages Breakdown]] for details.
 
 ### Plugin Merge Order
 
@@ -109,7 +109,7 @@ See [[contracts/plugin-contract#Contract Versioning]] for details.
 
 **Understand the plugin system** → [[contracts/plugin-contract]]
 
-**Look up a core plugin** → [[plugins/plugins-overview]]
+**Look up a core plugin** → [[plugins/overview]]
 
 **Find code examples** → [[reference/quick-reference]]
 
@@ -135,7 +135,7 @@ See [[contracts/plugin-contract]], [[contracts/theme-contract]]
 - Internal utilities (slug, ignore, parse, resolve)
 - All plugins use `definePlugin()` factory
 
-See [[plugins/plugins-overview]], [[plugins/plugin-utilities]]
+See [[plugins/overview]], [[plugins/utilities]]
 
 ### `@svartz/config`
 

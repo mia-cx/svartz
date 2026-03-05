@@ -22,7 +22,7 @@ Traverses vault directory recursively, reads file contents, parses YAML frontmat
 
 ## Function Signature
 
-```typescript
+````typescript
 /**
  * Create a vault file discovery plugin.
  *
@@ -54,10 +54,10 @@ export function discoverFiles(): SvartzPlugin {
     id: "core:discover-files",
     discover: (ctx) => {
       // Implementation
-    }
+    },
   }));
 }
-```
+````
 
 ## Hook Details
 
@@ -66,6 +66,7 @@ export function discoverFiles(): SvartzPlugin {
 Runs during the `discover` stage. Populates `ctx.files` with all discovered files.
 
 **Behavior:**
+
 1. Read `ctx.vaultConfig.include` and `exclude` patterns
 2. Traverse vault directory using globs/ignore rules
 3. For each `.md` file:
@@ -77,12 +78,14 @@ Runs during the `discover` stage. Populates `ctx.files` with all discovered file
 5. Append to `ctx.files`
 
 **Postcondition:** `ctx.files` has all files with:
+
 - `path` — relative path from vault root
 - `slug` — canonical, conflict-free slug
 - `content` — raw markdown
 - `frontmatter` — parsed YAML dict
 
 **Error handling:**
+
 - File read errors are collected (non-fatal, unless caught during slug conflict detection)
 - Invalid YAML in frontmatter → logged as warning, frontmatter set to `{}`
 
@@ -95,6 +98,7 @@ See [[plugin-internals-slug]] for complete details. Summary:
 3. **Deterministic:** Same vault always produces same slugs
 
 **Examples:**
+
 - `docs/intro.md` → slug `docs/intro`
 - `notes/Todo.md` + `archive/Todo.md` → slugs `notes/todo`, `archive/todo`
 - `projects/web app/readme.md` → slug `projects/web-app/readme`
@@ -109,6 +113,7 @@ See [[plugin-internals-slug]] for complete details. Summary:
 ## Example Output
 
 Given vault:
+
 ```
 docs/
   intro.md
@@ -120,6 +125,7 @@ notes/
 ```
 
 After `discover`, `ctx.files`:
+
 ```typescript
 [
   {
@@ -135,38 +141,40 @@ After `discover`, `ctx.files`:
     slug: "docs/getting-started",
     content: "# Getting Started\n...",
     frontmatter: {},
-    published: true
+    published: true,
   },
   {
     path: "notes/2024-01-01-first-note.md",
     slug: "notes/2024-01-01-first-note",
     content: "...",
     frontmatter: { date: "2024-01-01" },
-    published: true
+    published: true,
   },
   {
     path: "notes/Archive/old-note.md",
     slug: "notes/archive/old-note",
     content: "...",
     frontmatter: {},
-    published: true
-  }
-]
+    published: true,
+  },
+];
 ```
 
 ## Configuration Impact
 
 **From `vaultConfig`:**
+
 - `include` — glob patterns to include (default: `["**/*.md"]`)
 - `exclude` — glob patterns to exclude (default: `["node_modules/**", ".git/**"]`)
 - `frontmatterFields` — defines which frontmatter keys to extract
 
 **From `config.defaults.vaultConfig`:**
+
 - Same fields propagate to all vaults unless overridden
 
 ## See Also
 
 - [[contracts/plugin-contract]] — Plugin system contract
-- [[plugins/plugin-utilities#Slug Generation]] — Slug generation and conflict detection
-- [[plugins/plugin-utilities#Gitignore Parsing]] — Pattern matching and .gitignore parsing
-- [[plugins/plugin-filter-unpublished]] — Downstream filtering stage
+- [[plugins/utilities#Slug Generation]] — Slug generation and conflict detection
+- [[plugins/utilities#Gitignore Parsing]] — Pattern matching and .gitignore parsing
+- [[plugins/filter-unpublished]] — Downstream filtering stage

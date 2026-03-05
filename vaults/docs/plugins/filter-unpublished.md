@@ -205,5 +205,5 @@ After `filterUnpublished`, `ctx.files`:
 ## See Also
 
 - [[contracts/plugin-contract]] — Plugin system contract
-- [[plugins/plugins-overview#Stage 2]] — Filter unpublished stage
+- [[plugins/overview#Stage 2]] — Filter unpublished stage
 - [[guides/setup-config#Frontmatter Semantics]] — Publication semantics guide
