@@ -199,4 +199,4 @@ This branch is a from-scratch rewrite of Quartz's site generator using SvelteKit
 
 ## Suggested next action
 - Wire note routes and one prerendered note page (finish M0).
-- *After vault changes are done:* Define an implementation contract and plan for `@svartz/plugins` (plugin model), then implement that for vault.
+- *After vault changes are done:* Define an implementation contract and plan for the plugin system in `@svartz/core`, then implement that for vault.
