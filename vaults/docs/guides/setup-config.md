@@ -105,7 +105,7 @@ export default defineConfig({
       // File patterns to include/exclude
       include: ["**/*.md"],
       exclude: ["node_modules/**", ".git/**", "_draft/**"],
-      
+
       // Frontmatter field mapping
       frontmatterFields: {
         titleField: "title",
@@ -114,15 +114,15 @@ export default defineConfig({
         aliasesField: "aliases",
         createdAtField: "createdAt",
         updatedAtField: "updatedAt",
-        publishedField: "published"
-      }
+        publishedField: "published",
+      },
     },
-    
+
     // Default theme for all vaults
     theme: "@svartz/theme-minimal",
-    
+
     // Plugins run in all vaults (optional)
-    plugins: []
+    plugins: [],
   },
 
   // Define one or more vaults
@@ -131,18 +131,18 @@ export default defineConfig({
     docs: {
       // Path relative to config file (can be absolute too)
       path: "./vaults/docs",
-      
+
       // Optional: override defaults for this vault
       theme: "@svartz/theme-minimal",
-      
+
       // Optional: vault-specific plugins
-      plugins: []
+      plugins: [],
     },
 
     // Another vault: "wiki"
     wiki: {
       path: "./vaults/wiki",
-      
+
       // Optional: different theme
       theme: {
         base: "@svartz/theme-minimal",
@@ -150,13 +150,13 @@ export default defineConfig({
         tailwind: {
           extend: {
             colors: {
-              primary: "#0066cc"
-            }
-          }
-        }
-      }
-    }
-  }
+              primary: "#0066cc",
+            },
+          },
+        },
+      },
+    },
+  },
 });
 ```
 
@@ -167,6 +167,7 @@ export default defineConfig({
 ### What's a "Draft"?
 
 A file is considered **draft** if:
+
 - The `publishedField` (default: `"published"`) is missing, OR
 - The field value is **falsy**: `false`, `null`, `undefined`, `""`
 
@@ -176,13 +177,11 @@ title: Published Note
 published: true
 ---
 # This file will be published
-
 ---
 title: Draft Note
 published: false
 ---
 # This file will be filtered out
-
 ---
 title: Another Draft
 ---
@@ -191,15 +190,15 @@ title: Another Draft
 
 ### Standard Fields
 
-| Field | Example | Purpose |
-| --- | --- | --- |
-| `title` | `"My Note"` | Note title (required for good UX) |
-| `description` | `"A brief summary"` | Used in previews and search |
-| `tags` | `["learning", "svartz"]` | Taxonomy for filtering |
-| `aliases` | `["alternate-name"]` | Alternative wikilink targets |
-| `createdAt` | `"2024-01-15"` | Creation date (ISO format preferred) |
-| `updatedAt` | `"2024-01-20"` | Last modified date |
-| `published` | `true` or omitted | Publication status |
+| Field         | Example                  | Purpose                              |
+| ------------- | ------------------------ | ------------------------------------ |
+| `title`       | `"My Note"`              | Note title (required for good UX)    |
+| `description` | `"A brief summary"`      | Used in previews and search          |
+| `tags`        | `["learning", "svartz"]` | Taxonomy for filtering               |
+| `aliases`     | `["alternate-name"]`     | Alternative wikilink targets         |
+| `createdAt`   | `"2024-01-15"`           | Creation date (ISO format preferred) |
+| `updatedAt`   | `"2024-01-20"`           | Last modified date                   |
+| `published`   | `true` or omitted        | Publication status                   |
 
 ---
 
@@ -277,6 +276,7 @@ vaults: {
 ```
 
 **Target types:**
+
 - `static` — Static file output (default)
 - `pages` — Cloudflare Pages
 - `worker` — Cloudflare Workers
@@ -317,10 +317,10 @@ export default defineConfig({
   plugins: [
     svartzPlugin({
       configPath: "./svartz.config.ts",
-      vaultId: "docs"  // Which vault to build
+      vaultId: "docs", // Which vault to build
     }),
-    sveltekit()
-  ]
+    sveltekit(),
+  ],
 });
 ```
 
@@ -352,13 +352,13 @@ vaults: {
     theme: "@svartz/theme-minimal",
     target: { type: "pages", projectName: "docs-site" }
   },
-  
+
   wiki: {
     path: "./vaults/wiki",
     theme: "@svartz/theme-wiki",
     target: { type: "pages", projectName: "wiki-site" }
   },
-  
+
   blog: {
     path: "./vaults/blog",
     theme: "@svartz/theme-blog",
@@ -391,18 +391,20 @@ const isDev = process.env.NODE_ENV === "development";
 
 export default defineConfig({
   version: "1.0.0",
-  
+
   defaults: {
     vault: {
       include: isDev ? ["**/*.md", "**/_draft/**"] : ["**/*.md"],
       frontmatterFields: {
-        publishedField: isDev ? "draft" : "published"
-      }
+        publishedField: isDev ? "draft" : "published",
+      },
     },
-    theme: isDev ? "@svartz/theme-dev" : "@svartz/theme-prod"
+    theme: isDev ? "@svartz/theme-dev" : "@svartz/theme-prod",
   },
-  
-  vaults: { /* ... */ }
+
+  vaults: {
+    /* ... */
+  },
 });
 ```
 
@@ -420,7 +422,6 @@ Check your YAML syntax in frontmatter. Use an online YAML validator if unsure.
 tags: ["one", "two"]
 published: true
 ---
-
 # ✗ Wrong (missing quotes)
 ---
 tags: [one, two]

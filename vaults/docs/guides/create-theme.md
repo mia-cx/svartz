@@ -96,11 +96,11 @@ Create `package.json`:
 
 <div class="default-layout">
   <Header />
-  
+
   <main class="content">
     <slot />
   </main>
-  
+
   <Footer />
 </div>
 
@@ -110,7 +110,7 @@ Create `package.json`:
     grid-template-rows: auto 1fr auto;
     min-height: 100vh;
   }
-  
+
   .content {
     padding: 2rem;
   }
@@ -129,17 +129,17 @@ Create `package.json`:
 
 <div class="note-layout">
   <Header />
-  
+
   <div class="note-container">
     <main class="note-content">
       <slot />
     </main>
-    
+
     <aside class="note-sidebar">
       <Sidebar />
     </aside>
   </div>
-  
+
   <Footer />
 </div>
 
@@ -149,14 +149,14 @@ Create `package.json`:
     grid-template-rows: auto 1fr auto;
     min-height: 100vh;
   }
-  
+
   .note-container {
     display: grid;
     grid-template-columns: 1fr 300px;
     gap: 2rem;
     padding: 2rem;
   }
-  
+
   @media (max-width: 768px) {
     .note-container {
       grid-template-columns: 1fr;
@@ -179,51 +179,51 @@ export default defineTheme({
   id: "@myorg/theme-custom",
   version: "1.0.0",
   contractVersion: "1.0.0",
-  
+
   displayName: "My Custom Theme",
   description: "A beautiful, minimal theme for Svartz",
-  
+
   // Required: layouts
   layouts: {
     defaultPage: { default: DefaultLayout },
-    notePage: { default: NoteLayout }
+    notePage: { default: NoteLayout },
   },
-  
+
   // Required: routes
   routes: [
     {
       id: "note",
       pattern: "/[...slug]",
-      layoutSlot: "notePage"
+      layoutSlot: "notePage",
     },
     {
       id: "index",
       pattern: "/",
-      layoutSlot: "defaultPage"
-    }
+      layoutSlot: "defaultPage",
+    },
   ],
-  
+
   // Optional: component overrides
   componentRegistry: {
     backlinks: { default: BacklinksComponent },
-    toc: { default: TocComponent }
+    toc: { default: TocComponent },
   },
-  
+
   // Optional: declare what artifacts you need
   artifactRequirements: {
     index: true,
     graph: false,
-    backlinks: true
+    backlinks: true,
   },
-  
+
   // Optional: declare rendering capabilities
   renderCapabilities: {
     wikilinks: true,
     codeBlocks: true,
     syntaxHighlighting: true,
     math: true,
-    callouts: true
-  }
+    callouts: true,
+  },
 });
 ```
 
@@ -241,10 +241,10 @@ export default {
     extend: {
       colors: {
         primary: "#0066cc",
-        secondary: "#666"
-      }
-    }
-  }
+        secondary: "#666",
+      },
+    },
+  },
 };
 ```
 
@@ -262,7 +262,8 @@ export default {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--color-text);
   background-color: var(--color-bg);
 }
@@ -272,7 +273,7 @@ body {
 
 ## Step 7: Add JSDoc to Theme
 
-```typescript
+````typescript
 /**
  * Custom theme for Svartz vaults.
  *
@@ -301,7 +302,7 @@ body {
 export default defineTheme({
   // ...
 });
-```
+````
 
 ---
 
@@ -318,37 +319,35 @@ interface ThemeOptions {
   fontFamily?: string;
 }
 
-export default defineTheme<ThemeOptions>(
-  (opts = {}) => {
-    const {
-      colorScheme = "auto",
-      sidebarPosition = "right",
-      fontFamily = "system"
-    } = opts;
+export default defineTheme<ThemeOptions>((opts = {}) => {
+  const {
+    colorScheme = "auto",
+    sidebarPosition = "right",
+    fontFamily = "system",
+  } = opts;
 
-    return {
-      id: "@myorg/theme-custom",
-      version: "1.0.0",
-      contractVersion: "1.0.0",
-      
-      displayName: "My Custom Theme",
-      
-      layouts: {
-        defaultPage: { default: DefaultLayout },
-        notePage: { default: NoteLayout }
+  return {
+    id: "@myorg/theme-custom",
+    version: "1.0.0",
+    contractVersion: "1.0.0",
+
+    displayName: "My Custom Theme",
+
+    layouts: {
+      defaultPage: { default: DefaultLayout },
+      notePage: { default: NoteLayout },
+    },
+
+    routes: [
+      {
+        id: "note",
+        pattern: "/[...slug]",
+        layoutSlot: "notePage",
+        meta: { colorScheme, sidebarPosition, fontFamily },
       },
-      
-      routes: [
-        {
-          id: "note",
-          pattern: "/[...slug]",
-          layoutSlot: "notePage",
-          meta: { colorScheme, sidebarPosition, fontFamily }
-        }
-      ]
-    };
-  }
-);
+    ],
+  };
+});
 ```
 
 Users can then configure per-vault:
@@ -379,14 +378,14 @@ import { discoverFiles, filterUnpublished } from "@svartz/plugins";
 export default defineTheme({
   id: "@myorg/theme-custom",
   // ... other fields ...
-  
+
   pluginPreset: {
     plugins: [
       // Ensure these run even if user removes core plugins
       discoverFiles(),
-      filterUnpublished()
-    ]
-  }
+      filterUnpublished(),
+    ],
+  },
 });
 ```
 
@@ -397,12 +396,14 @@ export default defineTheme({
 ### Manual Testing
 
 1. **Create test vault:**
+
    ```bash
    mkdir test-vault
    echo "# Test Note\nWikilink: [[another]]" > test-vault/test.md
    ```
 
 2. **Add to config:**
+
    ```typescript
    vaults: {
      test: {
@@ -452,7 +453,7 @@ Then use in config:
 
 ```typescript
 defaults: {
-  theme: "@myorg/theme-custom"
+  theme: "@myorg/theme-custom";
 }
 ```
 
@@ -461,6 +462,7 @@ defaults: {
 ## Best Practices
 
 ✅ **DO:**
+
 - Use semantic versioning (1.0.0, 1.1.0, 2.0.0)
 - Include both `defaultPage` and `notePage` layouts
 - Document with JSDoc and README
@@ -470,6 +472,7 @@ defaults: {
 - Test with real vault content
 
 ❌ **DON'T:**
+
 - Skip the `:slug` route pattern (breaks note rendering)
 - Hard-code file paths (use relative imports)
 - Assume specific frontmatter fields (get from config)
@@ -481,16 +484,19 @@ defaults: {
 ## Troubleshooting
 
 ### Theme Won't Load
+
 - Check `contractVersion` major version matches core
 - Verify `id`, `version`, `contractVersion` are present
 - Test with `defineTheme()` directly
 
 ### Layouts Not Applied
+
 - Ensure layout component is properly exported
 - Check route `layoutSlot` matches layout key
 - Verify `pattern` is valid SvelteKit route syntax
 
 ### Styling Not Working
+
 - Ensure CSS is imported in component
 - Check Tailwind/PostCSS is configured
 - Test with inline styles first
