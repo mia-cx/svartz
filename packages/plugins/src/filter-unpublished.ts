@@ -34,7 +34,7 @@ export const filterUnpublished = definePlugin(() => ({
         return Boolean(value);
       });
     },
-    options: { fatal: true },
+    options: { fatal: true, enforce: "post" },
   },
 }));
 
