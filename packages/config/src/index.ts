@@ -1,70 +1,30 @@
 import { Effect, Either } from "effect";
 import {
-  loadConfigEffect as loadConfigProgram,
-  decodeConfigEffect as decodeConfigProgram,
-} from "./loader.js";
+  loadConfig as loadConfigEffect,
+  parseConfig as parseConfigEffect,
+} from "./loader";
 import {
-  resolveConfigPathsEffect as resolveConfigPathsProgram,
-  getVaultEffect as getVaultProgram,
-  listVaults as listVaultsPure,
-} from "./resolver.js";
+  getVaultConfig as getVaultConfigEffect,
+  resolveConfig as resolveConfigEffect,
+} from "./resolver";
 import type {
-  SvartzConfig,
   ResolvedSvartzConfig,
   ResolvedVaultConfig,
-  VaultSummary,
-} from "./types.js";
+  SvartzConfig,
+} from "./types";
 
-// --- Re-exports: types ---
-
+export * from "./schemas";
+export * from "./types";
 export type {
-  SvartzConfig,
-  SvartzDefaults,
-  VaultConfig,
-  VaultThemeConfig,
-  TargetConfig,
-  LinkResolutionStrategy,
-  FrontmatterFields,
-  TailwindThemeConfig,
-  ResolvedSvartzConfig,
-  ResolvedVaultConfig,
-  ResolvedFrontmatter,
-  ResolvedTheme,
-  ResolvedBuildDefaults,
-  VaultSummary,
-  ConfigError,
-} from "./types.js";
-
-// --- Re-exports: tagged error classes ---
-
-export {
-  ConfigNotFound,
-  ConfigImportFailed,
-  ConfigDecodeFailed,
-  VaultPathInvalid,
-  VaultIdNotFound,
-} from "./types.js";
-
-// --- Re-exports: schemas ---
-
-export {
-  SemverSchema,
-  SvartzConfigSchema,
-  VaultConfigSchema,
-  VaultThemeConfigSchema,
-  TargetConfigSchema,
-  FrontmatterFieldsSchema,
-  SvartzDefaultsSchema,
-  LinkResolutionStrategySchema,
-  TailwindThemeConfigSchema,
-} from "./schema.js";
+  ResolvedBuildConfig as ResolvedBuildDefaults,
+  ResolvedFrontmatterConfig as ResolvedFrontmatter,
+  ResolvedThemeConfig as ResolvedTheme,
+} from "./types";
+export * from "./utils";
 
 // --- Effect programs (for consumers who use Effect directly) ---
 
-export { loadConfigProgram as loadConfigEffect };
-export { decodeConfigProgram as decodeConfigEffect };
-export { resolveConfigPathsProgram as resolveConfigPathsEffect };
-export { getVaultProgram as getVaultEffect };
+export { loadConfigEffect, parseConfigEffect, resolveConfigEffect };
 
 // --- Boundary adapter ---
 
@@ -78,25 +38,21 @@ export const runEffect = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
 
 export const loadConfig = (
   configPath?: string,
-): Promise<{ config: SvartzConfig; configDir: string }> =>
-  runEffect(loadConfigProgram(configPath));
+): Promise<ResolvedSvartzConfig> => runEffect(loadConfigEffect(configPath));
 
-export const decodeConfig = (raw: unknown): Promise<SvartzConfig> =>
-  runEffect(decodeConfigProgram(raw));
+export const parseConfig = (raw: unknown): Promise<SvartzConfig> =>
+  runEffect(parseConfigEffect(raw));
 
-export const resolveConfigPaths = (
+export const resolveConfig = (
   config: SvartzConfig,
   configDir: string,
 ): Promise<ResolvedSvartzConfig> =>
-  runEffect(resolveConfigPathsProgram(config, configDir));
+  runEffect(resolveConfigEffect(config, configDir));
 
 export const getVault = (
   config: ResolvedSvartzConfig,
   vaultId: string,
 ): Promise<ResolvedVaultConfig> =>
-  runEffect(getVaultProgram(config, vaultId));
-
-export const listVaults = (config: ResolvedSvartzConfig): VaultSummary[] =>
-  listVaultsPure(config);
+  runEffect(getVaultConfigEffect(config, vaultId));
 
 export const defineConfig = (config: SvartzConfig): SvartzConfig => config;

@@ -3,14 +3,16 @@ import { access, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { major as semverMajor } from "semver";
-import { SvartzConfigSchema } from "./schema.js";
-import type { SvartzConfig } from "./types.js";
+import { resolveConfig } from "./resolver";
+import { SvartzConfigSchema } from "./schemas";
+import type { ResolvedSvartzConfig, SvartzConfig } from "./types/index";
 import {
   ConfigDecodeFailed,
   ConfigImportFailed,
   ConfigNotFound,
-} from "./types.js";
-import { getPackageVersion } from "./utils/package-version.js";
+  VaultPathInvalid,
+} from "./types/index";
+import { getPackageVersion } from "./utils";
 
 const CONFIG_FILENAMES = ["svartz.config", ".svartzrc"];
 const CONFIG_EXTENSIONS = [".ts", ".mjs", ".js"] as const;
@@ -18,6 +20,8 @@ const CONFIG_EXTENSIONS = [".ts", ".mjs", ".js"] as const;
 /**
  * Parse (validate) a raw JS object against the config schema, then check that the
  * major version matches the version this package supports.
+ * @param raw - The raw JS object to parse.
+ * @returns The parsed SvartzConfig.
  */
 export const parseConfig = (
   raw: unknown,
@@ -51,6 +55,8 @@ export const parseConfig = (
  * - Explicit path to a directory: look for default config names in that dir.
  * - Explicit path to a file: use it.
  * - Explicit path that is neither, or no path: look in process.cwd().
+ * @param configPath - The path to the config file or directory.
+ * @returns The absolute path to the config file or directory.
  */
 const validateConfigPath = (
   configPath?: string,
@@ -107,6 +113,8 @@ const validateConfigPath = (
 
 /**
  * Dynamically import a config file and extract its default export.
+ * @param configPath - The path to the config file.
+ * @returns The imported config.
  */
 const importConfig = (
   configPath: string,
@@ -127,16 +135,24 @@ const importConfig = (
 /**
  * Load, import, and parse a svartz config file.
  * Returns the parsed SvartzConfig and the directory containing the config file.
+ * @param configPath - The path to the config file or directory.
+ * @returns The parsed and resolved SvartzConfig as ResolvedSvartzConfig.
  */
 export const loadConfig = (
   configPath?: string,
 ): Effect.Effect<
-  { config: SvartzConfig; configDir: string },
-  ConfigNotFound | ConfigImportFailed | ConfigDecodeFailed
+  ResolvedSvartzConfig,
+  ConfigNotFound | ConfigImportFailed | ConfigDecodeFailed | VaultPathInvalid
 > =>
   Effect.gen(function* () {
-    const resolvedPath = yield* validateConfigPath(configPath);
-    const raw = yield* importConfig(resolvedPath);
+    // Validate the config path and resolve it to an absolute path.
+    const validatedPath = yield* validateConfigPath(configPath);
+    // Dynamically import the config file and extract its default export.
+    const raw = yield* importConfig(validatedPath);
+    // Ensure the config adheres to the schema, and is compatible with this version of the config package.
     const config = yield* parseConfig(raw);
-    return { config, configDir: dirname(resolvedPath) };
+    // Resolve the SvartzConfig to ensure absolute paths in the config file.
+    const resolvedConfig = yield* resolveConfig(config, dirname(validatedPath));
+
+    return resolvedConfig;
   });
