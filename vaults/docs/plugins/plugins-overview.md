@@ -262,20 +262,20 @@ export function emitArtifacts(): SvartzPlugin {
 - **`core:filter-unpublished`** [[plugins/plugin-filter-unpublished]]
 
 ### Transform Content Stage (4 plugins, can run in parallel)
-- **`core:transform-ofm`** [[plugins/plugin-transform#Plugin Transform OFM]] — Obsidian markdown features
-- **`core:transform-gfm`** [[plugins/plugin-transform#Plugin Transform GFM]] — GitHub Flavored Markdown
-- **`core:transform-syntax`** [[plugins/plugin-transform#Plugin Transform Syntax]] — Syntax highlighting prep
-- **`core:transform-latex`** [[plugins/plugin-transform#Plugin Transform LaTeX]] — LaTeX/math blocks
+- **`core:transform-gfm`** [[plugins/plugin-transform-gfm]] — GitHub Flavored Markdown
+- **`core:transform-ofm`** [[plugins/plugin-transform-ofm]] — Obsidian Flavored Markdown
+- **`core:transform-syntax`** [[plugins/plugin-transform-syntax]] — Syntax highlighting prep
+- **`core:transform-latex`** [[plugins/plugin-transform-latex]] — LaTeX/math blocks
 
 ### Index Content Stage (2 plugins)
-- **`core:transform-description`** [[plugins/plugin-index#Plugin Transform Description]] — Extract summaries
-- **`core:index-content`** [[plugins/plugin-index#Plugin Index Content]] — Build search index
+- **`core:transform-description`** [[plugins/plugin-transform-description]] — Extract summaries
+- **`core:index-content`** [[plugins/plugin-index-content]] — Build search index
 
 ### Resolve Links Stage
-- **`core:resolve-links`** [[plugins/plugin-resolve-emit#Plugin Resolve Links]] — Wikilink resolution (stub)
+- **`core:resolve-links`** [[plugins/plugin-resolve-links]] — Wikilink resolution (stub)
 
 ### Emit Stage
-- **`core:emit-artifacts`** [[plugins/plugin-resolve-emit#Plugin Emit Artifacts]] — Write artifacts
+- **`core:emit-artifacts`** [[plugins/plugin-emit-artifacts]] — Write artifacts
 
 ---
 
