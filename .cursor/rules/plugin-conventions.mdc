@@ -1,28 +1,39 @@
 ---
-description: Plugin system conventions for @svartz/core and @svartz/plugins
+description: Plugin and theme system conventions for @svartz/core and @svartz/plugins
 globs:
   - packages/core/**
   - packages/plugins/**
 alwaysApply: false
 ---
 
-# Plugin system conventions
+# Plugin and theme system conventions
 
 ## Type ownership
 
-- `@svartz/core` owns resolved config types, pipeline types, plugin interfaces, utilities, and errors
+- `@svartz/core` owns resolved config types, pipeline types, plugin/theme interfaces, utilities, errors, and tailwind/wrangler schemas
 - `@svartz/plugins` owns core pipeline plugin implementations (12 plugins)
-- `@svartz/vite-plugin` owns runner/orchestration (stage dispatch, error collection)
-- `@svartz/core` must NOT depend on `@svartz/config`
+- `@svartz/vite-plugin` owns runner/orchestration (stage dispatch, error collection, theme resolution)
+- `@svartz/config` re-exports tailwind/wrangler schemas from core; owns config composition/resolution
 - `@svartz/plugins` depends only on `@svartz/core` (plus runtime deps like gray-matter, minimatch, moment)
+- `@svartz/core` depends on `effect` (internal validation); author-facing types are Effect-free
 
 ## Internal layout
 
 - `packages/core/src/types.ts` — shared resolved config and pipeline types (ProcessedFile, RawLink, Index, Graph)
-- `packages/core/src/plugin/` — plugin contract (types, errors, utils, merge, define-plugin)
+- `packages/core/src/plugin/` — plugin contract (types, errors, utils, merge, define-plugin, schema)
+- `packages/core/src/theme/` — theme contract (types, errors, define-theme)
+- `packages/core/src/tailwind/` — tailwind schema + types (canonical home)
+- `packages/core/src/wrangler/` — wrangler schema + types (canonical home)
 - `packages/core/src/index.ts` — flat barrel re-exporting everything
 - `packages/plugins/src/internal/` — shared utilities (slug, parse, resolve, ignore, datetime)
 - `packages/plugins/src/*.ts` — one file per core plugin
+
+## Contract versioning
+
+- `CONTRACT_VERSION` constant exported from `@svartz/core` (currently `1.0.0`)
+- Themes: `contractVersion` is **required** (semver string, must match major)
+- Plugins: `contractVersion` is **optional** (backward compatible)
+- Compatibility: semver major must match `CONTRACT_VERSION`
 
 ## Hook names are plugin-specific
 
@@ -42,6 +53,15 @@ Hooks use granular names matching pipeline stages, not generic names:
 
 `fatal`, `enforce`, `parallel` live on `hook.options`, not on the plugin object.
 
+## Plugin merge order
+
+1. Core plugins (`createCorePlugins()`)
+2. Theme plugin preset (`theme.pluginPreset.plugins`)
+3. Config defaults plugins (`config.defaults.plugins`)
+4. Config vault plugins (`config.vault.plugins`)
+
+Duplicate ID replaces in-place; new ID appends; disabled removed.
+
 ## Core plugins
 
 - All core plugin IDs start with `core:` prefix
@@ -50,6 +70,14 @@ Hooks use granular names matching pipeline stages, not generic names:
 - `core:emit-artifacts` sets `parallel: true`
 - `createCorePlugins()` returns the canonical ordered array
 - `CORE_PLUGIN_IDS` is the readonly list of all core plugin IDs
+
+## Theme contract
+
+- `defineTheme` accepts static object or factory; validates on each invocation
+- Required: `id`, `version`, `contractVersion`, `layouts` (with `defaultPage` + `notePage`), `routes` (with `note` route containing `:slug`)
+- Optional: `displayName`, `description`, `author`, `homepage`, `components`, `capabilities`, `artifactRequirements`, `pluginPreset`, `defaults`, `hooks`
+- `search` and `toc` are derived from the canonical index — not independent artifacts
+- `ThemeComponentLoader`: sync `{ default: unknown }` or lazy `() => Promise<{ default: unknown }>`
 
 ## Published semantics
 
@@ -66,12 +94,21 @@ Hooks use granular names matching pipeline stages, not generic names:
 - Index entries sorted by slug; graph/backlinks keys sorted lexicographically
 - Link resolution tie-breaks: shared depth → path depth → lexicographic
 
+## Validation
+
+- Plugin validation uses Effect Schema internally (`validatePluginShape` from `plugin/schema.ts`)
+- Feature toggle `USE_SCHEMA_VALIDATION` in `plugin/utils.ts` for rollback to manual path
+- Theme validation uses manual checks in `theme/define-theme.ts`
+- Unknown keys warn via `console.warn`, never throw
+
 ## Log prefix
 
-Use `[svartz:plugin]` for all console.warn messages from plugin utilities.
+- Plugin warnings: `[svartz:plugin]`
+- Theme warnings: `[svartz:theme]`
 
 ## Error classes
 
-Plugin errors use plain classes with `_tag` (Effect-compatible without Effect dependency):
+Plugin/theme errors use plain classes with `_tag` (Effect-compatible without exposing Effect types):
 - `PluginValidationError` — invalid plugin shape
 - `PluginHookError` — hook execution failure
+- `ThemeValidationError` — invalid theme manifest
