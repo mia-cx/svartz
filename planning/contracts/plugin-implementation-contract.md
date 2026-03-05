@@ -3,23 +3,23 @@
 ## Overview
 
 Three-package plugin system for Svartz:
-- `@svartz/core` — shared types, plugin contract, utilities, errors
+- `@svartz/core` — shared types, plugin contract, theme contract, Effect Schema validation, tailwind/wrangler schemas
 - `@svartz/plugins` — core pipeline plugin implementations
 - `@svartz/vite-plugin` — runner/orchestration
 
 In-memory pipeline inspired by Vite/Quartz. No Turbo caching for vault/index/graph; Turbo is only for package builds.
 
-`@svartz/core` does NOT depend on `@svartz/config`. Plugin authors depend on `@svartz/core`; they never need Effect.
+`@svartz/core` has an Effect runtime dependency (for Schema validation). Author-facing types remain plain TypeScript — plugin/theme authors never need Effect.
 
 ---
 
 ## Architecture
 
 ```
-Plugin author
+Plugin / Theme author
     │
     ▼
-@svartz/core             ← shared types, definePlugin, merge, normalize, sort, errors
+@svartz/core             ← types, definePlugin, defineTheme, merge, normalize, sort, errors, schemas
     │
     ▼
 @svartz/plugins          ← core pipeline plugin implementations (12 plugins)
@@ -32,11 +32,67 @@ Plugin author
 
 ```
 @svartz/plugins     ──▶  @svartz/core
-@svartz/config      ──▶  @svartz/core  (deferred; PluginEntrySchema = Unknown for now)
+@svartz/config      ──▶  @svartz/core  (re-exports tailwind/wrangler schemas)
 @svartz/vite-plugin ──▶  @svartz/core, @svartz/plugins, @svartz/config
+@svartz/theme-*     ──▶  @svartz/core
 ```
 
-No package cycles. `@svartz/core` depends on nothing.
+No package cycles. `@svartz/core` depends only on `effect`.
+
+---
+
+## Contract Versioning
+
+- `CONTRACT_VERSION` constant exported from `@svartz/core` (currently `1.0.0`).
+- Themes: `contractVersion` is **required** (semver string).
+- Plugins: `contractVersion` is **optional** (backward compatible).
+- Compatibility check: parse semver, require matching major version.
+- Validation error on incompatibility includes expected major + received version.
+
+---
+
+## Theme Contract
+
+### Core types (`@svartz/core`)
+
+- `SvartzTheme` — id, version, contractVersion, layouts, routes + optional metadata and functional sections
+- `ThemeLayoutMap` — required `defaultPage`, `notePage`; optional `root`, `tagPage`, `folderPage`, `notFoundPage`; extensible
+- `ThemeRouteDefinition` — id, pattern; optional layoutSlot, component, prerender, priority, meta
+- `ThemeComponentLoader` — sync `{ default: unknown }` or lazy `() => Promise<{ default: unknown }>`
+- `ThemeComponentRegistry` — callout, backlinks, graphPanel, searchBox, toc, noteHeader; extensible
+- `ThemeArtifactRequirements` — index, graph, backlinks (optional booleans); custom array
+- `ThemeRenderCapabilities` — declarative flags for rendering features
+- `ThemePluginPreset` — plugins merged with standard semantics (replace by id, append if new)
+
+### Validation minima
+
+- Must include route with `id: "note"` and `pattern` containing `:slug`
+- Must include required layout slots (`defaultPage`, `notePage`)
+- `contractVersion` must have matching semver major
+- Unknown keys warn via `console.warn` and are ignored
+
+### `defineTheme`
+
+- Static object form: `defineTheme({ id: "...", ... })`
+- Factory form: `defineTheme((opts) => ({ ... }))`
+- Returns callable factory; validates on each invocation
+
+---
+
+## Plugin Merge Order + Specificity
+
+Runner merge order:
+
+1. Core plugins (`createCorePlugins()`)
+2. Theme plugin preset (`theme.pluginPreset.plugins`)
+3. Config defaults plugins (`config.defaults.plugins`)
+4. Config vault plugins (`config.vault.plugins`)
+
+Conflict rule:
+- Duplicate ID → replace existing entry in-place (more specific layer wins)
+- New ID → append
+- Disabled → removed from final list
+- Deterministic: replaced plugins keep their original position
 
 ---
 
@@ -106,6 +162,24 @@ Plugin contract:
 - `definePlugin`, `normalizePlugin`, `mergePlugins`, `isPluginEnabled`, `sortPluginsForStage`
 - `PluginValidationError`, `PluginHookError`
 
+Theme contract:
+- `SvartzTheme`, `ThemeLayoutMap`, `ThemeRouteDefinition`, `ThemeComponentLoader`
+- `ThemeComponentRegistry`, `ThemeArtifactRequirements`, `ThemeRenderCapabilities`, `ThemePluginPreset`
+- `defineTheme`, `validateTheme`, `ThemeValidationError`
+- `CONTRACT_VERSION`
+
+Effect Schema (internal, exported for tooling):
+- `PluginSchema`, `HookInputSchema`, `HookOptionsSchema`, `FnSchema`
+- `validatePluginShape`, `KNOWN_PLUGIN_KEYS`
+
+Tailwind schemas/types (canonical home, re-exported by config):
+- `TailwindThemeConfigSchema`, `TailwindThemeConfigPropertyRecordSchema`
+- `TailwindThemeConfig`, `DefaultThemeOverrideHints`
+
+Wrangler schemas/types (canonical home, re-exported by config):
+- `WranglerConfigSchema`, `WranglerConfigFieldsSchema`, + all building-block schemas
+- `WranglerConfig`, `WranglerConfigFields`, + all building-block types
+
 ### ProcessedFile contract
 
 ```ts
@@ -130,7 +204,7 @@ interface Index {
 }
 ```
 
-Single source of truth for search, backlinks, and graph projections. UI consumers project from this artifact.
+Single source of truth for search, backlinks, and graph projections. `search` and `toc` are derived from the index — not independent artifacts.
 
 ---
 
@@ -138,7 +212,9 @@ Single source of truth for search, backlinks, and graph projections. UI consumer
 
 - **Factory pattern:** `pluginFactory(options?) => SvartzPlugin`
 - **`definePlugin(factory)`** wraps a factory with runtime validation + normalization.
+- **Static form:** `definePlugin({ id, ... })` for zero-config plugins.
 - **`id`** is immutable, required, non-empty string. Set by the factory, not overridable by options.
+- **`contractVersion`** optional semver string; checked against `CONTRACT_VERSION` major by runner.
 - **`disabled`** flag: canonical way to disable a plugin. Disabled plugins are removed during merge.
 - **Hook shorthand:** `transformOfm(ctx) {}` normalizes to `{ run: transformOfm, options: {} }`.
 - **Per-hook options:** `fatal`, `enforce`, `parallel` are set per-hook, not per-plugin.
@@ -170,45 +246,39 @@ Reference: `@packages/vault` slug.ts (fileToSlug) and indexer.ts (resolveLink).
 
 ---
 
-## Merge Semantics
+## Runtime Validation
 
-1. **Normalize** each list: dedupe by `id` (warn on duplicates, last wins).
-2. **Base:** normalized `defaults.plugins`.
-3. **Apply** normalized `vault.plugins`:
-   - Same `id` → replace in-place (keeps position).
-   - New `id` → append.
-4. **Remove** entries with `disabled: true`.
-5. Output is deterministic: replaced plugins keep their original position.
+### Effect Schema migration
 
----
+Plugin validation is routed through Effect Schema (`validatePluginShape`) with a feature toggle for rollback to the legacy manual validation path. Parity criteria:
 
-## Error Policy
+- Same invalid input classes throw `PluginValidationError`
+- `_tag` and message prefix unchanged
+- Warning count and category unchanged
+- Shorthand normalization output unchanged
+- Stage sorting/merge downstream behavior unchanged
 
-- Fatal behavior is **plugin-owned per-hook** via `options.fatal`.
-- Core plugins set their own hooks to fatal; this is an implementation detail of core plugins.
-- Runner collects all errors (tagged with plugin id + stage), reports consolidated at end.
-- Hooks with `options.fatal: true` cause final build failure.
-- Non-fatal errors are reported but do not halt the build.
-
-Error types (`@svartz/core`):
-- `PluginValidationError` — invalid plugin shape (thrown by `definePlugin`)
-- `PluginHookError` — hook execution failure (produced by runner)
-
-Both are plain classes with `_tag` discriminant (Effect-compatible, no Effect dependency).
-
----
-
-## Runtime Checks (MVP)
+### Runtime checks
 
 | Check | Severity |
 |---|---|
 | `id` missing or empty string | error (throw) |
-| Unknown hook keys on plugin object | warn |
+| Unknown hook/theme keys on object | warn |
 | Duplicate plugin IDs in same list | warn (last wins) |
 | Invalid `options.enforce` value | error (throw) |
 | Invalid `options.parallel` value | error (throw) |
 | Hook is neither function nor `{ run, options? }` | error (throw) |
 | Disabled plugin with hooks present | warn |
+| Theme missing required route or layout | error (throw) |
+| Theme contractVersion major mismatch | error (throw) |
+
+### Warning policy
+
+Unknown keys emit `console.warn` with format `[svartz:plugin] plugin "ID" has unknown key "KEY"` or `[svartz:theme] theme "ID" has unknown key "KEY"`. Warnings are informational and never throw.
+
+### Benchmark guardrail
+
+Local dev-only benchmark tests measure normalization/validation overhead per plugin. Max regression threshold: 15%. Not used in CI.
 
 ---
 
@@ -219,12 +289,16 @@ Both are plain classes with `_tag` discriminant (Effect-compatible, no Effect de
 | Utility | Description |
 |---|---|
 | `definePlugin(factory)` | Wraps factory with validation + normalization |
+| `defineTheme(manifest)` | Wraps theme with validation |
 | `normalizePlugin(plugin)` | Convert shorthand hooks to object form |
 | `mergePlugins(defaults, vault)` | Layered merge with dedupe and disable |
 | `isPluginEnabled(plugin)` | `!plugin.disabled` |
 | `sortPluginsForStage(plugins, stage)` | Sort by enforce tier; expects normalized plugins |
+| `validatePluginShape(input)` | Effect Schema structural validation |
+| `validateTheme(theme)` | Theme manifest validation |
 | `createCorePlugins()` | Returns canonical ordered array of all 12 core plugins |
 | `CORE_PLUGIN_IDS` | Readonly array of all core plugin IDs |
+| `CONTRACT_VERSION` | Current contract version constant |
 
 ### Future
 
@@ -249,7 +323,10 @@ mdsvex is a rendering concern, not a core pipeline plugin. Deferred to an option
 
 | Concern | Owner |
 |---|---|
-| Resolved config/vault/pipeline types, plugin contract | `@svartz/core` |
+| Resolved config/vault/pipeline types, plugin/theme contract | `@svartz/core` |
+| Tailwind/Wrangler schemas (canonical) | `@svartz/core` |
+| Tailwind/Wrangler re-exports + config composition | `@svartz/config` |
 | Core plugin implementations | `@svartz/plugins` |
-| Schema, validation, config resolution | `@svartz/config` |
+| Schema-based config validation, resolution | `@svartz/config` |
 | Stage dispatch, ordering, parallelism, error collection | `@svartz/vite-plugin` |
+| Theme runtime resolution, SvelteKit route materialization | `@svartz/vite-plugin` |
