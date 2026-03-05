@@ -5,7 +5,7 @@ import {
   VaultThemeConfigSchema,
   TargetConfigSchema,
   LinkResolutionStrategySchema,
-} from "../src/schema.js";
+} from "../src/schemas";
 
 const decode = <A, I>(schema: Schema.Schema<A, I>, input: unknown) =>
   Effect.runSync(
@@ -16,22 +16,19 @@ describe("SvartzConfigSchema", () => {
   it("decodes a valid full config", () => {
     const result = decode(SvartzConfigSchema, {
       version: "1.0.0",
-      workspace: { rootDir: "." },
       defaults: {
-        vault: {
-          include: ["**/*.md"],
-          exclude: [],
-          linkResolution: "closest",
-          theme: { base: "@svartz/theme-minimal", colors: { brand: "red" } },
-          frontmatter: { titleField: "name" },
-        },
-        build: { concurrency: 5, maxRetries: 2 },
+        include: ["**/*.md"],
+        exclude: [],
+        linkResolution: "closest",
+        theme: { base: "@svartz/theme-minimal", colors: { brand: "red" } },
+        frontmatter: { titleField: "name" },
       },
+      build: { concurrency: 5, maxRetries: 2 },
       vaults: [
         {
           id: "docs",
           path: "vaults/docs",
-          target: { type: "pages", projectName: "docs" },
+          target: { type: "static" },
         },
       ],
     });
@@ -92,6 +89,36 @@ describe("SvartzConfigSchema", () => {
     });
     expect(Either.isRight(result)).toBe(true);
   });
+
+  it("accepts optional plugins on defaults (shallow, shape TBD)", () => {
+    const result = decode(SvartzConfigSchema, {
+      version: "1.0.0",
+      defaults: { plugins: [] },
+      vaults: [{ id: "a", path: "b", target: { type: "static" } }],
+    });
+    expect(Either.isRight(result)).toBe(true);
+    const withEntries = decode(SvartzConfigSchema, {
+      version: "1.0.0",
+      defaults: { plugins: [{ name: "default-plugin" }] },
+      vaults: [{ id: "a", path: "b", target: { type: "static" } }],
+    });
+    expect(Either.isRight(withEntries)).toBe(true);
+  });
+
+  it("accepts optional plugins on vault (shallow, shape TBD)", () => {
+    const result = decode(SvartzConfigSchema, {
+      version: "1.0.0",
+      vaults: [
+        {
+          id: "a",
+          path: "b",
+          target: { type: "static" },
+          plugins: [{ name: "vault-plugin" }],
+        },
+      ],
+    });
+    expect(Either.isRight(result)).toBe(true);
+  });
 });
 
 describe("VaultThemeConfigSchema", () => {
@@ -120,21 +147,55 @@ describe("VaultThemeConfigSchema", () => {
 });
 
 describe("TargetConfigSchema", () => {
-  it("accepts worker target", () => {
+  it("accepts cloudflare-workers target with wrangler Route shapes (string, ZoneNameRoute)", () => {
     const result = decode(TargetConfigSchema, {
-      type: "worker",
+      type: "cloudflare-workers",
       name: "my-worker",
-      routes: ["/api/*"],
+      routes: ["/api/*", { pattern: "sub.example.com/*", zone_name: "example.com" }],
     });
     expect(Either.isRight(result)).toBe(true);
   });
 
-  it("accepts pages target", () => {
+  it("accepts cloudflare-workers target with ZoneIdRoute and CustomDomainRoute", () => {
     const result = decode(TargetConfigSchema, {
-      type: "pages",
-      projectName: "my-pages",
+      type: "cloudflare-workers",
+      name: "my-worker",
+      routes: [
+        { pattern: "*.example.com/*", zone_id: "abc123" },
+        { pattern: "app.example.com/*", custom_domain: true },
+      ],
     });
     expect(Either.isRight(result)).toBe(true);
+  });
+
+  it("accepts cloudflare-workers target with wrangler env fields (main, assets, compatibility_date)", () => {
+    const result = decode(TargetConfigSchema, {
+      type: "cloudflare-workers",
+      name: "web",
+      main: ".svelte-kit/cloudflare/_worker.js",
+      assets: { directory: ".svelte-kit/cloudflare", binding: "ASSETS" },
+      compatibility_date: "2026-03-03",
+      compatibility_flags: ["nodejs_compat"],
+      observability: { enabled: true },
+    });
+    expect(Either.isRight(result)).toBe(true);
+  });
+
+  it("accepts cloudflare-workers target with only type (all env fields optional)", () => {
+    const result = decode(TargetConfigSchema, { type: "cloudflare-workers" });
+    expect(Either.isRight(result)).toBe(true);
+  });
+
+  it("accepts cloudflare-pages target (projectName optional)", () => {
+    expect(Either.isRight(decode(TargetConfigSchema, { type: "cloudflare-pages" }))).toBe(true);
+    expect(
+      Either.isRight(
+        decode(TargetConfigSchema, {
+          type: "cloudflare-pages",
+          projectName: "my-docs",
+        }),
+      ),
+    ).toBe(true);
   });
 
   it("accepts static target", () => {

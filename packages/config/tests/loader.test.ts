@@ -2,17 +2,17 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { resolve } from "node:path";
 import {
   loadConfig,
-  decodeConfig,
+  parseConfig,
   ConfigNotFound,
   ConfigImportFailed,
   ConfigDecodeFailed,
-} from "../src/index.js";
+} from "../src/index";
 
 const FIXTURES = resolve(__dirname, "fixtures/configs");
 
-describe("decodeConfig", () => {
+describe("parseConfig", () => {
   it("decodes a valid raw object", async () => {
-    const result = await decodeConfig({
+    const result = await parseConfig({
       version: "1.0.0",
       vaults: [{ id: "a", path: "b", target: { type: "static" } }],
     });
@@ -21,11 +21,11 @@ describe("decodeConfig", () => {
   });
 
   it("throws ConfigDecodeFailed on invalid object", async () => {
-    await expect(decodeConfig({ version: "1.0.0" })).rejects.toThrow(
+    await expect(parseConfig({ version: "1.0.0" })).rejects.toThrow(
       ConfigDecodeFailed,
     );
     try {
-      await decodeConfig({ version: "1.0.0" });
+      await parseConfig({ version: "1.0.0" });
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigDecodeFailed);
       expect((e as ConfigDecodeFailed)._tag).toBe("ConfigDecodeFailed");
@@ -35,7 +35,7 @@ describe("decodeConfig", () => {
 
   it("throws ConfigDecodeFailed on wrong major version", async () => {
     await expect(
-      decodeConfig({
+      parseConfig({
         version: "2.0.0",
         vaults: [{ id: "a", path: "b", target: { type: "static" } }],
       }),
@@ -43,7 +43,7 @@ describe("decodeConfig", () => {
   });
 
   it("accepts compatible minor/patch versions", async () => {
-    const result = await decodeConfig({
+    const result = await parseConfig({
       version: "1.5.3",
       vaults: [{ id: "a", path: "b", target: { type: "static" } }],
     });
@@ -58,19 +58,19 @@ describe("loadConfig", () => {
 
   it("loads a valid .mjs config file", async () => {
     const configPath = resolve(FIXTURES, "valid-minimal.mjs");
-    const { config, configDir } = await loadConfig(configPath);
-    expect(config.version).toBe("1.0.0");
+    const config = await loadConfig(configPath);
+    expect(config.configDir).toBe(FIXTURES);
     expect(config.vaults).toHaveLength(1);
     expect(config.vaults[0]!.id).toBe("main");
-    expect(configDir).toBe(FIXTURES);
   });
 
   it("loads a full config with defaults and multiple vaults", async () => {
     const configPath = resolve(FIXTURES, "valid-full.mjs");
-    const { config } = await loadConfig(configPath);
+    const config = await loadConfig(configPath);
     expect(config.vaults).toHaveLength(2);
-    expect(config.defaults?.vault?.include).toEqual(["**/*.md"]);
-    expect(config.defaults?.build?.concurrency).toBe(5);
+    // Defaults are merged into each vault; docs vault gets file defaults for include/exclude
+    expect(config.vaults[0]!.include).toEqual(["**/*.md"]);
+    expect(config.vaults[0]!.exclude).toEqual(["archive/**"]);
   });
 
   it("throws ConfigNotFound for missing file", async () => {
@@ -102,7 +102,7 @@ describe("loadConfig", () => {
   it("respects SVARTZ_CONFIG env var", async () => {
     const configPath = resolve(FIXTURES, "valid-minimal.mjs");
     vi.stubEnv("SVARTZ_CONFIG", configPath);
-    const { config } = await loadConfig();
+    const config = await loadConfig();
     expect(config.vaults[0]!.id).toBe("main");
   });
 

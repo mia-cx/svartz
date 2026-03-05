@@ -3,7 +3,7 @@ export default {
   vaults: [
     {
       id: "main",
-      path: "tests/fixtures/valid-vault",
+      path: "../valid-vault",
       target: { type: "static" },
     },
   ],
