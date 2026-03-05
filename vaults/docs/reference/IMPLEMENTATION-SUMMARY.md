@@ -26,6 +26,7 @@ Svartz documentation vault (`vaults/docs`) containing complete reference for @sv
 ### @svartz/core ✅
 
 **Plugin System:**
+
 - `SvartzPlugin` interface ✅
 - `PluginContext` interface ✅
 - `HookInput` type ✅
@@ -38,6 +39,7 @@ Svartz documentation vault (`vaults/docs`) containing complete reference for @sv
 - Stage diagram and descriptions ✅
 
 **Theme System:**
+
 - `SvartzTheme` interface ✅
 - `ThemeLayoutMap` interface ✅
 - `ThemeComponentLoader` type ✅
@@ -52,12 +54,14 @@ Svartz documentation vault (`vaults/docs`) containing complete reference for @sv
 - `CONTRACT_VERSION` constant ✅
 
 **Schemas (Moved to Core):**
+
 - Tailwind schema and types ✅
 - Wrangler schema and types ✅
 
 ### @svartz/plugins ✅
 
 **Core Plugins:**
+
 - `discoverFiles()` — discover stage ✅
 - `filterUnpublished()` — filterUnpublished stage ✅
 - `transformOfm()` — transformContent stage ✅
@@ -70,6 +74,7 @@ Svartz documentation vault (`vaults/docs`) containing complete reference for @sv
 - `emitArtifacts()` — emit stage ✅
 
 **Internal Utilities:**
+
 - Slug generation (`generateSlug`, `resolveSlugConflicts`) ✅
 - Gitignore parsing (`createIgnoreMatcher`) ✅
 - Datetime utilities (`toISOString`, `fileStatsToISO`) ✅
@@ -79,11 +84,13 @@ Svartz documentation vault (`vaults/docs`) containing complete reference for @sv
 ### @svartz/config ✅
 
 **Public API:**
+
 - `loadConfig()` function ✅
 - `resolveConfig()` function ✅
 - `loadAndResolveConfig()` function ✅
 
 **Types:**
+
 - `SvartzConfig` interface ✅
 - `ResolvedSvartzConfig` interface ✅
 - `SvartzDefaults` interface ✅
@@ -93,11 +100,13 @@ Svartz documentation vault (`vaults/docs`) containing complete reference for @sv
 - `ThemeConfig` type ✅
 
 **Errors:**
+
 - `ConfigLoadError` ✅
 - `ConfigValidationError` ✅
 - `ConfigResolutionError` ✅
 
 **Schema:**
+
 - All Effect Schema definitions referenced ✅
 
 ---
@@ -119,18 +128,21 @@ Svartz documentation vault (`vaults/docs`) containing complete reference for @sv
 ### Files with JSDoc
 
 **@svartz/core:**
+
 - `src/plugin/types.ts` — interfaces documented ✅
 - `src/plugin/utils.ts` — `normalizePlugin`, `sortPluginsForStage`, `mergePlugins` documented ✅
 - `src/theme/types.ts` — all theme types documented ✅
 - `src/theme/define-theme.ts` — `defineTheme` factory documented ✅
 
 **@svartz/plugins:**
+
 - `src/discover-files.ts` — brief JSDoc + implementation ✅
 - `src/filter-unpublished.ts` — brief JSDoc + implementation ✅
 - All plugin files include JSDoc headers ✅
 - Internal utilities in `src/internal/` include JSDoc ✅
 
 **@svartz/config:**
+
 - `src/index.ts` — public API functions documented ✅
 - Error classes documented with `@field` ✅
 
@@ -144,18 +156,23 @@ Svartz documentation vault (`vaults/docs`) containing complete reference for @sv
 
 ```typescript
 // packages/core/src/plugin/utils.ts
-export function normalizePlugin(plugin: SvartzPlugin): NormalizedSvartzPlugin
-export function sortPluginsForStage(plugins: SvartzPlugin[], stage: string): SvartzPlugin[]
-export function mergePlugins(layers: SvartzPlugin[][]): SvartzPlugin[]
+export function normalizePlugin(plugin: SvartzPlugin): NormalizedSvartzPlugin;
+export function sortPluginsForStage(
+  plugins: SvartzPlugin[],
+  stage: string,
+): SvartzPlugin[];
+export function mergePlugins(layers: SvartzPlugin[][]): SvartzPlugin[];
 ```
 
 #### Theme System Functions
 
 ```typescript
 // packages/core/src/theme/define-theme.ts
-export function defineTheme(theme: SvartzTheme): () => SvartzTheme
-export function defineTheme<T>(factory: (options?: T) => SvartzTheme): (options?: T) => SvartzTheme
-export function validateTheme(theme: SvartzTheme): void
+export function defineTheme(theme: SvartzTheme): () => SvartzTheme;
+export function defineTheme<T>(
+  factory: (options?: T) => SvartzTheme,
+): (options?: T) => SvartzTheme;
+export function validateTheme(theme: SvartzTheme): void;
 ```
 
 ### @svartz/plugins
@@ -164,53 +181,80 @@ export function validateTheme(theme: SvartzTheme): void
 
 ```typescript
 // Each returns SvartzPlugin via definePlugin()
-export const discoverFiles: () => SvartzPlugin
-export const filterUnpublished: () => SvartzPlugin
-export const transformOfm: () => SvartzPlugin
-export const transformGfm: () => SvartzPlugin
-export const transformSyntax: () => SvartzPlugin
-export const transformLatex: () => SvartzPlugin
-export const transformDescription: () => SvartzPlugin
-export const indexContent: () => SvartzPlugin
-export const resolveLinks: () => SvartzPlugin
-export const emitArtifacts: () => SvartzPlugin
+export const discoverFiles: () => SvartzPlugin;
+export const filterUnpublished: () => SvartzPlugin;
+export const transformOfm: () => SvartzPlugin;
+export const transformGfm: () => SvartzPlugin;
+export const transformSyntax: () => SvartzPlugin;
+export const transformLatex: () => SvartzPlugin;
+export const transformDescription: () => SvartzPlugin;
+export const indexContent: () => SvartzPlugin;
+export const resolveLinks: () => SvartzPlugin;
+export const emitArtifacts: () => SvartzPlugin;
 ```
 
 #### Utilities
 
 ```typescript
 // packages/plugins/src/internal/slug.ts
-export function generateSlug(filePath: string): string
-export function resolveSlugConflicts(files: ProcessedFile[]): ProcessedFile[]
+export function generateSlug(filePath: string): string;
+export function resolveSlugConflicts(files: ProcessedFile[]): ProcessedFile[];
 
 // packages/plugins/src/internal/ignore.ts
-export function createIgnoreMatcher(vaultPath: string, include: string[], exclude: string[]): (filePath: string) => boolean
+export function createIgnoreMatcher(
+  vaultPath: string,
+  include: string[],
+  exclude: string[],
+): (filePath: string) => boolean;
 
 // packages/plugins/src/internal/datetime.ts
-export function toISOString(input: unknown): string | undefined
-export function fileStatsToISO(stats: fs.Stats): string
+export function toISOString(input: unknown): string | undefined;
+export function fileStatsToISO(stats: fs.Stats): string;
 
 // packages/plugins/src/internal/parse.ts
-export function parseFrontmatter(content: string): { frontmatter: Record<string, unknown>; content: string }
-export function getFrontmatterField(frontmatter: Record<string, unknown>, fieldName: string): unknown
+export function parseFrontmatter(content: string): {
+  frontmatter: Record<string, unknown>;
+  content: string;
+};
+export function getFrontmatterField(
+  frontmatter: Record<string, unknown>,
+  fieldName: string,
+): unknown;
 
 // packages/plugins/src/internal/resolve.ts
-export function parseWikilinks(content: string): RawLink[]
-export function resolveWikilink(target: string, files: ProcessedFile[], strategy: "closest" | "shallowest" | "absolute"): string | undefined
+export function parseWikilinks(content: string): RawLink[];
+export function resolveWikilink(
+  target: string,
+  files: ProcessedFile[],
+  strategy: "closest" | "shallowest" | "absolute",
+): string | undefined;
 ```
 
 ### @svartz/config
 
 ```typescript
 // packages/config/src/index.ts
-export function loadConfig(path: string): Promise<SvartzConfig>
-export function resolveConfig(config: SvartzConfig): Promise<ResolvedSvartzConfig>
-export function loadAndResolveConfig(path: string): Promise<ResolvedSvartzConfig>
+export function loadConfig(path: string): Promise<SvartzConfig>;
+export function resolveConfig(
+  config: SvartzConfig,
+): Promise<ResolvedSvartzConfig>;
+export function loadAndResolveConfig(
+  path: string,
+): Promise<ResolvedSvartzConfig>;
 
 // Errors (exported as tagged Error classes)
-export class ConfigLoadError extends Error { _tag: "ConfigLoadError"; filePath: string; cause: Error; }
-export class ConfigValidationError extends Error { _tag: "ConfigValidationError"; details: ValidationErrorDetail[]; }
-export class ConfigResolutionError extends Error { _tag: "ConfigResolutionError"; }
+export class ConfigLoadError extends Error {
+  _tag: "ConfigLoadError";
+  filePath: string;
+  cause: Error;
+}
+export class ConfigValidationError extends Error {
+  _tag: "ConfigValidationError";
+  details: ValidationErrorDetail[];
+}
+export class ConfigResolutionError extends Error {
+  _tag: "ConfigResolutionError";
+}
 ```
 
 ---

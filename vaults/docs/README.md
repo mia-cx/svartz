@@ -48,7 +48,16 @@ vaults/docs/
 ├── plugins/
 │   ├── overview.md              # All plugins at a glance
 │   ├── discover-files.md        # Deep dive: discover stage
-│   └── utilities.md             # Internal helpers
+│   └── utilities/               # Plugin utilities (one file per utility)
+│       ├── README.md
+│       ├── normalize-plugin.md
+│       ├── sort-plugins-for-stage.md
+│       ├── merge-plugins.md
+│       ├── slug.md
+│       ├── ignore.md
+│       ├── datetime.md
+│       ├── parse.md
+│       └── resolve.md
 ├── guides/
 │   ├── setup-config.md          # Setup guide (0→production)
 │   ├── create-plugin.md         # Plugin authoring guide
