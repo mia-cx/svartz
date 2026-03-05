@@ -1,0 +1,36 @@
+{
+  "name": "@svartz/plugins",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Core pipeline plugins for the Svartz build system",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mia-cx/svartz.git",
+    "directory": "packages/plugins"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@svartz/core": "workspace:*",
+    "gray-matter": "^4.0.3",
+    "minimatch": "^10.1.1",
+    "moment": "^2.30.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
+}
