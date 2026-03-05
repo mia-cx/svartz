@@ -1,0 +1,77 @@
+---
+description: Plugin system conventions for @svartz/core and @svartz/plugins
+globs:
+  - packages/core/**
+  - packages/plugins/**
+alwaysApply: false
+---
+
+# Plugin system conventions
+
+## Type ownership
+
+- `@svartz/core` owns resolved config types, pipeline types, plugin interfaces, utilities, and errors
+- `@svartz/plugins` owns core pipeline plugin implementations (12 plugins)
+- `@svartz/vite-plugin` owns runner/orchestration (stage dispatch, error collection)
+- `@svartz/core` must NOT depend on `@svartz/config`
+- `@svartz/plugins` depends only on `@svartz/core` (plus runtime deps like gray-matter, minimatch, moment)
+
+## Internal layout
+
+- `packages/core/src/types.ts` — shared resolved config and pipeline types (ProcessedFile, RawLink, Index, Graph)
+- `packages/core/src/plugin/` — plugin contract (types, errors, utils, merge, define-plugin)
+- `packages/core/src/index.ts` — flat barrel re-exporting everything
+- `packages/plugins/src/internal/` — shared utilities (slug, parse, resolve, ignore, datetime)
+- `packages/plugins/src/*.ts` — one file per core plugin
+
+## Hook names are plugin-specific
+
+Hooks use granular names matching pipeline stages, not generic names:
+- `discoverFiles`, `parseFrontmatter`, `filterUnpublished`, `resolveLinks`
+- `transformOfm`, `transformGfm`, `transformToc`, `transformDescription`, `transformSyntax`, `transformLatex`
+- `indexContent`, `emitArtifacts`
+- Lifecycle: `buildStart`, `configResolved`, `buildEnd`, `handleChange`
+
+## SvartzPlugin vs NormalizedSvartzPlugin
+
+- `SvartzPlugin`: author-facing, hooks accept function shorthand or object form (`PluginHookInput`)
+- `NormalizedSvartzPlugin`: runner-facing, all hooks in object form (`PluginHook`). Produced by `normalizePlugin()`.
+- Runner and `sortPluginsForStage` always work with normalized plugins.
+
+## Hook options are per-hook, not per-plugin
+
+`fatal`, `enforce`, `parallel` live on `hook.options`, not on the plugin object.
+
+## Core plugins
+
+- All core plugin IDs start with `core:` prefix
+- All core hooks set `fatal: true`
+- `core:filter-unpublished` sets `enforce: "post"`
+- `core:emit-artifacts` sets `parallel: true`
+- `createCorePlugins()` returns the canonical ordered array
+- `CORE_PLUGIN_IDS` is the readonly list of all core plugin IDs
+
+## Published semantics
+
+- missing/null/undefined → published
+- true → published
+- datetime string → published
+- false → unpublished
+- empty string → unpublished
+
+## Determinism
+
+- Canonical slugs: full vault-relative path, extensionless, lowercased
+- Two files at different paths never produce the same slug
+- Index entries sorted by slug; graph/backlinks keys sorted lexicographically
+- Link resolution tie-breaks: shared depth → path depth → lexicographic
+
+## Log prefix
+
+Use `[svartz:plugin]` for all console.warn messages from plugin utilities.
+
+## Error classes
+
+Plugin errors use plain classes with `_tag` (Effect-compatible without Effect dependency):
+- `PluginValidationError` — invalid plugin shape
+- `PluginHookError` — hook execution failure
