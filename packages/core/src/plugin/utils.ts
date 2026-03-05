@@ -7,8 +7,45 @@ import type {
 } from "./types";
 import { STAGE_NAMES } from "./types";
 import { PluginValidationError } from "./errors";
+import { validatePluginShape, warnUnknownPluginKeys } from "./schema";
+
+/**
+ * Feature toggle: when true, use Effect Schema decode path.
+ * Set to false to revert to the legacy manual validation path.
+ */
+const USE_SCHEMA_VALIDATION = true;
 
 const VALID_ENFORCE = new Set(["pre", "post", undefined]);
+
+// --- Legacy manual validation (kept for rollback) ---
+
+function legacyValidatePlugin(plugin: SvartzPlugin): void {
+  if (!plugin.id || typeof plugin.id !== "string") {
+    throw new PluginValidationError({
+      pluginId: plugin.id ?? "<missing>",
+      message: `Plugin id must be a non-empty string`,
+    });
+  }
+}
+
+function legacyWarnUnknownKeys(plugin: SvartzPlugin): void {
+  const KNOWN_KEYS = new Set<string>([
+    "id",
+    "contractVersion",
+    "disabled",
+    ...STAGE_NAMES,
+    "handleChange",
+  ]);
+  for (const key of Object.keys(plugin)) {
+    if (!KNOWN_KEYS.has(key)) {
+      console.warn(
+        `[svartz:plugin] plugin "${plugin.id}" has unknown key "${key}"`,
+      );
+    }
+  }
+}
+
+// --- Hook normalization (shared by both paths) ---
 
 function normalizeHook(
   hook: SvartzPlugin[StageName],
@@ -22,14 +59,20 @@ function normalizeHook(
   }
 
   if (typeof hook === "object" && typeof hook.run === "function") {
-    validateHookOptions(hook.options, pluginId, stage);
+    if (!USE_SCHEMA_VALIDATION) {
+      validateHookOptions(hook.options, pluginId, stage);
+    }
     return hook;
   }
 
-  throw new PluginValidationError({
-    pluginId,
-    message: `Hook "${stage}" must be a function or { run, options? }`,
-  });
+  if (!USE_SCHEMA_VALIDATION) {
+    throw new PluginValidationError({
+      pluginId,
+      message: `Hook "${stage}" must be a function or { run, options? }`,
+    });
+  }
+
+  return undefined;
 }
 
 function normalizeChangeHook(
@@ -43,14 +86,20 @@ function normalizeChangeHook(
   }
 
   if (typeof hook === "object" && typeof hook.run === "function") {
-    validateHookOptions(hook.options, pluginId, "handleChange");
+    if (!USE_SCHEMA_VALIDATION) {
+      validateHookOptions(hook.options, pluginId, "handleChange");
+    }
     return hook;
   }
 
-  throw new PluginValidationError({
-    pluginId,
-    message: `Hook "handleChange" must be a function or { run, options? }`,
-  });
+  if (!USE_SCHEMA_VALIDATION) {
+    throw new PluginValidationError({
+      pluginId,
+      message: `Hook "handleChange" must be a function or { run, options? }`,
+    });
+  }
+
+  return undefined;
 }
 
 function validateHookOptions(
@@ -75,36 +124,24 @@ function validateHookOptions(
   }
 }
 
-const KNOWN_KEYS = new Set<string>([
-  "id",
-  "disabled",
-  ...STAGE_NAMES,
-  "handleChange",
-]);
-
-function warnUnknownKeys(plugin: SvartzPlugin): void {
-  for (const key of Object.keys(plugin)) {
-    if (!KNOWN_KEYS.has(key)) {
-      console.warn(
-        `[svartz:plugin] plugin "${plugin.id}" has unknown key "${key}"`,
-      );
-    }
-  }
-}
+// --- Main normalize function ---
 
 /**
- * Normalize a plugin: convert function shorthand hooks to object form
- * and validate hook shapes/options. Throws on invalid plugins.
+ * Normalize a plugin: validate shape + convert function shorthand hooks
+ * to object form. Throws PluginValidationError on invalid plugins.
+ * Warnings emitted via console.warn for unknown keys and disabled-with-hooks.
  */
 function normalizePlugin(plugin: SvartzPlugin): NormalizedSvartzPlugin {
-  if (!plugin.id || typeof plugin.id !== "string") {
-    throw new PluginValidationError({
-      pluginId: plugin.id ?? "<missing>",
-      message: `Plugin id must be a non-empty string`,
-    });
+  if (USE_SCHEMA_VALIDATION) {
+    validatePluginShape(plugin);
+    warnUnknownPluginKeys(
+      plugin as unknown as Record<string, unknown>,
+      typeof plugin.id === "string" ? plugin.id : "<missing>",
+    );
+  } else {
+    legacyValidatePlugin(plugin);
+    legacyWarnUnknownKeys(plugin);
   }
-
-  warnUnknownKeys(plugin);
 
   if (plugin.disabled && hasHooks(plugin)) {
     console.warn(
@@ -114,6 +151,9 @@ function normalizePlugin(plugin: SvartzPlugin): NormalizedSvartzPlugin {
 
   const normalized: NormalizedSvartzPlugin = {
     id: plugin.id,
+    ...(plugin.contractVersion !== undefined && {
+      contractVersion: plugin.contractVersion,
+    }),
     ...(plugin.disabled !== undefined && { disabled: plugin.disabled }),
 
     // Lifecycle hooks
@@ -177,8 +217,10 @@ function normalizePlugin(plugin: SvartzPlugin): NormalizedSvartzPlugin {
 }
 
 function hasHooks(plugin: SvartzPlugin): boolean {
-  return STAGE_NAMES.some((s) => plugin[s] != null) ||
-    plugin.handleChange != null;
+  return (
+    STAGE_NAMES.some((s) => plugin[s] != null) ||
+    plugin.handleChange != null
+  );
 }
 
 function isPluginEnabled(plugin: SvartzPlugin): boolean {
