@@ -7,19 +7,19 @@ Svartz documentation vault (`vaults/docs`) containing complete reference for @sv
 ### Entry Points
 
 1. **[[README]]** — Overview and quick navigation
-2. **[[quick-reference]]** — Fast lookup for common tasks and code patterns
+2. **[[reference/quick-reference]]** — Fast lookup for common tasks and code patterns
 
 ### Contracts (Canonical References)
 
-3. **[[plugin-contract]]** — Plugin system contract (types, validation, utilities)
-4. **[[theme-contract]]** — Theme system contract (types, defineTheme factory, validation)
-5. **[[config-contract]]** — Configuration schema and API
+3. **[[contracts/plugin-contract]]** — Plugin system contract (types, validation, utilities)
+4. **[[contracts/theme-contract]]** — Theme system contract (types, defineTheme factory, validation)
+5. **[[contracts/config-contract]]** — Configuration schema and API
 
 ### Plugin System
 
-6. **[[plugins-overview]]** — All 12 core plugins reference with quick lookup table
-7. **[[plugin-discover-files]]** — Core discover plugin (first stage)
-8. **[[plugin-utilities]]** — Plugin utilities and internal modules
+6. **[[plugins/plugins-overview]]** — All 12 core plugins reference with quick lookup table
+7. **[[plugins/plugin-discover-files]]** — Core discover plugin (first stage)
+8. **[[plugins/plugin-utilities]]** — Plugin utilities and internal modules
 
 ## Coverage
 
@@ -234,7 +234,7 @@ export class ConfigResolutionError extends Error { _tag: "ConfigResolutionError"
 6. Errors collected (fatal stops pipeline; non-fatal continues)
 ```
 
-See [[plugin-contract]] for full details.
+See [[contracts/plugin-contract]] for full details.
 
 ### Theme Lifecycle
 
@@ -246,7 +246,7 @@ See [[plugin-contract]] for full details.
 5. Vite plugin uses theme layouts + routes for SvelteKit route generation
 ```
 
-See [[theme-contract]] for full details.
+See [[contracts/theme-contract]] for full details.
 
 ### Config Resolution
 
@@ -259,7 +259,7 @@ See [[theme-contract]] for full details.
 6. Consumers (CLI, Vite, etc.) use resolved config
 ```
 
-See [[config-contract]] for full details.
+See [[contracts/config-contract]] for full details.
 
 ---
 

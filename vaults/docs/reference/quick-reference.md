@@ -382,8 +382,8 @@ type ConfigValidationError = { _tag: "ConfigValidationError"; details: Validatio
 
 ## See Also
 
-- [[plugin-contract]] — Full plugin system spec
-- [[theme-contract]] — Full theme system spec
-- [[config-contract]] — Full config spec
-- [[plugins-overview]] — All core plugins
-- [[plugin-utilities]] — Utility functions
+- [[contracts/plugin-contract]] — Full plugin system spec
+- [[contracts/theme-contract]] — Full theme system spec
+- [[contracts/config-contract]] — Full config spec
+- [[plugins/plugins-overview]] — All core plugins
+- [[plugins/plugin-utilities]] — Utility functions

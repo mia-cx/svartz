@@ -314,7 +314,7 @@ const corePlugins = createCorePlugins();
 
 ## See Also
 
-- [[plugin-contract]] — Plugin system contract
-- [[plugin-utilities]] — mergePlugins, sortPluginsForStage, etc.
-- [[plugin-internals-slug]] — Slug generation algorithm
-- [[plugin-internals-ignore]] — Gitignore pattern matching
+- [[contracts/plugin-contract]] — Plugin system contract
+- [[plugins/plugin-utilities]] — mergePlugins, sortPluginsForStage, etc.
+- [[plugins/plugin-utilities#Slug Generation]] — Slug generation algorithm
+- [[plugins/plugin-utilities#Gitignore Parsing]] — Gitignore pattern matching

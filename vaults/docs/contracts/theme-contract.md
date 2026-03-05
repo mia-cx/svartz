@@ -436,6 +436,5 @@ export function defineTheme<T extends Record<string, unknown> = Record<string, n
 
 ## See Also
 
-- [[plugin-contract]] — Companion contract for plugins
-- [[theme-validation]] — Validation internals and Effect Schema
-- [[theme-types]] — Internal type definitions
+- [[contracts/plugin-contract]] — Companion contract for plugins
+- [[reference/quick-reference]] — Code examples and patterns

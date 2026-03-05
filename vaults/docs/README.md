@@ -1,84 +1,261 @@
 # Svartz Documentation Vault
 
-Complete reference documentation for the Svartz project, including architecture, contracts, and implementation details for:
-
-- **@svartz/core** — Plugin and theme contracts, Effect Schema validation, shared schemas
-- **@svartz/plugins** — Core pipeline plugin implementations
-- **@svartz/config** — Configuration loading and validation
+Complete reference and guides for the Svartz documentation, theme, and plugin systems.
 
 ## Quick Navigation
 
-### Contracts & Architecture
-- [[plugin-contract]] — Plugin system contract and API
-- [[theme-contract]] — Theme contract and `defineTheme` factory
-- [[config-contract]] — Configuration schema and resolution
+### 📖 Start Here
 
-### Core (@svartz/core)
+- **[[guides/setup-config]]** — Set up Svartz from scratch (new users)
+- **[[guides/create-plugin]]** — Write a custom plugin
+- **[[guides/create-theme]]** — Author a custom theme
+- **[[reference/quick-reference]]** — Code snippets and patterns
 
-**Plugin System**
-- [[plugin-types]] — `SvartzPlugin`, `PluginContext`, hook interfaces
-- [[plugin-validation]] — Effect Schema validation and `normalizePlugin`
-- [[plugin-utilities]] — `sortPluginsForStage`, `mergePlugins`, error handling
+### 📚 Contracts (Source of Truth)
 
-**Theme System**
-- [[theme-types]] — `SvartzTheme`, layouts, routes, component loaders
-- [[theme-define]] — `defineTheme` factory with validation
-- [[theme-validation]] — Contract validation rules and errors
+Deep dives into each component:
 
-**Shared Schemas**
-- [[tailwind-schema]] — Tailwind configuration schema and types
-- [[wrangler-schema]] — Wrangler configuration schema and types
+- **[[contracts/plugin-contract]]** — Plugin system (types, validation, utilities)
+- **[[contracts/theme-contract]]** — Theme system (defineTheme, validation)
+- **[[contracts/config-contract]]** — Configuration (schema, API, errors)
 
-### Plugins (@svartz/plugins)
+### 🔧 Plugins
 
-Core pipeline plugins (each with implementation details):
-- [[plugin-discover-files]] — Traverse vault, parse frontmatter
-- [[plugin-filter-unpublished]] — Remove drafts/unpublished files
-- [[plugin-transform-ofm]] — Parse frontmatter YAML
-- [[plugin-transform-description]] — Extract first 1-3 sentences
-- [[plugin-transform-gfm]] — GitHub Flavored Markdown processing
-- [[plugin-transform-syntax]] — Syntax highlighting preparation
-- [[plugin-transform-latex]] — LaTeX/math block handling
-- [[plugin-index-content]] — Build search index and manifest
-- [[plugin-emit-artifacts]] — Write final artifacts (index.json, graph, backlinks)
+Reference for all core plugins:
 
-Utilities:
-- [[plugin-internals-slug]] — Slug generation and conflict detection
-- [[plugin-internals-ignore]] — `.gitignore` parsing
-- [[plugin-internals-datetime]] — ISO timestamp utilities
-- [[plugin-internals-parse]] — YAML/frontmatter parsing helpers
+- **[[plugins/plugins-overview]]** — Quick lookup table, stage breakdown
+- **[[plugins/plugin-discover-files]]** — Vault discovery and slug generation
+- **[[plugins/plugin-utilities]]** — Internal utilities (slug, ignore, parse, resolve)
 
-### Config (@svartz/config)
+### 📖 Reference
 
-- [[config-schema]] — Effect Schema definitions (source of truth)
-- [[config-loader]] — Loading and parsing `svartz.config.ts`
-- [[config-resolver]] — Path resolution and defaults merging
-- [[config-types]] — Tagged error types, configuration interfaces
+Detailed documentation:
+
+- **[[reference/IMPLEMENTATION-SUMMARY]]** — Coverage checklist, JSDoc alignment
+- **[[reference/quick-reference]]** — Common patterns, error handling, code examples
+
+---
+
+## Directory Structure
+
+```
+vaults/docs/
+├── README.md                    ← You are here
+├── contracts/
+│   ├── plugin-contract.md       # Plugin system spec
+│   ├── theme-contract.md        # Theme system spec
+│   └── config-contract.md       # Config schema & API
+├── plugins/
+│   ├── plugins-overview.md      # All plugins at a glance
+│   ├── plugin-discover-files.md # Deep dive: discover stage
+│   └── plugin-utilities.md      # Internal helpers
+├── guides/
+│   ├── setup-config.md          # Setup guide (0→production)
+│   ├── create-plugin.md         # Plugin authoring guide
+│   └── create-theme.md          # Theme authoring guide
+└── reference/
+    ├── quick-reference.md       # Snippets & patterns
+    └── IMPLEMENTATION-SUMMARY.md # Coverage & JSDoc status
+```
+
+---
 
 ## Key Concepts
 
 ### Stages
-Plugins hook into 6 stages with `pre` / `default` / `post` enforcement:
-1. **discover** — File discovery and frontmatter parsing
+
+Plugins hook into 6 sequential stages:
+
+1. **discover** — Traverse vault, parse frontmatter, generate slugs
 2. **filterUnpublished** — Remove drafts
-3. **transformContent** — Content transformations (GFM, syntax, LaTeX)
-4. **indexContent** — Build index and metadata
-5. **resolveLinks** — Wikilink resolution
-6. **emit** — Write final artifacts
+3. **transformContent** — Modify markdown (runs in parallel by default)
+4. **indexContent** — Build search index and metadata
+5. **resolveLinks** — Resolve wikilinks to slugs (stub)
+6. **emit** — Write artifacts to disk
+
+See [[plugins/plugins-overview#Stages Breakdown]] for details.
 
 ### Plugin Merge Order
-1. Core plugins
+
+Plugins from 4 layers merge with conflict resolution (by-id replacement):
+
+1. Core plugins (`@svartz/plugins`)
 2. Theme plugin preset
 3. Config defaults plugins
-4. Config vault plugins
+4. Config vault plugins (most specific)
 
-Duplicate IDs replace earlier entries; new IDs append.
+See [[contracts/plugin-contract#Utility Functions]] for merge logic.
 
 ### Contract Versioning
-- Both plugins and themes use `contractVersion` (semver)
-- Compatibility check: major version must match `CONTRACT_VERSION` from `@svartz/core`
-- Validation errors on mismatch; warnings on unknown keys
 
-## Usage Examples
+Both plugins and themes declare `contractVersion` (semver):
+- Major version must match core's `CONTRACT_VERSION` (currently `1.0.0`)
+- Validation error on mismatch
+- Ensures compatibility across updates
 
-See individual note sections for function-level signatures and usage examples.
+See [[contracts/plugin-contract#Contract Versioning]] for details.
+
+---
+
+## Workflows
+
+### 🎯 I Want To...
+
+**Set up Svartz from scratch** → [[guides/setup-config]]
+
+**Write a custom plugin** → [[guides/create-plugin]]
+
+**Author a theme** → [[guides/create-theme]]
+
+**Understand the plugin system** → [[contracts/plugin-contract]]
+
+**Look up a core plugin** → [[plugins/plugins-overview]]
+
+**Find code examples** → [[reference/quick-reference]]
+
+**Debug configuration issues** → [[contracts/config-contract#Troubleshooting]]
+
+---
+
+## Core Packages
+
+### `@svartz/core`
+
+- Plugin contract (`SvartzPlugin`, `PluginContext`)
+- Theme contract (`SvartzTheme`, `defineTheme`)
+- Effect Schema validation
+- Shared schemas (Tailwind, Wrangler)
+- Utilities (`normalizePlugin`, `mergePlugins`, `sortPluginsForStage`)
+
+See [[contracts/plugin-contract]], [[contracts/theme-contract]]
+
+### `@svartz/plugins`
+
+- 10 core plugins across all stages
+- Internal utilities (slug, ignore, parse, resolve)
+- All plugins use `definePlugin()` factory
+
+See [[plugins/plugins-overview]], [[plugins/plugin-utilities]]
+
+### `@svartz/config`
+
+- Configuration schema and validation
+- Public API (`loadConfig`, `resolveConfig`, `loadAndResolveConfig`)
+- Error handling (`ConfigLoadError`, `ConfigValidationError`, `ConfigResolutionError`)
+
+See [[contracts/config-contract]]
+
+---
+
+## JSDoc Alignment
+
+**Status:** ✅ All public functions include comprehensive JSDoc
+
+### Coverage
+
+- ✅ `@svartz/core` — Plugin/theme contracts, utilities
+- ✅ `@svartz/plugins` — All core plugins and utilities
+- ✅ `@svartz/config` — Public API and errors
+
+See [[reference/IMPLEMENTATION-SUMMARY#JSDoc Alignment]] for full details.
+
+---
+
+## Best Practices
+
+### Plugin Authoring
+
+- Use descriptive IDs (e.g., `"myorg:transform-callouts"`)
+- Document with JSDoc
+- Handle errors gracefully
+- Test in isolation before integrating
+- Mutate files in-place for efficiency
+
+See [[guides/create-plugin#Best Practices]]
+
+### Theme Authoring
+
+- Use semantic versioning
+- Include both `defaultPage` and `notePage`
+- Support responsive design
+- Provide light/dark mode
+- Test with real vault content
+
+See [[guides/create-theme#Best Practices]]
+
+### Configuration
+
+- Use consistent frontmatter field names
+- Remember: missing `publishedField` = draft
+- Override per-vault when needed
+- Validate your config
+
+See [[guides/setup-config#Troubleshooting]]
+
+---
+
+## Examples
+
+### Minimal Config
+
+```typescript
+import { defineConfig } from "@svartz/config";
+
+export default defineConfig({
+  version: "1.0.0",
+  defaults: { theme: "@svartz/theme-minimal" },
+  vaults: {
+    docs: { path: "./vaults/docs" }
+  }
+});
+```
+
+### Custom Plugin
+
+```typescript
+import { definePlugin } from "@svartz/core";
+
+export const myPlugin = definePlugin(() => ({
+  id: "custom:my-plugin",
+  transformContent: (ctx) => {
+    ctx.files.forEach(file => {
+      file.content = /* transform */;
+    });
+  }
+}));
+```
+
+### Custom Theme
+
+```typescript
+import { defineTheme } from "@svartz/core";
+
+export default defineTheme({
+  id: "@myorg/theme-custom",
+  version: "1.0.0",
+  contractVersion: "1.0.0",
+  layouts: { defaultPage: { default: Default }, notePage: { default: Note } },
+  routes: [{ id: "note", pattern: "/[...slug]" }]
+});
+```
+
+See [[reference/quick-reference]] for more examples.
+
+---
+
+## Contributing
+
+When updating Svartz contracts or implementations:
+
+1. Update relevant source code (JSDoc required)
+2. Update corresponding doc file here
+3. Keep wikilinks and cross-references current
+4. Validate with examples
+
+---
+
+## See Also
+
+- `planning/contracts/` — Technical design decisions
+- `.cursor/rules/plugin-conventions.mdc` — Agent guidelines
+- Source code in `packages/core`, `packages/plugins`, `packages/config`

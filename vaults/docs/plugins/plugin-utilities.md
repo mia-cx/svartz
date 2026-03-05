@@ -395,6 +395,6 @@ export function resolveWikilink(
 
 ## See Also
 
-- [[plugins-overview]] — All core plugins reference
-- [[plugin-contract]] — Plugin system contract
-- [[plugin-discover-files]] — Uses slug + ignore utilities
+- [[plugins/plugins-overview]] — All core plugins reference
+- [[contracts/plugin-contract]] — Plugin system contract
+- [[plugins/plugin-discover-files]] — Uses slug + ignore utilities

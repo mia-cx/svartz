@@ -401,6 +401,6 @@ export function discoverFiles(): SvartzPlugin {
 
 ## See Also
 
-- [[theme-contract]] — Companion contract for themes
-- [[plugin-validation]] — Effect Schema validation internals
-- [[plugin-utilities]] — Implementation of utility functions
+- [[contracts/theme-contract]] — Companion contract for themes
+- [[plugins/plugin-utilities]] — Implementation of utility functions
+- [[reference/quick-reference]] — Code examples

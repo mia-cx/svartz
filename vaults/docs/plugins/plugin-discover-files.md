@@ -166,7 +166,7 @@ After `discover`, `ctx.files`:
 
 ## See Also
 
-- [[plugin-contract]] — Plugin system contract
-- [[plugin-internals-slug]] — Slug generation and conflict detection
-- [[plugin-internals-ignore]] — Pattern matching and .gitignore parsing
-- [[plugin-filter-unpublished]] — Downstream filtering stage
+- [[contracts/plugin-contract]] — Plugin system contract
+- [[plugins/plugin-utilities#Slug Generation]] — Slug generation and conflict detection
+- [[plugins/plugin-utilities#Gitignore Parsing]] — Pattern matching and .gitignore parsing
+- [[plugins/plugin-filter-unpublished]] — Downstream filtering stage

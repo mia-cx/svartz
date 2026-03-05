@@ -442,6 +442,6 @@ for (const vault of config.vaults) {
 
 ## See Also
 
-- [[theme-contract]] — Theme configuration options
-- [[plugin-contract]] — Plugin merge order in config
-- [[config-schema]] — Effect Schema definitions (source of truth)
+- [[contracts/plugin-contract]] — Plugin merge order in config
+- [[contracts/theme-contract]] — Theme configuration options
+- [[reference/quick-reference]] — Code examples
