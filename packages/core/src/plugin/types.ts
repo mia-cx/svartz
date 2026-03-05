@@ -73,6 +73,7 @@ type StageName = (typeof STAGE_NAMES)[number];
 
 interface SvartzPlugin {
   readonly id: string;
+  readonly contractVersion?: string;
   readonly disabled?: boolean;
 
   // Lifecycle hooks
@@ -100,6 +101,7 @@ interface SvartzPlugin {
 
 interface NormalizedSvartzPlugin {
   readonly id: string;
+  readonly contractVersion?: string;
   readonly disabled?: boolean;
 
   // Lifecycle hooks
