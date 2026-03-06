@@ -1,0 +1,16 @@
+---
+description: Keep apps/web runtime integration decoupled from @svartz/vite package deps
+globs: apps/web/**
+alwaysApply: false
+---
+
+# Apps Web Svartz Runtime
+
+`apps/web` is the static SvelteKit shell that consumes Svartz runtime surfaces, but the real `@svartz/vite` plugin is injected by the CLI at dev/build time.
+
+- Do not add `@svartz/vite` as a direct `apps/web` dependency just to get virtual-module typings.
+- Do not add `@svartz/core` as a direct `apps/web` dependency just to import shared runtime types.
+- Keep local ambient declarations for `virtual:svartz/theme` and `virtual:svartz/artifacts` inside `apps/web/src/**.d.ts`.
+- Keep route-shell loader types local to `apps/web` unless the app truly needs package-level runtime code.
+- For browser/unit tests, provide test-only virtual-module stubs in `apps/web/vite.config.ts` or local test helpers.
+- Do not wire the real Svartz Vite plugin into `apps/web/vite.config.ts`; production/dev injection belongs to the CLI orchestration layer.

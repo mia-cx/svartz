@@ -5,128 +5,73 @@ Core pipeline plugin for writing final artifacts to disk.
 ## Overview
 
 **Plugin ID:** `core:emit-artifacts`  
-**Stage:** `emit`  
-**Enforce:** `default`  
+**Stage:** `emitArtifacts`  
+**Enforce:** `post`  
 **Fatal:** `true` (artifact writing must succeed)
 
-Writes in-memory artifacts accumulated by previous stages to disk. Creates index.json, graph.json, backlinks.json, and other outputs.
+Compiles vault note content into `.svelte` page artifacts, emits an eager `index.ts` runtime module, and writes the vault-scoped artifact set to disk.
 
-## Function Signature
+The plugin itself does **not** run in parallel with sibling plugins. The disk-writer inside the plugin writes artifact files in parallel using Effect.
 
-```typescript
-/**
- * Create the emit-artifacts plugin.
- *
- * @description
- * Writes accumulated artifacts to disk:
- * - index.json — search index + manifest
- * - graph.json — link graph
- * - backlinks.json — reverse link index
- * - Additional custom artifacts
- *
- * Runs in emit stage after all processing complete.
- *
- * @returns Plugin for emit stage
- *
- * @example
- * ```ts
- * const plugin = emitArtifacts();
- * // Result: files written to .svartz/generated/
- * ```
- */
-export function emitArtifacts(): SvartzPlugin {
-  return definePlugin(() => ({
-    id: "core:emit-artifacts",
-    emit: (ctx) => {
-      // Write artifacts to disk
-    }
-  }));
-}
+## Outputs
+
+Given `ResolvedConfig.outDir = .svartz/vaults/docs/dist`, the plugin writes:
+
+```text
+.svartz/vaults/docs/artifacts/
+├── index.ts
+└── pages/
+    └── **/*.svelte
 ```
 
-## Artifacts Written
+### `pages/**/*.svelte`
 
-### index.json
+One compiled page artifact per note slug.
 
-Search index and manifest of all notes.
+- source: `ctx.files`
+- artifact key shape: `pages/<slug>.svelte`
+- contents: mdsvex-compiled Svelte module plus exported `svartz` note metadata
 
-```json
-{
-  "index": [
-    {
-      "slug": "docs/intro",
-      "title": "Getting Started",
-      "description": "An introduction...",
-      "tags": ["tutorial"],
-      "createdAt": "2024-01-15T00:00:00Z",
-      "updatedAt": "2024-01-20T10:30:00Z"
-    }
-  ]
-}
-```
+### `index.ts`
 
-### graph.json
+One eager runtime module for global layouts/components:
 
-Link graph structure.
-
-```json
-{
-  "nodes": [
-    { "id": "docs/intro", "title": "Getting Started" },
-    { "id": "docs/advanced", "title": "Advanced Guide" }
-  ],
-  "edges": [
-    { "from": "docs/intro", "to": "docs/advanced", "type": "mentions" }
-  ]
-}
-```
-
-### backlinks.json
-
-Reverse link index (which files reference which).
-
-```json
-{
-  "docs/intro": ["docs/guide", "docs/faq"],
-  "docs/advanced": ["docs/guide"]
-}
-```
+- `index`
+- `graph`
+- `backlinks`
+- `search`
 
 ## Output Location
 
-Default: `.svartz/generated/` (relative to vault)
+Derived from the active vault `ResolvedConfig.outDir`:
 
-Per-vault override:
-```typescript
-vaults: {
-  docs: {
-    path: "./docs",
-    outDir: "./dist/artifacts"  // Custom output directory
-  }
-}
+```text
+artifactsRoot = resolve(outDir, "..", "artifacts")
 ```
 
 ## Integration
 
-- **Precondition:** All previous stages complete
-- **Postcondition:** Artifacts on disk, ready for consumption
-- **Depends on:** All previous stages
-- **Depended by:** SvelteKit app (reads artifacts)
+- **Precondition:** `ctx.index` has been populated by `core:index`
+- **Consumes:** `ctx.files`, `ctx.index`, `ctx.config.outDir`
+- **Produces:** `ctx.artifacts` entries plus disk materialization
+- **Depended on by:** `virtual:svartz/artifacts` and the runtime page shell
 
 ## Best Practices
 
 ✅ **DO:**
-- Write all artifacts in one pass
-- Ensure directories exist before writing
-- Validate artifact structure
+- keep this plugin as the last emitter in the stage
+- treat `ctx.artifacts` as the canonical emitted output set
+- keep artifact paths vault-scoped via `ResolvedConfig.outDir`
+- write files in parallel internally only after artifact paths are finalized
 
 ❌ **DON'T:**
-- Emit before all processing complete
-- Write artifacts to version control
-- Assume specific output directory structure
+- run this hook in parallel with sibling plugins
+- write into `apps/web/src/routes`
+- assume a global artifact root shared by multiple vaults
 
 ## See Also
 
 - [[contracts/plugin-contract]] — Plugin system contract
 - [[plugins/overview]] — All core plugins overview
 - [[plugins/index-content]] — Builds index for emission
+- [[guides/runtime-vite-integration]] — How Vite consumes emitted artifacts

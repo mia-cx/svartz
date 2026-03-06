@@ -4,37 +4,37 @@ overview: "Build `@svartz/vite` as a runtime-driven integration: consume `@svart
 todos:
   - id: resolve-config-artifacts
     content: Replace multi-vault resolved build types with single-vault `ResolvedConfig`, make `outDir` the consumed final bundle path, and add `Artifact`/`ArtifactBag` plus updated runner context contracts.
-    status: pending
+    status: completed
   - id: scaffold-svartz-vite
     content: Scaffold `packages/vite` with plugin entry, options, context, theme bridge, artifact path helpers, virtual modules, and ambient virtual-module typings.
-    status: pending
+    status: completed
   - id: runner-and-merge
     content: Add runner execution utilities and 4-layer plugin merge semantics (`core -> theme -> defaults -> vault`) with enforce/parallel/error collection behavior.
-    status: pending
+    status: completed
   - id: route-matcher-theme-bridge
     content: Implement the core route matcher and the `virtual:svartz/theme` bridge, including `resolveRuntimeRoute`, `resolveRouteToArtifactKey`, and re-export from the validated resolved theme module path.
-    status: pending
+    status: completed
   - id: emit-page-artifacts
     content: Compile vault content into vault-scoped generated artifacts under `.svartz/vaults/<vaultId>/artifacts`, with `pages/**/*.svelte`, eager `index.ts`, and lazy note loaders.
-    status: pending
+    status: completed
   - id: app-shell-routing
     content: Wire `apps/web` layout/page shells to theme-owned layouts, route `layoutSlot` selection, note artifact loading, and static-route override behavior.
-    status: pending
+    status: completed
   - id: output-safety
     content: Ensure vault-scoped artifact/dist paths, `outDir` defaults, and virtual-module payloads are parallel-build safe.
-    status: pending
+    status: completed
   - id: tests
     content: Add tests for resolved-config handoff, runner ordering/merge, theme bridge helpers, artifact layout/loading, static route overrides, and runtime shell smoke paths.
-    status: pending
+    status: completed
   - id: capture-knowledge
     content: Capture any new non-obvious runner, virtual-module, or route-shell conventions into `.cursor/rules` or docs if implementation exposes repeated pitfalls.
-    status: pending
+    status: completed
   - id: documentation
     content: Document `@svartz/vite` package usage, generated artifact layout, runtime routing/layout model, and virtual module contracts in package README and vault docs.
-    status: pending
+    status: completed
   - id: review-close
     content: Run a final boundary/performance/alignment review, verify locked-plan compliance, and close remaining gaps before handoff.
-    status: pending
+    status: completed
   - id: todo-seo-followup
     content: Deferred SEO/site-metadata follow-up tracked in `TODO.md`.
     status: completed

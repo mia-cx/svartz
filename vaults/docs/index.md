@@ -9,6 +9,7 @@ Complete reference and guides for the Svartz documentation, theme, and plugin sy
 - **[[guides/setup-config]]** — Set up Svartz from scratch (new users)
 - **[[guides/create-plugin]]** — Write a custom plugin
 - **[[guides/create-theme]]** — Author a custom theme
+- **[[guides/runtime-vite-integration]]** — Understand runtime Vite + SvelteKit integration
 - **[[reference/quick-reference]]** — Code snippets and patterns
 
 ### 📚 Contracts (Source of Truth)
@@ -115,6 +116,8 @@ See [[contracts/plugin-contract#Contract Versioning]] for details.
 **Write a custom plugin** → [[guides/create-plugin]]
 
 **Author a theme** → [[guides/create-theme]]
+
+**Understand the Vite runtime bridge** → [[guides/runtime-vite-integration]]
 
 **Understand the plugin system** → [[contracts/plugin-contract]]
 
