@@ -1,0 +1,42 @@
+{
+  "name": "@svartz/vite",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Runtime-driven Vite integration for Svartz vault builds",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./virtual-modules": {
+      "import": "./dist/virtual-modules.js",
+      "types": "./types/virtual-modules.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts && tsup src/virtual-modules.ts --format esm",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mia-cx/svartz.git",
+    "directory": "packages/vite"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@svartz/core": "workspace:^",
+    "@svartz/plugins": "workspace:^"
+  },
+  "peerDependencies": {
+    "vite": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^7.3.1",
+    "vitest": "^3.0.0"
+  }
+}
