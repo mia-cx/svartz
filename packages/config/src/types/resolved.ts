@@ -1,72 +1,38 @@
 import type {
-  LinkResolutionStrategy,
-  SvartzConfig,
-  TargetConfig,
-  VaultConfig,
-} from "./config";
-import type { TailwindThemeConfig } from "./tailwind";
+  ResolvedBuildConfig,
+  ResolvedConfig as CoreResolvedConfig,
+  ResolvedFrontmatterConfig,
+  ResolvedThemeConfig,
+  ResolvedVaultDefaults,
+} from "@svartz/core";
+import type { SvartzConfig } from "./config";
 
-// --- Resolved shared (no dependency on other Resolved*) ---
+/** Canonical single-vault resolved build config re-exported from @svartz/core. */
+type ResolvedConfig = CoreResolvedConfig;
 
-interface ResolvedFrontmatterConfig {
-  readonly titleField: string;
-  readonly descriptionField: string;
-  readonly tagsField: string;
-  readonly aliasesField: string;
-  readonly createdAtField: string;
-  readonly updatedAtField: string;
-  readonly publishedField: string;
-  readonly dateFormat?: string;
-}
-
-/** Resolved theme: base package name + optional theme.extend keys (Tailwind). */
-type ResolvedThemeConfig = Readonly<
-  { base: string } & Partial<TailwindThemeConfig>
->;
-
-interface ResolvedBuildConfig {
-  readonly concurrency: number;
-  readonly maxRetries: number;
-}
-
-/** Resolved vault default options (no id, path, target). */
-interface ResolvedVaultDefaults {
-  readonly include: readonly string[];
-  readonly exclude: readonly string[];
-  readonly linkResolution: LinkResolutionStrategy;
-  readonly theme: ResolvedThemeConfig;
-  readonly frontmatter: ResolvedFrontmatterConfig;
-}
-
-// --- Resolved vault & config ---
-
-interface ResolvedVaultConfig extends VaultConfig {
-  readonly linkResolution: LinkResolutionStrategy;
-  readonly theme: ResolvedThemeConfig;
-  readonly frontmatter: ResolvedFrontmatterConfig;
-  readonly target: TargetConfig;
-}
-
-/** Resolved config: defaults are merged into each vault, so no top-level defaults or build. */
-interface ResolvedSvartzConfig
+/**
+ * Internal multi-vault resolved config set used by config resolution helpers.
+ * Defaults are merged into each vault, while build defaults remain available here.
+ */
+interface ResolvedConfigSet
   extends Omit<SvartzConfig, "defaults" | "vaults" | "build"> {
   readonly configDir: string;
-  readonly vaults: readonly ResolvedVaultConfig[];
+  readonly build: ResolvedBuildConfig;
+  readonly vaults: readonly ResolvedConfig[];
 }
 
-interface VaultSummary {
-  readonly id: string;
-  readonly path: string;
-  readonly themeBase: string;
-  readonly target: TargetConfig;
-}
+/** Compatibility alias for code that still refers to a resolved vault. */
+type ResolvedVaultConfig = ResolvedConfig;
+/** Compatibility alias for code that still refers to the multi-vault bundle. */
+type ResolvedSvartzConfig = ResolvedConfigSet;
 
 export {
+  type ResolvedBuildConfig,
+  type ResolvedConfig,
+  type ResolvedConfigSet,
   type ResolvedFrontmatterConfig,
   type ResolvedThemeConfig,
-  type ResolvedBuildConfig,
-  type ResolvedVaultDefaults,
   type ResolvedVaultConfig,
+  type ResolvedVaultDefaults,
   type ResolvedSvartzConfig,
-  type VaultSummary,
 };

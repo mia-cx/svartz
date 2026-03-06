@@ -1,14 +1,15 @@
 // Shared types
 export type {
+  Artifact,
+  ArtifactBag,
   MaybePromise,
   LinkResolutionStrategy,
   TargetConfig,
+  ResolvedConfig,
   ResolvedFrontmatterConfig,
   ResolvedThemeConfig,
   ResolvedBuildConfig,
   ResolvedVaultDefaults,
-  ResolvedVaultConfig,
-  ResolvedSvartzConfig,
   ProcessedFile,
   ChangeEvent,
   IndexLink,
@@ -42,6 +43,19 @@ export {
   sortPluginsForStage,
 } from "./plugin/utils";
 export {
+  HOOK_PARALLEL_DEFAULTS,
+  executeHandleChange,
+  executeStage,
+  runLifecycleHooks,
+  runStages,
+} from "./plugin/runner";
+export type {
+  HookExecutionResult,
+  RunnerPlugin,
+  RunnerResult,
+} from "./plugin/runner";
+export {
+  PluginAggregateError,
   PluginValidationError,
   PluginHookError,
   type PluginError,
@@ -70,6 +84,15 @@ export type {
   SvartzTheme,
 } from "./theme/types";
 export { CONTRACT_VERSION } from "./theme/types";
+export {
+  matchThemeRoute,
+  normalizePathname,
+  resolveThemeRouteToArtifactKey,
+} from "./theme/route-matcher";
+export type {
+  RuntimeRouteInput,
+  RuntimeRouteMatch,
+} from "./theme/route-matcher";
 
 // Theme contract — utilities
 export { defineTheme, validateTheme, type ThemeFactory } from "./theme/define-theme";

@@ -1,10 +1,10 @@
 import type {
-  MaybePromise,
-  ResolvedSvartzConfig,
-  ResolvedVaultConfig,
-  ProcessedFile,
+  ArtifactBag,
   ChangeEvent,
   Index,
+  MaybePromise,
+  ProcessedFile,
+  ResolvedConfig,
 } from "../types";
 
 // --- Hook options ---
@@ -40,9 +40,9 @@ type PluginChangeHookInput =
 // --- Plugin context ---
 
 interface PluginContext {
-  readonly config: ResolvedSvartzConfig;
-  readonly vault: ResolvedVaultConfig;
+  readonly config: ResolvedConfig;
   files: ProcessedFile[];
+  artifacts: ArtifactBag;
   index?: Index;
   meta: Map<string, unknown>;
 }

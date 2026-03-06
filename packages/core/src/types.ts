@@ -42,7 +42,10 @@ interface ResolvedVaultDefaults {
   readonly frontmatter: ResolvedFrontmatterConfig;
 }
 
-interface ResolvedVaultConfig {
+/** Canonical single-vault build config consumed by the runner and @svartz/vite. */
+interface ResolvedConfig {
+  readonly version: string;
+  readonly $schema?: string;
   readonly id: string;
   readonly path: string;
   readonly outDir: string;
@@ -55,12 +58,20 @@ interface ResolvedVaultConfig {
   readonly plugins: readonly unknown[];
 }
 
-interface ResolvedSvartzConfig {
-  readonly version: string;
-  readonly $schema?: string;
-  readonly configDir: string;
-  readonly vaults: readonly ResolvedVaultConfig[];
+// --- Artifact model ---
+
+interface Artifact {
+  readonly key: string;
+  readonly path: string;
+  readonly type: string;
+  readonly pluginId: string;
+  readonly contents: string | Uint8Array;
+  readonly noteSlug?: string;
+  readonly mimeType?: string;
+  readonly meta?: Record<string, unknown>;
 }
+
+type ArtifactBag = Map<string, Artifact>;
 
 // --- Pipeline types ---
 
@@ -146,21 +157,22 @@ interface GraphTarget {
 type Graph = Readonly<Record<string, readonly GraphTarget[]>>;
 
 export type {
-  MaybePromise,
+  Artifact,
+  ArtifactBag,
+  ChangeEvent,
+  Graph,
+  GraphTarget,
+  Index,
+  IndexEntry,
+  IndexLink,
   LinkResolutionStrategy,
-  TargetConfig,
+  MaybePromise,
+  ProcessedFile,
+  RawLink,
+  ResolvedBuildConfig,
+  ResolvedConfig,
   ResolvedFrontmatterConfig,
   ResolvedThemeConfig,
-  ResolvedBuildConfig,
   ResolvedVaultDefaults,
-  ResolvedVaultConfig,
-  ResolvedSvartzConfig,
-  RawLink,
-  ProcessedFile,
-  ChangeEvent,
-  IndexLink,
-  IndexEntry,
-  Index,
-  GraphTarget,
-  Graph,
+  TargetConfig,
 };

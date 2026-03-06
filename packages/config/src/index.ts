@@ -5,13 +5,10 @@ import {
 } from "./loader";
 import {
   getVaultConfig as getVaultConfigEffect,
+  listVaults,
   resolveConfig as resolveConfigEffect,
 } from "./resolver";
-import type {
-  ResolvedSvartzConfig,
-  ResolvedVaultConfig,
-  SvartzConfig,
-} from "./types";
+import type { ResolvedConfig, ResolvedConfigSet, SvartzConfig } from "./types";
 
 export * from "./schemas";
 export * from "./types";
@@ -24,7 +21,7 @@ export * from "./utils";
 
 // --- Effect programs (for consumers who use Effect directly) ---
 
-export { loadConfigEffect, parseConfigEffect, resolveConfigEffect };
+export { loadConfigEffect, parseConfigEffect, resolveConfigEffect, listVaults };
 
 // --- Boundary adapter ---
 
@@ -38,7 +35,7 @@ export const runEffect = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
 
 export const loadConfig = (
   configPath?: string,
-): Promise<ResolvedSvartzConfig> => runEffect(loadConfigEffect(configPath));
+): Promise<ResolvedConfigSet> => runEffect(loadConfigEffect(configPath));
 
 export const parseConfig = (raw: unknown): Promise<SvartzConfig> =>
   runEffect(parseConfigEffect(raw));
@@ -46,13 +43,13 @@ export const parseConfig = (raw: unknown): Promise<SvartzConfig> =>
 export const resolveConfig = (
   config: SvartzConfig,
   configDir: string,
-): Promise<ResolvedSvartzConfig> =>
+): Promise<ResolvedConfigSet> =>
   runEffect(resolveConfigEffect(config, configDir));
 
 export const getVault = (
-  config: ResolvedSvartzConfig,
+  config: ResolvedConfigSet,
   vaultId: string,
-): Promise<ResolvedVaultConfig> =>
+): Promise<ResolvedConfig> =>
   runEffect(getVaultConfigEffect(config, vaultId));
 
 export const defineConfig = (config: SvartzConfig): SvartzConfig => config;

@@ -32,7 +32,7 @@ describe("resolveConfigPaths", () => {
   it("resolves outDir to default .svartz/vaults/<id> when not set", async () => {
     const resolved = await resolveConfig(minimalConfig, PKG_ROOT);
     const vault = resolved.vaults[0]!;
-    expect(vault.outDir).toBe(resolve(PKG_ROOT, ".svartz/vaults/main"));
+    expect(vault.outDir).toBe(resolve(PKG_ROOT, ".svartz/vaults/main/dist"));
   });
 
   it("resolves custom outDir relative to config root", async () => {
@@ -55,8 +55,7 @@ describe("resolveConfigPaths", () => {
     const resolved = await resolveConfig(minimalConfig, PKG_ROOT);
     const vault = resolved.vaults[0]!;
     expect(vault.include).toEqual([
-      "**/*.md",
-      "**/*.mdx",
+      "**/*.{md,mdx,svx}",
       "**/*.{jpg,jpeg,png,gif,webp,avif,bmp,svg}",
       "**/*.{mp3,m4a,wav,ogg,flac,webm,3gp}",
       "**/*.{mp4,mov,mkv,ogv}",

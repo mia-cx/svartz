@@ -1,12 +1,15 @@
-import type { SvartzPlugin } from "./types";
+type MergeablePlugin = {
+  readonly id: string;
+  readonly disabled?: boolean;
+};
 
 /**
  * Deduplicate plugins by id within a single list.
  * On duplicate: warn, last wins (keeps last occurrence's position).
  */
-function dedupePlugins(plugins: readonly SvartzPlugin[]): SvartzPlugin[] {
+function dedupePlugins<T extends MergeablePlugin>(plugins: readonly T[]): T[] {
   const seen = new Map<string, number>();
-  const result: SvartzPlugin[] = [];
+  const result: T[] = [];
 
   for (const plugin of plugins) {
     const existingIdx = seen.get(plugin.id);
@@ -24,37 +27,59 @@ function dedupePlugins(plugins: readonly SvartzPlugin[]): SvartzPlugin[] {
   return result;
 }
 
-/**
- * Layered merge of default and vault plugin lists.
- *
- * 1. Normalize each list (dedupe by id, last wins)
- * 2. Base: normalized defaults
- * 3. Apply vault overrides:
- *    - same id → replace in-place (keeps position)
- *    - new id → append
- * 4. Remove disabled entries
- */
-function mergePlugins(
-  defaultPlugins: readonly SvartzPlugin[],
-  vaultPlugins: readonly SvartzPlugin[],
-): SvartzPlugin[] {
-  const normalizedDefaults = dedupePlugins(defaultPlugins);
-  const normalizedVault = dedupePlugins(vaultPlugins);
-
-  const result = [...normalizedDefaults];
-  const idxMap = new Map(result.map((p, i) => [p.id, i]));
-
-  for (const plugin of normalizedVault) {
-    const existingIdx = idxMap.get(plugin.id);
-    if (existingIdx !== undefined) {
-      result[existingIdx] = plugin;
-    } else {
-      idxMap.set(plugin.id, result.length);
-      result.push(plugin);
+function normalizeMergeLayers<T extends MergeablePlugin>(
+  firstLayer: readonly T[] | readonly (readonly T[])[],
+  restLayers: readonly (readonly T[])[],
+): readonly (readonly T[])[] {
+  if (restLayers.length === 0) {
+    const maybeLayers = firstLayer as readonly unknown[];
+    if (Array.isArray(maybeLayers[0])) {
+      return firstLayer as readonly (readonly T[])[];
     }
   }
 
-  return result.filter((p) => p.disabled !== true);
+  return [firstLayer as readonly T[], ...restLayers];
+}
+
+/**
+ * Layered merge of plugin lists.
+ *
+ * 1. Normalize each layer (dedupe by id, last wins)
+ * 2. Apply layers from least specific to most specific
+ * 3. same id → replace in-place (keeps original position)
+ * 4. new id → append
+ * 5. disabled plugins are removed from final output
+ */
+function mergePlugins<T extends MergeablePlugin>(
+  baseLayer: readonly T[],
+  overrideLayer: readonly T[],
+): T[];
+function mergePlugins<T extends MergeablePlugin>(
+  ...layers: readonly (readonly T[])[]
+): T[];
+function mergePlugins<T extends MergeablePlugin>(
+  firstLayer: readonly T[] | readonly (readonly T[])[],
+  ...restLayers: readonly (readonly T[])[]
+): T[] {
+  const layers = normalizeMergeLayers(firstLayer, restLayers);
+  const result: T[] = [];
+  const indices = new Map<string, number>();
+
+  for (const layer of layers) {
+    const normalizedLayer = dedupePlugins(layer);
+
+    for (const plugin of normalizedLayer) {
+      const existingIdx = indices.get(plugin.id);
+      if (existingIdx !== undefined) {
+        result[existingIdx] = plugin;
+      } else {
+        indices.set(plugin.id, result.length);
+        result.push(plugin);
+      }
+    }
+  }
+
+  return result.filter((plugin) => plugin.disabled !== true);
 }
 
 export { mergePlugins };

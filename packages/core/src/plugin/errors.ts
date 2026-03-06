@@ -32,6 +32,25 @@ class PluginHookError extends Error {
   }
 }
 
-type PluginError = PluginValidationError | PluginHookError;
+class PluginAggregateError extends Error {
+  readonly _tag = "PluginAggregateError" as const;
+  readonly errors: readonly PluginHookError[];
 
-export { PluginValidationError, PluginHookError, type PluginError };
+  constructor(opts: { message: string; errors: readonly PluginHookError[] }) {
+    super(opts.message);
+    this.name = "PluginAggregateError";
+    this.errors = opts.errors;
+  }
+}
+
+type PluginError =
+  | PluginAggregateError
+  | PluginHookError
+  | PluginValidationError;
+
+export {
+  PluginAggregateError,
+  PluginValidationError,
+  PluginHookError,
+  type PluginError,
+};

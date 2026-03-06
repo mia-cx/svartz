@@ -11,7 +11,7 @@ const makePlugin = (
 });
 
 describe("mergePlugins", () => {
-  it("returns defaults when vault list is empty", () => {
+  it("returns the first layer when later layers are empty", () => {
     const defaults = [makePlugin("a"), makePlugin("b")];
     const result = mergePlugins(defaults, []);
     expect(result.map((p) => p.id)).toEqual(["a", "b"]);
@@ -89,5 +89,29 @@ describe("mergePlugins", () => {
     const vault = [makePlugin("d"), makePlugin("b", { disabled: false })];
     const result = mergePlugins(defaults, vault);
     expect(result.map((p) => p.id)).toEqual(["a", "b", "c", "d"]);
+  });
+});
+
+
+describe("mergePlugins layered semantics", () => {
+  it("merges core, theme, defaults, and vault by specificity", () => {
+    const core = [makePlugin("core:discover"), makePlugin("core:index")];
+    const theme = [makePlugin("theme:callouts"), makePlugin("core:index", { disabled: false })];
+    const defaults = [makePlugin("defaults:toc"), makePlugin("theme:callouts", { disabled: false })];
+    const vault = [makePlugin("core:index", { disabled: true }), makePlugin("vault:custom")];
+
+    const result = mergePlugins(core, theme, defaults, vault);
+
+    expect(result.map((plugin) => plugin.id)).toEqual([
+      "core:discover",
+      "theme:callouts",
+      "defaults:toc",
+      "vault:custom",
+    ]);
+  });
+
+  it("accepts an array of layers as input", () => {
+    const result = mergePlugins([[makePlugin("a")], [makePlugin("a", { disabled: true })], [makePlugin("b")]]);
+    expect(result.map((plugin) => plugin.id)).toEqual(["b"]);
   });
 });

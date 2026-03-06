@@ -15,6 +15,11 @@ function definePlugin(
 function definePlugin<
   T extends Record<string, unknown> = Record<string, never>,
 >(
+  factory: PluginFactory<T>,
+): (options?: T & { disabled?: boolean }) => NormalizedSvartzPlugin;
+function definePlugin<
+  T extends Record<string, unknown> = Record<string, never>,
+>(
   factoryOrPlugin: PluginFactory<T> | SvartzPlugin,
 ): (options?: T & { disabled?: boolean }) => NormalizedSvartzPlugin {
   return (options) => {

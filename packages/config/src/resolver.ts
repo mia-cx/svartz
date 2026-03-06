@@ -1,14 +1,15 @@
 import { Effect } from "effect";
+import { mergePlugins } from "@svartz/core";
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import type {
   FrontmatterFields,
   LinkResolutionStrategy,
   ResolvedBuildConfig,
+  ResolvedConfig,
+  ResolvedConfigSet,
   ResolvedFrontmatterConfig,
-  ResolvedSvartzConfig,
   ResolvedThemeConfig,
-  ResolvedVaultConfig,
   SvartzConfig,
   SvartzDefaults,
   VaultConfig,
@@ -92,7 +93,8 @@ const resolveVaultConfig = (
   vault: VaultConfig,
   defaults: SvartzDefaults | undefined,
   configDir: string,
-): Effect.Effect<ResolvedVaultConfig, VaultPathInvalid> =>
+  metadata: Pick<ResolvedConfig, "version" | "$schema">,
+): Effect.Effect<ResolvedConfig, VaultPathInvalid> =>
   Effect.gen(function* () {
     const absolutePath = resolve(configDir, vault.path);
 
@@ -111,12 +113,23 @@ const resolveVaultConfig = (
     }
 
     const outDirRelative =
-      vault.outDir ?? defaults?.outDir ?? `.svartz/vaults/${vault.id}`;
+      vault.outDir ?? defaults?.outDir ?? `.svartz/vaults/${vault.id}/dist`;
     const outDirAbsolute = resolve(configDir, outDirRelative);
 
-    const plugins = vault.plugins ?? defaults?.plugins ?? [];
+    const plugins = mergePlugins(
+      (defaults?.plugins ?? []) as readonly {
+        readonly id: string;
+        readonly disabled?: boolean;
+      }[],
+      (vault.plugins ?? []) as readonly {
+        readonly id: string;
+        readonly disabled?: boolean;
+      }[],
+    ) as readonly unknown[];
 
     return {
+      version: metadata.version,
+      ...(metadata.$schema !== undefined && { $schema: metadata.$schema }),
       id: vault.id,
       path: absolutePath,
       outDir: outDirAbsolute,
@@ -138,12 +151,16 @@ const resolveVaultConfig = (
 export const resolveConfig = (
   config: SvartzConfig,
   configDir: string,
-): Effect.Effect<ResolvedSvartzConfig, VaultPathInvalid> =>
+): Effect.Effect<ResolvedConfigSet, VaultPathInvalid> =>
   Effect.gen(function* () {
     const buildDefaults = resolveBuildDefaults(config.build);
     const vaults = yield* Effect.forEach(
       config.vaults,
-      (vault) => resolveVaultConfig(vault, config.defaults, configDir),
+      (vault) =>
+        resolveVaultConfig(vault, config.defaults, configDir, {
+          version: config.version,
+          $schema: config.$schema,
+        }),
       { concurrency: buildDefaults.concurrency },
     );
 
@@ -151,6 +168,7 @@ export const resolveConfig = (
       version: config.version,
       ...(config.$schema !== undefined && { $schema: config.$schema }),
       configDir,
+      build: buildDefaults,
       vaults,
     };
   });
@@ -158,11 +176,11 @@ export const resolveConfig = (
 // --- getVault ---
 
 export const getVaultConfig = (
-  config: ResolvedSvartzConfig,
+  config: ResolvedConfigSet,
   vaultId: string,
-): Effect.Effect<ResolvedVaultConfig, VaultIdNotFound> =>
+): Effect.Effect<ResolvedConfig, VaultIdNotFound> =>
   Effect.gen(function* () {
-    const vault = config.vaults.find((v) => v.id === vaultId);
+    const vault = config.vaults.find((candidate) => candidate.id === vaultId);
     if (!vault) {
       return yield* new VaultIdNotFound({
         vaultId,
@@ -174,10 +192,10 @@ export const getVaultConfig = (
 
 // --- listVaults (pure) ---
 
-export const listVaults = (config: ResolvedSvartzConfig) =>
-  config.vaults.map((v) => ({
-    id: v.id,
-    path: v.path,
-    themeBase: v.theme.base,
-    target: v.target,
+export const listVaults = (config: ResolvedConfigSet) =>
+  config.vaults.map((vault) => ({
+    id: vault.id,
+    path: vault.path,
+    themeBase: vault.theme.base,
+    target: vault.target,
   }));
