@@ -35,6 +35,7 @@ This branch is a from-scratch rewrite of Quartz's site generator using SvelteKit
 
 ## Long-term ideas (post-MVP)
 - **Obsidian plugin for Svartz mdsvex support:** Render `.md` files in Obsidian with Svelte component syntax, live preview. Requires Svelte renderer in Obsidian; speculative but cool.
+- **Vite+ migration (post-GA):** Adopt Vite+ for library builds and monorepo task runner after GA (public preview targeted early 2026). **`vite lib`** for `@svartz/config`, `@svartz/core`, `@svartz/plugins`, `@svartz/vault`, and any future theme packages (replaces tsup). **`vite run`** for the monorepo (replaces Turborepo). Priority: build and DTS performance so Svartz stays fast and cheap to build in CI. Until then keep tsup + Turbo; when adding buildable packages, stick to ESM and standard entry patterns to keep migration straightforward. *(Tracked in GitHub.)*
 
 ## High-level architecture
 - SvelteKit app for routing/layouts/UI.
@@ -170,6 +171,9 @@ This branch is a from-scratch rewrite of Quartz's site generator using SvelteKit
 - Sitemap generation.
 - RSS/Atom feed (optional).
 - OpenGraph + meta tags.
+- Add shared vault/site metadata config fields for SEO and branding:
+  - `title`, `description`, canonical/base URL, and other common metadata
+  - `title` should also support the theme/site-name UI use case (for example the top-left site title, like Quartz)
 
 ### 10) Dev experience
 - Watch mode:
