@@ -7,8 +7,8 @@ const makeCtx = (
   publishedField = "published",
 ): PluginContext =>
   ({
-    config: { version: "0.0.1", configDir: ".", vaults: [] },
-    vault: {
+    config: {
+      version: "0.0.1",
       id: "test",
       path: "/vault",
       outDir: "/out",
@@ -29,6 +29,7 @@ const makeCtx = (
       plugins: [],
     },
     files,
+    artifacts: new Map(),
     meta: new Map(),
   }) as PluginContext;
 

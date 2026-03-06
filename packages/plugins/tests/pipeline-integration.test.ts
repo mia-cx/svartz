@@ -8,8 +8,8 @@ import type { PluginContext, ProcessedFile } from "@svartz/core";
 
 const makeCtx = (files: ProcessedFile[]): PluginContext =>
   ({
-    config: { version: "0.0.1", configDir: ".", vaults: [] },
-    vault: {
+    config: {
+      version: "0.0.1",
       id: "test",
       path: "/vault",
       outDir: "/out",
@@ -30,6 +30,7 @@ const makeCtx = (files: ProcessedFile[]): PluginContext =>
       plugins: [],
     },
     files,
+    artifacts: new Map(),
     meta: new Map(),
   }) as PluginContext;
 

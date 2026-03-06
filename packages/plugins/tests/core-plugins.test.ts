@@ -60,10 +60,11 @@ describe("createCorePlugins", () => {
     expect(filter?.filterUnpublished?.options?.enforce).toBe("post");
   });
 
-  it("core:emit-artifacts allows parallel", () => {
+  it("core:emit-artifacts runs post to flush final artifacts last", () => {
     const plugins = createCorePlugins();
     const emit = plugins.find((p) => p.id === "core:emit-artifacts");
-    expect(emit?.emitArtifacts?.options?.parallel).toBe(true);
+    expect(emit?.emitArtifacts?.options?.enforce).toBe("post");
+    expect(emit?.emitArtifacts?.options?.parallel).toBeUndefined();
   });
 
   it("CORE_PLUGIN_IDS is readonly (as const)", () => {
