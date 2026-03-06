@@ -18,9 +18,9 @@ export const discoverFiles = definePlugin(() => ({
 
   discoverFiles: {
     async run(ctx) {
-      const vaultPath = ctx.vault.path;
-      const include = ctx.vault.include;
-      const exclude = ctx.vault.exclude;
+      const vaultPath = ctx.config.path;
+      const include = ctx.config.include;
+      const exclude = ctx.config.exclude;
 
       const visitedInodes = new Set<number>();
       const filePaths: string[] = [];

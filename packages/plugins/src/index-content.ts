@@ -15,13 +15,14 @@ import { countWords, extractDescription } from "./internal/parse";
 import { normalizeDateTime } from "./internal/datetime";
 
 const INDEX_VERSION = "1.0.0";
+const DEFAULT_INDEX_TIMESTAMP = new Date(0);
 
 export const indexContent = definePlugin(() => ({
   id: "core:index",
 
   indexContent: {
     run(ctx) {
-      const fm = ctx.vault.frontmatter;
+      const fm = ctx.config.frontmatter;
       const entries: IndexEntry[] = [];
 
       for (const file of ctx.files) {
@@ -50,10 +51,10 @@ export const indexContent = definePlugin(() => ({
 
         const createdAt =
           normalizeDateTime(frontmatter[fm.createdAtField], fm.dateFormat) ??
-          new Date();
+          DEFAULT_INDEX_TIMESTAMP;
         const modifiedAt =
           normalizeDateTime(frontmatter[fm.updatedAtField], fm.dateFormat) ??
-          new Date();
+          DEFAULT_INDEX_TIMESTAMP;
 
         let publishedAt: Date | undefined;
         if (fm.publishedField) {

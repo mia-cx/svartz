@@ -18,7 +18,7 @@ export const filterUnpublished = definePlugin(() => ({
 
   filterUnpublished: {
     run(ctx) {
-      const publishedField = ctx.vault.frontmatter.publishedField;
+      const publishedField = ctx.config.frontmatter.publishedField;
 
       ctx.files = ctx.files.filter((file) => {
         if (!publishedField || !file.frontmatter) return true;

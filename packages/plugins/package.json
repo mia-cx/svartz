@@ -23,7 +23,9 @@
   "license": "MIT",
   "dependencies": {
     "@svartz/core": "workspace:*",
+    "effect": "^3.19.19",
     "gray-matter": "^4.0.3",
+    "mdsvex": "^0.12.6",
     "minimatch": "^10.1.1",
     "moment": "^2.30.1"
   },

@@ -15,7 +15,7 @@ export const resolveLinks = definePlugin(() => ({
 
   resolveLinks: {
     run(ctx) {
-      const strategy = ctx.vault.linkResolution;
+      const strategy = ctx.config.linkResolution;
       const allSlugs = ctx.files.map((f) => f.slug);
 
       const slugSources = ctx.files.map((file) => {

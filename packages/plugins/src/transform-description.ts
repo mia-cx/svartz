@@ -14,7 +14,7 @@ export const transformDescription = definePlugin(() => ({
 
   transformDescription: {
     run(ctx) {
-      const descField = ctx.vault.frontmatter.descriptionField;
+      const descField = ctx.config.frontmatter.descriptionField;
 
       for (const file of ctx.files) {
         if (!file.frontmatter) continue;
