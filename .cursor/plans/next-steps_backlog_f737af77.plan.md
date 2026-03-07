@@ -1,141 +1,178 @@
 ---
 name: next-steps backlog
-overview: Create a separate high-priority `NEXT_STEPS.md` backlog that reflects the actual post-runtime architecture, verifies which plugin work is still stubbed, and trims overlapping items from `TODO.md` so the two files do not contradict each other.
+overview: Create NEXT_STEPS.md as the high-priority implementation backlog, reconcile TODO.md, and define the implementation contract (pipeline order, ownership, acceptance criteria) so a follow-up agent (e.g. GPT-5.4 or Opus) can execute the backlog.
 todos:
-  - id: tests
-    content: "Tests: N/A — backlog-only change; verify correctness by re-reading the source files that prove plugin stubs and asset-discovery gaps before editing markdown."
-    status: pending
-  - id: capture-knowledge
-    content: "Capture Knowledge: record the new execution order in `NEXT_STEPS.md` so future agents stop scattering these priority items across `TODO.md` and ad hoc plan queues."
-    status: pending
-  - id: documentation
-    content: "Documentation: add `NEXT_STEPS.md` and reconcile `TODO.md` so the high-priority queue and broad backlog are both documented without overlap."
-    status: pending
-  - id: review-close
-    content: "Review & Close: do a final pass for duplicate items, stale TODO entries, and any statement that contradicts the current runtime theme resolution or plugin status."
-    status: pending
   - id: verify-status
-    content: Verify the current source status of the transform plugins, runtime theme resolution, and asset discovery before making backlog edits.
-    status: pending
+    content: Re-read packages/plugins and packages/config sources; confirm stubs, discovery filter, and helper ownership match Verified State before any edits.
+    status: completed
   - id: write-next-steps
-    content: Draft the new high-priority `NEXT_STEPS.md` with sections for markdown parity/embedding, theme-minimal + `@svartz/ui`, CLI E2E, watch/HMR, and later themes.
-    status: pending
+    content: Create NEXT_STEPS.md at repo root with exactly five sections and bullets from Locked Contract + Backlog Content; use relative paths and no duplicate bullets.
+    status: completed
   - id: reconcile-todo
-    content: Trim or rewrite overlapping items in `TODO.md`, including moving the current `Next plan queue` into the new file and folding related backlog items into the right section.
-    status: pending
+    content: Update TODO.md so no bullet is duplicated in NEXT_STEPS.md; remove or reword Next plan queue and overlapping Active backlog items; keep SEO, docs, i18n, deferred.
+    status: completed
+  - id: review-close
+    content: Grep NEXT_STEPS.md and TODO.md for overlapping phrasing; confirm theme resolution and theme requirements are not stated as open questions in TODO.md.
+    status: completed
 isProject: false
 ---
 
-# Create Next-Steps Backlog
+# Next-Steps Backlog — Implementation Contract
 
-## Goal
+## Scope
 
-Create a dedicated high-priority backlog file for the next implementation wave, while keeping `TODO.md` as the broader backlog. The new file will group the immediate work in the execution order you specified and only include items that are still genuinely unfinished.
+- **Phase 1 (this plan):** Produce `NEXT_STEPS.md`, reconcile `TODO.md`, and leave a single source of truth for high-priority work plus a contract for implementers.
+- **Phase 2 (future):** An agent implementing the content of `NEXT_STEPS.md` must follow the **Locked Contract** and **Canonical pipeline order** below; this plan is the implementation contract for that work.
 
-## Verified Current State
+---
 
-- Markdown transform plugins are still explicit stubs in `[/Users/mia/mia-cx/svartz/packages/plugins/src/transform-ofm.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/transform-ofm.ts)`, `[/Users/mia/mia-cx/svartz/packages/plugins/src/transform-gfm.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/transform-gfm.ts)`, `[/Users/mia/mia-cx/svartz/packages/plugins/src/transform-toc.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/transform-toc.ts)`, `[/Users/mia/mia-cx/svartz/packages/plugins/src/transform-syntax.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/transform-syntax.ts)`, and `[/Users/mia/mia-cx/svartz/packages/plugins/src/transform-latex.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/transform-latex.ts)`.
-- The canonical core pipeline still includes those hooks in order in `[/Users/mia/mia-cx/svartz/packages/plugins/src/index.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/index.ts)`, so these are real backlog items rather than obsolete ideas.
-- `[/Users/mia/mia-cx/svartz/packages/plugins/src/index-content.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/index-content.ts)` currently produces `entries`, `graph`, and `backlinks`, but does not yet build a MiniSearch-ready search artifact.
-- `[/Users/mia/mia-cx/svartz/packages/plugins/src/internal/parse.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/internal/parse.ts)` still exports a tiny `extractFrontmatter()` wrapper, but its only live production usage is in `[/Users/mia/mia-cx/svartz/packages/plugins/src/parse-frontmatter.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/parse-frontmatter.ts)`, and `packages/vault` is now considered defunct.
-- `[/Users/mia/mia-cx/svartz/packages/plugins/src/internal/parse.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/internal/parse.ts)` still owns three behaviors that should live closer to their consuming plugins: `extractRawLinks()` should move into `[/Users/mia/mia-cx/svartz/packages/plugins/src/resolve-links.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/resolve-links.ts)`, `extractDescription()` should be inlined into `[/Users/mia/mia-cx/svartz/packages/plugins/src/transform-description.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/transform-description.ts)`, and `countWords()` should be replaced by a dedicated word-count plugin that runs after frontmatter parsing and before embedding.
-- `[/Users/mia/mia-cx/svartz/packages/plugins/src/internal/resolve.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/internal/resolve.ts)` still owns `buildSlugMap()` and `resolveLink()` as shared helpers, but these should be treated as implementation details of `[/Users/mia/mia-cx/svartz/packages/plugins/src/resolve-links.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/resolve-links.ts)`, not reusable cross-plugin utilities.
-- Asset discovery does not yet honor the resolved config include patterns. `[/Users/mia/mia-cx/svartz/packages/plugins/src/discover-files.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/discover-files.ts)` still hard-filters to `.md` before checking the include globs, and its include/exclude behavior is partially split into shared ignore helpers that should instead be owned by discovery itself.
-- Theme resolution is already runtime-owned by `@svartz/vite`, via `virtual:svartz/theme`, so that old TODO question is stale. Current runtime composition lives in `[/Users/mia/mia-cx/svartz/apps/web/src/lib/svartz/SvartzRuntimePage.svelte](/Users/mia/mia-cx/svartz/apps/web/src/lib/svartz/SvartzRuntimePage.svelte)`.
-- Theme `requirements` and `capabilities` are metadata only. Themes are expected to satisfy their operational needs by shipping a `plugins[]` preset that `@svartz/vite` merges into the final plugin list; core plugin generation should not branch on theme metadata.
+## Locked Contract
 
-## File Changes
+### Shared helpers (keep in `packages/plugins/src/internal/`)
 
-- Add a new top-level backlog file, proposed name: `[/Users/mia/mia-cx/svartz/NEXT_STEPS.md](/Users/mia/mia-cx/svartz/NEXT_STEPS.md)`.
-- Update `[/Users/mia/mia-cx/svartz/TODO.md](/Users/mia/mia-cx/svartz/TODO.md)` so it stays broad and does not duplicate or contradict the new high-priority queue.
+- **fileToSlug** (slug.ts) — used by discover-files and resolve-links; canonical slug contract.
+- **normalizeDateTime** (datetime.ts) — generic date parsing; used by index-content.
 
-## New `NEXT_STEPS.md` Structure
+### Plugin-owned logic (move out of shared; no other plugin uses)
 
-### 1. Markdown Parity And Embedding
+- **parse-frontmatter** — Only responsibility: split frontmatter and body markdown. Inline `extractFrontmatter()` (gray-matter) here; do not parse or emit raw links.
+- **resolve-links** — Owns: raw-link extraction, slug map build, link resolution, and link rewrite. Move `extractRawLinks()`, `buildSlugMap()`, and `resolveLink()` into this plugin (or a private module used only by it). Rewrite internal md/wikilinks to runtime-safe output: default `<a href="...">`, or a plugin-configured Svelte component that accepts at least `href`. Config: optional `linkComponent` in plugin options. **Note:** Links that are embeds (prefixed with `!`, e.g. `![[note]]` or `![alt](image.png)`) must not be rewritten to `<a>` or the link component; leave them for the embed/transclusion plugin to handle. **Note:** Links that are embeds (prefixed with `!`, e.g. `![[note]]` or `![alt](image.png)`) must not be rewritten to `<a>` or the link component; leave them for the embed/transclusion plugin to handle.
+- **transform-description** — Sole owner of final per-file description and title fallback. Inline `extractDescription()` and move `deriveTitle()` here. Downstream plugins (e.g. index-content) read `file.frontmatter` / description set by this plugin; they do not compute description or title.
+- **discover-files** — Owns include/exclude filtering. Use resolved config `include`/`exclude` only; no hardcoded `.md`. Inline or own all logic currently in `internal/ignore.ts` (shouldIgnore, shouldIncludePath) inside discover-files; remove shared ignore helpers if unused elsewhere.
+- **Word-count plugin** — New plugin after parse-frontmatter, before embed. Strips frontmatter (already split), HTML comments `<!-- -->`, markdown comments `%% %%`, and tag markup; counts text inside HTML. No shared `countWords()`; implement or use a library that matches these rules.
+- **index-content** — Consumes `file.links` (from resolve-links) and `file.frontmatter`/description/title (from transform-description). Builds `entries`, `graph`, `backlinks`; add MiniSearch index builder step emitting a search-ready artifact. Aliases are not required for index/graph; entry.links exist for graph and search weighting.
+- **Emit-artifacts** — Materializes artifact bag to disk. Immediately before it, a thin **mdsvex wrapper** step turns transformed markdown/HTML note content into Svelte and adds note modules to the artifact bag; emit-artifacts then writes them under `.svartz/vaults/<vaultId>/artifacts`.
 
-Move the immediate content-pipeline work here because it is verified as unfinished:
+### Theme and generation
 
-- Inline `extractFrontmatter()` into `[/Users/mia/mia-cx/svartz/packages/plugins/src/parse-frontmatter.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/parse-frontmatter.ts)` and collapse any tests that only exist to preserve that tiny wrapper.
-- Move `extractRawLinks()` ownership into `[/Users/mia/mia-cx/svartz/packages/plugins/src/resolve-links.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/resolve-links.ts)`, since raw-link parsing exists to feed link resolution rather than general file discovery.
-- Move `buildSlugMap()` and `resolveLink()` ownership into `[/Users/mia/mia-cx/svartz/packages/plugins/src/resolve-links.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/resolve-links.ts)`, keeping them as plugin internals rather than shared helpers.
-- Expand `[/Users/mia/mia-cx/svartz/packages/plugins/src/resolve-links.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/resolve-links.ts)` so it both resolves internal markdown/wikilinks and rewrites them into runtime-safe output: plain `<a>` markup by default, or a configured Svelte link component when provided. That component contract must at least accept `href`.
-- Inline `extractDescription()` into `[/Users/mia/mia-cx/svartz/packages/plugins/src/transform-description.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/transform-description.ts)`, and make `transform-description` the sole owner of ensuring every file carries a final description value for downstream consumers.
-- Move `deriveTitle()` ownership into `[/Users/mia/mia-cx/svartz/packages/plugins/src/transform-description.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/transform-description.ts)`, so title fallback/normalization is resolved there rather than in `index-content`.
-- Replace `countWords()` with a dedicated word-count plugin that runs after `[/Users/mia/mia-cx/svartz/packages/plugins/src/parse-frontmatter.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/parse-frontmatter.ts)` and before embedding, so frontmatter and embedded-note content never contribute to word count.
-- Scope that word-count plugin so it strips HTML comments (`<!-- -->`), markdown comments (`%% %%`), and HTML tag markup itself while still counting text content inside HTML elements; evaluate a library during implementation, but do not assume one is sufficient until it matches these markdown/html-specific rules.
-- Real OFM transformer work.
-- Real GFM transformer work.
-- TOC extraction, explicitly scoped to the source note only and excluding embedded-note headings.
-- Syntax highlighting plugin, explicitly scoped to Shiki and noting that the plugin options should expose Shiki configuration.
-- LaTeX/math transformer work.
-- Recursive markdown embedding/transclusion, including heading-targeted section transclusion.
-- Add a MiniSearch index-builder step to `[/Users/mia/mia-cx/svartz/packages/plugins/src/index-content.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/index-content.ts)` so the canonical index plugin emits a search-ready artifact alongside `entries`, `graph`, and `backlinks`.
-- Add a thin mdsvex compilation wrapper immediately before `[/Users/mia/mia-cx/svartz/packages/plugins/src/emit-artifacts.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/emit-artifacts.ts)` that turns the transformed markdown/HTML note content into Svelte artifacts and places those modules into the artifact bag for final materialization.
-- Asset discovery and pass-through artifact emitters for images, audio, video, and PDFs.
-- Attachment/image path rewriting and embed/link conventions, since you want `TODO.md` items `53-54` folded into OFM/embedder work.
+- Theme `requirements` and `capabilities` are metadata only. Themes satisfy needs via `plugins[]` preset merged by `@svartz/vite`; core plugins do not branch on theme metadata.
+- Non-note routes (folder/tag/error) are theme-owned; pipeline does not have to emit them. Without a theme there is no UI, only artifacts and manifests.
 
-### 2. Theme-Minimal And Shared UI
+### Link rewrite
 
-Create a second section that absorbs the current theme/UI/site-surface work:
+- resolve-links plugin options may include optional `linkComponent` (Svelte component). Contract: component receives at least `href`. If absent, output plain `<a>`.
 
-- Build `@svartz/theme-minimal` against the existing theme contract.
-- State that theme-specific behavior should come from `@svartz/plugins`, not ad hoc theme-exported plugins.
-- State explicitly that theme `requirements` and `capabilities` remain metadata only; the actual enforcement mechanism is the theme’s own `plugins[]` preset merged by `@svartz/vite`.
-- Define `@svartz/ui` as the shared theme-agnostic component package for `Link`, `TableOfContents`, `Breadcrumbs`, `FileTrie`, backlinks, graph, and search UI.
-- Fold in current `TODO.md` items `45-48`, because the present `apps/web` shell already delegates layout/page rendering to the theme runtime.
+### TOC and embedding
 
-### 3. CLI End-To-End Integration
+- TOC: source note only; exclude headings that come from embedded content.
+- Embedder runs after all other content transformers so embedded content is fully transformed. Word count runs before embedding (does not count embedded note content).
 
-Create a third section that makes the CLI the next verification gate:
+---
 
-- Implement the real CLI handoff into `apps/web` with `@svartz/vite`.
-- Use `vaults/docs/` as the concrete end-to-end verification target.
-- Include single-vault build/dev first, then multi-vault orchestration after the basic end-to-end loop works.
+## Canonical pipeline order
 
-### 4. Watch Mode And Change Handling
+Execution order for the core pipeline (to be reflected in `packages/plugins/src/index.ts` when implementing):
 
-Place this after end-to-end CLI integration, per your requested order:
+1. discoverFiles (config-driven include/exclude; no hardcoded `.md`)
+2. parseFrontmatter (frontmatter + body only; no link extraction)
+3. filterUnpublished
+4. resolveLinks (raw-link parse, slug map, resolve, rewrite links in content)
+5. wordCount (new; after frontmatter, before embed)
+6. transformOfm
+7. transformGfm
+8. transformSyntax (Shiki; options expose Shiki config)
+9. transformLatex
+10. transformToc (source-note headings only)
+11. transformDescription (description + title fallback; sole owner)
+12. embed/transclusion (recursive; heading-targeted section transclusion)
+13. mdsvex wrapper (markdown/HTML → Svelte; push note modules into artifact bag)
+14. indexContent (entries, graph, backlinks, MiniSearch index)
+15. emitArtifacts (write artifact bag to disk)
 
-- Implement `handleChange` through the pipeline and Vite dev path.
-- Add watch mode/HMR after the end-to-end runtime path is working.
+Current code has transformDescription and transformToc earlier; when implementing, reorder so that description runs after TOC and embed runs after all transforms; word count and mdsvex wrapper are new steps.
 
-### 5. Additional Themes
+---
 
-Keep later theme work in its own final section:
+## Verified state (pre-execution)
 
-- Add more default themes only after `theme-minimal`, the shared UI package, and the end-to-end runtime/dev loop are proven.
+- Transform plugins OFM, GFM, TOC, Syntax, LaTeX in `packages/plugins/src/transform-*.ts` are stubs.
+- `index-content.ts` produces entries, graph, backlinks; no MiniSearch yet.
+- `internal/parse.ts`: extractFrontmatter (single use parse-frontmatter), extractRawLinks (move to resolve-links), extractDescription (move to transform-description), countWords (replace by word-count plugin).
+- `internal/resolve.ts`: buildSlugMap and resolveLink used only by resolve-links; move into that plugin.
+- `internal/slug.ts`: fileToSlug remains shared; deriveTitle moves to transform-description.
+- `discover-files.ts`: hardcodes `.md` and uses include/exclude; must switch to resolved config include patterns and own all include/exclude logic.
+- Theme resolution is in `@svartz/vite`; theme requirements/capabilities are metadata only.
 
-## `TODO.md` Cleanup Rules
+---
 
-- Remove or narrow items that are now promoted into `NEXT_STEPS.md` so the files do not compete.
-- Move the existing `Next plan queue` items into the new file rather than keeping a second ad hoc high-priority list inside `TODO.md`.
-- Keep broad backlog areas like SEO, docs, i18n, and deferred items in `TODO.md`.
-- Fold `TODO.md` items `45-48` into the theme-minimal section and `53-54` into the markdown parity/embedding section.
+## Phase 1: Deliverables and steps
 
-## Verification Before Editing
+### Step 1 — Verify
 
-When executing:
+- Re-read `packages/plugins/src/parse-frontmatter.ts`, `internal/parse.ts`, `resolve-links.ts`, `transform-description.ts`, `index-content.ts`, `discover-files.ts`, `internal/resolve.ts`, `internal/ignore.ts`, and `index.ts`.
+- Confirm: extractFrontmatter only in parse-frontmatter; extractRawLinks in parse; buildSlugMap/resolveLink only in resolve-links; discover uses only `.md` and shared ignore. Mark any drift in a one-line note.
 
-- Re-read `parse-frontmatter.ts` and `internal/parse.ts` and confirm `extractFrontmatter()` is still only a tiny wrapper before documenting the inline cleanup.
-- Re-read `resolve-links.ts`, `transform-description.ts`, `index-content.ts`, and `internal/parse.ts` and confirm `extractRawLinks()`, `extractDescription()`, `deriveTitle()`, and `countWords()` still live outside their intended owning plugins before documenting the ownership split.
-- Re-read `internal/resolve.ts` and confirm `buildSlugMap()` and `resolveLink()` are only serving `resolve-links`, then document their move into that plugin.
-- Re-read `discover-files.ts` and `internal/ignore.ts` and confirm include/exclude filtering is still split between discovery and shared helpers before documenting that ownership cleanup.
-- Confirm the current pipeline order in `[/Users/mia/mia-cx/svartz/packages/plugins/src/index.ts](/Users/mia/mia-cx/svartz/packages/plugins/src/index.ts)` and capture the new sequencing requirements: word count runs after frontmatter parsing and before embedding; TOC reflects only source-note headings; mdsvex note compilation happens immediately before artifact emission.
-- Re-read the five transform plugin files and confirm they still contain only MVP stub bodies.
-- Re-read `index-content.ts` and confirm it still stops at `entries`, `graph`, and `backlinks` before documenting the MiniSearch builder as unfinished work.
-- Re-read `discover-files.ts` and confirm it still hardcodes `.md` instead of using the resolved include patterns before documenting the asset gap.
-- Re-read `SvartzRuntimePage.svelte` to ground the claim that the app shell is thin and theme-owned UX belongs under `theme-minimal`.
-- Re-read the theme contract and Vite merge path as needed and confirm `requirements`/`capabilities` are metadata only, while theme `plugins[]` remains the operational path.
+### Step 2 — Create NEXT_STEPS.md
 
-## Done Criteria
+- Create `NEXT_STEPS.md` at repo root.
+- Structure: five sections with headings and bullets. Use the **Backlog content** below verbatim for section bullets (relative paths, e.g. `packages/plugins/...`). No numbering of sections required; section titles are enough.
 
-- `NEXT_STEPS.md` exists and is clearly organized by the requested execution order.
-- Every item in the new file is verified unfinished, not already implemented.
-- `TODO.md` no longer duplicates the promoted high-priority queue or stale theme-resolution questions.
-- The asset-discovery gap is explicitly captured in the new file, along with the pass-through asset-emitter follow-up.
-- The Shiki-configurable syntax-highlighting requirement and recursive section transclusion requirement are both spelled out explicitly.
-- The new high-priority queue explicitly calls out the MiniSearch index-builder follow-up in `core:index`.
-- The new high-priority queue explicitly calls out the `extractFrontmatter()` inline cleanup in `parse-frontmatter`.
-- The new high-priority queue explicitly captures the parse-helper ownership cleanup and the dedicated post-frontmatter word-count plugin with its markdown/html stripping rules.
-- The new high-priority queue explicitly captures config-driven discovery, resolve-links-owned link parsing/slug mapping/link rewriting, metadata-only theme requirements, source-note-only TOC behavior, and the thin mdsvex wrapper step before `emit-artifacts`.
+### Step 3 — Reconcile TODO.md
+
+- Remove or reword the "Next plan queue" block so its items appear only in NEXT_STEPS.md.
+- In Active backlog, remove or shorten items that are now fully covered in NEXT_STEPS.md (e.g. theme-minimal, @svartz/ui, CLI, watch/HMR, OFM/GFM/syntax/LaTeX/embed, assets, TOC, transclusion). Keep SEO, feeds, i18n, dev experience, deferred.
+- Ensure no bullet in TODO.md is a verbatim duplicate of a bullet in NEXT_STEPS.md.
+- Leave "Foundation already in place" and "Notes" intact unless they contradict the contract above.
+
+### Step 4 — Review
+
+- Grep for "theme resolution", "theme requirements", "requirements and capabilities" in TODO.md; ensure they are not stated as open questions.
+- Spot-check NEXT_STEPS.md for the five sections and for at least: config-driven discovery, resolve-links ownership, mdsvex wrapper before emit-artifacts, word count before embed, TOC source-note only, MiniSearch in index-content, theme metadata-only.
+
+---
+
+## Backlog content (for NEXT_STEPS.md)
+
+Copy the following into NEXT_STEPS.md as the body. Section titles must be preserved; paths are relative to repo root.
+
+### Section 1 — Markdown parity and embedding
+
+- Inline extractFrontmatter in parse-frontmatter; parse-frontmatter only splits frontmatter and body.
+- Move extractRawLinks, buildSlugMap, resolveLink into resolve-links; resolve-links rewrites internal links to `<a>` or optional linkComponent (min contract: href). Do not rewrite embed-style links (`![[...]]` / `![...](...)`); those are handled by the embed/transclusion plugin.
+- Inline extractDescription and move deriveTitle into transform-description; transform-description is sole owner of final description and title fallback.
+- Add word-count plugin after parse-frontmatter, before embed; strip HTML/md comments and tag markup; count text inside tags only.
+- Implement OFM, GFM, Shiki syntax (options expose Shiki config), LaTeX transforms.
+- TOC extraction: source-note headings only, exclude embedded content.
+- Recursive markdown embedding/transclusion with heading-targeted section transclusion; embedder runs after all other transformers.
+- Thin mdsvex wrapper step immediately before emit-artifacts: transformed md/HTML → Svelte, add note modules to artifact bag.
+- MiniSearch index builder in index-content alongside entries, graph, backlinks.
+- Discovery from resolved config include patterns (no hardcoded .md); include/exclude owned by discover-files. Asset discovery and pass-through emitters for images, audio, video, PDF; attachment/image path rewriting and embed conventions (OFM/embedder).
+
+### Section 2 — Theme-minimal and shared UI
+
+- Build theme-minimal against the theme contract; theme-specific behavior via plugins in theme plugins[] merged by @svartz/vite; requirements/capabilities metadata only.
+- @svartz/ui: shared theme-agnostic components — Link, TableOfContents, Breadcrumbs, FileTrie, backlinks, graph, search (bar + modal). Consumed by theme-minimal and other themes.
+- Real note layouts/navigation, folder/tag/not-found pages, backlinks/graph/search UI, client-side search on emitted index (per current TODO 45–48).
+
+### Section 3 — CLI end-to-end
+
+- CLI handoff injecting @svartz/vite into apps/web for build/dev; single-vault first, then svartz build:all and svartz dev; use vaults/docs as E2E verification target.
+
+### Section 4 — Watch and HMR
+
+- handleChange through pipeline and Vite dev path; watch mode/HMR after E2E runtime path works.
+
+### Section 5 — Additional themes
+
+- Add more default themes only after theme-minimal, @svartz/ui, and E2E runtime/dev loop are proven.
+
+---
+
+## Done criteria (Phase 1)
+
+- NEXT_STEPS.md exists at repo root with exactly five sections and bullets matching Backlog content (no verbatim duplicates from TODO.md).
+- TODO.md has no "Next plan queue" duplicate of NEXT_STEPS content; Active backlog trimmed so overlap with NEXT_STEPS is removed or reworded; SEO, docs, i18n, deferred remain.
+- Grep confirms no open “theme resolution” or “theme requirements” question left in TODO.md.
+- Verification step documented: re-read key files and note any drift from Verified state.
+
+---
+
+## Execution contract for Phase 2 (implementing NEXT_STEPS.md)
+
+When implementing the content of NEXT_STEPS.md:
+
+- Follow **Canonical pipeline order** and **Locked Contract** in this plan. Pipeline order is authoritative over any ordering implied only in NEXT_STEPS.md.
+- parse-frontmatter: no link extraction. resolve-links: owns raw-link parse, slug map, resolve, and link rewrite. transform-description: owns description and title fallback. discover-files: owns include/exclude from config only.
+- Add tests for new or moved behavior (word-count, link rewrite, discovery by pattern, mdsvex wrapper, MiniSearch); update existing tests when moving or inlining helpers.
+- After plugin/helper moves, remove or deprecate unused exports from internal/parse and internal/resolve; keep fileToSlug and normalizeDateTime as shared.
 
