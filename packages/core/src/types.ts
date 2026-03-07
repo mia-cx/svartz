@@ -75,6 +75,49 @@ type ArtifactBag = Map<string, Artifact>;
 
 // --- Pipeline types ---
 
+interface TocEntry {
+  readonly depth: number;
+  readonly text: string;
+  readonly slug: string;
+}
+
+interface SearchDocument {
+  readonly id: string;
+  readonly slug: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly content: string;
+  readonly tags: readonly string[];
+  readonly aliases: readonly string[];
+}
+
+interface TagIndexEntry {
+  readonly slug: string;
+  readonly title: string;
+  readonly noteCount: number;
+  readonly href: string;
+}
+
+interface FolderIndexEntry {
+  readonly slug: string;
+  readonly title: string;
+  readonly noteCount: number;
+  readonly href: string;
+}
+
+interface RouteIndex {
+  readonly notes: readonly string[];
+  readonly tags: readonly string[];
+  readonly folders: readonly string[];
+  readonly all: readonly string[];
+}
+
+interface AssetRecord {
+  readonly path: string;
+  readonly sourcePath: string;
+  readonly mimeType?: string;
+}
+
 /**
  * A link extracted from markdown before resolution.
  * Mirrors vault's LinkMatch — kept Effect-free for plugin authors.
@@ -98,11 +141,16 @@ interface RawLink {
  */
 interface ProcessedFile {
   readonly path: string;
+  readonly sourcePath?: string;
+  readonly extension?: string;
   slug: string;
   content: string;
   frontmatter?: Record<string, unknown>;
   rawLinks?: RawLink[];
   links?: string[];
+  createdAt?: Date;
+  modifiedAt?: Date;
+  toc?: readonly TocEntry[];
 }
 
 interface ChangeEvent {
@@ -128,7 +176,9 @@ interface IndexEntry {
   readonly tags: readonly string[];
   readonly aliases: readonly string[];
   readonly description?: string;
+  readonly content: string;
   readonly links: readonly IndexLink[];
+  readonly toc: readonly TocEntry[];
   readonly wordCount: number;
   readonly readingTimeMinutes: number;
   readonly createdAt: Date;
@@ -145,6 +195,11 @@ interface Index {
   readonly entries: readonly IndexEntry[];
   readonly graph: Readonly<Record<string, readonly string[]>>;
   readonly backlinks: Readonly<Record<string, readonly string[]>>;
+  readonly search: readonly SearchDocument[];
+  readonly tags: readonly TagIndexEntry[];
+  readonly folders: readonly FolderIndexEntry[];
+  readonly routes: RouteIndex;
+  readonly assets: readonly AssetRecord[];
 }
 
 /** Rich graph node for UI consumers (projection of Index). */
@@ -158,8 +213,10 @@ type Graph = Readonly<Record<string, readonly GraphTarget[]>>;
 
 export type {
   Artifact,
+  AssetRecord,
   ArtifactBag,
   ChangeEvent,
+  FolderIndexEntry,
   Graph,
   GraphTarget,
   Index,
@@ -174,5 +231,9 @@ export type {
   ResolvedFrontmatterConfig,
   ResolvedThemeConfig,
   ResolvedVaultDefaults,
+  RouteIndex,
+  SearchDocument,
   TargetConfig,
+  TagIndexEntry,
+  TocEntry,
 };

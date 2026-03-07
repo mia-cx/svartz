@@ -24,10 +24,22 @@
   "dependencies": {
     "@svartz/core": "workspace:*",
     "effect": "^3.19.19",
+    "github-slugger": "^2.0.0",
     "gray-matter": "^4.0.3",
+    "mdast-util-to-string": "^4.0.0",
     "mdsvex": "^0.12.6",
     "minimatch": "^10.1.1",
-    "moment": "^2.30.1"
+    "minisearch": "^7.2.0",
+    "moment": "^2.30.1",
+    "rehype-autolink-headings": "^7.1.0",
+    "rehype-katex": "^7.0.1",
+    "rehype-pretty-code": "^0.14.1",
+    "rehype-slug": "^6.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "shiki": "^1.26.2",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

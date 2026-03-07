@@ -62,6 +62,7 @@ const STAGE_NAMES = [
   "transformDescription",
   "transformSyntax",
   "transformLatex",
+  "transformEmbeds",
   "indexContent",
   "emitArtifacts",
   "buildEnd",
@@ -93,6 +94,7 @@ interface SvartzPlugin {
   transformDescription?: PluginHookInput;
   transformSyntax?: PluginHookInput;
   transformLatex?: PluginHookInput;
+  transformEmbeds?: PluginHookInput;
   indexContent?: PluginHookInput;
   emitArtifacts?: PluginHookInput;
 }
@@ -121,6 +123,7 @@ interface NormalizedSvartzPlugin {
   transformDescription?: PluginHook;
   transformSyntax?: PluginHook;
   transformLatex?: PluginHook;
+  transformEmbeds?: PluginHook;
   indexContent?: PluginHook;
   emitArtifacts?: PluginHook;
 }
