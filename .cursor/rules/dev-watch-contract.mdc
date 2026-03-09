@@ -1,0 +1,35 @@
+---
+description: Svartz dev watch and restart contract for CLI/Vite/plugin work
+globs:
+  - packages/cli/**
+  - packages/vite/**
+  - packages/plugins/**
+  - packages/config/**
+alwaysApply: false
+---
+
+# Dev Watch Contract
+
+`svartz dev` uses a split watch model:
+
+- Vault content changes are handled inside `@svartz/vite` via `configureServer()`: rerun the pipeline, rewrite generated runtime bridge modules, invalidate them, and trigger a browser full reload.
+- Config, `apps/web/vite.config.ts`, active theme package, and best-effort workspace package source changes are handled by the CLI supervisor: rebuild affected workspace packages if needed, then restart the dev runner process cleanly.
+
+## Vault changes
+
+- Treat watch-mode correctness as more important than fine-grained HMR.
+- First pass is full pipeline rebuild plus browser full reload, not stage-level incremental patching.
+- `handleChange` hooks in core plugins are for change classification and cache clearing, not partial artifact mutation.
+
+## Restart-class changes
+
+- Restart the dev runner for svartz config changes.
+- Restart the dev runner for `apps/web/vite.config.ts` changes.
+- Restart the dev runner for active theme package changes.
+- Watch `packages/config/src`, `packages/core/src`, `packages/plugins/src`, `packages/vite/src`, and `packages/ui/src` as best-effort workspace source roots.
+- When a watched workspace package change is inside this repo, rebuild the matching package before restarting the dev runner.
+
+## Test seams
+
+- `apps/web` Vitest runtime stubs must stay file-backed in `apps/web/src/lib/svartz/testing/fixtures/`.
+- `@svartz/vite` tests should assert the current bridge contract and watch behavior, including full-reload signaling for vault changes.

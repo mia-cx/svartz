@@ -1,0 +1,20 @@
+---
+description: When adding or changing test/coverage tooling (Vitest, coverage-v8, test scripts), follow the documented workflow and scope. Ensures correct workspaces, exclusions, and install commands.
+globs: packages/*/package.json,apps/*/package.json,themes/*/package.json,**/vitest.config.*,docs/coverage-baseline-audit.md,turbo.json
+---
+
+# Coverage and test tooling
+
+When working on Vitest, `@vitest/coverage-v8`, or `test`/`test:coverage` scripts in this repo:
+
+1. **Read the workflow** in [docs/coverage-baseline-audit.md](docs/coverage-baseline-audit.md) (section "Coverage workflow (repeatable)"). It defines in-scope workspaces, commands, exclusions, and accepted non-goals.
+
+2. **Out-of-scope packages** — Do not add Vitest or coverage tooling to:
+   - `packages/vault (old, to be superseded)` (defunct)
+   - `packages/reference` (upstream Quartz; uses `tsx --test`)
+
+3. **Vitest major** — Do not change Vitest major versions as part of coverage work. `config`/`core`/`plugins`/`vite` use Vitest 3; `cli`/`ui`/`themes/minimal`/`apps/web` use Vitest 4. Add `@vitest/coverage-v8` with the same major as the workspace’s existing `vitest`.
+
+4. **Install** — Use `pnpm i -D <pkg>` (see pnpm-install-command-preference rule). Do not use `pnpm add`.
+
+5. **Thresholds** — Do not add coverage thresholds (e.g. `coverage.lines: 80`) in the first rollout; keep report-only until baseline is stable.

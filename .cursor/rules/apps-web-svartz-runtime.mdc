@@ -12,5 +12,6 @@ alwaysApply: false
 - Do not add `@svartz/core` as a direct `apps/web` dependency just to import shared runtime types.
 - Keep local ambient declarations for `virtual:svartz/theme` and `virtual:svartz/artifacts` inside `apps/web/src/**.d.ts`.
 - Keep route-shell loader types local to `apps/web` unless the app truly needs package-level runtime code.
-- For browser/unit tests, provide test-only virtual-module stubs in `apps/web/vite.config.ts` or local test helpers.
+- For browser/unit tests, keep the `virtual:svartz/*` test surfaces file-backed under `apps/web/src/lib/svartz/testing/fixtures/` and alias them from `apps/web/vite.config.ts`. Do not go back to giant inline string-literal virtual modules.
 - Do not wire the real Svartz Vite plugin into `apps/web/vite.config.ts`; production/dev injection belongs to the CLI orchestration layer.
+- When the CLI moves `kit.outDir` outside `apps/web` into `.svartz/vaults/<id>/.svelte-kit`, it must also prepare that vault workspace so the generated prerender server can still resolve `apps/web` dependencies. Today that means ensuring `.svartz/vaults/<id>/node_modules` points at `apps/web/node_modules`.
