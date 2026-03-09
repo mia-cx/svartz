@@ -1,18 +1,25 @@
 /**
  * core:transform-toc — Table of Contents extraction.
  *
- * Extracts heading structure for TOC generation.
- * MVP: passes through unchanged.
+ * Extracts heading structure from source notes only. Embedded content does not
+ * contribute headings to the parent note's TOC.
  */
 
 import { definePlugin } from "@svartz/core";
+import { extractHeadings } from "./internal/parse";
 
 export const transformToc = definePlugin(() => ({
   id: "core:transform-toc",
 
   transformToc: {
-    run(_ctx) {
-      // MVP stub — TOC extraction implemented when heading tree type is defined
+    run(ctx) {
+      for (const file of ctx.files) {
+        if (!file.extension || ![".md", ".mdx", ".svx"].includes(file.extension)) {
+          continue;
+        }
+
+        file.toc = extractHeadings(file.content);
+      }
     },
     options: { fatal: true },
   },

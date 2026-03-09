@@ -15,15 +15,39 @@ tags: [a, b]
 Body content here.`;
 
     const { frontmatter, bodyMarkdown } = extractFrontmatter(content);
-    expect(frontmatter.title).toBe("Hello");
-    expect(frontmatter.tags).toEqual(["a", "b"]);
+    expect(frontmatter?.title).toBe("Hello");
+    expect(frontmatter?.tags).toEqual(["a", "b"]);
     expect(bodyMarkdown.trim()).toBe("Body content here.");
   });
 
-  it("returns empty frontmatter when none present", () => {
+  it("returns undefined frontmatter when none present", () => {
     const { frontmatter, bodyMarkdown } = extractFrontmatter("Just text.");
-    expect(frontmatter).toEqual({});
+    expect(frontmatter).toBeUndefined();
     expect(bodyMarkdown.trim()).toBe("Just text.");
+  });
+
+  it("drops invalid frontmatter and keeps the body", () => {
+    const content = `---
+title: [
+---
+Body content here.`;
+
+    const { frontmatter, bodyMarkdown } = extractFrontmatter(content);
+    expect(frontmatter).toBeUndefined();
+    expect(bodyMarkdown.trim()).toBe("Body content here.");
+  });
+
+  it("sanitizes templater tags in frontmatter before parsing", () => {
+    const content = `---
+created: <% tp.file.creation_date() %>
+title: Daily Note
+---
+Body content here.`;
+
+    const { frontmatter, bodyMarkdown } = extractFrontmatter(content);
+    expect(frontmatter?.created).toBe("svartz-templater");
+    expect(frontmatter?.title).toBe("Daily Note");
+    expect(bodyMarkdown.trim()).toBe("Body content here.");
   });
 });
 

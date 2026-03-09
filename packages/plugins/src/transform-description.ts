@@ -8,6 +8,7 @@
 
 import { definePlugin } from "@svartz/core";
 import { extractDescription } from "./internal/parse";
+import { deriveTitle } from "./internal/slug";
 
 export const transformDescription = definePlugin(() => ({
   id: "core:transform-description",
@@ -15,8 +16,21 @@ export const transformDescription = definePlugin(() => ({
   transformDescription: {
     run(ctx) {
       const descField = ctx.config.frontmatter.descriptionField;
+      const titleField = ctx.config.frontmatter.titleField;
 
       for (const file of ctx.files) {
+        if (!file.extension || ![".md", ".mdx", ".svx"].includes(file.extension)) continue;
+
+        file.frontmatter ??= {};
+
+        const existingTitle = file.frontmatter[titleField];
+        if (typeof existingTitle !== "string" || existingTitle.length === 0) {
+          const filename = file.path.split("/").pop() ?? "Untitled";
+          file.frontmatter[titleField] = deriveTitle(
+            filename.replace(/\.[^.]+$/, ""),
+          );
+        }
+
         if (!file.frontmatter) continue;
 
         const existing = file.frontmatter[descField];

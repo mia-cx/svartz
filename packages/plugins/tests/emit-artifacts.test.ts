@@ -57,6 +57,7 @@ describe("core:emit-artifacts", () => {
         {
           path: "guides/intro.md",
           slug: "guides/intro",
+          extension: ".md",
           content: "# Intro\n\nWelcome to Svartz.",
           frontmatter: { title: "Intro" },
         },
@@ -80,6 +81,11 @@ describe("core:emit-artifacts", () => {
         ],
         graph: { "guides/intro": [] },
         backlinks: { "guides/intro": [] },
+        search: [],
+        tags: [],
+        folders: [],
+        routes: { notes: ["/guides/intro/"], tags: [], folders: [], all: ["/guides/intro/"] },
+        assets: [],
       },
       outDir,
     );

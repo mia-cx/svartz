@@ -8,7 +8,7 @@ describe("createCorePlugins", () => {
   it("returns correct number of plugins", () => {
     const plugins = createCorePlugins();
     expect(plugins).toHaveLength(CORE_PLUGIN_IDS.length);
-    expect(plugins).toHaveLength(12);
+    expect(plugins).toHaveLength(13);
   });
 
   it("returns plugins in canonical order matching CORE_PLUGIN_IDS", () => {
@@ -67,8 +67,38 @@ describe("createCorePlugins", () => {
     expect(emit?.emitArtifacts?.options?.parallel).toBeUndefined();
   });
 
+  it("attaches handleChange hooks to every core plugin", () => {
+    const plugins = createCorePlugins();
+    for (const plugin of plugins) {
+      expect(plugin.handleChange, `${plugin.id} should define handleChange`).toBeDefined();
+    }
+  });
+
+  it("clears parse caches when markdown changes are handled", () => {
+    const plugins = createCorePlugins();
+    const parseFrontmatter = plugins.find((plugin) => plugin.id === "core:parse-frontmatter");
+    const ctx = {
+      config: { path: "/vaults/docs" },
+      files: [],
+      artifacts: new Map(),
+      meta: new Map([["sourceBodies", new Map()]]),
+    };
+
+    parseFrontmatter?.handleChange?.run(
+      {
+        type: "change",
+        file: "/vaults/docs/daily.md",
+        relativeFile: "daily.md",
+      },
+      ctx as never,
+    );
+
+    expect(ctx.meta.has("sourceBodies")).toBe(false);
+    expect(ctx.meta.get("svartz:changedPlugins")).toEqual(new Set(["core:parse-frontmatter"]));
+  });
+
   it("CORE_PLUGIN_IDS is readonly (as const)", () => {
-    expect(CORE_PLUGIN_IDS.length).toBe(12);
+    expect(CORE_PLUGIN_IDS.length).toBe(13);
     // TypeScript `as const` prevents mutation at compile-time
   });
 });
@@ -85,6 +115,7 @@ describe("CORE_PLUGIN_IDS", () => {
     expect(CORE_PLUGIN_IDS).toContain("core:transform-description");
     expect(CORE_PLUGIN_IDS).toContain("core:transform-syntax");
     expect(CORE_PLUGIN_IDS).toContain("core:transform-latex");
+    expect(CORE_PLUGIN_IDS).toContain("core:transform-embeds");
     expect(CORE_PLUGIN_IDS).toContain("core:index");
     expect(CORE_PLUGIN_IDS).toContain("core:emit-artifacts");
   });

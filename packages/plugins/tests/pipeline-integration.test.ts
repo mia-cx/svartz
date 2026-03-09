@@ -40,6 +40,7 @@ describe("pipeline integration: parse -> filter -> resolve -> transform -> index
       {
         path: "notes/hello.md",
         slug: "notes/hello",
+        extension: ".md",
         content: `---
 title: Hello World
 tags: [greeting]
@@ -50,6 +51,7 @@ This is a hello page. See [[goodbye]] for farewell.`,
       {
         path: "notes/goodbye.md",
         slug: "notes/goodbye",
+        extension: ".md",
         content: `---
 title: Goodbye World
 tags: [farewell]
@@ -98,6 +100,7 @@ This is a goodbye page. Links to [[hello]].`,
       {
         path: "draft.md",
         slug: "draft",
+        extension: ".md",
         content: `---
 title: Draft
 published: false
@@ -107,6 +110,7 @@ This is a draft.`,
       {
         path: "public.md",
         slug: "public",
+        extension: ".md",
         content: `---
 title: Public
 published: true
@@ -138,6 +142,7 @@ describe("artifact determinism", () => {
       {
         path: "b.md",
         slug: "b",
+        extension: ".md",
         content: `---
 title: B
 tags: [x]
@@ -147,6 +152,7 @@ Links to [[a]].`,
       {
         path: "a.md",
         slug: "a",
+        extension: ".md",
         content: `---
 title: A
 tags: [y]
@@ -184,9 +190,9 @@ Links to [[b]].`,
 
   it("entries are sorted by slug", () => {
     const files: ProcessedFile[] = [
-      { path: "z.md", slug: "z", content: "---\ntitle: Z\n---\nZ content." },
-      { path: "a.md", slug: "a", content: "---\ntitle: A\n---\nA content." },
-      { path: "m.md", slug: "m", content: "---\ntitle: M\n---\nM content." },
+      { path: "z.md", slug: "z", extension: ".md", content: "---\ntitle: Z\n---\nZ content." },
+      { path: "a.md", slug: "a", extension: ".md", content: "---\ntitle: A\n---\nA content." },
+      { path: "m.md", slug: "m", extension: ".md", content: "---\ntitle: M\n---\nM content." },
     ];
 
     const ctx = makeCtx(files);
@@ -200,8 +206,8 @@ Links to [[b]].`,
 
   it("graph keys are sorted", () => {
     const files: ProcessedFile[] = [
-      { path: "z.md", slug: "z", content: "---\ntitle: Z\n---\n[[a]]" },
-      { path: "a.md", slug: "a", content: "---\ntitle: A\n---\n[[z]]" },
+      { path: "z.md", slug: "z", extension: ".md", content: "---\ntitle: Z\n---\n[[a]]" },
+      { path: "a.md", slug: "a", extension: ".md", content: "---\ntitle: A\n---\n[[z]]" },
     ];
 
     const ctx = makeCtx(files);

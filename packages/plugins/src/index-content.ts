@@ -9,13 +9,48 @@
  */
 
 import { definePlugin } from "@svartz/core";
-import type { IndexEntry, IndexLink, Index } from "@svartz/core";
-import { deriveTitle } from "./internal/slug";
-import { countWords, extractDescription } from "./internal/parse";
+import type {
+  FolderIndexEntry,
+  IndexEntry,
+  IndexLink,
+  Index,
+  RouteIndex,
+  SearchDocument,
+  TagIndexEntry,
+} from "@svartz/core";
+import { countWords, extractDescription, stripMarkdownToText } from "./internal/parse";
 import { normalizeDateTime } from "./internal/datetime";
 
 const INDEX_VERSION = "1.0.0";
 const DEFAULT_INDEX_TIMESTAMP = new Date(0);
+
+function isMarkdownFile(extension: string | undefined): boolean {
+  return extension !== undefined && [".md", ".mdx", ".svx"].includes(extension);
+}
+
+function slugToHref(slug: string): string {
+  return slug === "index" ? "/" : `/${slug}/`;
+}
+
+function folderSlugFromEntry(slug: string): string | undefined {
+  const segments = slug.split("/");
+  if (segments.length <= 1) return undefined;
+
+  if (segments[segments.length - 1] === "index") {
+    return segments.slice(0, -1).join("/") || undefined;
+  }
+
+  return segments.slice(0, -1).join("/") || undefined;
+}
+
+function folderTitle(slug: string): string {
+  return slug
+    .split("/")
+    .pop()
+    ?.replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    ?? "Folder";
+}
 
 export const indexContent = definePlugin(() => ({
   id: "core:index",
@@ -24,16 +59,28 @@ export const indexContent = definePlugin(() => ({
     run(ctx) {
       const fm = ctx.config.frontmatter;
       const entries: IndexEntry[] = [];
+      const search: SearchDocument[] = [];
+      const tagCounts = new Map<string, number>();
+      const folderCounts = new Map<string, number>();
+      const noteRouteSet = new Set<string>();
+      const assetRecords = ctx.files
+        .filter((file) => !isMarkdownFile(file.extension))
+        .map((file) => ({
+          path: file.path,
+          sourcePath: file.sourcePath ?? file.path,
+        }))
+        .sort((left, right) => left.path.localeCompare(right.path));
 
       for (const file of ctx.files) {
+        if (!isMarkdownFile(file.extension)) continue;
+
         const frontmatter = file.frontmatter ?? {};
 
         const fmTitle = frontmatter[fm.titleField];
-        const filename = file.path.split("/").pop() ?? "Untitled";
         const title =
           typeof fmTitle === "string" && fmTitle.length > 0
             ? fmTitle
-            : deriveTitle(filename.replace(/\.[^.]+$/, ""));
+            : "Untitled";
 
         const tags = Array.isArray(frontmatter[fm.tagsField])
           ? (frontmatter[fm.tagsField] as string[])
@@ -48,12 +95,15 @@ export const indexContent = definePlugin(() => ({
           typeof fmDesc === "string" && fmDesc.length > 0
             ? fmDesc
             : extractDescription(file.content);
+        const plainTextContent = stripMarkdownToText(file.content);
 
         const createdAt =
           normalizeDateTime(frontmatter[fm.createdAtField], fm.dateFormat) ??
+          file.createdAt ??
           DEFAULT_INDEX_TIMESTAMP;
         const modifiedAt =
           normalizeDateTime(frontmatter[fm.updatedAtField], fm.dateFormat) ??
+          file.modifiedAt ??
           DEFAULT_INDEX_TIMESTAMP;
 
         let publishedAt: Date | undefined;
@@ -87,16 +137,40 @@ export const indexContent = definePlugin(() => ({
           tags,
           aliases,
           description,
+          content: plainTextContent,
           links,
+          toc: file.toc ?? [],
           wordCount: wc,
           readingTimeMinutes: Math.ceil(wc / 200) || 1,
           createdAt,
           modifiedAt,
           publishedAt,
         });
+
+        search.push({
+          id: file.slug,
+          slug: file.slug,
+          title,
+          description,
+          content: plainTextContent,
+          tags,
+          aliases,
+        });
+
+        for (const tag of tags) {
+          tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+        }
+
+        const folderSlug = folderSlugFromEntry(file.slug);
+        if (folderSlug) {
+          folderCounts.set(folderSlug, (folderCounts.get(folderSlug) ?? 0) + 1);
+        }
+
+        noteRouteSet.add(slugToHref(file.slug));
       }
 
       entries.sort((a, b) => a.slug.localeCompare(b.slug));
+      search.sort((a, b) => a.slug.localeCompare(b.slug));
 
       const graph: Record<string, readonly string[]> = {};
       const backlinks: Record<string, string[]> = {};
@@ -131,11 +205,50 @@ export const indexContent = definePlugin(() => ({
         sortedGraph[slug] = graph[slug]!;
       }
 
+      const tags: TagIndexEntry[] = [...tagCounts.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([slug, noteCount]) => ({
+          slug,
+          title: slug,
+          noteCount,
+          href: `/tags/${slug}/`,
+        }));
+
+      const folders: FolderIndexEntry[] = [...folderCounts.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([slug, noteCount]) => ({
+          slug,
+          title: folderTitle(slug),
+          noteCount,
+          href: `/folders/${slug}/`,
+        }));
+
+      const routes: RouteIndex = {
+        notes: [...noteRouteSet].sort(),
+        tags: ["/tags/", ...tags.map((entry) => entry.href)],
+        folders: ["/folders/", ...folders.map((entry) => entry.href)],
+        all: [
+          "/",
+          ...new Set([
+            ...noteRouteSet,
+            "/tags/",
+            ...tags.map((entry) => entry.href),
+            "/folders/",
+            ...folders.map((entry) => entry.href),
+          ]),
+        ].sort(),
+      };
+
       const index: Index = {
         version: INDEX_VERSION,
         entries,
         graph: sortedGraph,
         backlinks: sortedBacklinks,
+        search,
+        tags,
+        folders,
+        routes,
+        assets: assetRecords,
       };
 
       ctx.index = index;

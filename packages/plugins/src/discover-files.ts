@@ -6,12 +6,17 @@
  */
 
 import { readdir, readFile, lstat, realpath, stat } from "node:fs/promises";
-import { join, extname, relative, basename } from "node:path";
+import { join, extname, relative } from "node:path";
 import { definePlugin } from "@svartz/core";
 import { fileToSlug } from "./internal/slug";
 import { shouldIgnore, shouldIncludePath } from "./internal/ignore";
 
 const MAX_SYMLINK_DEPTH = 4;
+const MARKDOWN_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
+
+function isMarkdownFile(path: string): boolean {
+  return MARKDOWN_EXTENSIONS.has(extname(path).toLowerCase());
+}
 
 export const discoverFiles = definePlugin(() => ({
   id: "core:discover-files",
@@ -48,7 +53,7 @@ export const discoverFiles = definePlugin(() => ({
               continue;
             }
 
-            if (resolvedStat.isFile() && extname(entry.name) === ".md") {
+            if (resolvedStat.isFile()) {
               const relPath = relative(vaultPath, fullPath);
               if (shouldIncludePath(relPath, include, exclude)) {
                 filePaths.push(relPath);
@@ -64,7 +69,7 @@ export const discoverFiles = definePlugin(() => ({
             continue;
           }
 
-          if (entry.isFile() && extname(entry.name) === ".md") {
+          if (entry.isFile()) {
             const relPath = relative(vaultPath, fullPath);
             if (shouldIncludePath(relPath, include, exclude)) {
               filePaths.push(relPath);
@@ -79,11 +84,19 @@ export const discoverFiles = definePlugin(() => ({
       ctx.files = await Promise.all(
         filePaths.map(async (relPath) => {
           const fullPath = join(vaultPath, relPath);
-          const content = await readFile(fullPath, "utf-8");
+          const fileStat = await stat(fullPath);
+          const extension = extname(relPath).toLowerCase();
+          const content = isMarkdownFile(relPath)
+            ? await readFile(fullPath, "utf-8")
+            : "";
           return {
             path: relPath,
             slug: fileToSlug(relPath),
+            sourcePath: fullPath,
+            extension,
             content,
+            createdAt: fileStat.birthtime,
+            modifiedAt: fileStat.mtime,
           };
         }),
       );
