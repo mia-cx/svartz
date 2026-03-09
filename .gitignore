@@ -7,6 +7,8 @@
 **/.turbo
 **/.svelte-kit
 **/build
+.svartz
+**/__screenshots__
 
 # Environment (secrets; turbo uses .env for cache key only)
 .env*
@@ -25,5 +27,5 @@ coverage
 .DS_Store
 
 # Private vault fixtures (do not commit)
-packages/vault/tests/fixtures/obsidian-journal/
-packages/vault/tests/fixtures/vault/
+vaults/obsidian-journal/
+vaults/vault/

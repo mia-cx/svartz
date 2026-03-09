@@ -8,15 +8,21 @@
     "url": "https://github.com/mia-cx/svartz.git"
   },
   "scripts": {
+    "svartz": "svartz",
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",
     "test": "turbo test",
+    "test:coverage": "turbo test:coverage",
     "clean": "turbo clean && rm -rf node_modules",
     "add-license-headers": "node scripts/add-license-headers.mjs",
     "add-license-headers:dry": "node scripts/add-license-headers.mjs --dry-run"
   },
   "devDependencies": {
+    "@svartz/config": "workspace:^",
+    "@svartz/core": "workspace:^",
+    "@svartz/theme-minimal": "workspace:^",
+    "svartz": "workspace:^",
     "turbo": "^2.3.0"
   },
   "packageManager": "pnpm@9.14.2",
