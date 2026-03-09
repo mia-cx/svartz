@@ -26,7 +26,7 @@ const ARTIFACTS_PLACEHOLDER_SOURCE = [
   'export async function loadNoteArtifact(key) {',
   '  throw new Error(`[svartz:vite] note artifact "${key}" is not available yet`);',
   '}',
-  'export const index = { version: "0.0.0", entries: [], graph: {}, backlinks: {}, search: [], tags: [], folders: [], routes: { notes: [], tags: [], folders: [], all: [] }, assets: [] };',
+  'export const index = { version: "0.0.0", entries: [], graph: {}, backlinks: {}, search: [], tags: [], folders: [], routes: { notes: [], tags: [], folders: [], feed: [], all: [] }, assets: [] };',
   'export const graph = index.graph;',
   'export const backlinks = index.backlinks;',
   'export const search = index.search;',
@@ -36,6 +36,7 @@ const ARTIFACTS_PLACEHOLDER_SOURCE = [
   'export const assets = index.assets;',
   'export const searchDocuments = [];',
   'export const searchIndex = { documentCount: 0, nextId: 0, storedFields: {}, fieldIds: {}, fieldLength: {}, averageFieldLength: {}, index: [], serializationVersion: 2 };',
+  'export const themeConfig = {};',
 ].join("\n");
 
 type SvartzVirtualModuleId =

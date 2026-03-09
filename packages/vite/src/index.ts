@@ -69,6 +69,11 @@ function toError(cause: unknown): Error {
   return cause instanceof Error ? cause : new Error(String(cause));
 }
 
+function extractThemeConfig(theme: { base: string; [key: string]: unknown }): Record<string, unknown> {
+  const { base: _base, ...rest } = theme;
+  return rest;
+}
+
 function svartz(options: SvartzVitePluginOptions): Plugin {
   let context = createSvartzViteContext(options);
   let themeModuleId = resolveThemeModuleId(context.config);
@@ -155,7 +160,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
         [
           writeGeneratedModule(
             getGeneratedRuntimeThemeModulePath(context.config),
-            createThemeVirtualModuleSource(themeModuleId),
+            createThemeVirtualModuleSource(themeModuleId, extractThemeConfig(context.config.theme)),
           ),
           writeGeneratedModule(
             getGeneratedRuntimeArtifactsModulePath(context.config),
@@ -163,6 +168,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
               emittedArtifacts,
               getGeneratedIndexModulePath(context.config),
               getGeneratedSearchModulePath(context.config),
+              extractThemeConfig(context.config.theme),
             ),
           ),
         ],
@@ -223,12 +229,17 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     name: "svartz:vite",
     enforce: "pre",
     config() {
+      const alias: Record<string, string> = {
+        "virtual:svartz/theme": getGeneratedRuntimeThemeModulePath(options.config),
+        "virtual:svartz/artifacts": getGeneratedRuntimeArtifactsModulePath(options.config),
+      };
+      const themeSourcePath = process.env["SVARTZ_THEME_SOURCE_PATH"];
+      if (themeSourcePath && options.config.theme?.base) {
+        alias[options.config.theme.base] = themeSourcePath;
+      }
       return {
         resolve: {
-          alias: {
-            "virtual:svartz/theme": getGeneratedRuntimeThemeModulePath(options.config),
-            "virtual:svartz/artifacts": getGeneratedRuntimeArtifactsModulePath(options.config),
-          },
+          alias,
         },
       };
     },
@@ -284,7 +295,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     },
     load(id) {
       if (id === RESOLVED_THEME_VIRTUAL_ID) {
-        return createThemeVirtualModuleSource(themeModuleId);
+        return createThemeVirtualModuleSource(themeModuleId, extractThemeConfig(context.config.theme));
       }
 
       if (id === RESOLVED_ARTIFACTS_VIRTUAL_ID) {
@@ -292,6 +303,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
           emittedArtifacts,
           getGeneratedIndexModulePath(context.config),
           getGeneratedSearchModulePath(context.config),
+          extractThemeConfig(context.config.theme),
         );
       }
 

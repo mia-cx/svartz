@@ -47,6 +47,7 @@ function createArtifactsVirtualModuleSource(
   artifacts: readonly Artifact[],
   indexModulePath: string,
   searchModulePath: string,
+  themeConfig: Record<string, unknown> = {},
 ): string {
   const records = artifacts.map((artifact) => ({
     key: artifact.key,
@@ -80,6 +81,8 @@ function createArtifactsVirtualModuleSource(
     "  }",
     "  return loader();",
     "}",
+    "",
+    `export const themeConfig = ${JSON.stringify(themeConfig)};`,
     "",
     "export { index, graph, backlinks, search, tags, folders, routes, assets, searchDocuments, searchIndex };",
   ].join("\n");
