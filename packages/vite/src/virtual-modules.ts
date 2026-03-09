@@ -26,10 +26,16 @@ const ARTIFACTS_PLACEHOLDER_SOURCE = [
   'export async function loadNoteArtifact(key) {',
   '  throw new Error(`[svartz:vite] note artifact "${key}" is not available yet`);',
   '}',
-  'export const index = { version: "0.0.0", entries: [], graph: {}, backlinks: {} };',
+  'export const index = { version: "0.0.0", entries: [], graph: {}, backlinks: {}, search: [], tags: [], folders: [], routes: { notes: [], tags: [], folders: [], all: [] }, assets: [] };',
   'export const graph = index.graph;',
   'export const backlinks = index.backlinks;',
-  'export const search = index.entries;',
+  'export const search = index.search;',
+  'export const tags = index.tags;',
+  'export const folders = index.folders;',
+  'export const routes = index.routes;',
+  'export const assets = index.assets;',
+  'export const searchDocuments = [];',
+  'export const searchIndex = { documentCount: 0, nextId: 0, storedFields: {}, fieldIds: {}, fieldLength: {}, averageFieldLength: {}, index: [], serializationVersion: 2 };',
 ].join("\n");
 
 type SvartzVirtualModuleId =

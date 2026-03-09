@@ -38,7 +38,7 @@ function createThemeVirtualModuleSource(themeModuleId: string): string {
     "export function resolveRouteToArtifactKey(input) {",
     "  return resolveThemeRouteToArtifactKey(routes, input);",
     "}",
-  ].join("\\n");
+  ].join("\n");
 }
 
 export {

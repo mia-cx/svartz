@@ -39,15 +39,19 @@ export function createSvartzVitePlugin(config: ResolvedConfig) {
 Given `ResolvedConfig.outDir = .svartz/vaults/docs/dist`, the plugin writes runtime inputs to:
 
 ```text
-.svartz/vaults/docs/artifacts/
-├── index.ts
-└── pages/
-    └── **/*.svelte
+.svartz/vaults/docs/
+├── .svelte-kit/
+├── artifacts/
+│   ├── index.ts
+│   └── pages/
+│       └── **/*.svelte
+└── dist/
 ```
 
 - `index.ts` eagerly exports `index`, `graph`, `backlinks`, and `search`.
 - `pages/**/*.svelte` contains one compiled page artifact per note slug.
 - The final Vite/SvelteKit bundle still goes to `ResolvedConfig.outDir`.
+- The CLI, not `@svartz/vite`, is responsible for pointing `apps/web` at the vault-scoped `.svelte-kit` directory and preparing the workspace so prerender can resolve dependencies.
 
 ## Virtual Modules
 

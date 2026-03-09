@@ -5,6 +5,7 @@ import {
   getGeneratedArtifactsRoot,
   getGeneratedIndexModulePath,
   getGeneratedPageModulePath,
+  getGeneratedSearchModulePath,
 } from "../src/artifacts";
 
 const configA: ResolvedConfig = {
@@ -77,10 +78,14 @@ describe("@svartz/vite artifact helpers", () => {
     const source = createArtifactsVirtualModuleSource(
       artifacts,
       getGeneratedIndexModulePath(configA),
+      getGeneratedSearchModulePath(configA),
     );
 
     expect(source).toContain(
-      'import { index, graph, backlinks, search } from "/workspace/.svartz/vaults/docs/artifacts/index.ts";',
+      'import { index, graph, backlinks, search, tags, folders, routes, assets } from "/workspace/.svartz/vaults/docs/artifacts/index.ts";',
+    );
+    expect(source).toContain(
+      'import { searchDocuments, searchIndex } from "/workspace/.svartz/vaults/docs/artifacts/search.ts";',
     );
     expect(source).toContain('"pages/guides/intro.svelte": () => import("/workspace/.svartz/vaults/docs/artifacts/pages/guides/intro.svelte")');
     expect(source).toContain("export const artifacts = new Map");

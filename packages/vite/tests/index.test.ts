@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Artifact, ResolvedConfig } from "@svartz/core";
 import {
@@ -7,11 +8,13 @@ import {
 import { svartz } from "../src/index";
 
 const {
+  executeHandleChangeMock,
   createThemeVirtualModuleSourceMock,
   loadThemeModuleMock,
   resolveRuntimePluginsMock,
   runStagesMock,
 } = vi.hoisted(() => ({
+  executeHandleChangeMock: vi.fn(),
   createThemeVirtualModuleSourceMock: vi.fn(),
   loadThemeModuleMock: vi.fn(),
   resolveRuntimePluginsMock: vi.fn(),
@@ -25,6 +28,7 @@ vi.mock("@svartz/core", async () => {
 
   return {
     ...actual,
+    executeHandleChange: executeHandleChangeMock,
     runStages: runStagesMock,
   };
 });
@@ -55,8 +59,8 @@ vi.mock("../src/plugins", async () => {
 const testConfig: ResolvedConfig = {
   version: "0.0.1",
   id: "docs",
-  path: "/vaults/docs",
-  outDir: "/workspace/.svartz/vaults/docs/dist",
+  path: "/tmp/svartz-tests/vaults/docs",
+  outDir: "/tmp/svartz-tests/.svartz/vaults/docs/dist",
   include: [],
   exclude: [],
   linkResolution: "closest",
@@ -77,6 +81,7 @@ const testConfig: ResolvedConfig = {
 describe("@svartz/vite plugin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
 
     loadThemeModuleMock.mockResolvedValue({
       id: "theme-docs",
@@ -89,6 +94,10 @@ describe("@svartz/vite plugin", () => {
       routes: [{ id: "home", pattern: "/" }],
     });
     resolveRuntimePluginsMock.mockReturnValue([]);
+    executeHandleChangeMock.mockResolvedValue({
+      errors: [],
+      fatalError: undefined,
+    });
     createThemeVirtualModuleSourceMock.mockImplementation(
       (themeModuleId: string) => `theme-source:${themeModuleId}`,
     );
@@ -99,7 +108,7 @@ describe("@svartz/vite plugin", () => {
       ) => {
         ctx.artifacts.set("pages/index.svelte", {
           key: "pages/index.svelte",
-          path: "/workspace/.svartz/vaults/docs/artifacts/pages/index.svelte",
+          path: "/tmp/svartz-tests/.svartz/vaults/docs/artifacts/pages/index.svelte",
           type: "svelte",
           pluginId: "core:emit-artifacts",
           noteSlug: "index",
@@ -107,7 +116,7 @@ describe("@svartz/vite plugin", () => {
         });
         ctx.artifacts.set("index.ts", {
           key: "index.ts",
-          path: "/workspace/.svartz/vaults/docs/artifacts/index.ts",
+          path: "/tmp/svartz-tests/.svartz/vaults/docs/artifacts/index.ts",
           type: "ts",
           pluginId: "core:emit-artifacts",
           contents: "export const index = {};",
@@ -142,8 +151,66 @@ describe("@svartz/vite plugin", () => {
     expect(runStagesMock).toHaveBeenCalled();
     expect(artifactsSource).toContain("pages/index.svelte");
     expect(artifactsSource).toContain(
-      'import { index, graph, backlinks, search } from "/workspace/.svartz/vaults/docs/artifacts/index.ts";',
+      'import { index, graph, backlinks, search, tags, folders, routes, assets } from "/tmp/svartz-tests/.svartz/vaults/docs/artifacts/index.ts";',
     );
     expect(themeSource).toBe("theme-source:@svartz/theme-docs");
+  });
+
+  it("rebuilds and triggers a full reload when a vault file changes", async () => {
+    vi.useFakeTimers();
+
+    const plugin = svartz({
+      config: testConfig,
+      env: {},
+      mode: "test",
+    });
+
+    await plugin.buildStart?.call({} as never);
+
+    const watcher = new EventEmitter() as EventEmitter & {
+      add: ReturnType<typeof vi.fn>;
+    };
+    watcher.add = vi.fn();
+
+    const server = {
+      watcher,
+      ws: { send: vi.fn() },
+      moduleGraph: {
+        getModulesByFile: vi.fn().mockReturnValue(new Set([{ id: "module" }])),
+        invalidateModule: vi.fn(),
+      },
+      config: {
+        logger: {
+          warn: vi.fn(),
+          error: vi.fn(),
+        },
+      },
+    };
+
+    const dispose = plugin.configureServer?.(server as never);
+    expect(watcher.add).toHaveBeenCalledWith(testConfig.path);
+
+    await vi.advanceTimersByTimeAsync(300);
+    watcher.emit("change", "/tmp/svartz-tests/vaults/docs/note.md");
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(executeHandleChangeMock).toHaveBeenCalledWith(
+      [],
+      expect.objectContaining({
+        type: "change",
+        file: "/tmp/svartz-tests/vaults/docs/note.md",
+        relativeFile: "note.md",
+      }),
+      expect.objectContaining({
+        config: testConfig,
+      }),
+    );
+    expect(runStagesMock).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => {
+      expect(server.ws.send).toHaveBeenCalledWith({ type: "full-reload" });
+    });
+    expect(server.moduleGraph.invalidateModule).toHaveBeenCalled();
+
+    dispose?.();
   });
 });
