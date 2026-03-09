@@ -1,6 +1,8 @@
 # Next Steps
 
-High-priority implementation backlog. Execution order and ownership are defined in `.cursor/plans/next-steps_backlog_f737af77.plan.md` (Locked Contract, Canonical pipeline order).
+The static end-to-end pipeline is implemented and finalized in `.cursor/plans/static_e2e_pipeline_e3431902.plan.md`.
+
+The backlog below is follow-up work after that completed static milestone.
 
 ---
 
