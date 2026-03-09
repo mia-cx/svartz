@@ -41,6 +41,7 @@ const HOOK_PARALLEL_DEFAULTS: Record<RunnerHookName, boolean> = {
   transformDescription: true,
   transformSyntax: true,
   transformLatex: true,
+  transformEmbeds: true,
   indexContent: false,
   emitArtifacts: false,
 };

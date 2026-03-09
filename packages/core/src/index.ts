@@ -1,6 +1,7 @@
 // Shared types
 export type {
   Artifact,
+  AssetRecord,
   ArtifactBag,
   MaybePromise,
   LinkResolutionStrategy,
@@ -12,12 +13,17 @@ export type {
   ResolvedVaultDefaults,
   ProcessedFile,
   ChangeEvent,
+  FolderIndexEntry,
   IndexLink,
   IndexEntry,
   Index,
   RawLink,
   GraphTarget,
   Graph,
+  RouteIndex,
+  SearchDocument,
+  TagIndexEntry,
+  TocEntry,
 } from "./types";
 
 // Plugin contract — types
