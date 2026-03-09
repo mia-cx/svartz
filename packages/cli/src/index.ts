@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { cp, lstat, mkdir, readlink, rm, stat, symlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +25,7 @@ import {
   createServer,
   loadConfigFromFile,
   mergeConfig,
+  preview as vitePreview,
   type InlineConfig,
   type ServerOptions,
 } from "vite";
@@ -74,6 +76,11 @@ type BuildOptions = SharedOptions & {
 };
 
 type DevOptions = BuildOptions & {
+  readonly host?: string;
+  readonly port?: string;
+};
+
+type PreviewOptions = BuildOptions & {
   readonly host?: string;
   readonly port?: string;
 };
@@ -269,6 +276,36 @@ const ensureVaultWorkspace = (
     catch: (cause) => cause as Error,
   });
 
+const ensureVaultKitSymlink = (
+  appRoot: string,
+  vault: ResolvedConfig,
+): Effect.Effect<void, Error> =>
+  Effect.tryPromise({
+    try: async () => {
+      const vaultKitDir = path.join(getVaultBuildRoot(vault), ".svelte-kit");
+      await mkdir(vaultKitDir, { recursive: true });
+
+      const appKitPath = path.join(appRoot, ".svelte-kit");
+      try {
+        const existing = await lstat(appKitPath);
+        if (existing.isSymbolicLink()) {
+          const currentTarget = await readlink(appKitPath);
+          const resolvedTarget = path.resolve(appRoot, currentTarget);
+          if (resolvedTarget === vaultKitDir) return;
+        }
+        await rm(appKitPath, { recursive: true, force: true });
+      } catch (cause) {
+        if ((cause as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw cause;
+        }
+      }
+
+      const relativeTarget = path.relative(appRoot, vaultKitDir);
+      await symlink(relativeTarget, appKitPath, "dir");
+    },
+    catch: (cause) => cause as Error,
+  });
+
 const ensureDirectory = (directory: string) =>
   Effect.tryPromise({
     try: async () => {
@@ -396,6 +433,7 @@ const createAppConfig = (
 ): Effect.Effect<InlineConfig, CliError> =>
   Effect.gen(function* () {
     yield* ensureVaultWorkspace(appRoot, vault);
+    yield* ensureVaultKitSymlink(appRoot, vault);
     process.chdir(appRoot);
     applyPlatformEnvForVault(vault);
     process.env["SVARTZ_OUT_DIR"] = vault.outDir;
@@ -404,6 +442,15 @@ const createAppConfig = (
     process.env["SVARTZ_TARGET_TYPE"] = vault.target.type;
     process.env["SVARTZ_THEME_MODULE_PATH"] = getGeneratedRuntimeThemeModulePath(vault);
     process.env["SVARTZ_ARTIFACTS_MODULE_PATH"] = getGeneratedRuntimeArtifactsModulePath(vault);
+    const themeRoot = findPackageRootForModule(vault.theme.base);
+    const themeSourceCandidate = themeRoot
+      ? path.join(themeRoot, "src", "lib", "index.ts")
+      : "";
+    if (themeSourceCandidate && existsSync(themeSourceCandidate)) {
+      process.env["SVARTZ_THEME_SOURCE_PATH"] = themeSourceCandidate;
+    } else {
+      delete process.env["SVARTZ_THEME_SOURCE_PATH"];
+    }
 
     const loaded = yield* Effect.tryPromise({
       try: () =>
@@ -503,6 +550,42 @@ const devVault = (
       },
       catch: (cause) => cause as Error,
     });
+  });
+
+const previewVault = (
+  appRoot: string,
+  vault: ResolvedConfig,
+  options: PreviewOptions,
+): Effect.Effect<void, CliError> =>
+  Effect.gen(function* () {
+    const supportedVault = yield* ensureBuildTargetSupported(vault);
+    const config = yield* createAppConfig(
+      appRoot,
+      supportedVault,
+      "production",
+      "build",
+    );
+    // base is set via SVARTZ_BASE_PATH → svelte.config.js kit.paths.base; SvelteKit
+    // overrides Vite's base, so merging base here would trigger the override warning.
+    const previewConfig = mergeConfig(config, {
+      build: { outDir: supportedVault.outDir },
+      preview: {
+        ...(options.host && { host: options.host }),
+        ...(options.port && { port: Number(options.port) }),
+      },
+    });
+    const previewServer = yield* Effect.tryPromise({
+      try: () => vitePreview(previewConfig),
+      catch: (cause) => cause as Error,
+    });
+    previewServer.printUrls();
+  });
+
+const previewCommand = (options: PreviewOptions): Effect.Effect<void, CliError> =>
+  Effect.gen(function* () {
+    const workspace = yield* loadWorkspace(options.config);
+    const vault = yield* selectVault(workspace.config, options.vault);
+    yield* previewVault(workspace.appRoot, vault, options);
   });
 
 const createDevWatcher = (
@@ -704,6 +787,17 @@ function createProgram(): Command {
     .option("--port <port>", "Dev server port")
     .action(async (options: DevOptions) => {
       await runEffect(devCommand(options));
+    });
+
+  program
+    .command("preview")
+    .description("Serve the built output for one vault (run build first)")
+    .option("--config <path>", "Path to svartz.config.ts")
+    .option("--vault <id>", "Vault ID to preview")
+    .option("--host <host>", "Preview server host")
+    .option("--port <port>", "Preview server port")
+    .action(async (options: PreviewOptions) => {
+      await runEffect(previewCommand(options));
     });
 
   program
