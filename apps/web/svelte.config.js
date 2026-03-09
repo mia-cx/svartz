@@ -1,13 +1,43 @@
 import { mdsvex } from 'mdsvex';
-import adapter from "@sveltejs/adapter-cloudflare";
+import adapterAuto from "@sveltejs/adapter-auto";
+import adapterCloudflare from "@sveltejs/adapter-cloudflare";
+import adapterNode from "@sveltejs/adapter-node";
+import adapterStatic from "@sveltejs/adapter-static";
+
+const outDir = process.env.SVARTZ_OUT_DIR ?? "build";
+const kitOutDir = process.env.SVARTZ_KIT_OUT_DIR ?? ".svelte-kit";
+const basePath = process.env.SVARTZ_BASE_PATH ?? "";
+const targetType = process.env.SVARTZ_TARGET_TYPE ?? "static";
+
+function resolveAdapter(target) {
+	switch (target) {
+		case "node":
+			return adapterNode({
+				out: outDir,
+				precompress: true
+			});
+		case "cloudflare-workers":
+			return adapterCloudflare();
+		case "cloudflare-pages":
+			return adapterAuto();
+		case "static":
+		default:
+			return adapterStatic({
+				pages: outDir,
+				assets: outDir,
+				strict: true
+			});
+	}
+}
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	kit: {
-		// adapter-auto only supports some environments, see https://svelte.dev/docs/kit/adapter-auto for a list.
-		// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
-		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
-		adapter: adapter()
+		adapter: resolveAdapter(targetType),
+		outDir: kitOutDir,
+		paths: {
+			base: basePath
+		}
 	},
 	preprocess: [mdsvex()],
 	extensions: ['.svelte', '.svx']

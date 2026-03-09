@@ -58,6 +58,41 @@ declare module 'virtual:svartz/artifacts' {
 		readonly tags: readonly string[];
 		readonly aliases: readonly string[];
 		readonly description?: string;
+		readonly content: string;
+		readonly toc: readonly {
+			readonly depth: number;
+			readonly text: string;
+			readonly slug: string;
+		}[];
+		readonly wordCount: number;
+		readonly readingTimeMinutes: number;
+		readonly createdAt: Date;
+		readonly modifiedAt: Date;
+		readonly publishedAt?: Date;
+	}
+
+	export interface RuntimeSearchDocument {
+		readonly id: string;
+		readonly slug: string;
+		readonly title: string;
+		readonly description?: string;
+		readonly content: string;
+		readonly tags: readonly string[];
+		readonly aliases: readonly string[];
+	}
+
+	export interface RuntimeTagEntry {
+		readonly slug: string;
+		readonly title: string;
+		readonly noteCount: number;
+		readonly href: string;
+	}
+
+	export interface RuntimeFolderEntry {
+		readonly slug: string;
+		readonly title: string;
+		readonly noteCount: number;
+		readonly href: string;
 	}
 
 	export const artifacts: ReadonlyMap<string, RuntimeArtifactRecord>;
@@ -69,8 +104,28 @@ declare module 'virtual:svartz/artifacts' {
 		readonly entries: readonly RuntimeIndexEntry[];
 		readonly graph: Readonly<Record<string, readonly string[]>>;
 		readonly backlinks: Readonly<Record<string, readonly string[]>>;
+		readonly search: readonly RuntimeSearchDocument[];
+		readonly tags: readonly RuntimeTagEntry[];
+		readonly folders: readonly RuntimeFolderEntry[];
+		readonly routes: {
+			readonly notes: readonly string[];
+			readonly tags: readonly string[];
+			readonly folders: readonly string[];
+			readonly all: readonly string[];
+		};
+		readonly assets: readonly {
+			readonly path: string;
+			readonly sourcePath: string;
+			readonly mimeType?: string;
+		}[];
 	};
 	export const graph: typeof index.graph;
 	export const backlinks: typeof index.backlinks;
-	export const search: typeof index.entries;
+	export const search: typeof index.search;
+	export const tags: typeof index.tags;
+	export const folders: typeof index.folders;
+	export const routes: typeof index.routes;
+	export const assets: typeof index.assets;
+	export const searchDocuments: readonly RuntimeSearchDocument[];
+	export const searchIndex: unknown;
 }

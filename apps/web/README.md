@@ -1,42 +1,24 @@
-# sv
+# apps/web
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+`apps/web` is the SvelteKit shell that renders Svartz runtime output. The real `@svartz/vite` plugin is injected by the CLI for dev/build; this app stays decoupled from that package at rest.
 
-## Creating a project
+## Runtime Fixtures In Tests
 
-If you're seeing this, you've probably already done this step. Congrats!
+Vitest uses file-backed fixtures instead of inline virtual-module source strings:
 
-```sh
-# create a new project
-npx sv create my-app
-```
+- `src/lib/svartz/testing/fixtures/runtime-theme.ts`
+- `src/lib/svartz/testing/fixtures/runtime-artifacts.ts`
+- `src/lib/svartz/testing/fixtures/shared.ts`
 
-To recreate this project with the same configuration:
+`vite.config.ts` aliases `virtual:svartz/theme` and `virtual:svartz/artifacts` to those files only when `VITEST` is set. Real runtime builds still point those virtual modules at generated files under `.svartz/vaults/<vault-id>/artifacts/`.
 
-```sh
-# recreate this project
-pnpm dlx sv create --template minimal --types ts --add prettier eslint vitest="usages:unit,component" tailwindcss="plugins:typography,forms" sveltekit-adapter="adapter:auto" mdsvex paraglide="languageTags:en, nl+demo:no" mcp="ide:cursor,vscode+setup:remote" --install pnpm web
-```
+## Dev/Build Ownership
 
-## Developing
+- `svartz dev --vault <id>` owns `apps/web` dev startup.
+- `svartz build` owns production builds and vault-specific env injection.
+- `apps/web` should not add a direct dependency on `@svartz/vite` just to satisfy runtime tests.
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+## Watch Behavior
 
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+- Vault markdown or asset changes rebuild through `@svartz/vite` and then trigger a browser full reload.
+- Config, theme, and workspace package changes restart the dev runner from the CLI side.

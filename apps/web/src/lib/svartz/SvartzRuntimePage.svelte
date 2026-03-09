@@ -3,11 +3,17 @@
 	import type { Component } from 'svelte';
 	import { theme, resolveRuntimeRoute } from 'virtual:svartz/theme';
 	import {
+		assets,
 		backlinks,
+		folders,
 		graph,
 		index,
 		loadNoteArtifact,
-		search
+		routes,
+		search,
+		searchDocuments,
+		searchIndex,
+		tags
 	} from 'virtual:svartz/artifacts';
 
 	type ComponentModule = { default: Component<any> };
@@ -15,10 +21,11 @@
 		| (() => Promise<ComponentModule>)
 		| { readonly default: Component<any> };
 	type RuntimeRouteMatch = ReturnType<typeof resolveRuntimeRoute>;
+	let { pathname = undefined }: { pathname?: string } = $props();
 
-	function normalizeSlug(pathname: string): string | undefined {
-		if (pathname === '/') return undefined;
-		return pathname.replace(/^\/+|\/+$/g, '');
+	function normalizeSlug(currentPathname: string): string | undefined {
+		if (currentPathname === '/') return undefined;
+		return currentPathname.replace(/^\/+|\/+$/g, '');
 	}
 
 	function artifactKeyToSlug(artifactKey: string | undefined): string | undefined {
@@ -64,10 +71,12 @@
 		return Promise.resolve(undefined);
 	}
 
+	const activePathname = $derived(pathname ?? page.url.pathname);
+
 	const runtimeRoute = $derived(
 		resolveRuntimeRoute({
-			pathname: page.url.pathname,
-			slug: normalizeSlug(page.url.pathname)
+			pathname: activePathname,
+			slug: normalizeSlug(activePathname)
 		})
 	);
 
@@ -97,6 +106,7 @@
 
 	{#if LayoutComponent && PageComponent}
 		<LayoutComponent
+			{assets}
 			{theme}
 			route={runtimeRoute?.route}
 			match={runtimeRoute}
@@ -104,16 +114,27 @@
 			{index}
 			{graph}
 			{backlinks}
+			{folders}
+			{routes}
 			{search}
+			{searchDocuments}
+			{searchIndex}
+			{tags}
 		>
 			<PageComponent
+				{assets}
 				route={runtimeRoute?.route}
 				match={runtimeRoute}
 				{entry}
 				{index}
 				{graph}
 				{backlinks}
+				{folders}
+				{routes}
 				{search}
+				{searchDocuments}
+				{searchIndex}
+				{tags}
 			/>
 		</LayoutComponent>
 	{:else}

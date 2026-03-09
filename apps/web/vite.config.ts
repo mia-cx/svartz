@@ -1,119 +1,49 @@
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import tailwindcss from '@tailwindcss/vite';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import { sveltekit } from '@sveltejs/kit/vite';
 
 const SVARTZ_THEME_VIRTUAL_ID = 'virtual:svartz/theme';
 const SVARTZ_ARTIFACTS_VIRTUAL_ID = 'virtual:svartz/artifacts';
-const RESOLVED_SVARTZ_THEME_VIRTUAL_ID = '\0svartz:test-theme';
-const RESOLVED_SVARTZ_ARTIFACTS_VIRTUAL_ID = '\0svartz:test-artifacts';
-
-function svartzTestVirtualModules() {
-	return {
-		name: 'svartz:test-virtual-modules',
-		enforce: 'pre' as const,
-		resolveId(id: string) {
-			if (id === SVARTZ_THEME_VIRTUAL_ID) return RESOLVED_SVARTZ_THEME_VIRTUAL_ID;
-			if (id === SVARTZ_ARTIFACTS_VIRTUAL_ID) return RESOLVED_SVARTZ_ARTIFACTS_VIRTUAL_ID;
-			return null;
-		},
-		load(id: string) {
-			if (id === RESOLVED_SVARTZ_THEME_VIRTUAL_ID) {
-				return `
-import StubLayout from '$lib/svartz/testing/StubLayout.svelte';
-
-export const theme = {
-	id: 'svartz:test-theme',
-	version: '0.0.1',
-	contractVersion: '1.0.0',
-	layouts: {
-		defaultPage: { default: StubLayout },
-		notePage: { default: StubLayout },
-		notFoundPage: { default: StubLayout }
-	},
-	routes: [{ id: 'home', pattern: '/', layoutSlot: 'notePage' }]
-};
-
-export const routes = theme.routes;
-
-export function resolveRuntimeRoute(input) {
-	return {
-		route: routes[0],
-		layoutSlot: 'notePage',
-		artifactKey: 'pages/index.svelte',
-		pathname: input.pathname,
-		params: { slug: input.slug }
-	};
-}
-
-export function resolveRouteToArtifactKey() {
-	return 'pages/index.svelte';
-}`;
-			}
-
-			if (id === RESOLVED_SVARTZ_ARTIFACTS_VIRTUAL_ID) {
-				return `
-import StubPage from '$lib/svartz/testing/StubPage.svelte';
-
-export const artifacts = new Map([
-	[
-		'pages/index.svelte',
-		{
-			key: 'pages/index.svelte',
-			path: '/virtual/pages/index.svelte',
-			type: 'svelte',
-			noteSlug: 'index'
-		}
-	]
-]);
-
-export async function loadNoteArtifact() {
-	return { default: StubPage };
-}
-
-export const index = {
-	version: '1.0.0',
-	entries: [
-		{
-			slug: 'index',
-			path: 'index.md',
-			title: 'Svartz test page',
-			tags: [],
-			aliases: [],
-			description: 'Runtime shell test page.',
-			links: [],
-			wordCount: 3,
-			readingTimeMinutes: 1,
-			createdAt: new Date('2026-01-01T00:00:00.000Z'),
-			modifiedAt: new Date('2026-01-01T00:00:00.000Z')
-		}
-	],
-	graph: { index: [] },
-	backlinks: { index: [] }
-};
-
-export const graph = index.graph;
-export const backlinks = index.backlinks;
-export const search = index.entries;`;
-			}
-
-			return null;
-		}
-	};
-}
+const runtimeThemeModulePath = process.env.SVARTZ_THEME_MODULE_PATH;
+const runtimeArtifactsModulePath = process.env.SVARTZ_ARTIFACTS_MODULE_PATH;
+const testRuntimeThemeModulePath = fileURLToPath(
+	new URL('./src/lib/svartz/testing/fixtures/runtime-theme.ts', import.meta.url)
+);
+const testRuntimeArtifactsModulePath = fileURLToPath(
+	new URL('./src/lib/svartz/testing/fixtures/runtime-artifacts.ts', import.meta.url)
+);
 
 const isVitest = Boolean(process.env.VITEST);
 
 export default defineConfig({
+	resolve: {
+		alias: {
+			...(runtimeThemeModulePath
+				? { [SVARTZ_THEME_VIRTUAL_ID]: runtimeThemeModulePath }
+				: isVitest
+					? { [SVARTZ_THEME_VIRTUAL_ID]: testRuntimeThemeModulePath }
+					: {}),
+			...(runtimeArtifactsModulePath
+				? { [SVARTZ_ARTIFACTS_VIRTUAL_ID]: runtimeArtifactsModulePath }
+				: isVitest
+					? { [SVARTZ_ARTIFACTS_VIRTUAL_ID]: testRuntimeArtifactsModulePath }
+				: {})
+		}
+	},
 	plugins: [
-		...(isVitest ? [svartzTestVirtualModules()] : []),
 		tailwindcss(),
 		sveltekit(),
 		paraglideVitePlugin({ project: './project.inlang', outdir: './src/lib/paraglide' })
 	],
 	test: {
 		expect: { requireAssertions: true },
+		coverage: {
+			provider: "v8",
+			reporter: ["text", "html"],
+		},
 		projects: [
 			{
 				extends: './vite.config.ts',
