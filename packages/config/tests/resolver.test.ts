@@ -61,7 +61,7 @@ describe("resolveConfigPaths", () => {
       "**/*.{mp4,mov,mkv,ogv}",
       "**/*.pdf",
     ]);
-    expect(vault.exclude).toEqual([]);
+    expect(vault.exclude).toEqual([".trash/**", "**/.trash/**"]);
     expect(vault.linkResolution).toBe("closest");
     expect(vault.theme.base).toBe("@svartz/theme-minimal");
     expect(vault.theme).toEqual({ base: "@svartz/theme-minimal" });
@@ -100,8 +100,33 @@ describe("resolveConfigPaths", () => {
     const resolved = await resolveConfig(config, PKG_ROOT);
     const vault = resolved.vaults[0]!;
     expect(vault.include).toEqual(["*.mdx"]);
-    expect(vault.exclude).toEqual(["archive/**"]);
+    expect(vault.exclude).toEqual([".trash/**", "**/.trash/**", "archive/**"]);
     expect(vault.linkResolution).toBe("absolute");
+  });
+
+  it("always keeps the default .trash exclusion when vaults add their own excludes", async () => {
+    const config: SvartzConfig = {
+      version: "1.0.0",
+      defaults: {
+        exclude: ["archive/**"],
+      },
+      vaults: [
+        {
+          id: "v1",
+          path: "tests/fixtures/valid-vault",
+          exclude: ["templates/**"],
+          target: { type: "static" as const },
+        },
+      ],
+    };
+
+    const resolved = await resolveConfig(config, PKG_ROOT);
+    expect(resolved.vaults[0]!.exclude).toEqual([
+      ".trash/**",
+      "**/.trash/**",
+      "archive/**",
+      "templates/**",
+    ]);
   });
 
   it("normalizes string theme to object", async () => {

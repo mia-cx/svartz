@@ -121,8 +121,10 @@ const importConfig = (
 ): Effect.Effect<unknown, ConfigImportFailed> =>
   Effect.tryPromise({
     try: async () => {
-      const fileUrl = pathToFileURL(configPath).href;
-      const mod = (await import(fileUrl)) as Record<string, unknown>;
+      const fileUrl = pathToFileURL(configPath);
+      const configStat = await stat(configPath);
+      fileUrl.searchParams.set("t", String(configStat.mtimeMs));
+      const mod = (await import(fileUrl.href)) as Record<string, unknown>;
       return mod["default"] ?? mod;
     },
     catch: (cause) =>

@@ -31,7 +31,7 @@ const DEFAULT_INCLUDE = [
   "**/*.{mp4,mov,mkv,ogv}",
   "**/*.pdf",
 ];
-const DEFAULT_EXCLUDE: string[] = [];
+const DEFAULT_EXCLUDE = [".trash/**", "**/.trash/**"];
 const DEFAULT_LINK_RESOLUTION: LinkResolutionStrategy = "closest";
 const DEFAULT_THEME_BASE = "@svartz/theme-minimal";
 const DEFAULT_BUILD: ResolvedBuildConfig = {
@@ -87,6 +87,11 @@ const resolveBuildDefaults = (
 ): ResolvedBuildConfig =>
   ({ ...DEFAULT_BUILD, ...build }) as ResolvedBuildConfig;
 
+const mergeExclude = (
+  defaultExclude: readonly string[] | undefined,
+  vaultExclude: readonly string[] | undefined,
+): string[] => [...new Set([...DEFAULT_EXCLUDE, ...(defaultExclude ?? []), ...(vaultExclude ?? [])])];
+
 // --- Single vault resolution ---
 
 const resolveVaultConfig = (
@@ -134,7 +139,7 @@ const resolveVaultConfig = (
       path: absolutePath,
       outDir: outDirAbsolute,
       include: vault.include ?? defaults?.include ?? DEFAULT_INCLUDE,
-      exclude: vault.exclude ?? defaults?.exclude ?? DEFAULT_EXCLUDE,
+      exclude: mergeExclude(defaults?.exclude, vault.exclude),
       linkResolution:
         vault.linkResolution ??
         defaults?.linkResolution ??

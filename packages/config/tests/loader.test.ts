@@ -70,7 +70,11 @@ describe("loadConfig", () => {
     expect(config.vaults).toHaveLength(2);
     // Defaults are merged into each vault; docs vault gets file defaults for include/exclude
     expect(config.vaults[0]!.include).toEqual(["**/*.md"]);
-    expect(config.vaults[0]!.exclude).toEqual(["archive/**"]);
+    expect(config.vaults[0]!.exclude).toEqual([
+      ".trash/**",
+      "**/.trash/**",
+      "archive/**",
+    ]);
   });
 
   it("throws ConfigNotFound for missing file", async () => {
