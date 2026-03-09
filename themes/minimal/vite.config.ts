@@ -12,6 +12,10 @@ export default defineConfig({
 	],
 	test: {
 		expect: { requireAssertions: true },
+		coverage: {
+			provider: "v8",
+			reporter: ["text", "html"],
+		},
 		projects: [
 			{
 				extends: './vite.config.ts',

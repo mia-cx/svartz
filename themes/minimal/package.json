@@ -12,7 +12,8 @@
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
 		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run"
+		"test": "npm run test:unit -- --run",
+		"test:coverage": "vitest run --coverage"
 	},
 	"files": [
 		"dist",
@@ -22,13 +23,16 @@
 	"sideEffects": [
 		"**/*.css"
 	],
+	"main": "./dist/index.js",
 	"svelte": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"type": "module",
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
-			"svelte": "./dist/index.js"
+			"svelte": "./dist/index.js",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
 		}
 	},
 	"peerDependencies": {
@@ -47,6 +51,7 @@
 		"@tailwindcss/vite": "^4.1.18",
 		"@types/node": "^24",
 		"@vitest/browser-playwright": "^4.0.18",
+		"@vitest/coverage-v8": "^4.0.18",
 		"eslint": "^9.39.2",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.14.0",
@@ -67,5 +72,9 @@
 	},
 	"keywords": [
 		"svelte"
-	]
+	],
+	"dependencies": {
+		"@svartz/core": "workspace:*",
+		"@svartz/ui": "workspace:*"
+	}
 }
