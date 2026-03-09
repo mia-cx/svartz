@@ -52,12 +52,29 @@ function folderTitle(slug: string): string {
     ?? "Folder";
 }
 
+/** Route prefix config that themes may place under `theme.routes.*` in the vault config. */
+interface ThemeRouteConfig {
+  tags?: string;
+  folders?: string;
+  feed?: string;
+}
+
+function resolveThemeRouteConfig(theme: { base: string; [key: string]: unknown }): Required<ThemeRouteConfig> {
+  const routes = (theme as { routes?: ThemeRouteConfig }).routes;
+  return {
+    tags: routes?.tags ?? "tags",
+    folders: routes?.folders ?? "folders",
+    feed: routes?.feed ?? "feed",
+  };
+}
+
 export const indexContent = definePlugin(() => ({
   id: "core:index",
 
   indexContent: {
     run(ctx) {
       const fm = ctx.config.frontmatter;
+      const routeConfig = resolveThemeRouteConfig(ctx.config.theme);
       const entries: IndexEntry[] = [];
       const search: SearchDocument[] = [];
       const tagCounts = new Map<string, number>();
@@ -211,7 +228,7 @@ export const indexContent = definePlugin(() => ({
           slug,
           title: slug,
           noteCount,
-          href: `/tags/${slug}/`,
+          href: `/${routeConfig.tags}/${slug}/`,
         }));
 
       const folders: FolderIndexEntry[] = [...folderCounts.entries()]
@@ -220,21 +237,27 @@ export const indexContent = definePlugin(() => ({
           slug,
           title: folderTitle(slug),
           noteCount,
-          href: `/folders/${slug}/`,
+          href: `/${routeConfig.folders}/${slug}/`,
         }));
+
+      const tagsRoot = `/${routeConfig.tags}/`;
+      const foldersRoot = `/${routeConfig.folders}/`;
+      const feedRoot = `/${routeConfig.feed}/`;
 
       const routes: RouteIndex = {
         notes: [...noteRouteSet].sort(),
-        tags: ["/tags/", ...tags.map((entry) => entry.href)],
-        folders: ["/folders/", ...folders.map((entry) => entry.href)],
+        tags: [tagsRoot, ...tags.map((entry) => entry.href)],
+        folders: [foldersRoot, ...folders.map((entry) => entry.href)],
+        feed: entries.length > 0 ? [feedRoot] : [],
         all: [
           "/",
           ...new Set([
             ...noteRouteSet,
-            "/tags/",
+            tagsRoot,
             ...tags.map((entry) => entry.href),
-            "/folders/",
+            foldersRoot,
             ...folders.map((entry) => entry.href),
+            ...(entries.length > 0 ? [feedRoot] : []),
           ]),
         ].sort(),
       };
