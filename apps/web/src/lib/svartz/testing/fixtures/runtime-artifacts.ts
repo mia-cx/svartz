@@ -27,3 +27,4 @@ export const tags = index.tags;
 export const folders = index.folders;
 export const routes = index.routes;
 export const assets = index.assets;
+export const themeConfig: Record<string, unknown> = {};

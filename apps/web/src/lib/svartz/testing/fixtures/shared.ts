@@ -32,9 +32,10 @@ export const testIndex = {
 	folders: [{ slug: 'guides', title: 'Guides', noteCount: 1, href: '/folders/guides/' }],
 	routes: {
 		notes: ['/', '/guides/intro/'],
-		tags: ['/tags/testing/'],
-		folders: ['/folders/guides/'],
-		all: ['/', '/guides/intro/', '/tags/testing/', '/folders/guides/']
+		tags: ['/tags/', '/tags/testing/'],
+		folders: ['/folders/', '/folders/guides/'],
+		feed: ['/feed/'],
+		all: ['/', '/feed/', '/folders/', '/folders/guides/', '/guides/intro/', '/tags/', '/tags/testing/']
 	},
 	assets: []
 } as const;

@@ -111,6 +111,7 @@ declare module 'virtual:svartz/artifacts' {
 			readonly notes: readonly string[];
 			readonly tags: readonly string[];
 			readonly folders: readonly string[];
+			readonly feed: readonly string[];
 			readonly all: readonly string[];
 		};
 		readonly assets: readonly {
@@ -128,4 +129,6 @@ declare module 'virtual:svartz/artifacts' {
 	export const assets: typeof index.assets;
 	export const searchDocuments: readonly RuntimeSearchDocument[];
 	export const searchIndex: unknown;
+	/** Vault-level theme config (everything under `theme:` in svartz.config, minus `base`). */
+	export const themeConfig: Record<string, unknown>;
 }

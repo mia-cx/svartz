@@ -13,7 +13,8 @@
 		search,
 		searchDocuments,
 		searchIndex,
-		tags
+		tags,
+		themeConfig
 	} from 'virtual:svartz/artifacts';
 
 	type ComponentModule = { default: Component<any> };
@@ -108,6 +109,7 @@
 		<LayoutComponent
 			{assets}
 			{theme}
+			{themeConfig}
 			route={runtimeRoute?.route}
 			match={runtimeRoute}
 			{entry}
@@ -123,6 +125,7 @@
 		>
 			<PageComponent
 				{assets}
+				{themeConfig}
 				route={runtimeRoute?.route}
 				match={runtimeRoute}
 				{entry}

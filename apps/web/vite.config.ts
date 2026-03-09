@@ -19,6 +19,9 @@ const testRuntimeArtifactsModulePath = fileURLToPath(
 const isVitest = Boolean(process.env.VITEST);
 
 export default defineConfig({
+	build: {
+		emptyOutDir: true
+	},
 	resolve: {
 		alias: {
 			...(runtimeThemeModulePath
