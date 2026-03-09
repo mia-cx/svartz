@@ -5,50 +5,25 @@
 	const items = $derived(buildBreadcrumbs(slug));
 </script>
 
-<nav aria-label="Breadcrumbs" class="breadcrumbs">
-	<ol>
+<nav aria-label="Breadcrumbs">
+	<ol class="flex flex-wrap items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">
 		{#each items as item, index (item.href)}
 			{@const isLast = index === items.length - 1}
-			<li>
+			<li class="flex items-center gap-1">
 				{#if isLast}
-					<span aria-current="page">{item.title}</span>
+					<span aria-current="page" class="font-medium text-zinc-900 dark:text-zinc-100">
+						{item.title}
+					</span>
 				{:else}
-					<a href={item.href}>{item.title}</a>
+					<a
+						href={item.href}
+						class="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
+					>
+						{item.title}
+					</a>
+					<span aria-hidden="true" class="text-zinc-300 dark:text-zinc-600">/</span>
 				{/if}
 			</li>
 		{/each}
 	</ol>
 </nav>
-
-<style>
-	.breadcrumbs ol {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.35rem;
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		font-size: 0.8rem;
-		color: var(--svartz-muted, #9ca3af);
-	}
-
-	.breadcrumbs li {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-	}
-
-	.breadcrumbs li:not(:last-child)::after {
-		content: '/';
-		opacity: 0.5;
-	}
-
-	.breadcrumbs a {
-		color: inherit;
-		text-decoration: none;
-	}
-
-	.breadcrumbs a:hover {
-		text-decoration: underline;
-	}
-</style>

@@ -5,6 +5,7 @@
 		createdAt?: Date;
 		modifiedAt?: Date;
 		tags?: readonly string[];
+		wordCount?: number;
 	};
 
 	let { entry }: { entry?: Entry } = $props();
@@ -17,65 +18,56 @@
 
 	const createdAt = $derived(formatDate(entry?.createdAt));
 	const modifiedAt = $derived(formatDate(entry?.modifiedAt));
+	const readingTime = $derived(
+		entry?.wordCount != null ? Math.max(1, Math.ceil(entry.wordCount / 200)) : undefined
+	);
 </script>
 
 {#if entry}
-	<header class="note-header">
-		<h1>{entry.title}</h1>
-		{#if createdAt || modifiedAt}
-			<p class="meta">
-				{#if createdAt}Created {createdAt}{/if}
-				{#if createdAt && modifiedAt}<span aria-hidden="true"> • </span>{/if}
-				{#if modifiedAt}Updated {modifiedAt}{/if}
+	<header class="grid gap-3">
+		<h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-4xl">
+			{entry.title}
+		</h1>
+
+		{#if createdAt || modifiedAt || readingTime}
+			<p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-500 dark:text-zinc-400">
+				{#if createdAt}
+					<span>Created {createdAt}</span>
+				{/if}
+				{#if createdAt && modifiedAt}
+					<span aria-hidden="true" class="text-zinc-300 dark:text-zinc-600">·</span>
+				{/if}
+				{#if modifiedAt}
+					<span>Updated {modifiedAt}</span>
+				{/if}
+				{#if (createdAt || modifiedAt) && readingTime}
+					<span aria-hidden="true" class="text-zinc-300 dark:text-zinc-600">·</span>
+				{/if}
+				{#if readingTime}
+					<span>{readingTime} min read</span>
+				{/if}
 			</p>
 		{/if}
+
 		{#if entry.description}
-			<p class="description">{entry.description}</p>
+			<p class="text-base leading-relaxed text-zinc-600 dark:text-zinc-400">
+				{entry.description}
+			</p>
 		{/if}
+
 		{#if entry.tags && entry.tags.length > 0}
-			<ul class="tags" aria-label="Tags">
+			<ul class="flex flex-wrap gap-1.5" aria-label="Tags">
 				{#each entry.tags as tag (tag)}
-					<li><a href={'/tags/' + tag + '/'}>#{tag}</a></li>
+					<li>
+						<a
+							href={'/tags/' + tag + '/'}
+							class="inline-flex rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:bg-zinc-700"
+						>
+							#{tag}
+						</a>
+					</li>
 				{/each}
 			</ul>
 		{/if}
 	</header>
 {/if}
-
-<style>
-	.note-header {
-		display: grid;
-		gap: 0.75rem;
-	}
-
-	h1 {
-		margin: 0;
-		font-size: clamp(1.8rem, 4vw, 2.5rem);
-		line-height: 1.1;
-	}
-
-	.meta,
-	.description {
-		margin: 0;
-		color: var(--svartz-muted, #9ca3af);
-	}
-
-	.tags {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		list-style: none;
-		padding: 0;
-		margin: 0;
-	}
-
-	.tags a {
-		display: inline-flex;
-		padding: 0.2rem 0.5rem;
-		border-radius: 999px;
-		background: var(--svartz-panel, rgba(255, 255, 255, 0.05));
-		color: var(--svartz-muted, #9ca3af);
-		text-decoration: none;
-		font-size: 0.82rem;
-	}
-</style>
