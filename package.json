@@ -1,6 +1,7 @@
 {
   "name": "svartz-monorepo",
   "private": true,
+  "type": "module",
   "version": "0.0.1",
   "description": "Svartz — SvelteKit-based site generator for Obsidian vaults",
   "repository": {

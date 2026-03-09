@@ -514,6 +514,12 @@ importers:
 
   packages/ui:
     dependencies:
+      '@types/d3':
+        specifier: ^7.4.3
+        version: 7.4.3
+      d3:
+        specifier: ^7.9.0
+        version: 7.9.0
       minisearch:
         specifier: ^7.2.0
         version: 7.2.0
