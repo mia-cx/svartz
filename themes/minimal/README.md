@@ -1,3 +1,24 @@
+# @svartz/theme-minimal
+
+Quartz-like starter theme for Svartz static vault sites.
+
+## Theme styles (Tailwind)
+
+The theme ships **prebuilt CSS** containing only the Tailwind utilities used by the theme and its UI components. Consumers do not need to add the theme to Tailwind’s `content`; import the styles once:
+
+```js
+// In your app’s root layout or entry (e.g. +layout.svelte or app.css)
+import '@svartz/theme-minimal/styles.css';
+```
+
+The file `dist/styles.css` is built at prepack time from `src/lib/theme.css` and **`tailwind.config.js`**. Content paths and `theme.extend` live in that config so Svartz/vault config (e.g. `defaults.theme.colors`) can be merged with the same shape. The theme CSS uses `@config "../../tailwind.config.js"`; plugins (forms, typography) stay in the CSS file.
+
+**Content and recursive deps:** `svelte-package` does not flatten the bundle — `dist/` keeps `import('@svartz/ui')`, so Tailwind would not see UI class names if we only scanned `dist/`. The config therefore lists both `./src/lib/**` and `./node_modules/@svartz/ui/src/lib/**`. To avoid listing deps you’d need a separate build step that bundles theme + dependencies into a single (flat) file and then run Tailwind with `content` pointing only at that file; that’s not the default.
+
+---
+
+*Below: default Svelte library template.*
+
 # Svelte library
 
 Everything you need to build a Svelte library, powered by [`sv`](https://npmjs.com/package/sv).

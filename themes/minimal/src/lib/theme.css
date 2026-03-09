@@ -1,0 +1,8 @@
+/**
+ * Theme Tailwind entry: used to build dist/styles.css.
+ * Content and theme come from tailwind.config.js so Svartz/vault config can merge theme (e.g. colors) there.
+ */
+@import 'tailwindcss';
+@config '../../tailwind.config.js';
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
