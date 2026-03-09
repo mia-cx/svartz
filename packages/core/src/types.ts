@@ -109,6 +109,7 @@ interface RouteIndex {
   readonly notes: readonly string[];
   readonly tags: readonly string[];
   readonly folders: readonly string[];
+  readonly feed: readonly string[];
   readonly all: readonly string[];
 }
 

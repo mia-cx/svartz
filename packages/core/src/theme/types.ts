@@ -31,6 +31,7 @@ interface ThemeLayoutMap {
   readonly root?: ThemeComponentLoader;
   readonly tagPage?: ThemeComponentLoader;
   readonly folderPage?: ThemeComponentLoader;
+  readonly feedPage?: ThemeComponentLoader;
   readonly notFoundPage?: ThemeComponentLoader;
   readonly [key: string]: ThemeComponentLoader | undefined;
 }

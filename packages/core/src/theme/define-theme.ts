@@ -113,6 +113,9 @@ function validateTheme(theme: SvartzTheme): void {
  * Returns a callable factory that validates the manifest on each invocation.
  */
 function defineTheme(theme: SvartzTheme): () => SvartzTheme;
+function defineTheme<T extends Record<string, unknown>>(
+  factory: ThemeFactory<T>,
+): (options?: T) => SvartzTheme;
 function defineTheme<
   T extends Record<string, unknown> = Record<string, never>,
 >(
