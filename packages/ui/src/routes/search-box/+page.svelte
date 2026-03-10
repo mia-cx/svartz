@@ -110,7 +110,7 @@
 						{ key: 'Esc', action: 'Close the modal' },
 						{ key: '↑ / ↓', action: 'Navigate through results' },
 						{ key: 'Enter', action: 'Navigate to the highlighted result' }
-					] as row}
+					] as row (row.key)}
 						<tr class="bg-white dark:bg-zinc-950">
 							<td class="px-4 py-3 font-mono text-xs text-zinc-700 dark:text-zinc-300">{row.key}</td>
 							<td class="px-4 py-3 text-zinc-600 dark:text-zinc-400">{row.action}</td>
@@ -134,7 +134,7 @@
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-					{#each props as prop}
+					{#each props as prop (prop.name)}
 						<tr class="bg-white dark:bg-zinc-950">
 							<td class="px-4 py-3 font-mono text-xs text-blue-600 dark:text-blue-400">{prop.name}</td>
 							<td class="px-4 py-3 font-mono text-xs text-zinc-500 dark:text-zinc-400">{prop.type}</td>

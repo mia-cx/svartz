@@ -58,7 +58,7 @@
 	</div>
 
 	<div class="grid gap-4 sm:grid-cols-2">
-		{#each components as { href, label, description }}
+		{#each components as { href, label, description } (href)}
 			<a
 				{href}
 				class="group flex flex-col gap-2 rounded-lg border border-zinc-200 p-5 transition-all hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:hover:border-zinc-700"

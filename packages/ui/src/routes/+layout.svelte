@@ -51,7 +51,7 @@
 			</p>
 			<nav aria-label="Components">
 				<ul class="grid gap-0.5">
-					{#each components as { href, label }}
+					{#each components as { href, label } (href)}
 						{@const isActive = currentPath === href || currentPath.startsWith(href + '/')}
 						<li>
 							<a
@@ -76,7 +76,7 @@
 </div>
 
 <div style="display:none">
-	{#each locales as locale}
+	{#each locales as locale (locale)}
 		<a href={localizeHref(page.url.pathname, { locale })}>{locale}</a>
 	{/each}
 </div>

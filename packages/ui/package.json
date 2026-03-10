@@ -3,7 +3,7 @@
 	"version": "0.0.1",
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build && npm run prepack",
+		"build": "vite build && pnpm run prepack",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"prepack": "svelte-kit sync && svelte-package && publint",
@@ -12,7 +12,7 @@
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
 		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run",
+		"test": "pnpm run test:unit -- --run",
 		"test:coverage": "vitest run --coverage"
 	},
 	"files": [
@@ -74,8 +74,10 @@
 		"svelte"
 	],
 	"dependencies": {
+		"@nanostores/persistent": "^1.3.3",
 		"@types/d3": "^7.4.3",
 		"d3": "^7.9.0",
-		"minisearch": "^7.2.0"
+		"minisearch": "^7.2.0",
+		"nanostores": "^1.1.1"
 	}
 }

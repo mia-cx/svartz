@@ -41,6 +41,20 @@ export function titleFromSlugSegment(segment: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+/** Returns folder ids that must be open so the given slug is visible in the explorer. */
+export function ancestorFolderIdsForSlug(slug: string | undefined): string[] {
+	if (!slug || slug === "index") return [];
+	const segments = slug.split("/").filter(Boolean);
+	if (segments[segments.length - 1] === "index") segments.pop();
+	const ids: string[] = [];
+	let path = "";
+	for (let i = 0; i < segments.length - 1; i += 1) {
+		path = path ? `${path}/${segments[i]}` : (segments[i] ?? "");
+		ids.push(`folder:${path}`);
+	}
+	return ids;
+}
+
 export function buildBreadcrumbs(slug: string | undefined): Breadcrumb[] {
   if (!slug || slug === "index") {
     return [{ title: "Home", href: "/" }];

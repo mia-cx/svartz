@@ -24,7 +24,7 @@
 	<p class="mt-3 text-base text-zinc-600 dark:text-zinc-400">
 		Embeds a <a href="https://giscus.app" target="_blank" rel="noopener" class="underline underline-offset-2 hover:text-zinc-900 dark:hover:text-zinc-100">Giscus</a>
 		comment thread backed by GitHub Discussions. Theme stays in sync with Tailwind's dark mode automatically.
-		Use <code class="rounded bg-zinc-100 px-1 py-0.5 font-mono text-sm dark:bg-zinc-800">enabled={'{'}false{'}'}</code>
+		Use <code class="rounded bg-zinc-100 px-1 py-0.5 font-mono text-sm dark:bg-zinc-800">enabled=&#123;false&#125;</code>
 		to suppress comments per-note via frontmatter.
 	</p>
 
@@ -45,7 +45,7 @@
 		<div class="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
 			<pre class="overflow-x-auto bg-zinc-950 p-5 text-sm leading-relaxed text-zinc-100"><code
 >&lt;script&gt;
-  import {'{'} Comments {'}'} from '@svartz/ui';
+  import &#123; Comments &#125; from '@svartz/ui';
 &lt;/script&gt;
 
 &lt;Comments
@@ -72,7 +72,7 @@
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-					{#each props as prop}
+					{#each props as prop (prop.name)}
 						<tr class="bg-white dark:bg-zinc-950">
 							<td class="px-4 py-3 font-mono text-xs text-blue-600 dark:text-blue-400">{prop.name}</td>
 							<td class="px-4 py-3 font-mono text-xs text-zinc-500 dark:text-zinc-400">{prop.type}</td>

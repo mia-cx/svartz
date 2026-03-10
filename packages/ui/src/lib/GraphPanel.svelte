@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import {
 		forceSimulation,
 		forceLink,
@@ -7,8 +8,7 @@
 		forceCollide,
 		drag,
 		select,
-		type SimulationNodeDatum,
-		type SimulationLinkDatum
+		type SimulationNodeDatum
 	} from 'd3';
 
 	type Entry = { slug: string; title: string };
@@ -30,7 +30,6 @@
 		degree: number;
 	};
 	type RawLink = { source: string; target: string };
-	type BoundLink = SimulationLinkDatum<NodeDatum> & { source: NodeDatum; target: NodeDatum };
 
 	let containerEl = $state<HTMLDivElement | undefined>();
 	let svgEl = $state<SVGSVGElement | undefined>();
@@ -54,7 +53,7 @@
 		if (!svgEl || width < 10) return;
 
 		// Build node + link sets
-		const nodeSet = new Set<string>();
+		const nodeSet = new SvelteSet<string>();
 		const rawLinks: RawLink[] = [];
 
 		if (currentSlug) {
@@ -78,19 +77,19 @@
 		}
 
 		// Deduplicate undirected links
-		const seen = new Set<string>();
+		const seen = new SvelteSet<string>();
 		const dedupedLinks = rawLinks.filter((l) => {
 			const key = [l.source, l.target].sort().join('\0');
 			return seen.has(key) ? false : (seen.add(key), true);
 		});
 
-		const degreeMap = new Map<string, number>();
+		const degreeMap = new SvelteMap<string, number>();
 		for (const l of dedupedLinks) {
 			degreeMap.set(l.source, (degreeMap.get(l.source) ?? 0) + 1);
 			degreeMap.set(l.target, (degreeMap.get(l.target) ?? 0) + 1);
 		}
 
-		const entryMap = new Map(entries.map((e) => [e.slug, e.title]));
+		const entryMap = new SvelteMap(entries.map((e) => [e.slug, e.title]));
 		const nodes: NodeDatum[] = [...nodeSet].map((id) => ({
 			id,
 			title: entryMap.get(id) ?? id,

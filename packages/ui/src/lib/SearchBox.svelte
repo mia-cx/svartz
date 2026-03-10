@@ -84,7 +84,8 @@
 		function handleKeydown(e: KeyboardEvent) {
 			if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
 				e.preventDefault();
-				open ? closeModal() : openModal();
+				if (open) closeModal();
+				else openModal();
 			}
 		}
 		window.addEventListener('keydown', handleKeydown);
@@ -155,7 +156,6 @@
 		></button>
 
 		<!-- Dialog -->
-		<!-- svelte-ignore a11y_interactive_supports_focus -->
 		<div
 			role="dialog"
 			aria-modal="true"
