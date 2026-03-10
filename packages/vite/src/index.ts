@@ -40,6 +40,8 @@ import {
   loadThemeModule,
   resolveThemeExport,
   resolveThemeModuleId,
+  resolveThemePackageRoot,
+  resolveThemeRuntimeImportId,
   type ThemeModule,
 } from "./theme-resolver";
 import {
@@ -138,7 +140,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   }
 
   async function executePipeline(changeEvent?: ChangeEvent): Promise<void> {
-    theme = await loadThemeModule((id) => import(id), context.config);
+    theme = await loadThemeModule((id) => import(id), context.config, context.root);
     plugins = resolveRuntimePlugins(context.config, theme);
     const runnerContext = createRunnerContext();
 
@@ -329,6 +331,8 @@ export {
   loadThemeModule,
   resolveThemeExport,
   resolveThemeModuleId,
+  resolveThemePackageRoot,
+  resolveThemeRuntimeImportId,
   loadVirtualModule,
   resolveVirtualModuleId,
   assertRequiredCorePlugins,

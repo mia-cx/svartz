@@ -5,6 +5,7 @@ import type { SvartzVitePluginOptions } from "./options";
 
 interface SvartzViteContext {
   readonly config: ResolvedConfig;
+  readonly root: string;
   readonly mode: string;
   readonly env: Readonly<Record<string, string>>;
   readonly generatedRoot: string;
@@ -15,11 +16,12 @@ function createSvartzViteContext(
   resolved?: Pick<ViteResolvedConfig, "root" | "mode">,
 ): SvartzViteContext {
   const mode = options.mode ?? resolved?.mode ?? "production";
-  const envRoot = resolved?.root ?? process.cwd();
-  const env = options.env ?? loadEnv(mode, envRoot, "");
+  const root = resolved?.root ?? process.cwd();
+  const env = options.env ?? loadEnv(mode, root, "");
 
   return {
     config: options.config,
+    root,
     mode,
     env,
     generatedRoot: getGeneratedArtifactsRoot(options.config),

@@ -1,3 +1,7 @@
+import { existsSync, realpathSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { validateTheme, type ResolvedConfig, type SvartzTheme } from "@svartz/core";
 
 type ThemeModule = Record<string, unknown> & {
@@ -5,8 +9,57 @@ type ThemeModule = Record<string, unknown> & {
   theme?: SvartzTheme | ((config?: Record<string, unknown>) => SvartzTheme);
 };
 
+const BUILTIN_THEME_MODULE_ID = "@svartz/theme-minimal";
+
 function resolveThemeModuleId(config: ResolvedConfig): string {
   return config.theme.base;
+}
+
+function createRequireFromDirectory(resolveFromDirectory: string) {
+  return createRequire(path.join(resolveFromDirectory, "__svartz_theme_resolver__.js"));
+}
+
+function resolvePackageRootFromEntry(resolvedEntryPath: string): string | undefined {
+  let current = path.dirname(resolvedEntryPath);
+
+  while (true) {
+    const packageJsonPath = path.join(current, "package.json");
+    if (existsSync(packageJsonPath)) {
+      return realpathSync(current);
+    }
+
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+
+    current = parent;
+  }
+}
+
+function resolveThemeRuntimeImportId(
+  config: ResolvedConfig,
+  resolveFromDirectory = process.cwd(),
+): string {
+  const themeModuleId = resolveThemeModuleId(config);
+  if (themeModuleId === BUILTIN_THEME_MODULE_ID) {
+    return themeModuleId;
+  }
+
+  const requireFromDirectory = createRequireFromDirectory(resolveFromDirectory);
+  return pathToFileURL(requireFromDirectory.resolve(themeModuleId)).href;
+}
+
+function resolveThemePackageRoot(
+  moduleId: string,
+  resolveFromDirectory = process.cwd(),
+): string | undefined {
+  try {
+    const requireFromDirectory = createRequireFromDirectory(resolveFromDirectory);
+    return resolvePackageRootFromEntry(requireFromDirectory.resolve(moduleId));
+  } catch {
+    return undefined;
+  }
 }
 
 function resolveThemeExport(
@@ -26,8 +79,11 @@ function resolveThemeExport(
 async function loadThemeModule(
   loader: (id: string) => Promise<unknown>,
   config: ResolvedConfig,
+  resolveFromDirectory = process.cwd(),
 ): Promise<SvartzTheme> {
-  const themeModule = (await loader(resolveThemeModuleId(config))) as ThemeModule;
+  const themeModule = (await loader(
+    resolveThemeRuntimeImportId(config, resolveFromDirectory),
+  )) as ThemeModule;
   const { base: _base, ...themeConfig } = config.theme;
   return resolveThemeExport(themeModule, themeConfig);
 }
@@ -64,7 +120,10 @@ function createThemeVirtualModuleSource(
 export {
   createThemeVirtualModuleSource,
   loadThemeModule,
+  BUILTIN_THEME_MODULE_ID,
   resolveThemeExport,
   resolveThemeModuleId,
+  resolveThemePackageRoot,
+  resolveThemeRuntimeImportId,
 };
 export type { ThemeModule };
