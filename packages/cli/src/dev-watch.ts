@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 type WatchDescriptor = {
@@ -11,7 +11,10 @@ type WatchDescriptor = {
 
 const CONFIG_FILENAMES = ["svartz.config", ".svartzrc"] as const;
 const CONFIG_EXTENSIONS = [".ts", ".mjs", ".js"] as const;
-const require = createRequire(import.meta.url);
+
+function createRequireFromDirectory(resolveFromDirectory: string) {
+  return createRequire(path.join(resolveFromDirectory, "__svartz_dev_watch__.js"));
+}
 
 function matchesWatchDescriptor(changedPath: string, descriptor: WatchDescriptor): boolean {
   const normalizedChangedPath = path.resolve(changedPath);
@@ -51,26 +54,51 @@ function getConfigWatchDescriptors(
   );
 }
 
-function findPackageRootForModule(moduleId: string): string | undefined {
-  try {
-    let current = path.dirname(require.resolve(moduleId));
+function resolvePackageRootFromEntry(resolvedEntryPath: string): string | undefined {
+  let current = path.dirname(resolvedEntryPath);
 
-    while (true) {
-      const packageJsonPath = path.join(current, "package.json");
-      if (existsSync(packageJsonPath)) {
-        return current;
-      }
-
-      const parent = path.dirname(current);
-      if (parent === current) {
-        return undefined;
-      }
-
-      current = parent;
+  while (true) {
+    const packageJsonPath = path.join(current, "package.json");
+    if (existsSync(packageJsonPath)) {
+      return realpathSync(current);
     }
+
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+
+    current = parent;
+  }
+}
+
+function findPackageRootForModule(
+  moduleId: string,
+  resolveFromDirectory: string,
+): string | undefined {
+  try {
+    const requireFromDirectory = createRequireFromDirectory(resolveFromDirectory);
+    return resolvePackageRootFromEntry(requireFromDirectory.resolve(moduleId));
   } catch {
     return undefined;
   }
+}
+
+function isLocalWorkspacePackage(packageRoot: string, workspaceRoot: string): boolean {
+  const normalizedWorkspaceRoot = path.resolve(workspaceRoot);
+  const normalizedNodeModulesRoot = path.join(normalizedWorkspaceRoot, "node_modules");
+  const normalizedPackageRoot = path.resolve(packageRoot);
+  const relativeToWorkspace = path.relative(normalizedWorkspaceRoot, normalizedPackageRoot);
+  const relativeToNodeModules = path.relative(normalizedNodeModulesRoot, normalizedPackageRoot);
+
+  const isInWorkspace =
+    relativeToWorkspace === "" ||
+    (!relativeToWorkspace.startsWith("..") && !path.isAbsolute(relativeToWorkspace));
+  const isInNodeModules =
+    relativeToNodeModules === "" ||
+    (!relativeToNodeModules.startsWith("..") && !path.isAbsolute(relativeToNodeModules));
+
+  return isInWorkspace && !isInNodeModules;
 }
 
 function createWorkspaceSourceWatchDescriptors(workspaceRoot: string): WatchDescriptor[] {
@@ -111,6 +139,7 @@ export {
   createWorkspaceSourceWatchDescriptors,
   findPackageRootForModule,
   getConfigWatchDescriptors,
+  isLocalWorkspacePackage,
   matchesWatchDescriptor,
   uniqBuildFilters,
 };

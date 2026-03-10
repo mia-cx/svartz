@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, lstat, mkdir, readlink, rm, stat, symlink } from "node:fs/promises";
+import { cp, lstat, mkdir, readlink, rm, rmdir, stat, symlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import chokidar, { type FSWatcher } from "chokidar";
@@ -33,10 +33,13 @@ import {
   createWorkspaceSourceWatchDescriptors,
   findPackageRootForModule,
   getConfigWatchDescriptors,
+  isLocalWorkspacePackage,
   matchesWatchDescriptor,
   uniqBuildFilters,
   type WatchDescriptor,
 } from "./dev-watch";
+import { writeGeneratedTailwindSourcesFile } from "./tailwind-sources";
+import { syncManagedTurboFiles } from "./turbo-sync";
 
 class CliAppRootMissing extends Data.TaggedError("CliAppRootMissing")<{
   readonly appRoot: string;
@@ -116,14 +119,6 @@ const runEffect = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
 
 const workspaceRootFromAppRoot = (appRoot: string): string =>
   path.resolve(appRoot, "../..");
-
-const isWithinDirectory = (targetPath: string, directory: string): boolean => {
-  const relativePath = path.relative(path.resolve(directory), path.resolve(targetPath));
-  return (
-    relativePath === "" ||
-    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
-  );
-};
 
 const dedupeWatchDescriptors = (
   descriptors: readonly WatchDescriptor[],
@@ -334,6 +329,10 @@ const loadWorkspace = (configPath?: string): Effect.Effect<WorkspaceContext, Cli
       try: () => loadConfig(configPath),
       catch: (cause) => cause as Error,
     });
+    yield* Effect.tryPromise({
+      try: () => syncManagedTurboFiles(config),
+      catch: (cause) => cause as Error,
+    });
 
     const appRoot = path.join(config.configDir, "apps/web");
     yield* ensureDirectory(appRoot);
@@ -386,22 +385,18 @@ const loadDevWatchContext = async (
     ...createWorkspaceSourceWatchDescriptors(workspaceRoot),
   ];
 
-  const themeRoot = findPackageRootForModule(vault.theme.base);
-  if (themeRoot) {
-    const buildFilters = isWithinDirectory(themeRoot, workspaceRoot)
-      ? [vault.theme.base]
-      : undefined;
-
+  const themeRoot = findPackageRootForModule(vault.theme.base, workspace.appRoot);
+  if (themeRoot && isLocalWorkspacePackage(themeRoot, workspaceRoot)) {
     descriptors.push({
       path: path.join(themeRoot, "src"),
       label: `${vault.theme.base} source`,
-      buildFilters,
+      buildFilters: [vault.theme.base],
     });
     descriptors.push({
       path: path.join(themeRoot, "package.json"),
       label: `${vault.theme.base} package`,
       exact: true,
-      buildFilters,
+      buildFilters: [vault.theme.base],
     });
   }
 
@@ -442,15 +437,25 @@ const createAppConfig = (
     process.env["SVARTZ_TARGET_TYPE"] = vault.target.type;
     process.env["SVARTZ_THEME_MODULE_PATH"] = getGeneratedRuntimeThemeModulePath(vault);
     process.env["SVARTZ_ARTIFACTS_MODULE_PATH"] = getGeneratedRuntimeArtifactsModulePath(vault);
-    const themeRoot = findPackageRootForModule(vault.theme.base);
+    const themeRoot = findPackageRootForModule(vault.theme.base, appRoot);
     const themeSourceCandidate = themeRoot
       ? path.join(themeRoot, "src", "lib", "index.ts")
       : "";
-    if (themeSourceCandidate && existsSync(themeSourceCandidate)) {
+    if (
+      themeRoot &&
+      isLocalWorkspacePackage(themeRoot, workspaceRootFromAppRoot(appRoot)) &&
+      themeSourceCandidate &&
+      existsSync(themeSourceCandidate)
+    ) {
       process.env["SVARTZ_THEME_SOURCE_PATH"] = themeSourceCandidate;
     } else {
       delete process.env["SVARTZ_THEME_SOURCE_PATH"];
     }
+
+    process.env["SVARTZ_TAILWIND_SOURCES_PATH"] = yield* Effect.tryPromise({
+      try: () => writeGeneratedTailwindSourcesFile(appRoot, vault),
+      catch: (cause) => cause as Error,
+    });
 
     const loaded = yield* Effect.tryPromise({
       try: () =>
@@ -502,20 +507,59 @@ const copyVaultAssets = (vault: ResolvedConfig): Effect.Effect<void, CliError> =
     catch: (cause) => cause as Error,
   });
 
+const VAULT_BUILD_LOCK_RETRY_MS = 1000;
+const VAULT_BUILD_LOCK_MAX_WAIT_MS = 600_000; // 10 min
+
+const withVaultBuildLock = (
+  appRoot: string,
+  fn: () => Promise<void>,
+): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const workspaceRoot = path.resolve(appRoot, "../..");
+    const lockDir = path.join(workspaceRoot, ".svartz", ".vault-build.lock");
+    let waited = 0;
+
+    const tryAcquire = (): void => {
+      mkdir(lockDir, { recursive: false })
+        .then(() =>
+          fn().finally(() =>
+            rmdir(lockDir).catch(() => {
+              /* ignore stale lock cleanup failure */
+            }),
+          ),
+        )
+        .then(resolve, (err: NodeJS.ErrnoException) => {
+          if (err.code === "EEXIST" && waited < VAULT_BUILD_LOCK_MAX_WAIT_MS) {
+            waited += VAULT_BUILD_LOCK_RETRY_MS;
+            setTimeout(tryAcquire, VAULT_BUILD_LOCK_RETRY_MS);
+          } else {
+            reject(err);
+          }
+        });
+    };
+
+    tryAcquire();
+  });
+
 const buildVault = (
   appRoot: string,
   vault: ResolvedConfig,
 ): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
     const supportedVault = yield* ensureBuildTargetSupported(vault);
-    const config = yield* createAppConfig(appRoot, supportedVault, "production", "build");
     yield* Effect.tryPromise({
-      try: () => viteBuild(config).then(() => undefined),
+      try: () =>
+        withVaultBuildLock(appRoot, async () => {
+          const config = await runEffect(
+            createAppConfig(appRoot, supportedVault, "production", "build"),
+          );
+          await viteBuild(config);
+          if (supportedVault.target.type === "static") {
+            await runEffect(copyVaultAssets(supportedVault));
+          }
+        }),
       catch: (cause) => cause as Error,
     });
-    if (supportedVault.target.type === "static") {
-      yield* copyVaultAssets(supportedVault);
-    }
   });
 
 const devVault = (
@@ -809,6 +853,31 @@ function createProgram(): Command {
     .option("--port <port>", "Dev server port")
     .action(async (options: DevOptions) => {
       await runEffect(devRunnerCommand(options));
+    });
+
+  program
+    .command("run-managed-task <taskName>")
+    .description(
+      "Run a Turbo root task by name (used by synced svartz:build script; no-op when TURBO_HASH is set)",
+    )
+    .action((taskName: string) => {
+      if (!taskName) {
+        console.error("Expected a Turbo task name.");
+        process.exitCode = 1;
+        return;
+      }
+      if (process.env["TURBO_HASH"]) {
+        process.exit(0);
+      }
+      const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+      const result = spawnSync(command, ["exec", "turbo", "run", taskName], {
+        stdio: "inherit",
+        env: process.env,
+      });
+      if (result.error) {
+        throw result.error;
+      }
+      process.exitCode = result.status ?? 0;
     });
 
   return program;

@@ -1,24 +1,150 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".svelte-kit/**", "build/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "src/**",
+        "*.config.js",
+        "*.config.ts",
+        "vite.config.ts",
+        "vite.theme-css.config.ts",
+        "svelte.config.js",
+        "tailwind.config.js",
+        "tsconfig.json",
+        "package.json"
+      ],
+      "outputs": [
+        "dist/**",
+        ".svelte-kit/**",
+        "build/**"
+      ]
     },
     "dev": {
       "cache": false,
       "persistent": true
     },
-    "lint": {},
+    "lint": {
+      "inputs": [
+        "src/**",
+        "*.config.js",
+        "*.config.ts",
+        "package.json",
+        "tsconfig.json"
+      ]
+    },
     "test": {
-      "dependsOn": ["build"]
+      "dependsOn": [
+        "build"
+      ],
+      "inputs": [
+        "src/**",
+        "package.json",
+        "tsconfig.json",
+        "vitest.config.*",
+        "vite.config.*"
+      ]
     },
     "test:coverage": {
-      "dependsOn": ["build"]
+      "dependsOn": [
+        "build"
+      ],
+      "inputs": [
+        "src/**",
+        "package.json",
+        "tsconfig.json",
+        "vitest.config.*",
+        "vite.config.*"
+      ]
     },
     "clean": {
       "cache": false
+    },
+    "//#svartz:build": {
+      "dependsOn": [
+        "//#svartz:build:docs",
+        "//#svartz:build:obsidian-journal",
+        "//#svartz:build:vault"
+      ]
+    },
+    "//#svartz:build:docs": {
+      "inputs": [
+        "apps/web/**",
+        "package.json",
+        "pnpm-lock.yaml",
+        "svartz.config.*",
+        ".svartzrc.*",
+        "vaults/docs/**"
+      ],
+      "outputs": [
+        ".svartz/vaults/docs/dist/**"
+      ]
+    },
+    "//#svartz:dev:docs": {
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:preview:docs": {
+      "dependsOn": [
+        "//#svartz:build:docs"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:build:obsidian-journal": {
+      "inputs": [
+        "apps/web/**",
+        "package.json",
+        "pnpm-lock.yaml",
+        "svartz.config.*",
+        ".svartzrc.*",
+        "vaults/obsidian-journal/**"
+      ],
+      "outputs": [
+        ".svartz/vaults/obsidian-journal/dist/**"
+      ]
+    },
+    "//#svartz:dev:obsidian-journal": {
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:preview:obsidian-journal": {
+      "dependsOn": [
+        "//#svartz:build:obsidian-journal"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:build:vault": {
+      "inputs": [
+        "apps/web/**",
+        "package.json",
+        "pnpm-lock.yaml",
+        "svartz.config.*",
+        ".svartzrc.*",
+        "vaults/vault/**"
+      ],
+      "outputs": [
+        ".svartz/vaults/vault/dist/**"
+      ]
+    },
+    "//#svartz:dev:vault": {
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:preview:vault": {
+      "dependsOn": [
+        "//#svartz:build:vault"
+      ],
+      "cache": false,
+      "persistent": true
     }
   },
-  "globalDependencies": [".env"]
+  "globalDependencies": [
+    ".env",
+    "pnpm-lock.yaml"
+  ]
 }
