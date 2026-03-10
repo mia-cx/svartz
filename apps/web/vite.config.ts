@@ -7,13 +7,18 @@ import { sveltekit } from '@sveltejs/kit/vite';
 
 const SVARTZ_THEME_VIRTUAL_ID = 'virtual:svartz/theme';
 const SVARTZ_ARTIFACTS_VIRTUAL_ID = 'virtual:svartz/artifacts';
+const SVARTZ_TAILWIND_SOURCES_VIRTUAL_ID = 'virtual:svartz/tailwind-sources.css';
 const runtimeThemeModulePath = process.env.SVARTZ_THEME_MODULE_PATH;
 const runtimeArtifactsModulePath = process.env.SVARTZ_ARTIFACTS_MODULE_PATH;
+const runtimeTailwindSourcesPath = process.env.SVARTZ_TAILWIND_SOURCES_PATH;
 const testRuntimeThemeModulePath = fileURLToPath(
 	new URL('./src/lib/svartz/testing/fixtures/runtime-theme.ts', import.meta.url)
 );
 const testRuntimeArtifactsModulePath = fileURLToPath(
 	new URL('./src/lib/svartz/testing/fixtures/runtime-artifacts.ts', import.meta.url)
+);
+const fallbackTailwindSourcesPath = fileURLToPath(
+	new URL('./src/lib/svartz/testing/fixtures/tailwind-sources.css', import.meta.url)
 );
 
 const isVitest = Boolean(process.env.VITEST);
@@ -33,7 +38,9 @@ export default defineConfig({
 				? { [SVARTZ_ARTIFACTS_VIRTUAL_ID]: runtimeArtifactsModulePath }
 				: isVitest
 					? { [SVARTZ_ARTIFACTS_VIRTUAL_ID]: testRuntimeArtifactsModulePath }
-				: {})
+				: {}),
+			[SVARTZ_TAILWIND_SOURCES_VIRTUAL_ID]:
+				runtimeTailwindSourcesPath ?? fallbackTailwindSourcesPath
 		}
 	},
 	plugins: [
