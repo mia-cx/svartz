@@ -110,7 +110,7 @@
 <div class="shell">
 	<aside class="left-sidebar">
 		<SearchBox {searchDocuments} {searchIndex} />
-		<FileTrie entries={index.entries} />
+		<FileTrie entries={index.entries} currentSlug={breadcrumbSlug} />
 	</aside>
 
 	<div class="content-column">
