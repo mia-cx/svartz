@@ -17,6 +17,15 @@ svartz dev --vault docs
 
 Use `svartz build --vault <id>` when you want to target a single vault.
 
+## Turbo task sync
+
+After the CLI resolves `svartz.config.ts`, it syncs a managed Turbo/package surface at the config root:
+
+- `package.json` scripts: `svartz:build`, `svartz:build:<vault-id>`, `svartz:dev:<vault-id>`, `svartz:preview:<vault-id>`, plus `svartz:dev`/`svartz:preview` fan-out scripts.
+- `turbo.json` tasks: `//#svartz:build`, `//#svartz:build:<vault-id>`, `//#svartz:dev:<vault-id>`, and `//#svartz:preview:<vault-id>`.
+
+The CLI only rewrites those managed `svartz:*` / `//#svartz:*` entries, so existing non-Svartz scripts and Turbo tasks stay untouched.
+
 ## Per-Vault Workspace Contract
 
 For a vault like `docs`, the CLI now prepares:
