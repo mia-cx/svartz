@@ -1,17 +1,21 @@
+// Copyright (c) mia.cx. See LICENSE at repository root.
 /**
  * core:discover-files — traverse vault directory, read file contents, assign slugs.
  *
  * Postcondition: every ProcessedFile in ctx.files has a required `slug: string`
  * (vault-relative, extensionless, case-normalized via fileToSlug).
+ *
+ * Symlinks are intentionally not followed — folder symlinks don't surface in
+ * Obsidian vaults, so there's nothing to support.
  */
 
-import { readdir, readFile, lstat, realpath, stat } from "node:fs/promises";
-import { join, extname, relative } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { join, extname } from "node:path";
+import { fdir } from "fdir";
 import { definePlugin } from "@svartz/core";
 import { fileToSlug } from "./internal/slug";
 import { shouldIgnore, shouldIncludePath } from "./internal/ignore";
 
-const MAX_SYMLINK_DEPTH = 4;
 const MARKDOWN_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
 
 function isMarkdownFile(path: string): boolean {
@@ -27,58 +31,13 @@ export const discoverFiles = definePlugin(() => ({
       const include = ctx.config.include;
       const exclude = ctx.config.exclude;
 
-      const visitedInodes = new Set<number>();
-      const filePaths: string[] = [];
+      const filePaths = await new fdir()
+        .withRelativePaths()
+        .exclude((dirName) => shouldIgnore(dirName))
+        .filter((relPath) => shouldIncludePath(relPath, include, exclude))
+        .crawl(vaultPath)
+        .withPromise();
 
-      const walk = async (dir: string, symlinkDepth: number): Promise<void> => {
-        const entries = await readdir(dir, { withFileTypes: true });
-
-        for (const entry of entries) {
-          if (shouldIgnore(entry.name)) continue;
-
-          const fullPath = join(dir, entry.name);
-          const entryLstat = await lstat(fullPath);
-
-          if (entryLstat.isSymbolicLink()) {
-            if (symlinkDepth >= MAX_SYMLINK_DEPTH) continue;
-
-            const resolved = await realpath(fullPath);
-            const resolvedStat = await stat(resolved);
-
-            if (visitedInodes.has(resolvedStat.ino)) continue;
-            visitedInodes.add(resolvedStat.ino);
-
-            if (resolvedStat.isDirectory()) {
-              await walk(resolved, symlinkDepth + 1);
-              continue;
-            }
-
-            if (resolvedStat.isFile()) {
-              const relPath = relative(vaultPath, fullPath);
-              if (shouldIncludePath(relPath, include, exclude)) {
-                filePaths.push(relPath);
-              }
-            }
-            continue;
-          }
-
-          if (entry.isDirectory()) {
-            const dirStat = await stat(fullPath);
-            visitedInodes.add(dirStat.ino);
-            await walk(fullPath, symlinkDepth);
-            continue;
-          }
-
-          if (entry.isFile()) {
-            const relPath = relative(vaultPath, fullPath);
-            if (shouldIncludePath(relPath, include, exclude)) {
-              filePaths.push(relPath);
-            }
-          }
-        }
-      };
-
-      await walk(vaultPath, 0);
       filePaths.sort((a, b) => a.localeCompare(b));
 
       ctx.files = await Promise.all(
