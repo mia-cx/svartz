@@ -29,3 +29,6 @@ coverage
 # Private vault fixtures (do not commit)
 vaults/obsidian-journal/
 vaults/vault/
+
+# Local git worktrees
+.worktrees/
