@@ -402,5 +402,5 @@ export function discoverFiles(): SvartzPlugin {
 ## See Also
 
 - [[contracts/theme-contract]] — Companion contract for themes
-- [[plugins/utilities]] — Implementation of utility functions
+- `plugins/utilities` — Implementation of utility functions
 - [[reference/quick-reference]] — Code examples

@@ -14,6 +14,7 @@
 		search,
 		searchDocuments,
 		searchIndex,
+		siteConfig,
 		tags,
 		themeConfig
 	} from 'virtual:svartz/artifacts';
@@ -83,6 +84,11 @@
 		return resolveComponentModule(theme.layouts.notFoundPage);
 	}
 
+	function resolveAbsoluteUrl(value: string | undefined): string | undefined {
+		if (!value || !siteConfig.url) return undefined;
+		return new URL(value, `${siteConfig.url}/`).href;
+	}
+
 	const activePathname = $derived(pathname ?? page.url.pathname);
 
 	const runtimeRoute = $derived(
@@ -100,6 +106,14 @@
 			: undefined
 	);
 
+	const pageTitle = $derived(entry?.title ?? siteConfig.title);
+	const documentTitle = $derived(
+		entry && entry.title !== siteConfig.title ? `${entry.title} | ${siteConfig.title}` : siteConfig.title
+	);
+	const pageDescription = $derived(entry?.description ?? siteConfig.description);
+	const canonicalUrl = $derived(resolveAbsoluteUrl(activePathname));
+	const socialImageUrl = $derived(resolveAbsoluteUrl(siteConfig.image));
+
 	const layoutModule = $derived(
 		resolveComponentModule(resolveLayoutReference(runtimeRoute))
 	);
@@ -107,6 +121,24 @@
 	const LayoutComponent = $derived(layoutModule?.default);
 	const PageComponent = $derived(pageModule?.default);
 </script>
+
+<svelte:head>
+	<title>{documentTitle}</title>
+	{#if pageDescription}<meta name="description" content={pageDescription} />{/if}
+	{#if canonicalUrl}<link rel="canonical" href={canonicalUrl} />{/if}
+	<meta property="og:title" content={pageTitle} />
+	{#if pageDescription}<meta property="og:description" content={pageDescription} />{/if}
+	<meta property="og:type" content={entry ? 'article' : 'website'} />
+	{#if canonicalUrl}<meta property="og:url" content={canonicalUrl} />{/if}
+	{#if socialImageUrl}<meta property="og:image" content={socialImageUrl} />{/if}
+	<meta name="twitter:card" content={socialImageUrl ? 'summary_large_image' : 'summary'} />
+	<meta name="twitter:title" content={pageTitle} />
+	{#if pageDescription}<meta name="twitter:description" content={pageDescription} />{/if}
+	{#if socialImageUrl}<meta name="twitter:image" content={socialImageUrl} />{/if}
+	{#if siteConfig.author}<meta name="author" content={siteConfig.author} />{/if}
+	{#if entry?.publishedAt}<meta property="article:published_time" content={String(entry.publishedAt)} />{/if}
+	{#if entry?.modifiedAt}<meta property="article:modified_time" content={String(entry.modifiedAt)} />{/if}
+</svelte:head>
 
 {#if LayoutComponent && PageComponent}
 	<LayoutComponent

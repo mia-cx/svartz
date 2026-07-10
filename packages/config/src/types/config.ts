@@ -8,6 +8,7 @@ import type {
   TargetConfigSchema,
   LinkResolutionStrategySchema,
   FrontmatterFieldsSchema,
+  SiteConfigSchema,
 } from "../schemas";
 
 // --- Inferred types from Schema ---
@@ -26,6 +27,7 @@ type LinkResolutionStrategy = Schema.Schema.Type<
 type FrontmatterFields = Schema.Schema.Type<
   typeof FrontmatterFieldsSchema
 >;
+type SiteConfig = Schema.Schema.Type<typeof SiteConfigSchema>;
 
 export {
   type SvartzConfig,
@@ -36,4 +38,5 @@ export {
   type TargetConfig,
   type LinkResolutionStrategy,
   type FrontmatterFields,
+  type SiteConfig,
 };

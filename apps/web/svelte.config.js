@@ -25,6 +25,7 @@ function resolveAdapter(target) {
 			return adapterStatic({
 				pages: outDir,
 				assets: outDir,
+				fallback: '404.html',
 				strict: true
 			});
 	}

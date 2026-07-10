@@ -171,6 +171,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
               getGeneratedIndexModulePath(context.config),
               getGeneratedSearchModulePath(context.config),
               extractThemeConfig(context.config.theme),
+              context.config.site,
             ),
           ),
         ],
@@ -306,6 +307,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
           getGeneratedIndexModulePath(context.config),
           getGeneratedSearchModulePath(context.config),
           extractThemeConfig(context.config.theme),
+          context.config.site,
         );
       }
 

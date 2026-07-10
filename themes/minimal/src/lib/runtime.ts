@@ -35,4 +35,7 @@ const modules: MinimalThemeModules = {
 };
 
 /** Vite-bundled runtime manifest with eager components for SSR and hydration. */
-export default defineTheme((config?: MinimalThemeConfig) => createMinimalTheme(modules, config));
+const theme = defineTheme((config?: MinimalThemeConfig) => createMinimalTheme(modules, config));
+
+export { theme };
+export default theme;

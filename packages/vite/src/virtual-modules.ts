@@ -41,6 +41,7 @@ const ARTIFACTS_PLACEHOLDER_SOURCE = [
   'export const searchDocuments = [];',
   'export const searchIndex = { documentCount: 0, nextId: 0, storedFields: {}, fieldIds: {}, fieldLength: {}, averageFieldLength: {}, index: [], serializationVersion: 2 };',
   'export const themeConfig = {};',
+  'export const siteConfig = { title: "Svartz" };',
 ].join("\n");
 
 type SvartzVirtualModuleId =

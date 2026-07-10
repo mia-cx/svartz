@@ -427,4 +427,4 @@ type ConfigValidationError = {
 - [[contracts/theme-contract]] — Full theme system spec
 - [[contracts/config-contract]] — Full config spec
 - [[plugins/overview]] — All core plugins
-- [[plugins/utilities]] — Utility functions
+- `plugins/utilities` — Utility functions

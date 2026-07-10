@@ -2,18 +2,24 @@
 	type Entry = {
 		title: string;
 		description?: string;
-		createdAt?: Date;
-		modifiedAt?: Date;
+		createdAt?: Date | string;
+		modifiedAt?: Date | string;
 		tags?: readonly string[];
 		wordCount?: number;
 	};
 
 	let { entry }: { entry?: Entry } = $props();
 
-	function formatDate(value: Date | undefined): string | undefined {
-		return value
-			? value.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-			: undefined;
+	function formatDate(value: Date | string | undefined): string | undefined {
+		if (!value) return undefined;
+		const date = value instanceof Date ? value : new Date(value);
+		if (Number.isNaN(date.getTime())) return undefined;
+		return new Intl.DateTimeFormat('en', {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric',
+			timeZone: 'UTC'
+		}).format(date);
 	}
 
 	const createdAt = $derived(formatDate(entry?.createdAt));

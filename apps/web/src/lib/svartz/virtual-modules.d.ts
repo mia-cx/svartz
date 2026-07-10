@@ -131,5 +131,12 @@ declare module 'virtual:svartz/artifacts' {
 	export const searchDocuments: readonly RuntimeSearchDocument[];
 	export const searchIndex: unknown;
 	/** Vault-level theme config (everything under `theme:` in svartz.config, minus `base`). */
-	export const themeConfig: Record<string, unknown>;
+	export const themeConfig: Readonly<Record<string, unknown>>;
+	export const siteConfig: Readonly<{
+		title: string;
+		description?: string;
+		url?: string;
+		author?: string;
+		image?: string;
+	}>;
 }

@@ -32,3 +32,10 @@ export const folders = index.folders;
 export const routes = index.routes;
 export const assets = index.assets;
 export const themeConfig: Record<string, unknown> = {};
+export const siteConfig = {
+	title: 'Svartz Test',
+	description: 'A test vault',
+	url: 'https://example.com',
+	author: 'Svartz',
+	image: '/social.png'
+};

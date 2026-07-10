@@ -48,6 +48,7 @@ function createArtifactsVirtualModuleSource(
   indexModulePath: string,
   searchModulePath: string,
   themeConfig: Record<string, unknown> = {},
+  siteConfig: ResolvedConfig["site"] = { title: "Svartz" },
 ): string {
   const records = artifacts.map((artifact) => ({
     key: artifact.key,
@@ -94,6 +95,7 @@ function createArtifactsVirtualModuleSource(
     "}",
     "",
     `export const themeConfig = ${JSON.stringify(themeConfig)};`,
+    `export const siteConfig = ${JSON.stringify(siteConfig)};`,
     "",
     "export { index, graph, backlinks, search, tags, folders, routes, assets, searchDocuments, searchIndex };",
   ].join("\n");

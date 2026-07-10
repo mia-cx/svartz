@@ -93,6 +93,7 @@ describe("@svartz/vite artifact helpers", () => {
     expect(source).toContain(
       '"pages/guides/intro.svelte": noteArtifact0',
     );
+    expect(source).toContain('export const siteConfig = {"title":"Svartz"};');
     expect(source).toContain("export function hasNoteArtifact(key)");
     expect(source).toContain("export function getNoteArtifact(key)");
     expect(source).not.toContain("() => import(");

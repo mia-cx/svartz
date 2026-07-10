@@ -23,7 +23,27 @@ const FrontmatterFieldsSchema = Schema.Struct({
   createdAtField: Schema.optional(Schema.String),
   updatedAtField: Schema.optional(Schema.String),
   publishedField: Schema.optional(Schema.String),
+  publicationMode: Schema.optional(Schema.Literal("opt-out", "explicit")),
   dateFormat: Schema.optional(Schema.String),
+});
+
+const HttpUrlSchema = Schema.String.pipe(
+  Schema.filter((value) => {
+    try {
+      const url = new URL(value);
+      return url.protocol === "http:" || url.protocol === "https:";
+    } catch {
+      return false;
+    }
+  }, { message: () => "site.url must be an absolute HTTP(S) URL" }),
+);
+
+const SiteConfigSchema = Schema.Struct({
+  title: Schema.String,
+  description: Schema.optional(Schema.String),
+  url: Schema.optional(HttpUrlSchema),
+  author: Schema.optional(Schema.String),
+  image: Schema.optional(Schema.String),
 });
 
 /** Shallow plugin placeholder; plugin interface/standard TBD. */
@@ -36,6 +56,7 @@ const VaultOptionsSchema = Schema.Struct({
   linkResolution: Schema.optional(LinkResolutionStrategySchema),
   theme: Schema.optional(VaultThemeConfigSchema),
   frontmatter: Schema.optional(FrontmatterFieldsSchema),
+  site: Schema.optional(SiteConfigSchema),
   /** Output directory for this vault's build artifact. Default: `.svartz/vaults/<vault.id>`. */
   outDir: Schema.optional(Schema.String),
   /** Plugin instances (transformers, filters, emitters). Vault- and theme-specific. Shape TBD when plugin API is defined. */
@@ -79,6 +100,7 @@ const VaultConfigSchema = Schema.Struct({
   linkResolution: Schema.optional(LinkResolutionStrategySchema),
   theme: Schema.optional(VaultThemeConfigSchema),
   frontmatter: Schema.optional(FrontmatterFieldsSchema),
+  site: Schema.optional(SiteConfigSchema),
   outDir: Schema.optional(Schema.String),
   plugins: Schema.optional(Schema.Array(PluginEntrySchema)),
 });
@@ -99,6 +121,7 @@ export {
   LinkResolutionStrategySchema,
   VaultThemeConfigSchema,
   FrontmatterFieldsSchema,
+  SiteConfigSchema,
   PluginEntrySchema,
   VaultOptionsSchema,
   TargetConfigSchema,

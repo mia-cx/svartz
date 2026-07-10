@@ -38,4 +38,12 @@ declare module "virtual:svartz/artifacts" {
   export const graph: Graph;
   export const backlinks: Index["backlinks"];
   export const search: Index["entries"];
+  export const themeConfig: Readonly<Record<string, unknown>>;
+  export const siteConfig: Readonly<{
+    title: string;
+    description?: string;
+    url?: string;
+    author?: string;
+    image?: string;
+  }>;
 }
