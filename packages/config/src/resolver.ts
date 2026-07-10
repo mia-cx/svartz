@@ -9,7 +9,9 @@ import type {
   ResolvedConfig,
   ResolvedConfigSet,
   ResolvedFrontmatterConfig,
+  ResolvedSiteConfig,
   ResolvedThemeConfig,
+  SiteConfig,
   SvartzConfig,
   SvartzDefaults,
   VaultConfig,
@@ -47,6 +49,7 @@ const DEFAULT_FRONTMATTER: ResolvedFrontmatterConfig = {
   createdAtField: "created_at",
   updatedAtField: "updated_at",
   publishedField: "published",
+  publicationMode: "opt-out",
 };
 
 // --- Theme normalization ---
@@ -79,6 +82,18 @@ const mergeFrontmatter = (
     ...defaultFm,
     ...vaultFm,
   }) as ResolvedFrontmatterConfig;
+
+const mergeSite = (
+  defaultSite: SiteConfig | undefined,
+  vaultSite: SiteConfig | undefined,
+  vaultId: string,
+): ResolvedSiteConfig => {
+  const merged = { title: vaultId, ...defaultSite, ...vaultSite };
+  return {
+    ...merged,
+    ...(merged.url !== undefined && { url: merged.url.replace(/\/+$/, "") }),
+  };
+};
 
 // --- Build defaults ---
 
@@ -146,6 +161,7 @@ const resolveVaultConfig = (
         DEFAULT_LINK_RESOLUTION,
       theme: mergeThemes(defaults?.theme, vault.theme),
       frontmatter: mergeFrontmatter(defaults?.frontmatter, vault.frontmatter),
+      site: mergeSite(defaults?.site, vault.site, vault.id),
       target: vault.target,
       plugins,
     };

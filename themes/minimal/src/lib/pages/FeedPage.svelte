@@ -4,8 +4,8 @@
 		title: string;
 		description?: string;
 		tags?: readonly string[];
-		modifiedAt?: Date;
-		createdAt?: Date;
+		modifiedAt?: Date | string;
+		createdAt?: Date | string;
 		readingTimeMinutes?: number;
 	};
 
@@ -29,7 +29,8 @@
 	const feedDescription = $derived(metaEntry?.description);
 
 	function noteDate(entry: Entry): Date | undefined {
-		return entry.modifiedAt ?? entry.createdAt;
+		const value = entry.modifiedAt ?? entry.createdAt;
+		return value ? new Date(value) : undefined;
 	}
 
 	function formatDate(d: Date): string {
@@ -73,10 +74,10 @@
 		{#each notes as entry (entry.slug)}
 			{@const date = noteDate(entry)}
 			<li class="grid gap-1.5 border-b border-zinc-100 py-4 last:border-0 dark:border-zinc-800">
-				<div class="flex items-baseline justify-between gap-4">
+				<div class="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
 					<a
 						href={slugToHref(entry.slug)}
-						class="font-medium leading-snug text-zinc-900 transition-colors hover:text-blue-600 dark:text-zinc-100 dark:hover:text-blue-400"
+						class="min-w-0 [overflow-wrap:anywhere] font-medium leading-snug text-zinc-900 transition-colors hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 dark:text-zinc-100 dark:hover:text-blue-400"
 					>
 						{entry.title}
 					</a>

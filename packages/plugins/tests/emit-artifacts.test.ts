@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Index, PluginContext, ProcessedFile } from "@svartz/core";
 import { emitArtifacts } from "../src/emit-artifacts";
+import { transformGfm } from "../src/transform-gfm";
+import { transformOfm } from "../src/transform-ofm";
 
 const tempDirs: string[] = [];
 
@@ -58,7 +60,14 @@ describe("core:emit-artifacts", () => {
           path: "guides/intro.md",
           slug: "guides/intro",
           extension: ".md",
-          content: "# Intro\n\nWelcome to Svartz.",
+          content: [
+            "# Intro",
+            "",
+            "Welcome to Svartz. ~~Outdated guidance.~~",
+            "",
+            "> [!note] Launch note",
+            "> Keep the static output readable.",
+          ].join("\n"),
           frontmatter: { title: "Intro" },
         },
       ],
@@ -90,6 +99,8 @@ describe("core:emit-artifacts", () => {
       outDir,
     );
 
+    transformOfm().transformOfm!.run(ctx);
+    transformGfm().transformGfm!.run(ctx);
     await emitArtifacts().emitArtifacts!.run(ctx);
 
     const artifactsRoot = resolve(outDir, "..", "artifacts");
@@ -106,6 +117,9 @@ describe("core:emit-artifacts", () => {
 
     expect(pageModule).toContain("export const svartz");
     expect(pageModule).toContain("Welcome to Svartz.");
+    expect(pageModule).toContain("<del>Outdated guidance.</del>");
+    expect(pageModule).toContain("<blockquote>");
+    expect(pageModule).toContain('data-callout="note"');
     expect(indexModule).toContain("export const index =");
     expect(indexModule).toContain("export const graph = index.graph;");
   });

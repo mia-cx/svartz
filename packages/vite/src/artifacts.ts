@@ -48,6 +48,7 @@ function createArtifactsVirtualModuleSource(
   indexModulePath: string,
   searchModulePath: string,
   themeConfig: Record<string, unknown> = {},
+  siteConfig: ResolvedConfig["site"] = { title: "Svartz" },
 ): string {
   const records = artifacts.map((artifact) => ({
     key: artifact.key,
@@ -56,33 +57,45 @@ function createArtifactsVirtualModuleSource(
     noteSlug: artifact.noteSlug,
   }));
 
-  const loaders = artifacts
-    .filter((artifact) => artifact.type === "svelte")
+  const svelteArtifacts = artifacts.filter((artifact) => artifact.type === "svelte");
+  const noteImports = svelteArtifacts
     .map(
-      (artifact) =>
-        `  ${JSON.stringify(artifact.key)}: () => import(${JSON.stringify(artifact.path)}),`,
+      (artifact, index) =>
+        `import * as noteArtifact${index} from ${JSON.stringify(artifact.path)};`,
+    )
+    .join("\n");
+  const noteModules = svelteArtifacts
+    .map(
+      (artifact, index) =>
+        `  ${JSON.stringify(artifact.key)}: noteArtifact${index},`,
     )
     .join("\n");
 
   return [
     `import { index, graph, backlinks, search, tags, folders, routes, assets } from ${JSON.stringify(indexModulePath)};`,
     `import { searchDocuments, searchIndex } from ${JSON.stringify(searchModulePath)};`,
+    noteImports,
     "",
     `export const artifacts = new Map(${JSON.stringify(records)}.map((record) => [record.key, record]));`,
     "",
-    "const noteArtifactLoaders = {",
-    loaders,
+    "const noteArtifactModules = {",
+    noteModules,
     "};",
     "",
-    "export async function loadNoteArtifact(key) {",
-    "  const loader = noteArtifactLoaders[key];",
-    "  if (!loader) {",
+    "export function hasNoteArtifact(key) {",
+    "  return Object.hasOwn(noteArtifactModules, key);",
+    "}",
+    "",
+    "export function getNoteArtifact(key) {",
+    "  const artifact = noteArtifactModules[key];",
+    "  if (!artifact) {",
     '    throw new Error(`[svartz:vite] note artifact "${key}" is not available`);',
     "  }",
-    "  return loader();",
+    "  return artifact;",
     "}",
     "",
     `export const themeConfig = ${JSON.stringify(themeConfig)};`,
+    `export const siteConfig = ${JSON.stringify(siteConfig)};`,
     "",
     "export { index, graph, backlinks, search, tags, folders, routes, assets, searchDocuments, searchIndex };",
   ].join("\n");

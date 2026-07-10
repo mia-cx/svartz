@@ -21,12 +21,21 @@ interface ResolvedFrontmatterConfig {
   readonly createdAtField: string;
   readonly updatedAtField: string;
   readonly publishedField: string;
+  readonly publicationMode: "opt-out" | "explicit";
   readonly dateFormat?: string;
 }
 
 interface ResolvedThemeConfig {
   readonly base: string;
   readonly [key: string]: unknown;
+}
+
+interface ResolvedSiteConfig {
+  readonly title: string;
+  readonly description?: string;
+  readonly url?: string;
+  readonly author?: string;
+  readonly image?: string;
 }
 
 interface ResolvedBuildConfig {
@@ -40,6 +49,7 @@ interface ResolvedVaultDefaults {
   readonly linkResolution: LinkResolutionStrategy;
   readonly theme: ResolvedThemeConfig;
   readonly frontmatter: ResolvedFrontmatterConfig;
+  readonly site: ResolvedSiteConfig;
 }
 
 /** Canonical single-vault build config consumed by the runner and @svartz/vite. */
@@ -54,6 +64,7 @@ interface ResolvedConfig {
   readonly linkResolution: LinkResolutionStrategy;
   readonly theme: ResolvedThemeConfig;
   readonly frontmatter: ResolvedFrontmatterConfig;
+  readonly site: ResolvedSiteConfig;
   readonly target: TargetConfig;
   readonly plugins: readonly unknown[];
 }
@@ -230,6 +241,7 @@ export type {
   ResolvedBuildConfig,
   ResolvedConfig,
   ResolvedFrontmatterConfig,
+  ResolvedSiteConfig,
   ResolvedThemeConfig,
   ResolvedVaultDefaults,
   RouteIndex,

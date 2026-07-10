@@ -5,6 +5,7 @@ import type { PluginContext, ProcessedFile } from "@svartz/core";
 const makeCtx = (
   files: ProcessedFile[],
   publishedField = "published",
+  publicationMode: "opt-out" | "explicit" = "opt-out",
 ): PluginContext =>
   ({
     config: {
@@ -24,6 +25,7 @@ const makeCtx = (
         createdAtField: "created_at",
         updatedAtField: "updated_at",
         publishedField,
+        publicationMode,
       },
       target: { type: "static" },
       plugins: [],
@@ -63,6 +65,12 @@ describe("core:filter-unpublished", () => {
     const ctx = makeCtx([makeFile("a")]);
     plugin.filterUnpublished!.run(ctx);
     expect(ctx.files).toHaveLength(1);
+  });
+
+  it("removes files without publication metadata in explicit mode", () => {
+    const ctx = makeCtx([makeFile("draft"), makeFile("published", true)], "published", "explicit");
+    plugin.filterUnpublished!.run(ctx);
+    expect(ctx.files.map((file) => file.slug)).toEqual(["published"]);
   });
 
   it("keeps files with published: null", () => {

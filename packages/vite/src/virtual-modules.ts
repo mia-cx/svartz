@@ -23,7 +23,11 @@ const THEME_PLACEHOLDER_SOURCE = [
 
 const ARTIFACTS_PLACEHOLDER_SOURCE = [
   'export const artifacts = new Map();',
-  'export async function loadNoteArtifact(key) {',
+  'export function hasNoteArtifact() {',
+  '  return false;',
+  '}',
+  '',
+  'export function getNoteArtifact(key) {',
   '  throw new Error(`[svartz:vite] note artifact "${key}" is not available yet`);',
   '}',
   'export const index = { version: "0.0.0", entries: [], graph: {}, backlinks: {}, search: [], tags: [], folders: [], routes: { notes: [], tags: [], folders: [], feed: [], all: [] }, assets: [] };',
@@ -37,6 +41,7 @@ const ARTIFACTS_PLACEHOLDER_SOURCE = [
   'export const searchDocuments = [];',
   'export const searchIndex = { documentCount: 0, nextId: 0, storedFields: {}, fieldIds: {}, fieldLength: {}, averageFieldLength: {}, index: [], serializationVersion: 2 };',
   'export const themeConfig = {};',
+  'export const siteConfig = { title: "Svartz" };',
 ].join("\n");
 
 type SvartzVirtualModuleId =

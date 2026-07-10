@@ -33,6 +33,53 @@ describe("parseConfig", () => {
     }
   });
 
+  it("accepts site metadata on a vault", async () => {
+    const result = await parseConfig({
+      version: "1.0.0",
+      vaults: [
+        {
+          id: "blog",
+          path: "blog",
+          target: { type: "static" },
+          site: {
+            title: "Patch Notes",
+            description: "Writing by Mia",
+            url: "https://example.com",
+            author: "Mia",
+            image: "/social.png",
+          },
+        },
+      ],
+    });
+
+    expect(result.vaults[0]!.site).toEqual({
+      title: "Patch Notes",
+      description: "Writing by Mia",
+      url: "https://example.com",
+      author: "Mia",
+      image: "/social.png",
+    });
+  });
+
+  it.each(["example.com", "ftp://example.com", "/blog", "not a url"])(
+    "rejects non-HTTP site URL %s",
+    async (url) => {
+      await expect(
+        parseConfig({
+          version: "1.0.0",
+          vaults: [
+            {
+              id: "blog",
+              path: "blog",
+              target: { type: "static" },
+              site: { title: "Patch Notes", url },
+            },
+          ],
+        }),
+      ).rejects.toThrow(ConfigDecodeFailed);
+    },
+  );
+
   it("throws ConfigDecodeFailed on wrong major version", async () => {
     await expect(
       parseConfig({
@@ -61,6 +108,11 @@ describe("loadConfig", () => {
     const config = await loadConfig(configPath);
     expect(config.configDir).toBe(FIXTURES);
     expect(config.vaults).toHaveLength(1);
+    expect(config.vaults[0]!.id).toBe("main");
+  });
+
+  it("loads TypeScript config files on the supported Node baseline", async () => {
+    const config = await loadConfig(resolve(FIXTURES, "valid-typescript.ts"));
     expect(config.vaults[0]!.id).toBe("main");
   });
 

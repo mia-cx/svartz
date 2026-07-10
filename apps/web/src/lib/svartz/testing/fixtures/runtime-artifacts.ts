@@ -13,7 +13,11 @@ export const artifacts = new Map([
 	]
 ]);
 
-export async function loadNoteArtifact(_key: string) {
+export function hasNoteArtifact(_key: string) {
+	return true;
+}
+
+export function getNoteArtifact(_key: string) {
 	return { default: StubPage };
 }
 
@@ -28,3 +32,10 @@ export const folders = index.folders;
 export const routes = index.routes;
 export const assets = index.assets;
 export const themeConfig: Record<string, unknown> = {};
+export const siteConfig = {
+	title: 'Svartz Test',
+	description: 'A test vault',
+	url: 'https://example.com',
+	author: 'Svartz',
+	image: '/social.png'
+};
