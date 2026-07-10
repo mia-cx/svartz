@@ -37,6 +37,9 @@ const config = {
 		outDir: kitOutDir,
 		paths: {
 			base: basePath
+		},
+		prerender: {
+			handleMissingId: 'warn'
 		}
 	},
 	preprocess: [mdsvex()],

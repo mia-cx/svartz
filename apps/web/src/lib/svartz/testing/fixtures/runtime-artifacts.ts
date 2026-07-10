@@ -13,7 +13,11 @@ export const artifacts = new Map([
 	]
 ]);
 
-export async function loadNoteArtifact(_key: string) {
+export function hasNoteArtifact(_key: string) {
+	return true;
+}
+
+export function getNoteArtifact(_key: string) {
 	return { default: StubPage };
 }
 

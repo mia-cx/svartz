@@ -6,9 +6,10 @@
 		assets,
 		backlinks,
 		folders,
+		getNoteArtifact,
 		graph,
+		hasNoteArtifact,
 		index,
-		loadNoteArtifact,
 		routes,
 		search,
 		searchDocuments,
@@ -18,7 +19,7 @@
 	} from 'virtual:svartz/artifacts';
 
 	type ComponentModule = { default: Component<any> };
-	type ThemeComponentLoader =
+	type ThemeComponentReference =
 		| (() => Promise<ComponentModule>)
 		| { readonly default: Component<any> };
 	type RuntimeRouteMatch = ReturnType<typeof resolveRuntimeRoute>;
@@ -35,16 +36,20 @@
 	}
 
 	function resolveComponentModule(
-		loader: ThemeComponentLoader | undefined
-	): Promise<ComponentModule | undefined> {
-		if (!loader) return Promise.resolve(undefined);
-		if (typeof loader === 'function') {
-			return loader() as Promise<ComponentModule>;
+		reference: ThemeComponentReference | undefined
+	): ComponentModule | undefined {
+		if (!reference) return undefined;
+		if (typeof reference === 'function') {
+			throw new Error(
+				'[svartz:web] lazy theme components cannot render during SSR; use an eager { default: Component } module'
+			);
 		}
-		return Promise.resolve(loader as ComponentModule);
+		return reference;
 	}
 
-	function resolveLayoutLoader(match: RuntimeRouteMatch): ThemeComponentLoader | undefined {
+	function resolveLayoutReference(
+		match: RuntimeRouteMatch
+	): ThemeComponentReference | undefined {
 		if (match?.layoutSlot && theme.layouts[match.layoutSlot]) {
 			return theme.layouts[match.layoutSlot];
 		}
@@ -56,7 +61,7 @@
 		return theme.layouts.defaultPage;
 	}
 
-	function resolvePageModule(match: RuntimeRouteMatch): Promise<ComponentModule | undefined> {
+	function resolvePageModule(match: RuntimeRouteMatch): ComponentModule | undefined {
 		if (!match) {
 			return resolveComponentModule(theme.layouts.notFoundPage);
 		}
@@ -65,11 +70,17 @@
 			return resolveComponentModule(match.route.component);
 		}
 
-		if (match.artifactKey) {
-			return loadNoteArtifact(match.artifactKey) as Promise<ComponentModule>;
+		if (match.artifactKey && hasNoteArtifact(match.artifactKey)) {
+			return getNoteArtifact(match.artifactKey);
 		}
 
-		return Promise.resolve(undefined);
+		const slug = artifactKeyToSlug(match.artifactKey);
+		if (slug && folders.some((folder) => folder.slug === slug)) {
+			const folderRoute = theme.routes.find((route) => route.id === 'folder');
+			return resolveComponentModule(folderRoute?.component);
+		}
+
+		return resolveComponentModule(theme.layouts.notFoundPage);
 	}
 
 	const activePathname = $derived(pathname ?? page.url.pathname);
@@ -89,26 +100,34 @@
 			: undefined
 	);
 
-	const renderState = $derived.by(async () => {
-		const [layout, pageModule] = await Promise.all([
-			resolveComponentModule(resolveLayoutLoader(runtimeRoute)),
-			resolvePageModule(runtimeRoute)
-		]);
-
-		return { layout, pageModule };
-	});
+	const layoutModule = $derived(
+		resolveComponentModule(resolveLayoutReference(runtimeRoute))
+	);
+	const pageModule = $derived(resolvePageModule(runtimeRoute));
+	const LayoutComponent = $derived(layoutModule?.default);
+	const PageComponent = $derived(pageModule?.default);
 </script>
 
-{#await renderState}
-	<div aria-live="polite">Loading...</div>
-{:then rendered}
-	{@const LayoutComponent = rendered.layout?.default}
-	{@const PageComponent = rendered.pageModule?.default}
-
-	{#if LayoutComponent && PageComponent}
-		<LayoutComponent
+{#if LayoutComponent && PageComponent}
+	<LayoutComponent
+		{assets}
+		{theme}
+		{themeConfig}
+		route={runtimeRoute?.route}
+		match={runtimeRoute}
+		{entry}
+		{index}
+		{graph}
+		{backlinks}
+		{folders}
+		{routes}
+		{search}
+		{searchDocuments}
+		{searchIndex}
+		{tags}
+	>
+		<PageComponent
 			{assets}
-			{theme}
 			{themeConfig}
 			route={runtimeRoute?.route}
 			match={runtimeRoute}
@@ -122,27 +141,8 @@
 			{searchDocuments}
 			{searchIndex}
 			{tags}
-		>
-			<PageComponent
-				{assets}
-				{themeConfig}
-				route={runtimeRoute?.route}
-				match={runtimeRoute}
-				{entry}
-				{index}
-				{graph}
-				{backlinks}
-				{folders}
-				{routes}
-				{search}
-				{searchDocuments}
-				{searchIndex}
-				{tags}
-			/>
-		</LayoutComponent>
-	{:else}
-		<p>Route component unavailable.</p>
-	{/if}
-{:catch error}
-	<p>{error instanceof Error ? error.message : 'Failed to load page.'}</p>
-{/await}
+		/>
+	</LayoutComponent>
+{:else}
+	<p>Route component unavailable.</p>
+{/if}

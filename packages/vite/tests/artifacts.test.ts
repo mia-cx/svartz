@@ -56,7 +56,7 @@ describe("@svartz/vite artifact helpers", () => {
     );
   });
 
-  it("builds a lazy artifact bridge source with eager index re-exports", () => {
+  it("builds an eager artifact bridge source for SSR", () => {
     const artifacts: Artifact[] = [
       {
         key: "pages/guides/intro.svelte",
@@ -87,7 +87,16 @@ describe("@svartz/vite artifact helpers", () => {
     expect(source).toContain(
       'import { searchDocuments, searchIndex } from "/workspace/.svartz/vaults/docs/artifacts/search.ts";',
     );
-    expect(source).toContain('"pages/guides/intro.svelte": () => import("/workspace/.svartz/vaults/docs/artifacts/pages/guides/intro.svelte")');
+    expect(source).toContain(
+      'import * as noteArtifact0 from "/workspace/.svartz/vaults/docs/artifacts/pages/guides/intro.svelte";',
+    );
+    expect(source).toContain(
+      '"pages/guides/intro.svelte": noteArtifact0',
+    );
+    expect(source).toContain("export function hasNoteArtifact(key)");
+    expect(source).toContain("export function getNoteArtifact(key)");
+    expect(source).not.toContain("() => import(");
+    expect(source).not.toContain("async function getNoteArtifact");
     expect(source).toContain("export const artifacts = new Map");
   });
 });

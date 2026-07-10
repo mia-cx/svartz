@@ -247,7 +247,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     },
     configResolved(resolved) {
       context = createSvartzViteContext(options, resolved);
-      themeModuleId = resolveThemeModuleId(context.config);
+      themeModuleId = resolveThemeRuntimeImportId(context.config, context.root);
     },
     async buildStart() {
       await executePipeline();

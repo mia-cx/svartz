@@ -30,9 +30,10 @@ declare module "virtual:svartz/artifacts" {
   }
 
   export const artifacts: ReadonlyMap<string, RuntimeArtifactRecord>;
-  export function loadNoteArtifact(
+  export function hasNoteArtifact(key: string): boolean;
+  export function getNoteArtifact(
     key: string,
-  ): Promise<{ default: unknown }>;
+  ): { default: unknown };
   export const index: Index;
   export const graph: Graph;
   export const backlinks: Index["backlinks"];
