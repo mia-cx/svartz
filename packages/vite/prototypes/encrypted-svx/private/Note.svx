@@ -1,0 +1,19 @@
+<script>
+  import Counter from './Counter.svelte';
+  import diagram from './diagram.svg?url';
+</script>
+
+# SVX_SECRET_BODY_6e1d72
+
+This text exists only inside the encrypted bundle.
+
+<Counter />
+
+<img src={diagram} alt="Protected diagram" width="180" height="80" />
+
+<div class="secret-label">Scoped style probe</div>
+
+<style>
+  .secret-label { border: 7px solid oklch(0.65 0.15 160); }
+  .secret-label::after { content: "SVX_SECRET_CSS_982ab1"; }
+</style>

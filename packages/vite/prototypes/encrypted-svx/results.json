@@ -1,0 +1,43 @@
+{
+  "browser": "151.0.7922.173",
+  "basePath": "/prototype/",
+  "staticFiles": 22,
+  "checks": [
+    {
+      "name": "No protected markers, password, source maps, or SVX in static output",
+      "pass": true
+    },
+    {
+      "name": "Locked static shell hydrates with no protected content or assets",
+      "pass": true
+    },
+    {
+      "name": "Wrong password reveals nothing and mounts no component",
+      "pass": true
+    },
+    {
+      "name": "Correct password decrypts and imports interactive SVX with scoped CSS and image",
+      "pass": true
+    },
+    {
+      "name": "SvelteKit navigation unmounts protected runtime and removes its styles",
+      "pass": true
+    },
+    {
+      "name": "Relock clears the session key and removes rendered content",
+      "pass": true
+    },
+    {
+      "name": "Modified ciphertext fails authentication before executing code",
+      "pass": true
+    },
+    {
+      "name": "Supported CSP emits no uncaught errors",
+      "pass": true
+    },
+    {
+      "name": "CSP without blob script permission blocks the encrypted component",
+      "pass": true
+    }
+  ]
+}

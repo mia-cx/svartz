@@ -1,0 +1,20 @@
+{
+  "name": "svartz-encrypted-svx-prototype",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.14.2",
+  "scripts": {
+    "build": "node scripts/build-encrypted.mjs && vite build",
+    "verify": "node scripts/verify.mjs",
+    "preview": "node scripts/serve.mjs"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "3.0.10",
+    "@sveltejs/kit": "2.53.4",
+    "@sveltejs/vite-plugin-svelte": "6.2.4",
+    "mdsvex": "0.12.6",
+    "svelte": "5.53.7",
+    "vite": "7.3.1",
+    "playwright": "1.58.1"
+  }
+}
