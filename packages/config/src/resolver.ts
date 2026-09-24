@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { mergePlugins } from "@svartz/core";
-import { lstat, readlink, realpath, stat } from "node:fs/promises";
-import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { lstat, readlink, stat } from "node:fs/promises";
+import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import type {
   FrontmatterFields,
   DiscoveryConfig,
@@ -147,25 +147,46 @@ const isWithin = (root: string, candidate: string): boolean => {
   return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 };
 
-/** Resolve an existing ancestor so two not-yet-created build roots cannot hide behind a symlink. */
-const canonicalBuildRoot = async (path: string, visited = new Set<string>()): Promise<string> => {
-  try {
-    return await realpath(path);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    try {
-      if ((await lstat(path)).isSymbolicLink()) {
-        if (visited.has(path)) throw new Error(`Build-root symlink cycle at ${path}`);
-        visited.add(path);
-        return canonicalBuildRoot(resolve(dirname(path), await readlink(path)), visited);
-      }
-    } catch (cause) {
-      if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
+const MAX_BUILD_ROOT_SYMLINKS = 40;
+
+/** Follow symlink targets in filesystem order, including `..` after another symlink. */
+const canonicalBuildRoot = async (path: string): Promise<string> => {
+  let current = parse(path).root;
+  let remaining = path.slice(current.length).split(sep);
+  let linksFollowed = 0;
+
+  while (remaining.length > 0) {
+    const segment = remaining.shift();
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      current = resolve(current, "..");
+      continue;
     }
-    const parent = dirname(path);
-    if (parent === path) throw error;
-    return resolve(await canonicalBuildRoot(parent, visited), basename(path));
+
+    const candidate = join(current, segment);
+    let entry;
+    try {
+      entry = await lstat(candidate);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      current = candidate;
+      continue;
+    }
+    if (!entry.isSymbolicLink()) {
+      current = candidate;
+      continue;
+    }
+
+    if (++linksFollowed > MAX_BUILD_ROOT_SYMLINKS) {
+      throw new Error(`Build-root symlink cycle at ${candidate}`);
+    }
+    const target = await readlink(candidate);
+    const absoluteTarget = isAbsolute(target);
+    if (absoluteTarget) current = parse(target).root;
+    remaining = [...target.slice(absoluteTarget ? current.length : 0).split(sep), ...remaining];
   }
+
+  return current;
 };
 
 // --- Single vault resolution ---

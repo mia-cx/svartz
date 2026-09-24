@@ -135,6 +135,29 @@ describe("resolveConfigPaths", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+  it("follows symlinks before traversing .. in a dangling target", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "svartz-traversal-build-roots-"));
+    try {
+      await mkdir(resolve(root, "other/deep"), { recursive: true });
+      await symlink("other/deep", resolve(root, "intermediate"), "dir");
+      await symlink("intermediate/../future", resolve(root, "linked"), "dir");
+      const config: SvartzConfig = {
+        version: "1.0.0",
+        vaults: [
+          { id: "blog", path: VALID_VAULT, outDir: "linked/blog/dist", target: { type: "host" }, mountPath: "/blog" },
+          { id: "work", path: VALID_VAULT, outDir: "other/future/blog/dist", target: { type: "host" }, mountPath: "/work" },
+        ],
+      };
+      await expect(resolveConfig(config, root)).rejects.toThrow(VaultBuildRootConflict);
+      const distinctConfig: SvartzConfig = {
+        ...config,
+        vaults: [config.vaults[0]!, { ...config.vaults[1]!, outDir: "future/blog/dist" }],
+      };
+      await expect(resolveConfig(distinctConfig, root)).resolves.toBeDefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   it("reports build-root filesystem failures through the tagged error channel", async () => {
     const root = await mkdtemp(resolve(tmpdir(), "svartz-invalid-build-root-"));
     try {
