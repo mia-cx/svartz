@@ -1,4 +1,4 @@
-/// <reference types="@svartz/ui/virtual-modules" />
+/// <reference types="@svartz/vite/virtual-modules" />
 
 declare global {
   namespace App {}
