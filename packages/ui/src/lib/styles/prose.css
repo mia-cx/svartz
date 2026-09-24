@@ -21,38 +21,33 @@
 .sv-prose {
 	max-inline-size: var(--sv-measure);
 	color: var(--sv-text);
+	font-family: var(--sv-font-text);
 	font-size: var(--sv-step-0);
 	line-height: var(--sv-leading);
 	overflow-wrap: break-word;
-	hyphens: auto;
 }
 
 .sv-prose > :first-child {
 	margin-block-start: 0;
 }
 
-/* Headings */
+/* Headings: mCX's level map. Google Sans Code, Argon, Xenon, then Fira Code. */
 .sv-prose :is(h1, h2, h3, h4, h5, h6) {
 	position: relative;
 	margin: 1.6em 0 0.5em;
 	color: var(--sv-ink);
-	font-family: var(--sv-font-display);
 	font-weight: 600;
-	letter-spacing: -0.012em;
 	line-height: var(--sv-leading-tight);
 	text-wrap: balance;
 	scroll-margin-block-start: var(--sv-space-6);
 }
 
-.sv-prose h1 { font-size: var(--sv-step-4); }
-.sv-prose h2 { font-size: var(--sv-step-3); }
-.sv-prose h3 { font-size: var(--sv-step-2); }
+.sv-prose h1 { font-family: var(--sv-font-title); font-size: var(--sv-step-4); letter-spacing: -0.03em; }
+.sv-prose h2 { font-family: var(--sv-font-h2); font-size: var(--sv-step-3); letter-spacing: -0.02em; }
+.sv-prose h3 { font-family: var(--sv-font-h3); font-size: var(--sv-step-2); font-weight: 700; }
+.sv-prose :is(h4, h5, h6) { font-family: var(--sv-font-minor); }
 .sv-prose h4 { font-size: var(--sv-step-1); }
-.sv-prose :is(h5, h6) {
-	font-family: var(--sv-font-text);
-	font-size: var(--sv-step-0);
-	letter-spacing: 0;
-}
+.sv-prose :is(h5, h6) { font-size: var(--sv-step-0); }
 
 .sv-prose .heading-anchor {
 	display: inline-grid;
@@ -143,10 +138,7 @@
 	padding-inline-start: 1em;
 	border-inline-start: 2px solid var(--sv-rule-strong);
 	color: var(--sv-text);
-	font-family: var(--sv-font-display);
-	font-size: var(--sv-step-1);
 	font-style: italic;
-	line-height: 1.5;
 }
 
 .sv-prose hr {
@@ -259,9 +251,10 @@
 .sv-prose th {
 	border-block-end-color: var(--sv-rule-strong);
 	color: var(--sv-muted);
-	font-family: var(--sv-font-mono);
+	font-family: var(--sv-font-interface);
 	font-size: var(--sv-label-size);
-	font-weight: 500;
+	font-stretch: var(--sv-label-stretch);
+	font-weight: 600;
 	letter-spacing: var(--sv-label-tracking);
 	text-transform: uppercase;
 	white-space: nowrap;
@@ -336,8 +329,10 @@
 	inset-inline-end: calc(2rem + var(--sv-space-3));
 	padding-block: 0.55rem;
 	color: var(--sv-muted);
-	font-family: var(--sv-font-mono);
+	font-family: var(--sv-font-interface);
 	font-size: var(--sv-label-size);
+	font-stretch: var(--sv-label-stretch);
+	font-weight: 600;
 	letter-spacing: var(--sv-label-tracking);
 	line-height: 1;
 	text-transform: uppercase;
@@ -405,9 +400,10 @@
 	gap: 0.55em;
 	margin: 0;
 	color: var(--sv-signal);
-	font-family: var(--sv-font-mono);
+	font-family: var(--sv-font-interface);
 	font-size: var(--sv-label-size);
-	font-weight: 600;
+	font-stretch: var(--sv-label-stretch);
+	font-weight: 700;
 	letter-spacing: var(--sv-label-tracking);
 	line-height: 1.6;
 	text-transform: uppercase;
@@ -484,8 +480,10 @@
 
 .sv-prose .svartz-embed-source {
 	margin-block-end: var(--sv-space-2);
-	font-family: var(--sv-font-mono);
+	font-family: var(--sv-font-interface);
 	font-size: var(--sv-label-size);
+	font-stretch: var(--sv-label-stretch);
+	font-weight: 600;
 	letter-spacing: var(--sv-label-tracking);
 	text-transform: uppercase;
 }

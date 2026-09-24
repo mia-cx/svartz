@@ -60,9 +60,10 @@
 
 	.title {
 		color: var(--sv-ink);
-		font-family: var(--sv-font-display);
+		font-family: var(--sv-font-h2);
 		font-size: var(--sv-step-1);
 		font-weight: 600;
+		letter-spacing: -0.02em;
 		text-decoration: none;
 	}
 

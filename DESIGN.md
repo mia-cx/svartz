@@ -33,17 +33,23 @@ Contrast ratios are measured against `--sv-paper`. The neutrals share hue 80 wit
 
 ## Typography
 
-| Role | Face | Why |
+The type system is Mia's mCX Obsidian theme ([obsidian-theme-mcx](https://github.com/mia-cx/obsidian-theme-mcx)), so a vault reads the same in Obsidian and on the web. Reading is monospace; the interface is Archivo.
+
+| Token | Face | Used for |
 |---|---|---|
-| Display: titles, headings, site name | Newsreader (variable, optical sizes) | An editorial serif that gives published pages authority. Optical sizing keeps small headings sturdy. |
-| Text: body, UI | Instrument Sans (variable, width axis) | A neutral grotesque that stays readable in long prose and dense UI. |
-| Mono: code, and the label voice | Geist Mono (variable) | Clear, and it doesn't look like a terminal at label sizes. |
+| `--sv-font-interface` | Archivo (variable, width axis) | Navigation, buttons, search, lists, and the label voice |
+| `--sv-font-text` | Monaspace Xenon | Note body (mCX's reading font) |
+| `--sv-font-title` | Google Sans Code (variable) | H1, page titles, site name |
+| `--sv-font-h2` | Monaspace Argon | H2, list titles |
+| `--sv-font-h3` | Monaspace Xenon, bold | H3 |
+| `--sv-font-minor` | Fira Code (variable) | H4 to H6 |
+| `--sv-font-mono` | Monaspace Argon | Code, tags, keyboard hints |
 
-All three are self-hosted through `@fontsource-variable`, so no page requests a font CDN.
+All faces are self-hosted through Fontsource, so no page requests a font CDN. Monaspace ships only static weights there: Xenon 400, 400 italic, and 700; Argon 400 and 600.
 
-**The label voice.** Metadata, callout titles, kind badges, method pills, dates and counts are set in small mono caps (`.sv-label`, 0.72rem, 0.07em tracking). This is the thread that ties the themes together: a Svartz page always labels things the same way.
+**The label voice.** mCX's overline: Archivo in capitals at 125% width (`.sv-label`, 0.7rem, 0.08em tracking, `--sv-label-stretch`). Metadata, callout titles, kind badges, method pills, dates, and counts all use it. This is the thread that ties the themes together: a Svartz page always labels things the same way.
 
-**Scale.** The body is `1.0625rem` at leading 1.65. Steps are `--sv-step--2` to `--sv-step-5`, computed from `--sv-ratio`.
+**Scale.** The body is `1rem` (monospace sets wide) at leading 1.65. Steps are `--sv-step--2` to `--sv-step-5`, computed from `--sv-ratio`.
 
 ## Space, shape, depth, motion
 
@@ -62,7 +68,7 @@ All three are self-hosted through `@fontsource-variable`, so no page requests a 
 - `.sv-badge`: a signal-coloured mono label for kinds, methods and states.
 - `.sv-icon-button`: a 2rem square, quiet until hovered.
 - `.sv-kbd`: keyboard hints.
-- `.sv-wordmark`: the site name, set in the display face.
+- `.sv-wordmark`: the site name, set in the title face.
 - `.sv-mark`: the Svartz mark.
 - `.sv-skip-link`, `.sv-visually-hidden`.
 

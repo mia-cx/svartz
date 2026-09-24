@@ -72,9 +72,12 @@
 			</div>
 
 			<h2 class="sv-label">Faces</h2>
-			<p class="display face">Newsreader sets the titles.</p>
-			<p class="face">Instrument Sans carries body text and interface labels, at leading 1.65.</p>
-			<p class="face mono">Geist Mono: const vault = await publish();</p>
+			<p class="face" style:font-family="var(--sv-font-title)" style:font-size="var(--sv-step-3)">Google Sans Code sets the titles</p>
+			<p class="face" style:font-family="var(--sv-font-h2)" style:font-size="var(--sv-step-2)">Monaspace Argon sets second-level headings</p>
+			<p class="face" style:font-family="var(--sv-font-minor)">Fira Code sets the minor headings</p>
+			<p class="face" style:font-family="var(--sv-font-text)">Monaspace Xenon carries the note body, at leading 1.65.</p>
+			<p class="face">Archivo runs the interface: navigation, search, lists.</p>
+			<p class="face" style:font-family="var(--sv-font-mono)">const vault = await publish();</p>
 
 			<h2 class="sv-label">Primitives</h2>
 			<div class="row">
@@ -175,22 +178,13 @@
 	}
 
 	.display {
-		font-family: var(--sv-font-display);
+		font-family: var(--sv-font-title);
 		font-weight: 600;
-		letter-spacing: -0.015em;
+		letter-spacing: -0.03em;
 	}
 
 	.face {
 		margin: 0;
 		color: var(--sv-ink);
-	}
-
-	.face.display {
-		font-size: var(--sv-step-3);
-	}
-
-	.face.mono {
-		font-family: var(--sv-font-mono);
-		font-size: 0.9rem;
 	}
 </style>

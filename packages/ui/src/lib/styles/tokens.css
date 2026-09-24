@@ -5,11 +5,15 @@
  * Colour mode: `color-scheme` drives every `light-dark()` pair. The OS decides
  * by default; the colour-mode script pins `.light` or `.dark` on <html>.
  */
-@import '@fontsource-variable/newsreader/opsz.css';
-@import '@fontsource-variable/newsreader/opsz-italic.css';
-@import '@fontsource-variable/instrument-sans/wdth.css';
-@import '@fontsource-variable/instrument-sans/wdth-italic.css';
-@import '@fontsource-variable/geist-mono/index.css';
+/* The mCX type system (github.com/mia-cx/obsidian-theme-mcx). */
+@import '@fontsource-variable/archivo/wdth.css';
+@import '@fontsource-variable/google-sans-code/wght.css';
+@import '@fontsource-variable/fira-code/wght.css';
+@import '@fontsource/monaspace-xenon/400.css';
+@import '@fontsource/monaspace-xenon/400-italic.css';
+@import '@fontsource/monaspace-xenon/700.css';
+@import '@fontsource/monaspace-argon/400.css';
+@import '@fontsource/monaspace-argon/600.css';
 
 :root {
 	color-scheme: light dark;
@@ -19,11 +23,16 @@
 	--sv-ratio: 1.2;
 	--sv-measure: 42rem;
 
-	/* Type */
-	--sv-font-display: 'Newsreader Variable', 'Iowan Old Style', Georgia, serif;
-	--sv-font-text: 'Instrument Sans Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
-	--sv-font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
-	--sv-text-base: 1.0625rem;
+	/* Type: the mCX stack. Reading is monospace; the interface is Archivo. */
+	--sv-font-fallback-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+	--sv-font-interface: 'Archivo Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--sv-font-text: 'Monaspace Xenon', var(--sv-font-fallback-mono);
+	--sv-font-title: 'Google Sans Code Variable', var(--sv-font-fallback-mono);
+	--sv-font-h2: 'Monaspace Argon', var(--sv-font-fallback-mono);
+	--sv-font-h3: 'Monaspace Xenon', var(--sv-font-fallback-mono);
+	--sv-font-minor: 'Fira Code Variable', var(--sv-font-fallback-mono);
+	--sv-font-mono: 'Monaspace Argon', var(--sv-font-fallback-mono);
+	--sv-text-base: 1rem;
 	--sv-leading: 1.65;
 	--sv-leading-tight: 1.15;
 	--sv-step--2: calc(var(--sv-text-base) / pow(var(--sv-ratio), 2));
@@ -34,9 +43,10 @@
 	--sv-step-3: calc(var(--sv-text-base) * pow(var(--sv-ratio), 3));
 	--sv-step-4: calc(var(--sv-text-base) * pow(var(--sv-ratio), 4));
 	--sv-step-5: calc(var(--sv-text-base) * pow(var(--sv-ratio), 5));
-	/* The label voice: small mono caps for metadata, kinds, methods, callout titles. */
-	--sv-label-size: 0.72rem;
-	--sv-label-tracking: 0.07em;
+	/* The label voice, mCX's overline: wide Archivo capitals for metadata, kinds, methods, callout titles. */
+	--sv-label-size: 0.7rem;
+	--sv-label-tracking: 0.08em;
+	--sv-label-stretch: 125%;
 
 	/* Space: a 4px grid scaled by density. */
 	--sv-space-1: calc(0.25rem * var(--sv-density));

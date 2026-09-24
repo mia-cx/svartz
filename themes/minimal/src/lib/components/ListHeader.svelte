@@ -20,10 +20,10 @@
 	h1 {
 		margin: 0;
 		color: var(--sv-ink);
-		font-family: var(--sv-font-display);
+		font-family: var(--sv-font-title);
 		font-size: var(--sv-step-5);
 		font-weight: 600;
-		letter-spacing: -0.02em;
+		letter-spacing: -0.04em;
 		line-height: 1.05;
 	}
 

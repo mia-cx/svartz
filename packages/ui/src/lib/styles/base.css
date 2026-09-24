@@ -7,7 +7,7 @@
 html {
 	background: var(--sv-paper);
 	color: var(--sv-text);
-	font-family: var(--sv-font-text);
+	font-family: var(--sv-font-interface);
 	font-size: 100%;
 	line-height: var(--sv-leading);
 	-webkit-text-size-adjust: 100%;
@@ -31,11 +31,12 @@ body {
 	border-radius: var(--sv-radius-s);
 }
 
-/* The label voice. */
+/* The label voice: mCX's overline. */
 .sv-label {
-	font-family: var(--sv-font-mono);
+	font-family: var(--sv-font-interface);
 	font-size: var(--sv-label-size);
-	font-weight: 500;
+	font-stretch: var(--sv-label-stretch);
+	font-weight: 600;
 	letter-spacing: var(--sv-label-tracking);
 	line-height: 1.4;
 	text-transform: uppercase;
@@ -80,9 +81,10 @@ a.sv-tag:hover {
 	border-radius: var(--sv-radius-s);
 	background: var(--sv-signal-soft);
 	color: var(--sv-signal);
-	font-family: var(--sv-font-mono);
+	font-family: var(--sv-font-interface);
 	font-size: var(--sv-label-size);
-	font-weight: 600;
+	font-stretch: var(--sv-label-stretch);
+	font-weight: 700;
 	letter-spacing: var(--sv-label-tracking);
 	line-height: 1.5;
 	text-transform: uppercase;
@@ -161,15 +163,15 @@ a.sv-tag:hover {
 	transform: none;
 }
 
-/* Site title. The site's name, set in the display face. */
+/* Site title. The site's name, set in the title face. */
 .sv-wordmark {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.45em;
-	font-family: var(--sv-font-display);
+	font-family: var(--sv-font-title);
 	font-size: var(--sv-step-2);
 	font-weight: 600;
-	letter-spacing: -0.02em;
+	letter-spacing: -0.03em;
 	line-height: 1;
 	color: var(--sv-ink);
 	text-decoration: none;
