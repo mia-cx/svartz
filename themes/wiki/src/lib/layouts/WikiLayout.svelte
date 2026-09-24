@@ -30,9 +30,10 @@
 	} from '@svartz/ui';
 	import Contents from '../components/Contents.svelte';
 	import Infobox from '../components/Infobox.svelte';
+	import DrawerMenu from '../components/DrawerMenu.svelte';
 	import SectionBar from '../components/SectionBar.svelte';
 	import { wikiRoutes } from '../manifest.js';
-	import { featuredNote, inFolder, readHatnote, readInfobox, sectionMenu, type MenuLink } from '../wiki.js';
+	import { featuredNote, readHatnote, readInfobox, sectionMenu, type MenuFolder } from '../wiki.js';
 
 	let { children, entry, vault, site, match, themeConfig, searchIndex, searchOptions }: ThemePageProps = $props();
 
@@ -74,7 +75,12 @@
 	}
 
 	let drawer = $state(false);
+	// The drawer's open sections; it starts at the section list each time.
+	let drawerTrail = $state<MenuFolder[]>([]);
 	afterNavigate(() => (drawer = false));
+	$effect(() => {
+		if (!drawer) drawerTrail = [];
+	});
 </script>
 
 <a class="sv-skip-link" href="#content">Skip to content</a>
@@ -98,38 +104,12 @@
 	</div>
 </header>
 
-{#snippet sectionTree(items: readonly MenuLink[], href: string, allHref: string, more: number)}
-	<ul>
-		<li><a href={href} aria-current={page.url.pathname === href ? 'page' : undefined}>Overview</a></li>
-		{#each items as item (item.id)}
-			<li>
-				{#if item.folder}
-					<details open={inFolder(item.folder.id, currentSlug)}>
-						<summary>{item.title}</summary>
-						{@render sectionTree(item.folder.items, item.folder.href, item.folder.allHref, item.folder.more)}
-					</details>
-				{:else}
-					<a href={item.href} aria-current={page.url.pathname === item.href ? 'page' : undefined}>{item.title}</a>
-				{/if}
-			</li>
-		{/each}
-		{#if more}<li><a class="see-all" href={allHref}>See all {items.length + more}</a></li>{/if}
-	</ul>
-{/snippet}
-
 <div class="wiki">
 	<aside class="rail" id="wiki-rail" data-open={drawer ? '' : undefined} aria-label="Site">
 		{#if menu.length > 0}
-			<nav class="drawer-sections" aria-labelledby="drawer-sections-heading">
-				<h2 id="drawer-sections-heading" class="sv-section-title">Sections</h2>
-				{#each menu as folder (folder.id)}
-					<details open={inFolder(folder.id, currentSlug)}>
-						<summary>{folder.title}</summary>
-						{@render sectionTree(folder.items, folder.href, folder.allHref, folder.more)}
-					</details>
-				{/each}
-			</nav>
+			<div class="drawer-only"><DrawerMenu {menu} currentPath={page.url.pathname} {currentSlug} bind:trail={drawerTrail} /></div>
 		{/if}
+		<div class="rail-root" class:drilled={drawerTrail.length > 0}>
 		<nav class="portal" aria-labelledby="portal-heading">
 			<h2 id="portal-heading" class="sv-section-title">Navigation</h2>
 			<ul>
@@ -142,6 +122,7 @@
 		{#if entry?.page.toc}
 			<div class="rail-contents"><Contents items={entry.toc} /></div>
 		{/if}
+		</div>
 	</aside>
 
 	<main class="main" id="content" tabindex="-1">
@@ -282,8 +263,14 @@
 		align-self: end;
 	}
 
-	.drawer-sections {
+	.drawer-only {
 		display: none;
+	}
+
+	.rail-root {
+		display: grid;
+		align-content: start;
+		gap: var(--sv-space-6);
 	}
 
 	.wiki-header .sv-wordmark {
@@ -589,44 +576,13 @@
 			display: none;
 		}
 
-		.drawer-sections {
+		.drawer-only {
 			display: block;
-			font-size: var(--sv-step--1);
 		}
 
-		.drawer-sections ul {
-			display: grid;
-			gap: var(--sv-space-1);
-			margin: var(--sv-space-1) 0 var(--sv-space-2);
-			padding-inline-start: var(--sv-space-4);
-			border-inline-start: var(--sv-rule-width) solid var(--sv-rule);
-			list-style: none;
-		}
-
-		.drawer-sections summary::marker {
-			color: var(--sv-muted);
-		}
-
-		.drawer-sections summary {
-			padding-block: var(--sv-space-1);
-			color: var(--sv-ink);
-			font-weight: 600;
-			cursor: pointer;
-		}
-
-		.drawer-sections a {
-			color: var(--sv-text);
-			text-decoration: none;
-		}
-
-		.drawer-sections a[aria-current] {
-			color: var(--sv-ink);
-			font-weight: 600;
-		}
-
-		.drawer-sections .see-all {
-			color: var(--sv-accent-text);
-			font-weight: 600;
+		/* An open section takes over the drawer, like a page. */
+		.rail-root.drilled {
+			display: none;
 		}
 
 		.header-inner {
