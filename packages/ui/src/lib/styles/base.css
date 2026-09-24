@@ -35,7 +35,6 @@ body {
 .sv-label {
 	font-family: var(--sv-font-sans);
 	font-size: var(--sv-label-size);
-	font-stretch: var(--sv-label-stretch);
 	font-weight: 600;
 	letter-spacing: var(--sv-label-tracking);
 	line-height: 1.4;
@@ -115,7 +114,6 @@ a.sv-tag:hover {
 	color: var(--sv-signal);
 	font-family: var(--sv-font-sans);
 	font-size: var(--sv-label-size);
-	font-stretch: var(--sv-label-stretch);
 	font-weight: 700;
 	letter-spacing: var(--sv-label-tracking);
 	line-height: 1.5;

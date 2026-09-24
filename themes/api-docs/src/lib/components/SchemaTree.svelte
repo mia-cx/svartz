@@ -133,7 +133,6 @@
 	.required {
 		color: var(--sv-accent-text);
 		font-size: var(--sv-label-size);
-		font-stretch: var(--sv-label-stretch);
 		font-weight: 700;
 		letter-spacing: var(--sv-label-tracking);
 		text-transform: uppercase;

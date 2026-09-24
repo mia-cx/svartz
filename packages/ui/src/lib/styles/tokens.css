@@ -6,8 +6,8 @@
  * by default; the colour-mode script pins `.light` or `.dark` on <html>.
  */
 /* mCX's reading faces (github.com/mia-cx/obsidian-theme-mcx): Archivo, and Monaspace Argon for code. */
-@import '@fontsource-variable/archivo/wdth.css';
-@import '@fontsource-variable/archivo/wdth-italic.css';
+@import '@fontsource-variable/archivo/wght.css';
+@import '@fontsource-variable/archivo/wght-italic.css';
 @import '@fontsource/monaspace-argon/400.css';
 @import '@fontsource/monaspace-argon/600.css';
 
@@ -33,10 +33,9 @@
 	--sv-step-3: calc(var(--sv-text-base) * pow(var(--sv-ratio), 3));
 	--sv-step-4: calc(var(--sv-text-base) * pow(var(--sv-ratio), 4));
 	--sv-step-5: calc(var(--sv-text-base) * pow(var(--sv-ratio), 5));
-	/* The label voice, mCX's overline: wide Archivo capitals for metadata, kinds, methods, callout titles. */
+	/* The label voice, mCX's overline: small tracked Archivo capitals for metadata, kinds, methods, callout titles. */
 	--sv-label-size: 0.7rem;
 	--sv-label-tracking: 0.08em;
-	--sv-label-stretch: 125%;
 
 	/* Space: a 4px grid scaled by density. */
 	--sv-space-1: calc(0.25rem * var(--sv-density));

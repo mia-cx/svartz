@@ -254,7 +254,6 @@
 		border-block-end: var(--sv-rule-width) solid var(--sv-rule-strong);
 		color: var(--sv-muted);
 		font-size: var(--sv-label-size);
-		font-stretch: var(--sv-label-stretch);
 		font-weight: 600;
 		letter-spacing: var(--sv-label-tracking);
 		text-align: start;
