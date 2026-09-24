@@ -8,7 +8,7 @@ Add disabled-by-default first-party plugins for Quartz's optional authoring form
 - [x] Citation rendering with a local bibliography and configurable style/link options.
 - [x] Capture Knowledge: record stage choice, dependency paths, and rebuild behavior in plugin rules.
 - [x] Documentation: show configuration and format boundaries.
-- [ ] Review & Close: run plugin, CLI, static/host, and packed-consumer checks; file a stacked PR.
+- [x] Review & Close: plugin, CLI, static/host, and packed-consumer checks passed; stacked PR #69 is filed on #67.
 
 The local Quartz 4.5.2 reference in `packages/reference` defines the optional feature subset. V1's agreed English UI lets citations use the package's local English locale.
 
