@@ -53,4 +53,11 @@ describe('listing helpers', () => {
 			['', '', undefined, ['about']]
 		]);
 	});
+
+	it('keeps a folder note whose folder has nothing else, as an empty section', () => {
+		const sections = topLevelSections([{ ...note('core'), title: 'Core' }], [{ slug: 'core', title: 'core', href: '/folders/core/' }]);
+		expect(sections.map((section) => [section.slug, section.title, section.href, section.entries.length])).toEqual([
+			['core', 'Core', '/core/', 0]
+		]);
+	});
 });

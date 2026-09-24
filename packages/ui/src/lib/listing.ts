@@ -63,7 +63,7 @@ export interface FolderSection<T> {
 /**
  * Notes grouped by top-level folder, in first-seen order, without the home note.
  * A folder note (`guides/index.md`, published as `guides`) names and links its
- * section instead of listing in it.
+ * section instead of listing in it; a folder with only its note is an empty section.
  */
 export function topLevelSections<T extends Linked>(
 	entries: readonly T[],
@@ -76,6 +76,8 @@ export function topLevelSections<T extends Linked>(
 		const nested = entry.slug.includes('/');
 		if (!nested && folders.some((folder) => folder.slug === entry.slug)) {
 			folderNotes.set(entry.slug, entry);
+			// Holds the section's place even if the folder has no other notes.
+			if (!sections.has(entry.slug)) sections.set(entry.slug, []);
 			continue;
 		}
 		const key = nested ? entry.slug.split('/')[0]! : '';
