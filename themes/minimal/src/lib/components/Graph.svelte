@@ -1,12 +1,11 @@
 <!--
-	The local link graph, one hop around the current note, with a button (and
-	Ctrl/⌘+G) that opens the whole vault's graph in a dialog.
+	The local link graph, one hop around the current note, with a button that
+	opens the whole vault's graph in a dialog.
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import X from '@lucide/svelte/icons/x';
-	import { onMount } from 'svelte';
 	import { buildGraph, type GraphInput } from '../graph.js';
 	import { mountGraph } from '../graph-canvas.js';
 
@@ -37,21 +36,11 @@
 		});
 	});
 
+	// No keyboard shortcut: Ctrl/⌘+G belongs to the browser's find-next.
 	function show() {
 		dialog?.showModal();
 		expanded = true;
 	}
-
-	onMount(() => {
-		const onKey = (event: KeyboardEvent) => {
-			if (event.key.toLowerCase() !== 'g' || !(event.metaKey || event.ctrlKey)) return;
-			event.preventDefault();
-			if (dialog?.open) dialog.close();
-			else show();
-		};
-		window.addEventListener('keydown', onKey);
-		return () => window.removeEventListener('keydown', onKey);
-	});
 </script>
 
 <section class="graph" aria-labelledby="graph-heading">

@@ -51,9 +51,11 @@
 				return;
 			}
 			const link = target?.closest<HTMLAnchorElement>('a[data-sv-internal]');
-			if (!link || link === anchor) return;
-			clearTimeout(openTimer);
+			if (!link) return;
 			clearTimeout(closeTimer);
+			// Back on the link whose preview is showing: just cancel the close.
+			if (link === anchor && visible) return;
+			clearTimeout(openTimer);
 			anchor = link;
 			openTimer = setTimeout(() => void show(link), OPEN_DELAY_MS);
 		};

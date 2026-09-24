@@ -13,7 +13,8 @@ describe('@svartz/theme-minimal manifests', () => {
 	});
 
 	it('replaces the core syntax plugin at build time only', () => {
-		expect(createNodeTheme().pluginPreset?.plugins.map((plugin) => plugin.id)).toEqual(['core:transform-syntax']);
+		const plugins = createNodeTheme().pluginPreset?.plugins ?? [];
+		expect(plugins.map((plugin) => ('id' in plugin ? plugin.id : undefined))).toEqual(['core:transform-syntax']);
 		expect(createMinimalTheme().pluginPreset).toBeUndefined();
 	});
 });

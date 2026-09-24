@@ -38,4 +38,15 @@ describe("note embeds", () => {
     expect(source.content).toContain('data-callout="warning"');
     expect(source.content).not.toContain("Not embedded");
   });
+
+  it("leaves wikilinks in code alone and links attachments", () => {
+    const source = note("guide.md", "![[sensors]]");
+    const target = note("sensors.md", "Write `[[dew-point]]` to link. See [[diagram.svg|the diagram]].\n\n```md\n[[dew-point]]\n```");
+    const diagram: ProcessedFile = { path: "attachments/diagram.svg", slug: "attachments/diagram.svg", extension: ".svg", content: "" };
+    transformEmbeds().transformEmbeds!.run(context([source, target, note("dew-point.md", "Dew."), diagram]));
+
+    expect(source.content).toContain("`[[dew-point]]`");
+    expect(source.content).toContain("```md\n[[dew-point]]\n```");
+    expect(source.content).toContain('<a href="../attachments/diagram.svg">the diagram</a>');
+  });
 });

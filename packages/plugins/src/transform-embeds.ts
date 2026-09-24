@@ -207,6 +207,8 @@ export const transformEmbeds = definePlugin(() => ({
           text.replace(WIKILINK_REGEX, (_raw: string, inner: string) => {
             const parsed = splitEmbedInner(inner);
             const label = escapeHtml(parsed.alias ?? parsed.target);
+            const assetPath = resolveAsset(noteBySlug.get(targetSlug)!, parsed.target);
+            if (assetPath) return `<a href="${relativeHref(sourceSlug, `/${assetPath}`)}">${label}</a>`;
             const resolved = resolveLink(
               { raw: inner, target: parsed.target, section: parsed.section, label: parsed.alias, type: "wikilink" } satisfies RawLink,
               slugMap,

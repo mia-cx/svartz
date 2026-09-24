@@ -34,6 +34,13 @@ describe('classifyLink', () => {
 		expect(classifyLink(undefined)).toBe('anchor');
 	});
 
+	it('treats links to attachments as files, not pages', () => {
+		expect(classifyLink('../attachments/manual.pdf')).toBe('file');
+		expect(classifyLink('/media/clip.mp4#t=10')).toBe('file');
+		expect(classifyLink('../guides/setup.html')).toBe('internal');
+		expect(classifyLink('../v1.2/notes/')).toBe('internal');
+	});
+
 	it('recognises heading anchors and footnote references', () => {
 		expect(classifyLink('#install', { class: 'heading-anchor' })).toBe('heading-anchor');
 		expect(classifyLink('#user-content-fn-1', { 'data-footnote-ref': true })).toBe('footnote');

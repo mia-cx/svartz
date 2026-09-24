@@ -16,7 +16,7 @@ export default defineConfig({
 | --- | --- |
 | Left | Site name, search (Ctrl/⌘ K, `#tag` filter), light/dark toggle, reader mode, explorer |
 | Centre | Breadcrumbs, title, date and reading time, tags, the note, Giscus comments when configured |
-| Right | Local graph (Ctrl/⌘ G opens the whole vault), contents with scroll tracking, backlinks |
+| Right | Local graph (the expand button opens the whole vault), contents with scroll tracking, backlinks |
 | Lists | `/tags/`, `/tags/:tag/`, `/folders/`, `/folders/:path/`, `/feed/`, and a 404 page |
 
 Below 1200px the right column moves under the note and the contents hide. Below 800px the left column becomes a top bar and the explorer a drawer. Internal links show a preview on hover.

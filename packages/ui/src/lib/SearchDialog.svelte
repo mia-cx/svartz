@@ -8,7 +8,15 @@
 	import Search from '@lucide/svelte/icons/search';
 	import { onMount, tick } from 'svelte';
 	import { fetchPreview } from './preview.js';
-	import { createSearch, excerpt, highlight, type SearchDocument, type SearchHit, type SearchOptions } from './search.js';
+	import {
+		createSearch,
+		excerpt,
+		highlight,
+		parseSearchQuery,
+		type SearchDocument,
+		type SearchHit,
+		type SearchOptions
+	} from './search.js';
 
 	let {
 		documents = [],
@@ -41,6 +49,11 @@
 
 	const search = $derived(createSearch(documents, searchOptions, searchIndex));
 	const hits = $derived(search(query));
+	// A query worth an empty state: a named tag, or two characters of text. A bare "#" is not.
+	const searched = $derived.by(() => {
+		const parsed = parseSearchQuery(query);
+		return Boolean(parsed.tag) || (parsed.text.length >= 2 && !parsed.text.startsWith('#'));
+	});
 	const active = $derived<SearchHit | undefined>(hits[selected]);
 
 	$effect(() => {
@@ -206,7 +219,7 @@
 					<div class="sv-search-preview sv-prose" bind:this={previewBody} aria-hidden="true"></div>
 				{/if}
 			</div>
-		{:else if query.trim().length >= 2 || query.startsWith('#')}
+		{:else if searched}
 			<p class="sv-search-empty">No notes match “{query.trim()}”.</p>
 		{/if}
 

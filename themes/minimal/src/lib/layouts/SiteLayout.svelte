@@ -41,15 +41,10 @@
 		entry && !isHome ? buildBreadcrumbs(entry.slug, vault.entries, homeHref, vault.folders).slice(0, -1) : []
 	);
 	const tagHref = $derived(tagHrefFor(vault));
-	const backlinks = $derived(
-		entry
-			? (vault.backlinks[entry.slug] ?? [])
-					.map((slug) => vault.entries.find((candidate) => candidate.slug === slug))
-					.filter((note) => note !== undefined)
-			: []
-	);
+	const backlinks = $derived(entry ? (vault.note(entry.slug)?.backlinks ?? []) : []);
 	const date = $derived(entry ? (entry.modifiedAt ?? entry.publishedAt ?? entry.createdAt) : undefined);
-	const comments = $derived(config.comments && entry?.page.comments !== false ? config.comments : undefined);
+	// Notes only: list pages and 404s must not open discussions.
+	const comments = $derived(entry?.page.comments ? config.comments : undefined);
 
 	let reader = $state(false);
 	let drawer = $state(false);
