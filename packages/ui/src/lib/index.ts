@@ -16,6 +16,16 @@ export { default as SearchDialog } from './SearchDialog.svelte';
 export * from './content/index.js';
 export { COLOR_MODE_KEY, COLOR_MODE_SCRIPT, currentColorMode, setColorMode, type ColorMode } from './color-mode.js';
 export { formatDate, isoDate, readingTime } from './format.js';
+export { count, folderContents, newestFirst, noteDate, notesTagged } from './listing.js';
+export { pageCrumbs, tagHrefFor } from './crumbs.js';
+export {
+	isRecord,
+	readLinks,
+	themeSettings,
+	type CommentsSettings,
+	type SettingsLink,
+	type ThemeSettings
+} from './theme-settings.js';
 export { PREVIEW_ATTRIBUTE, fetchPreview } from './preview.js';
 export {
 	createSearch,

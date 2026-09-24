@@ -1,9 +1,7 @@
 <script lang="ts">
-	import type { ThemePageProps } from '@svartz/ui';
+	import { count, tagHrefFor, type ThemePageProps } from '@svartz/ui';
 	import ListHeader from '../components/ListHeader.svelte';
 	import PageList from '../components/PageList.svelte';
-	import { count } from '../listing.js';
-	import { tagHrefFor } from '../routes.js';
 
 	let { vault }: ThemePageProps = $props();
 

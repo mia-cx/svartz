@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { VaultView } from '@svartz/core';
-import { pageCrumbs } from './routes.js';
+import { pageCrumbs } from './crumbs.js';
 
 const vault = {
 	routes: { mountPath: '/notes' },

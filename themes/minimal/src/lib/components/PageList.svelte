@@ -1,8 +1,7 @@
 <!-- A dated list of notes: date, title and description, tags. Used by every list page. -->
 <script lang="ts">
 	import type { IndexEntry } from '@svartz/core';
-	import { formatDate, isoDate } from '@svartz/ui';
-	import { noteDate } from '../listing.js';
+	import { formatDate, isoDate, noteDate } from '@svartz/ui';
 
 	let {
 		notes,

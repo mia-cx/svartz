@@ -1,10 +1,8 @@
 <!-- Every note, newest first. A `feed` note in the vault supplies the title and intro. -->
 <script lang="ts">
-	import type { ThemePageProps } from '@svartz/ui';
+	import { newestFirst, tagHrefFor, type ThemePageProps } from '@svartz/ui';
 	import ListHeader from '../components/ListHeader.svelte';
 	import PageList from '../components/PageList.svelte';
-	import { newestFirst } from '../listing.js';
-	import { tagHrefFor } from '../routes.js';
 
 	let { vault }: ThemePageProps = $props();
 

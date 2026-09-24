@@ -18,20 +18,21 @@
 		formatDate,
 		isoDate,
 		LinkPreviews,
+		pageCrumbs,
 		readingTime,
 		SearchDialog,
+		tagHrefFor,
+		themeSettings,
 		type ThemePageProps
 	} from '@svartz/ui';
 	import Backlinks from '../components/Backlinks.svelte';
 	import Explorer from '../components/Explorer.svelte';
 	import Graph from '../components/Graph.svelte';
 	import Toc from '../components/Toc.svelte';
-	import { minimalConfig } from '../config.js';
-	import { pageCrumbs, tagHrefFor } from '../routes.js';
 
 	let { children, entry, vault, site, match, themeConfig, searchIndex, searchOptions }: ThemePageProps = $props();
 
-	const config = $derived(minimalConfig(themeConfig));
+	const config = $derived(themeSettings(themeConfig));
 	const homeHref = $derived(`${vault.routes.mountPath}/`);
 	const currentHref = $derived(page.url.pathname);
 	const noteLayout = $derived(Boolean(entry));

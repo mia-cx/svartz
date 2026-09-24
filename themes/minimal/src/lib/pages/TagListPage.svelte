@@ -1,10 +1,8 @@
 <!-- Every tag as its own section, with its first ten notes, as in Quartz's tag index. -->
 <script lang="ts">
-	import type { ThemePageProps } from '@svartz/ui';
+	import { count, notesTagged, tagHrefFor, type ThemePageProps } from '@svartz/ui';
 	import ListHeader from '../components/ListHeader.svelte';
 	import PageList from '../components/PageList.svelte';
-	import { count, notesTagged } from '../listing.js';
-	import { tagHrefFor } from '../routes.js';
 
 	let { vault }: ThemePageProps = $props();
 
