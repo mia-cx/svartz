@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alphabetical, assetHref, byDay, featuredNote, readHatnote, readInfobox, wikilinkSegments } from './wiki.js';
+import { alphabetical, byDay, featuredNote, readHatnote, readInfobox, wikilinkSegments } from './wiki.js';
 
 const note = (title: string, modifiedAt?: string, properties: Record<string, unknown> = {}) => ({
 	slug: title.toLowerCase(),
@@ -79,12 +79,5 @@ describe('page helpers', () => {
 
 	it('finds the featured article', () => {
 		expect(featuredNote([note('a'), note('b', undefined, { featured: true })])?.title).toBe('b');
-	});
-
-	it('resolves an attachment name to its published URL', () => {
-		const vault = { routes: { mountPath: '/wiki' }, assets: [{ path: 'attachments/station.svg', sourcePath: '' }] };
-		expect(assetHref(vault, 'station.svg')).toBe('/wiki/attachments/station.svg');
-		expect(assetHref(vault, 'https://example.com/a.png')).toBe('https://example.com/a.png');
-		expect(assetHref(vault, 'missing.png')).toBeUndefined();
 	});
 });

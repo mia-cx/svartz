@@ -128,14 +128,3 @@ export function byDay<T extends Listable>(entries: readonly T[]): { date: string
 /** The note marked `featured: true`, for the main page. */
 export const featuredNote = <T extends Listable>(entries: readonly T[]) =>
 	entries.find((entry) => entry.properties.featured === true);
-
-/** The published URL of an attachment named in frontmatter; external URLs pass through. */
-export function assetHref(
-	vault: { readonly routes: { readonly mountPath: string }; readonly assets: readonly { readonly path: string }[] },
-	name: string
-): string | undefined {
-	if (/^[a-z]+:\/\//i.test(name)) return name;
-	const clean = name.replace(/^\.?\//, '');
-	const asset = vault.assets.find((candidate) => candidate.path === clean || candidate.path.endsWith(`/${clean}`));
-	return asset ? `${vault.routes.mountPath}/${asset.path}` : undefined;
-}

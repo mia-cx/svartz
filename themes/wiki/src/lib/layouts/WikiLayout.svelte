@@ -12,6 +12,7 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import {
+		assetHref,
 		ColorModeToggle,
 		Comments,
 		count,
@@ -28,7 +29,7 @@
 	import Contents from '../components/Contents.svelte';
 	import Infobox from '../components/Infobox.svelte';
 	import { wikiRoutes } from '../manifest.js';
-	import { assetHref, featuredNote, readHatnote, readInfobox } from '../wiki.js';
+	import { featuredNote, readHatnote, readInfobox } from '../wiki.js';
 
 	let { children, entry, vault, site, themeConfig, searchIndex, searchOptions }: ThemePageProps = $props();
 

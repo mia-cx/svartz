@@ -29,12 +29,16 @@
     "svartz:build:showcase-wiki": "svartz build --vault showcase-wiki",
     "svartz:dev:showcase-wiki": "svartz dev --vault showcase-wiki",
     "svartz:preview:showcase-wiki": "svartz preview --vault showcase-wiki",
-    "svartz:dev": "turbo run svartz:dev:docs svartz:dev:showcase svartz:dev:showcase-wiki",
-    "svartz:preview": "turbo run svartz:preview:docs svartz:preview:showcase svartz:preview:showcase-wiki"
+    "svartz:build:showcase-blog": "svartz build --vault showcase-blog",
+    "svartz:dev:showcase-blog": "svartz dev --vault showcase-blog",
+    "svartz:preview:showcase-blog": "svartz preview --vault showcase-blog",
+    "svartz:dev": "turbo run svartz:dev:docs svartz:dev:showcase svartz:dev:showcase-wiki svartz:dev:showcase-blog",
+    "svartz:preview": "turbo run svartz:preview:docs svartz:preview:showcase svartz:preview:showcase-wiki svartz:preview:showcase-blog"
   },
   "devDependencies": {
     "@svartz/config": "workspace:^",
     "@svartz/core": "workspace:^",
+    "@svartz/theme-blog": "workspace:^",
     "@svartz/theme-minimal": "workspace:^",
     "@svartz/theme-wiki": "workspace:^",
     "svartz": "workspace:^",

@@ -18,6 +18,7 @@ export { COLOR_MODE_KEY, COLOR_MODE_SCRIPT, currentColorMode, setColorMode, type
 export { formatDate, isoDate, readingTime } from './format.js';
 export { count, folderContents, newestFirst, noteDate, notesTagged } from './listing.js';
 export { pageCrumbs, tagHrefFor } from './crumbs.js';
+export { assetHref } from './assets.js';
 export {
 	isRecord,
 	readLinks,

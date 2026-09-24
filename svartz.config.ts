@@ -40,5 +40,17 @@ export default defineConfig({
         description: "A Svartz showcase for the wiki theme.",
       },
     },
+    {
+      // Showcase for @svartz/theme-blog: an allotment blog.
+      id: "showcase-blog",
+      path: "vaults/showcase-blog",
+      target: { type: "static" },
+      theme: { base: "@svartz/theme-blog" },
+      site: {
+        title: "Plot 14",
+        description: "Notes from a first-time allotment: what grew, what didn't, and what I'd do again.",
+        url: "https://plot14.example",
+      },
+    },
   ],
 });
