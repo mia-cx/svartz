@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import {
+  lstat,
   mkdir,
   open,
   readFile,
@@ -162,18 +163,63 @@ module.exports = async (env) => {
 };
 `;
   }
-  if (
-    /from\s+['"]@svartz\/vite\/host['"]/.test(source) &&
-    source.includes("withSvartzHost(")
-  )
-    return source;
+  const hostImport = [...source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]@svartz\/vite\/host['"]/g)]
+    .flatMap((match) => match[1]!.split(","))
+    .map((specifier) => /^withSvartzHost(?:\s+as\s+([A-Za-z_$][\w$]*))?$/.exec(specifier.trim()))
+    .find((match) => match !== null);
+  let binding = hostImport?.[1] ?? (hostImport ? "withSvartzHost" : "__svartz_with_host");
+  if (hostImport && source.includes(`${binding}(`)) return source;
+  if (!hostImport) {
+    let suffix = 2;
+    while (new RegExp(`\\b${binding}\\b`).test(source)) binding = `__svartz_with_host_${suffix++}`;
+  }
   const defaultExport = /^([ \t]*)export\s+default\s+/m;
   if (!defaultExport.test(source)) {
     throw new Error(
       "Cannot integrate: Vite config has no default export. Add withSvartzHost from @svartz/vite/host manually.",
     );
   }
-  return `import { withSvartzHost } from '@svartz/vite/host';\n${source.replace(defaultExport, "$1const __svartz_host_config = ")}\nexport default withSvartzHost(__svartz_host_config);\n`;
+  const hostImportLine = hostImport ? "" : `import { withSvartzHost as ${binding} } from '@svartz/vite/host';\n`;
+  return `${hostImportLine}${source.replace(defaultExport, "$1const __svartz_host_config = ")}\nexport default ${binding}(__svartz_host_config);\n`;
+}
+
+async function hasHostCatchall(root: string): Promise<boolean> {
+  const routesRoot = path.join(root, "src", "routes");
+  const search = async (directory: string): Promise<boolean> => {
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const next = path.join(directory, entry.name);
+      if (/^\[\.\.\.[^\]]+\]$/.test(entry.name)) {
+        const files = await readdir(next);
+        if (files.some((name) => /^\+(?:page|server)(?:@[^.]*)?(?:\.[^.]+)?\.(?:svelte|js|ts)$/.test(name))) return true;
+      }
+      if (entry.name.startsWith("(") && entry.name.endsWith(")") && await search(next)) return true;
+    }
+    return false;
+  };
+  if (!existsSync(routesRoot)) return false;
+  return search(routesRoot);
+}
+
+async function nonDirectoryAncestors(root: string, destinations: readonly string[]): Promise<string[]> {
+  const blocked = new Set<string>();
+  for (const destination of destinations) {
+    for (let parent = path.dirname(destination); parent !== "."; parent = path.dirname(parent)) {
+      try {
+        if (!(await lstat(path.join(root, parent))).isDirectory()) blocked.add(parent);
+      } catch (cause) {
+        if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
+      }
+    }
+  }
+  return [...blocked].sort();
+}
+
+export function commandExecutable(command: string, platform = process.platform): string {
+  return platform === "win32" && ["npm", "pnpm", "yarn"].includes(command)
+    ? `${command}.cmd`
+    : command;
 }
 
 async function writeNewFile(
@@ -195,7 +241,7 @@ async function run(
   cwd: string,
 ): Promise<void> {
   const child = spawn(
-    process.platform === "win32" ? `${command}.cmd` : command,
+    commandExecutable(command),
     args,
     {
       cwd,
@@ -230,8 +276,7 @@ export async function initProject(
   if (location.hostApp) {
     const catchallRoot = path.join(root, "src", "routes", "[...slug]");
     const catchallLoadPath = path.join(catchallRoot, "+page.ts");
-    const installCatchall = !existsSync(path.join(catchallRoot, "+page.svelte")) &&
-      !existsSync(catchallLoadPath);
+    const installCatchall = !(await hasHostCatchall(root));
     const catchallLoadTemplate = await readFile(path.join(templateRoot, "src", "routes", "[...slug]", "+page.ts"), "utf8");
     const previousCatchallLoad = catchallLoadTemplate
       .replace("import { prepareHostVault, routes }", "import { routes }")
@@ -304,9 +349,11 @@ export async function initProject(
   const files = await templateFiles();
   const destinationName = (name: string) =>
     name === "gitignore" ? ".gitignore" : name;
-  const conflicts = [...files.map(destinationName), "package.json"].filter(
-    (name) => existsSync(path.join(root, name)),
-  );
+  const destinations = [...files.map(destinationName), "package.json"];
+  const conflicts = [
+    ...destinations.filter((name) => existsSync(path.join(root, name))),
+    ...await nonDirectoryAncestors(root, destinations),
+  ];
   if (conflicts.length)
     throw new Error(
       `Cannot initialize: these files already exist: ${conflicts.join(", ")}`,

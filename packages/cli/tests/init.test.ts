@@ -13,7 +13,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
 import { loadConfigFromFile } from "vite";
-import { initProject } from "../src/init";
+import { commandExecutable, initProject } from "../src/init";
 
 const execFileAsync = promisify(execFile);
 const cli = path.resolve(import.meta.dirname, "../dist/index.js");
@@ -29,6 +29,12 @@ afterEach(async () => {
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
+});
+
+it("uses a command shim for Windows package managers but the Git executable for Git", () => {
+  expect(commandExecutable("pnpm", "win32")).toBe("pnpm.cmd");
+  expect(commandExecutable("git", "win32")).toBe("git");
+  expect(commandExecutable("bun", "win32")).toBe("bun");
 });
 
 it("initializes the invocation directory with an editable shell and vault", async () => {
@@ -95,7 +101,7 @@ it("adds configuration to an existing Kit app without changing its routes or bui
     "{ plugins: [] };",
   );
   expect(await readFile(path.join(root, "vite.config.ts"), "utf8")).toContain(
-    "withSvartzHost(__svartz_host_config)",
+    "__svartz_with_host(__svartz_host_config)",
   );
   expect(await readFile(path.join(root, "vault/index.md"), "utf8")).toBe(
     "# Existing note\n",
@@ -180,6 +186,20 @@ it("reuses existing host vault definitions and is idempotent", async () => {
   expect(manifest.scripts["svartz:dev"]).toBe("svartz dev");
 });
 
+it("reuses an imported host helper when wrapping an existing Vite config", async () => {
+  const root = await fixture();
+  await writeFile(path.join(root, "vite.config.ts"),
+    "import { withSvartzHost as wrapHost } from '@svartz/vite/host';\nexport default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  await initProject({ cwd: root, install: false, git: false });
+  const source = await readFile(path.join(root, "vite.config.ts"), "utf8");
+  expect(source.match(/from '@svartz\/vite\/host'/g)).toHaveLength(1);
+  expect(source).toContain("export default wrapHost(__svartz_host_config)");
+});
+
 it("keeps a host-owned catchall route", async () => {
   const root = await fixture();
   await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
@@ -193,6 +213,24 @@ it("keeps a host-owned catchall route", async () => {
   await initProject({ cwd: root, install: false, git: false });
   expect(await readFile(path.join(root, "src/routes/[...slug]/+page.svelte"), "utf8"))
     .toBe("<h1>Host catchall</h1>\n");
+  await expect(access(path.join(root, "src/routes/[...slug]/+page.ts")))
+    .rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it.each([
+  "src/routes/[...slug]/+page.js",
+  "src/routes/(site)/[...rest]/+page.svelte",
+])("preserves an existing catchall at %s", async (routePath) => {
+  const root = await fixture();
+  await mkdir(path.dirname(path.join(root, routePath)), { recursive: true });
+  await writeFile(path.join(root, routePath), "// host route\n");
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  await initProject({ cwd: root, install: false, git: false });
+  expect(await readFile(path.join(root, routePath), "utf8")).toBe("// host route\n");
   await expect(access(path.join(root, "src/routes/[...slug]/+page.ts")))
     .rejects.toMatchObject({ code: "ENOENT" });
 });
@@ -256,6 +294,16 @@ it("reports every new-project conflict before writing anything", async () => {
   await expect(
     access(path.join(root, "svartz.config.ts")),
   ).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("rejects a file-valued template ancestor before writing scaffold files", async () => {
+  const root = await fixture();
+  await writeFile(path.join(root, "src"), "owned file\n");
+
+  await expect(initProject({ cwd: root, install: false, git: false }))
+    .rejects.toThrow("src");
+  await expect(access(path.join(root, ".gitignore"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(path.join(root, "src"), "utf8")).toBe("owned file\n");
 });
 
 it("leaves an unsupported host Vite config untouched", async () => {
