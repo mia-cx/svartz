@@ -9,6 +9,7 @@ import {
   VaultPathInvalid,
   VaultMountConflict,
   VaultBuildRootConflict,
+  VaultBuildRootResolutionFailed,
   VaultIdConflict,
   VaultIdNotFound,
 } from "../src/index";
@@ -114,6 +115,39 @@ describe("resolveConfigPaths", () => {
         ],
       };
       await expect(resolveConfig(config, root)).rejects.toThrow(VaultBuildRootConflict);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("rejects build roots that meet through a dangling symlink ancestor", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "svartz-dangling-build-roots-"));
+    try {
+      await symlink(resolve(root, "real"), resolve(root, "linked"), "dir");
+      const config: SvartzConfig = {
+        version: "1.0.0",
+        vaults: [
+          { id: "blog", path: VALID_VAULT, outDir: "linked/blog/dist", target: { type: "host" }, mountPath: "/blog" },
+          { id: "work", path: VALID_VAULT, outDir: "real/blog/dist", target: { type: "host" }, mountPath: "/work" },
+        ],
+      };
+      await expect(resolveConfig(config, root)).rejects.toThrow(VaultBuildRootConflict);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("reports build-root filesystem failures through the tagged error channel", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "svartz-invalid-build-root-"));
+    try {
+      await symlink("loop", resolve(root, "loop"), "dir");
+      const config: SvartzConfig = {
+        version: "1.0.0",
+        vaults: [
+          { id: "blog", path: VALID_VAULT, outDir: "loop/blog/dist", target: { type: "host" }, mountPath: "/blog" },
+        ],
+      };
+      await expect(resolveConfig(config, root)).rejects.toMatchObject({
+        _tag: "VaultBuildRootResolutionFailed", vaultId: "blog", path: resolve(root, "loop/blog"),
+      } satisfies Partial<VaultBuildRootResolutionFailed>);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
