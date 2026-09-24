@@ -3,7 +3,8 @@
 	and adds a copy button. prose.css labels the language from `data-language`.
 -->
 <script lang="ts">
-	import { Check, Copy } from '@lucide/svelte';
+	import Check from '@lucide/svelte/icons/check';
+	import Copy from '@lucide/svelte/icons/copy';
 	import type { ContentComponentProps } from '../runtime/content-components.js';
 
 	let { tag, attributes, text, children }: ContentComponentProps = $props();

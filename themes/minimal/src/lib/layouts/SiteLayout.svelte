@@ -9,7 +9,9 @@
 	import '@svartz/ui/prose.css';
 	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
-	import { BookOpen, Menu, X } from '@lucide/svelte';
+	import BookOpen from '@lucide/svelte/icons/book-open';
+	import Menu from '@lucide/svelte/icons/menu';
+	import X from '@lucide/svelte/icons/x';
 	import {
 		buildBreadcrumbs,
 		ColorModeToggle,

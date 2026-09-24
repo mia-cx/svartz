@@ -1,6 +1,8 @@
 <script lang="ts">
 	import '$lib/styles/base.css';
-	import { Moon, Search, Sun } from '@lucide/svelte';
+	import Moon from '@lucide/svelte/icons/moon';
+	import Search from '@lucide/svelte/icons/search';
+	import Sun from '@lucide/svelte/icons/sun';
 
 	const neutrals = ['paper', 'surface', 'sunken', 'rule', 'rule-strong', 'muted', 'text', 'ink'];
 	const accents = ['accent', 'accent-text', 'accent-soft', 'mark'];

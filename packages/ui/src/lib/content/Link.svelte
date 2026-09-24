@@ -4,7 +4,8 @@
 	any other link, and carry an arrow so readers know they leave the site.
 -->
 <script lang="ts">
-	import { ArrowUpRight, Link as LinkIcon } from '@lucide/svelte';
+	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
+	import LinkIcon from '@lucide/svelte/icons/link';
 	import type { ContentComponentProps } from '../runtime/content-components.js';
 	import { classifyLink } from './links.js';
 

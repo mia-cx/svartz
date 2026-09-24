@@ -8,11 +8,13 @@ import { createMinimalTheme, type MinimalThemeConfig, type MinimalThemeModules }
 import FeedPage from './pages/FeedPage.svelte';
 import FolderListPage from './pages/FolderListPage.svelte';
 import FolderPage from './pages/FolderPage.svelte';
+import NotFoundPage from './pages/NotFoundPage.svelte';
 import TagListPage from './pages/TagListPage.svelte';
 
 const modules: MinimalThemeModules = {
 	siteLayout: { default: SiteLayout },
-	notFoundPage: () => import('./pages/NotFoundPage.svelte'),
+	// Eager: a lazy page sharing modules with eager ones stalls the Vite build (#62).
+	notFoundPage: { default: NotFoundPage },
 	tagListPage: { default: TagListPage },
 	tagPage: () => import('./pages/TagPage.svelte'),
 	folderListPage: { default: FolderListPage },

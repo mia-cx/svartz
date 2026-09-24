@@ -340,7 +340,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
     const manual = await fetch(`http://127.0.0.1:${port}/blog/about`);
     expect(await manual.text()).toContain("Manual about");
     const folder = await fetch(`http://127.0.0.1:${port}/blog/folders/guides`);
-    expect(await folder.text()).toContain("Deep guide");
+    expect(await folder.text(), stderr).toContain("Deep guide");
     const manualFolder = await fetch(`http://127.0.0.1:${port}/blog/folders/guides/deep`);
     expect(await manualFolder.text()).toContain("Manual deep listing");
     const tag = await fetch(`http://127.0.0.1:${port}/blog/tags/guides`);

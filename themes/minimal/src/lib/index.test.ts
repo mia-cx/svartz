@@ -21,7 +21,6 @@ describe('@svartz/theme-minimal manifests', () => {
 describe('@svartz/theme-minimal runtime modules', () => {
 	it('loads eager and lazy layout, route, and shared components for SSR', async () => {
 		const manifest = createMinimalTheme();
-		expect(typeof manifest.layouts.notFoundPage).toBe('function');
 		const theme = await materializeTheme(manifest);
 
 		for (const layout of Object.values(theme.layouts)) {

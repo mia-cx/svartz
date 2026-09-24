@@ -4,7 +4,8 @@
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { Maximize2, X } from '@lucide/svelte';
+	import Maximize2 from '@lucide/svelte/icons/maximize-2';
+	import X from '@lucide/svelte/icons/x';
 	import { onMount } from 'svelte';
 	import { buildGraph, type GraphInput } from '../graph.js';
 	import { mountGraph } from '../graph-canvas.js';

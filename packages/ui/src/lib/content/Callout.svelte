@@ -7,7 +7,7 @@
 	import type { ContentComponentProps } from '../runtime/content-components.js';
 	import { resolveCallout } from './callouts.js';
 	import CalloutIcon from './CalloutIcon.svelte';
-	import { ChevronDown } from '@lucide/svelte';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 
 	let { calloutType = 'note', title, fold, children }: ContentComponentProps = $props();
 

@@ -3,7 +3,8 @@
 	script, so themes need nothing else for colour modes.
 -->
 <script lang="ts">
-	import { Moon, Sun } from '@lucide/svelte';
+	import Moon from '@lucide/svelte/icons/moon';
+	import Sun from '@lucide/svelte/icons/sun';
 	import { onMount } from 'svelte';
 	import { COLOR_MODE_SCRIPT, currentColorMode, setColorMode, type ColorMode } from './color-mode.js';
 

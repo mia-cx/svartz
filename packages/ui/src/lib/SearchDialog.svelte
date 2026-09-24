@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { Search } from '@lucide/svelte';
+	import Search from '@lucide/svelte/icons/search';
 	import { onMount, tick } from 'svelte';
 	import { fetchPreview } from './preview.js';
 	import { createSearch, excerpt, highlight, type SearchDocument, type SearchHit, type SearchOptions } from './search.js';
