@@ -1,7 +1,7 @@
 <!-- A frontmatter description: `backticks` become code and `[[Name]]` becomes a link. -->
 <script lang="ts">
 	import type { IndexEntry } from '@svartz/core';
-	import { wikilinkSegments } from '@svartz/ui';
+	import { wikilinkSegments } from './wikilinks.js';
 
 	let { value, entries }: { value: string; entries: readonly IndexEntry[] } = $props();
 

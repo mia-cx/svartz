@@ -1,0 +1,58 @@
+{
+	"name": "@svartz/theme-api-docs",
+	"version": "1.0.0",
+	"description": "A Svartz theme for REST and GraphQL API docs: endpoints, schemas, and examples.",
+	"license": "SEE LICENSE IN LICENSE",
+	"publishConfig": { "access": "public" },
+	"engines": { "node": "^20.19.0 || >=22.12.0" },
+	"scripts": {
+		"build": "svelte-kit sync && svelte-package && publint",
+		"prepack": "svelte-kit sync && svelte-package && publint",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"test": "vitest run"
+	},
+	"files": [
+		"dist",
+		"!dist/**/*.test.*"
+	],
+	"sideEffects": [
+		"**/*.css"
+	],
+	"svelte": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"svelte": "./dist/index.js",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./runtime": {
+			"types": "./dist/runtime.d.ts",
+			"svelte": "./dist/runtime.js",
+			"import": "./dist/runtime.js",
+			"default": "./dist/runtime.js"
+		}
+	},
+	"peerDependencies": {
+		"svelte": "^5.0.0"
+	},
+	"dependencies": {
+		"@lucide/svelte": "^1.48.0",
+		"@svartz/core": "workspace:*",
+		"@svartz/ui": "workspace:*"
+	},
+	"devDependencies": {
+		"@sveltejs/kit": "^2.50.2",
+		"@sveltejs/package": "^2.5.7",
+		"@sveltejs/vite-plugin-svelte": "^6.2.4",
+		"@types/node": "^24",
+		"publint": "^0.3.17",
+		"svelte": "^5.51.0",
+		"svelte-check": "^4.4.2",
+		"typescript": "^5.9.3",
+		"vite": "^7.3.1",
+		"vitest": "^4.0.18"
+	}
+}

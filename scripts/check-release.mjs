@@ -20,6 +20,7 @@ const packages = [
   ['@svartz/theme-wiki', 'themes/wiki', ['dist/index.js', 'dist/runtime.js']],
   ['@svartz/theme-blog', 'themes/blog', ['dist/index.js', 'dist/runtime.js']],
   ['@svartz/theme-docs', 'themes/docs', ['dist/index.js', 'dist/runtime.js']],
+  ['@svartz/theme-api-docs', 'themes/api-docs', ['dist/index.js', 'dist/runtime.js']],
   ['@svartz/vite', 'packages/vite', ['dist/index.js', 'dist/host.js', 'dist/discovery.js', 'types/virtual-modules.d.ts']],
   ['svartz', 'packages/cli', ['dist/index.js', 'template/vault/index.md', 'template/gitignore']],
 ];

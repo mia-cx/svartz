@@ -35,12 +35,16 @@
     "svartz:build:showcase-docs": "svartz build --vault showcase-docs",
     "svartz:dev:showcase-docs": "svartz dev --vault showcase-docs",
     "svartz:preview:showcase-docs": "svartz preview --vault showcase-docs",
-    "svartz:dev": "turbo run svartz:dev:docs svartz:dev:showcase svartz:dev:showcase-wiki svartz:dev:showcase-blog svartz:dev:showcase-docs",
-    "svartz:preview": "turbo run svartz:preview:docs svartz:preview:showcase svartz:preview:showcase-wiki svartz:preview:showcase-blog svartz:preview:showcase-docs"
+    "svartz:build:showcase-api": "svartz build --vault showcase-api",
+    "svartz:dev:showcase-api": "svartz dev --vault showcase-api",
+    "svartz:preview:showcase-api": "svartz preview --vault showcase-api",
+    "svartz:dev": "turbo run svartz:dev:docs svartz:dev:showcase svartz:dev:showcase-wiki svartz:dev:showcase-blog svartz:dev:showcase-docs svartz:dev:showcase-api",
+    "svartz:preview": "turbo run svartz:preview:docs svartz:preview:showcase svartz:preview:showcase-wiki svartz:preview:showcase-blog svartz:preview:showcase-docs svartz:preview:showcase-api"
   },
   "devDependencies": {
     "@svartz/config": "workspace:^",
     "@svartz/core": "workspace:^",
+    "@svartz/theme-api-docs": "workspace:^",
     "@svartz/theme-blog": "workspace:^",
     "@svartz/theme-docs": "workspace:^",
     "@svartz/theme-minimal": "workspace:^",

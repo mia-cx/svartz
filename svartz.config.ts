@@ -68,5 +68,22 @@ export default defineConfig({
         description: "A Svartz showcase for the docs theme.",
       },
     },
+    {
+      // Showcase for @svartz/theme-api-docs: a REST and GraphQL shelter API.
+      id: "showcase-api",
+      path: "vaults/showcase-api",
+      target: { type: "static" },
+      theme: {
+        base: "@svartz/theme-api-docs",
+        version: "v2",
+        baseUrl: "https://api.harbour.example/v2",
+        routes: { folders: "reference" },
+        nav: { Status: "https://status.harbour.example", Changelog: "https://harbour.example/changelog" },
+      },
+      site: {
+        title: "Harbour Shelter API",
+        description: "A Svartz showcase for the API docs theme.",
+      },
+    },
   ],
 });

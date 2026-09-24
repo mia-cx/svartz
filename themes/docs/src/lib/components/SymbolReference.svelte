@@ -6,7 +6,7 @@
 <script lang="ts">
 	import type { IndexEntry } from '@svartz/core';
 	import type { Snippet } from 'svelte';
-	import DescText from './DescText.svelte';
+	import { DescText } from '@svartz/ui';
 	import KindBadge from './KindBadge.svelte';
 	import TypeText from './TypeText.svelte';
 	import { KIND_HEADINGS, type DocSymbol, type SymbolMember, type SymbolParameter } from '../symbols.js';
