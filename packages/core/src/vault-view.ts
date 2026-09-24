@@ -17,6 +17,7 @@ export interface VaultView {
   readonly folders: Index["folders"];
   readonly routes: RouteIndex;
   readonly assets: Index["assets"];
+  /** Find a published note by slug, href, or encoded SvelteKit URL pathname. */
   note(reference: string): VaultNoteView | undefined;
 }
 
@@ -66,7 +67,14 @@ export function createVaultView(index: Index, id: string, basePath = ""): VaultV
       const normalized = reference.endsWith("/") || !reference.startsWith("/")
         ? reference
         : `${reference}/`;
-      const entry = bySlug.get(reference) ?? byHref.get(normalized);
+      let entry = bySlug.get(reference) ?? byHref.get(normalized);
+      if (!entry) {
+        try {
+          entry = byHref.get(decodeURI(normalized));
+        } catch {
+          return undefined;
+        }
+      }
       if (!entry) return undefined;
       return {
         entry,

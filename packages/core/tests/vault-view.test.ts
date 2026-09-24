@@ -64,4 +64,12 @@ describe("vault view", () => {
     expect(vault.routes.redirects).toEqual({ "/site/blog/hi/": "/site/blog/hello/" });
     expect(index.entries[0]?.href).toBe("/blog/hello/");
   });
+
+  it("finds a Unicode note through an encoded SvelteKit URL pathname", () => {
+    const unicode = entry("日本");
+    const vault = createVaultView({ ...index, entries: [...index.entries, unicode] }, "journal", "/site");
+    const pathname = new URL("https://example.test/site/blog/日本/").pathname;
+    expect(vault.note(pathname)?.entry.slug).toBe("日本");
+    expect(vault.note("/site/blog/%ZZ/")).toBeUndefined();
+  });
 });
