@@ -1,3 +1,7 @@
+---
+tags: [guides]
+---
+
 # Create a plugin
 
 Choose the specific hook that owns your change. The [[contracts/plugin-contract]] lists all hooks and their order. Content transforms run serially; earlier hooks can prepare files for later hooks.

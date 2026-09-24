@@ -34,9 +34,11 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "node_modules"), "dir");
   await mkdir(path.join(root, "src/routes/other"), { recursive: true });
   await mkdir(path.join(root, "src/routes/blog/about"), { recursive: true });
+  await mkdir(path.join(root, "src/routes/blog/folders/guides/deep"), { recursive: true });
   await mkdir(path.join(root, "src/routes/rss.xml"), { recursive: true });
   await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
   await mkdir(path.join(root, "vault"));
+  await mkdir(path.join(root, "vault/guides/deep"), { recursive: true });
   await mkdir(path.join(root, "work-vault"));
   await mkdir(path.join(root, ".svelte-kit"));
 
@@ -62,6 +64,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   await writeFile(path.join(root, "src/routes/+page.svelte"), "<h1>Host home</h1>\n");
   await writeFile(path.join(root, "src/routes/other/+page.svelte"), "<h1>Other route</h1>\n");
   await writeFile(path.join(root, "src/routes/blog/about/+page.svelte"), "<h1>Manual about</h1>\n");
+  await writeFile(path.join(root, "src/routes/blog/folders/guides/deep/+page.svelte"), "<h1>Manual deep listing</h1>\n");
   await writeFile(path.join(root, "src/routes/rss.xml/+server.ts"), [
     "import { vaults } from 'virtual:svartz/host';",
     `import { renderHostRss } from ${JSON.stringify(path.join(workspaceRoot, "packages/vite/dist/discovery.js"))};`,
@@ -78,6 +81,9 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   await writeFile(path.join(root, "work-vault/shared.png"), "work asset");
   await writeFile(path.join(root, "work-vault/private.md"), "---\nprivate: true\n---\n# Secret project\n");
   await writeFile(path.join(root, "vault/about.md"), "---\naliases: [about-alt]\n---\n# Vault about\n\nVault about body.\n");
+  await writeFile(path.join(root, "vault/guides/index.md"), "---\ntitle: Guides landing\ntags: [guides]\n---\n# Guides landing\n");
+  await writeFile(path.join(root, "vault/guides/deep/one.md"), "---\ntitle: Deep guide\ntags: [guides]\n---\n# Deep guide\n");
+  await writeFile(path.join(root, "vault/guides/deep/private.md"), "---\nprivate: true\ntags: [guides]\n---\n# Hidden guide\n");
   await writeFile(path.join(root, "svartz.config.ts"), `export default {
     version: "1.0.0",
     vaults: [{
@@ -121,6 +127,11 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
     .toContain("Published note");
   expect(await readFile(path.join(root, ".svartz/vaults/notes/artifacts/pages/about-2.svelte"), "utf8"))
     .toContain("Vault about body");
+  const notesIndex = await readFile(path.join(root, ".svartz/vaults/notes/artifacts/index.ts"), "utf8");
+  expect(notesIndex).toContain('"slug": "guides", "title": "Guides", "noteCount": 2');
+  expect(notesIndex).toContain('"slug": "guides/deep", "title": "Deep", "noteCount": 1');
+  expect(notesIndex).toContain('"slug": "guides", "title": "guides", "noteCount": 2');
+  expect(notesIndex).not.toContain("Hidden guide");
   expect(await readFile(path.join(root, ".svartz/vaults/work/artifacts/pages/index.svelte"), "utf8"))
     .toContain("Work content");
   await expect(access(path.join(root, ".svartz/vaults/work/artifacts/pages/private.svelte")))
@@ -157,6 +168,16 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
     expect(await response?.text()).toContain("Other route");
     const manual = await fetch(`http://127.0.0.1:${port}/blog/about`);
     expect(await manual.text()).toContain("Manual about");
+    const folder = await fetch(`http://127.0.0.1:${port}/blog/folders/guides`);
+    expect(await folder.text()).toContain("Deep guide");
+    const manualFolder = await fetch(`http://127.0.0.1:${port}/blog/folders/guides/deep`);
+    expect(await manualFolder.text()).toContain("Manual deep listing");
+    const tag = await fetch(`http://127.0.0.1:${port}/blog/tags/guides`);
+    const tagBody = await tag.text();
+    expect(tagBody).toContain("Deep guide");
+    expect(tagBody).not.toContain("Hidden guide");
+    const authoredFolder = await fetch(`http://127.0.0.1:${port}/blog/guides`);
+    expect(await authoredFolder.text()).toContain("Guides landing");
     const vault = await fetch(`http://127.0.0.1:${port}/blog/about-2`);
     const vaultBody = await vault.text();
     expect(vault.status, `${stderr}\n${vaultBody}`).toBe(200);
@@ -190,6 +211,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
 
   const configPath = path.join(root, "svartz.config.ts");
   const configSource = await readFile(configPath, "utf8");
+  await rm(path.join(root, "vault/guides/deep/one.md"));
   await writeFile(configPath, configSource.replace('id: "notes",',
     'id: "notes", discovery: { feed: { enabled: false }, sitemap: { enabled: false } },'));
   await execFileAsync(process.execPath, [
@@ -198,4 +220,9 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   await expect(access(path.join(root, "build/client/blog/rss.xml"))).rejects.toMatchObject({ code: "ENOENT" });
   await expect(access(path.join(root, "build/client/blog/sitemap.xml"))).rejects.toMatchObject({ code: "ENOENT" });
   await access(path.join(root, "build/client/work/rss.xml"));
-}, 20_000);
+  await expect(access(path.join(root, ".svartz/vaults/notes/artifacts/pages/guides/deep/one.svelte")))
+    .rejects.toMatchObject({ code: "ENOENT" });
+  const rebuiltIndex = await readFile(path.join(root, ".svartz/vaults/notes/artifacts/index.ts"), "utf8");
+  expect(rebuiltIndex).not.toContain('"slug": "guides/deep", "title": "Deep"');
+  expect(rebuiltIndex).not.toContain('"/blog/folders/guides/deep/"');
+}, 30_000);
