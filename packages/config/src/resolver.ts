@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { mergePlugins } from "@svartz/core";
-import { stat } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { realpath, stat } from "node:fs/promises";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import type {
   FrontmatterFields,
   DiscoveryConfig,
@@ -147,6 +147,18 @@ const isWithin = (root: string, candidate: string): boolean => {
   return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 };
 
+/** Resolve an existing ancestor so two not-yet-created build roots cannot hide behind a symlink. */
+const canonicalBuildRoot = async (path: string): Promise<string> => {
+  try {
+    return await realpath(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const parent = dirname(path);
+    if (parent === path) throw error;
+    return resolve(await canonicalBuildRoot(parent), basename(path));
+  }
+};
+
 // --- Single vault resolution ---
 
 const resolveVaultConfig = (
@@ -244,11 +256,15 @@ export const resolveConfig = (
     }
 
     const hostVaults = vaults.filter((vault) => vault.target.type === "host");
+    const buildRoots = yield* Effect.forEach(vaults, (vault) =>
+      Effect.promise(() => canonicalBuildRoot(resolve(vault.outDir, ".."))),
+    );
     for (let first = 0; first < vaults.length; first++) {
-      for (const second of vaults.slice(first + 1)) {
+      for (let next = first + 1; next < vaults.length; next++) {
         const current = vaults[first]!;
-        const currentRoot = resolve(current.outDir, "..");
-        const secondRoot = resolve(second.outDir, "..");
+        const second = vaults[next]!;
+        const currentRoot = buildRoots[first]!;
+        const secondRoot = buildRoots[next]!;
         if (!isWithin(currentRoot, secondRoot) && !isWithin(secondRoot, currentRoot)) continue;
         return yield* new VaultBuildRootConflict({
           firstVaultId: current.id,
