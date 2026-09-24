@@ -1,4 +1,4 @@
-import { isRecord } from '@svartz/ui';
+import { isRecord, topLevelSections } from '@svartz/ui';
 
 type Properties = Readonly<Record<string, unknown>>;
 
@@ -189,31 +189,30 @@ export interface NavSection<T> {
 	/** A module of symbols (grouped by kind) rather than a folder of guides. */
 	readonly symbols: boolean;
 	readonly entries: T[];
+	/** Entries that aren't page-level symbols (guides), which `groupByKind` leaves out. */
+	readonly pages: T[];
 }
+
+const isPageKind = (kind: SymbolKind | undefined) => (PAGE_KINDS as readonly (SymbolKind | undefined)[]).includes(kind);
 
 /**
  * The sidebar: one section per top-level folder, guides before modules. Notes
- * at the vault root (other than the home note) form an Overview section.
+ * at the vault root (other than the home note) form an Overview section. A
+ * folder note (`core/index.md`, published as `core`) names and links its module.
  */
 export function symbolNav<T extends NavEntry>(
 	entries: readonly T[],
 	folders: readonly { readonly slug: string; readonly title: string; readonly href: string }[]
 ): NavSection<T>[] {
-	const topLevel = (entry: T) => (entry.slug.includes('/') ? entry.slug.split('/')[0]! : '');
-	const sections = new Map<string, T[]>();
-	for (const entry of entries) {
-		if (entry.slug === 'index') continue;
-		const key = topLevel(entry);
-		sections.set(key, [...(sections.get(key) ?? []), entry]);
-	}
-	return [...sections]
-		.map(([key, grouped]): NavSection<T> => {
-			const folder = folders.find((candidate) => candidate.slug === key);
+	return topLevelSections(entries, folders)
+		.map((section): NavSection<T> => {
+			const sorted = [...section.entries].sort((left, right) => collator.compare(left.title, right.title));
 			return {
-				title: key ? (folder?.title ?? key) : 'Overview',
-				href: folder?.href,
-				symbols: grouped.some((entry) => kindOf(entry) !== undefined),
-				entries: [...grouped].sort((left, right) => collator.compare(left.title, right.title))
+				title: section.slug ? section.title : 'Overview',
+				href: section.href,
+				symbols: sorted.some((entry) => kindOf(entry) !== undefined),
+				entries: sorted,
+				pages: sorted.filter((entry) => !isPageKind(kindOf(entry)))
 			};
 		})
 		.sort(

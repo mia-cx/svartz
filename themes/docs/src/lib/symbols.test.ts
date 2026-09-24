@@ -92,14 +92,24 @@ describe('grouping', () => {
 			entry('core/SvartzTheme', 'interface'),
 			entry('vite/withSvartzHost', 'function')
 		], [
-			{ slug: 'guides', title: 'Guides', noteCount: 1, href: '/folders/guides/' },
-			{ slug: 'core', title: 'core', noteCount: 2, href: '/folders/core/' },
-			{ slug: 'vite', title: 'vite', noteCount: 1, href: '/folders/vite/' }
+			{ slug: 'guides', title: 'Guides', href: '/folders/guides/' },
+			{ slug: 'core', title: 'core', href: '/folders/core/' },
+			{ slug: 'vite', title: 'vite', href: '/folders/vite/' }
 		]);
 		expect(nav.map((section) => [section.title, section.symbols, section.entries.length])).toEqual([
 			['Guides', false, 1],
 			['core', true, 2],
 			['vite', true, 1]
+		]);
+	});
+
+	it('names and links a module with its folder note, and keeps its guides', () => {
+		const nav = symbolNav(
+			[{ ...entry('core'), title: 'Core API' }, entry('core/defineTheme', 'function'), entry('core/migration')],
+			[{ slug: 'core', title: 'core', href: '/folders/core/' }]
+		);
+		expect(nav.map((section) => [section.title, section.href, section.pages.map((page) => page.title)])).toEqual([
+			['Core API', '/core/', ['migration']]
 		]);
 	});
 });

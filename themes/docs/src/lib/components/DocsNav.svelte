@@ -1,6 +1,6 @@
 <!--
 	The reference sidebar: guides first, then each module with its symbols grouped
-	by kind. Each symbol carries a one-letter kind badge.
+	by kind, then the module's own guides. Each symbol carries a one-letter kind badge.
 -->
 <script lang="ts">
 	import type { FolderIndexEntry, IndexEntry } from '@svartz/core';
@@ -37,6 +37,14 @@
 						{/each}
 					</ul>
 				{/each}
+				{#if section.pages.length > 0}
+					<p class="sv-label kind">Guides</p>
+					<ul>
+						{#each section.pages as entry (entry.slug)}
+							<li><a href={entry.href} aria-current={current(entry.href)}>{entry.title}</a></li>
+						{/each}
+					</ul>
+				{/if}
 			{:else}
 				<ul>
 					{#each section.entries as entry (entry.slug)}

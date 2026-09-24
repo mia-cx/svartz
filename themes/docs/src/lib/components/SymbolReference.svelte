@@ -17,7 +17,22 @@
 		children
 	}: { symbol: DocSymbol; entries: readonly IndexEntry[]; children?: Snippet } = $props();
 
-	let overload = $state(0);
+	// The layout stays mounted across pages, so the tab resets when the symbol changes.
+	let overload = $derived.by(() => {
+		void symbol;
+		return 0;
+	});
+	// Overloaded and static/instance members can share a name; anchors stay unique.
+	const memberIds = $derived.by(() => {
+		const seen = new Map<string, number>();
+		return new Map(
+			symbol.members.map((member) => {
+				const nth = (seen.get(member.name) ?? 0) + 1;
+				seen.set(member.name, nth);
+				return [member, nth === 1 ? `member-${member.name}` : `member-${member.name}-${nth}`];
+			})
+		);
+	});
 
 	const memberGroups = $derived(
 		Object.entries(
@@ -102,7 +117,7 @@
 	<section aria-labelledby="throws">
 		<h2 id="throws">Throws</h2>
 		<ul>
-			{#each symbol.throws as thrown (thrown.type)}
+			{#each symbol.throws as thrown, index (index)}
 				<li><TypeText value={thrown.type} {entries} />{#if thrown.description}{' '}— <DescText value={thrown.description} {entries} />{/if}</li>
 			{/each}
 		</ul>
@@ -130,10 +145,11 @@
 {#each memberGroups as [kind, members] (kind)}
 	<section aria-labelledby="members-{kind}">
 		<h2 id="members-{kind}">{KIND_HEADINGS[kind]}</h2>
-		{#each members as member (member.name)}
-			<article class="member" id="member-{member.name}">
+		{#each members as member (memberIds.get(member))}
+			{@const id = memberIds.get(member)}
+			<article class="member" {id}>
 				<h3>
-					<a href="#member-{member.name}">{member.name}</a>
+					<a href="#{id}">{member.name}</a>
 					<KindBadge kind={member.kind} />
 					{#if member.static}<span class="sv-badge" data-sv-signal style:--sv-hue="var(--sv-hue-blue)">static</span>{/if}
 					{#if member.deprecated}<span class="sv-badge" data-sv-signal style:--sv-hue="var(--sv-hue-red)">deprecated</span>{/if}
