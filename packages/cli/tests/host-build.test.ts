@@ -90,7 +90,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   await writeFile(path.join(root, "work-vault/Counter.svelte"), '<script>let count = $state(0);</script><button onclick={() => count++}>Count: {count}</button>\n');
   await writeFile(path.join(root, "work-vault/private.svg"), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><title>HOST_ASSET_MARKER</title><circle cx="5" cy="5" r="4" /></svg>');
   await writeFile(path.join(root, "work-vault/secret.svx"), "---\ntitle: Locked work\npassword_group: friends\n---\n<script>import { getContext } from 'svelte'; import { page } from '$app/state'; import { hostKey } from '$lib/context-key'; import Counter from './Counter.svelte';</script><h1>HOST_PROTECTED_MARKER</h1><p class='protected-tone'>sapphire</p><p>Context: {getContext(hostKey)}</p><p>Route: {page.url.pathname}</p><Counter /><img src='./private.svg' alt='Secret diagram' /><style>.protected-tone { color: rgb(1, 2, 3); }</style>\n");
-  await writeFile(path.join(root, "vault/about.md"), "---\naliases: [about-alt]\nsocialImage: shared.png\n---\n# Vault about\n\nVault about body.\n");
+  await writeFile(path.join(root, "vault/about.md"), "---\naliases: [about-alt]\nsocialImage: shared.png\n---\n# Vault about\n\nVault about body. #portfolio\n");
   await writeFile(path.join(root, "vault/guides/index.md"), "---\ntitle: Guides landing\ntags: [guides]\n---\n# Guides landing\n");
   await writeFile(path.join(root, "vault/guides/deep/one.md"), "---\ntitle: Deep guide\ntags: [guides]\n---\n# Deep guide\n");
   await writeFile(path.join(root, "vault/guides/deep/private.md"), "---\nprivate: true\ntags: [guides]\n---\n# Hidden guide\n");
@@ -333,6 +333,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
     const vaultBody = await vault.text();
     expect(vault.status, `${stderr}\n${vaultBody}`).toBe(200);
     expect(vaultBody).toContain("Vault about body");
+    expect(vaultBody).toContain('href="../tags/portfolio/"');
     expect(vaultBody).toContain('property="og:image" content="https://example.test/blog/shared.png"');
     const blogHome = await fetch(`http://127.0.0.1:${port}/blog/`);
     const blogBody = await blogHome.text();

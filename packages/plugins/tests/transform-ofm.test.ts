@@ -41,6 +41,15 @@ function makeCtx(content: string): PluginContext {
 }
 
 describe("transformOfm", () => {
+  it("links inline tags while leaving numeric tags and code alone", () => {
+    const ctx = makeCtx("A #Topic/sub and #123. `#code`\n\n```md\n#fenced\n```");
+    transformOfm().transformOfm!.run(ctx);
+    expect(ctx.files[0]!.inlineTags).toEqual(["topic/sub"]);
+    expect(ctx.files[0]!.content).toContain('<a class="tag-link" href="../tags/topic/sub/">#Topic/sub</a>');
+    expect(ctx.files[0]!.content).toContain("#123. `#code`");
+    expect(ctx.files[0]!.content).toContain("#fenced");
+  });
+
   it("escapes bare empty angle brackets outside code fences", () => {
     const ctx = makeCtx("- /widget?token=<>\n");
 

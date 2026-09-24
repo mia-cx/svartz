@@ -11,3 +11,8 @@ password_group: friends
 <h1>PRIVATE_BODY_MARKER</h1>
 <Counter />
 <img src="./photo.svg" alt="Protected attachment" />
+
+```mermaid
+graph TD
+  PRIVATE_MERMAID_MARKER --> B
+```

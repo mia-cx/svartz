@@ -14,7 +14,7 @@ it("indexes ancestor folders and unique tags from published files", () => {
       discovery: { dateSources: ["filesystem"] },
     } as ResolvedConfig,
     files: [
-      { path: "Guides/index.md", slug: "guides", extension: ".md", content: "# Landing", frontmatter: { tags: ["docs", "docs"] } },
+      { path: "Guides/index.md", slug: "guides", extension: ".md", content: "# Landing", frontmatter: { tags: ["docs", "docs"] }, inlineTags: ["docs", "topic/sub"] },
       { path: "Guides/Deep/one.md", slug: "guides/deep/one", extension: ".md", content: "# One", frontmatter: { tags: ["docs"] } },
       { path: "Guides/Deep/two.md", slug: "guides/deep/two", extension: ".md", content: "# Two" },
     ],
@@ -28,6 +28,7 @@ it("indexes ancestor folders and unique tags from published files", () => {
   ]);
   expect(ctx.index?.tags).toEqual([
     { slug: "docs", title: "docs", noteCount: 2, href: "/blog/tags/docs/" },
+    { slug: "topic/sub", title: "topic/sub", noteCount: 1, href: "/blog/tags/topic/sub/" },
   ]);
   expect(ctx.index?.routes.folders).toContain("/blog/folders/guides/");
   expect(ctx.index?.routes.folders).not.toContain("/blog/folders/guides/deep/");

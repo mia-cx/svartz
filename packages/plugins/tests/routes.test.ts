@@ -109,6 +109,19 @@ describe("canonical route allocation", () => {
       "/blog/hello-world-3/", "/blog/hello-world/", null,
     ]);
     expect(ctx.index!.graph.links).toEqual(["hello-world", "hello-world-3"]);
+    expect(ctx.files.find((file) => file.path === "links.md")!.content).toContain(
+      '<span class="svartz-unresolved-link" role="link" aria-disabled="true">missing</span>',
+    );
     expect(ctx.index!.entries.some((entry) => entry.path === "private.md")).toBe(false);
+  });
+
+  it("does not rewrite an embed while resolving the same wikilink target", () => {
+    const ctx = context([note("hello.md", "Hello"), note("links.md", "[[hello]] ![[hello]]")]);
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    allocateRoutesPlugin().allocateRoutes!.run(ctx);
+    resolveLinks().resolveLinks!.run(ctx);
+    expect(ctx.files.find((file) => file.path === "links.md")!.content).toContain(
+      '<a href="../hello/">hello</a> ![[hello]]',
+    );
   });
 });
