@@ -62,7 +62,7 @@ export class InitConflictError extends Data.TaggedError("InitConflictError")<{
 
 /** The existing project cannot be integrated without a manual layout change. */
 export class InitLayoutError extends Data.TaggedError("InitLayoutError")<{
-  readonly reason: "missing-kit" | "unsupported-vite";
+  readonly reason: "missing-kit" | "unsupported-vite" | "unsupported-tailwind";
   readonly message: string;
 }> {}
 
@@ -365,6 +365,14 @@ const initProjectEffect = (
     const manager = packageManager(root, existingManifest);
 
     if (location.hostApp) {
+      const tailwindVersion = existingManifest?.dependencies?.tailwindcss
+        ?? existingManifest?.devDependencies?.tailwindcss;
+      if (tailwindVersion && /(?:^|[~^<>=@|\s])3(?:\.|x|\*|\b)/.test(tailwindVersion)) {
+        return yield* new InitLayoutError({
+          reason: "unsupported-tailwind",
+          message: "Cannot integrate: this host uses Tailwind CSS 3. Upgrade to Tailwind CSS 4 before running svartz init.",
+        });
+      }
       const rootLayoutPath = path.join(root, "src", "routes", "+layout.svelte");
       const rootLayoutTemplate = yield* operation(
         "read root layout template",
@@ -380,6 +388,7 @@ const initProjectEffect = (
       );
       const migrateRootLayout =
         existsSync(rootLayoutPath) &&
+        !existsSync(path.join(root, "src", "routes", "layout.css")) &&
         (yield* operation("read host root layout", () =>
           readFile(rootLayoutPath, "utf8"),
         )) === previousRootLayout;
