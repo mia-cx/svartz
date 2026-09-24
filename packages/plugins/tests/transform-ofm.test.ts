@@ -177,6 +177,20 @@ describe("transformOfm", () => {
     );
   });
 
+  it("restores nested placeholders and replacement tokens literally", () => {
+    const source = "%% hidden `code $&` %% and `literal $&`";
+    const ctx = makeCtx(source);
+    transformOfm().transformOfm!.run(ctx);
+    expect(ctx.files[0]!.content).toBe("<!-- hidden `code $&` --> and `literal $&`");
+  });
+
+  it("transforms nested list prose that starts with four spaces", () => {
+    const ctx = makeCtx("- Parent\n    - Child ==highlight== %% hidden %% #topic\n");
+    transformOfm().transformOfm!.run(ctx);
+    expect(ctx.files[0]!.content).toContain("    - Child <mark>highlight</mark> <!-- hidden -->");
+    expect(ctx.files[0]!.content).toContain('class="tag-link"');
+  });
+
   it("does not transform indented or blockquoted fenced code", () => {
     const ctx = makeCtx(
       [
