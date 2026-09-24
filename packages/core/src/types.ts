@@ -35,6 +35,7 @@ interface ResolvedSiteConfig {
   readonly url?: string;
   readonly author?: string;
   readonly image?: string;
+  readonly favicon?: string;
 }
 
 type DateSource = "frontmatter" | "git" | "filesystem";
@@ -47,6 +48,8 @@ interface ResolvedDiscoveryConfig {
     readonly sort: "published" | "modified";
   };
   readonly sitemap: { readonly enabled: boolean };
+  readonly socialImages: { readonly enabled: boolean };
+  readonly favicon: { readonly enabled: boolean };
   readonly dateSources: readonly DateSource[];
 }
 
@@ -220,6 +223,7 @@ interface IndexEntry {
   readonly tags: readonly string[];
   readonly aliases: readonly string[];
   readonly description?: string;
+  readonly socialImage?: string;
   readonly content: string;
   readonly links: readonly IndexLink[];
   readonly toc: readonly TocEntry[];
@@ -244,6 +248,13 @@ interface Index {
   readonly folders: readonly FolderIndexEntry[];
   readonly routes: RouteIndex;
   readonly assets: readonly AssetRecord[];
+  readonly favicon?: {
+    readonly svg?: string;
+    readonly png: string;
+    readonly appleTouch: string;
+    /** Small inlined icon for builds without a public site URL. */
+    readonly inline: string;
+  };
 }
 
 /** Rich graph node for UI consumers (projection of Index). */

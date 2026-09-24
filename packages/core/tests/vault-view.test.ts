@@ -23,7 +23,7 @@ const entry = (slug: string): IndexEntry => ({
 
 const index: Index = {
   version: "1.0.0",
-  entries: [entry("hello"), entry("world")],
+  entries: [{ ...entry("hello"), socialImage: "/blog/__svartz/social/hello.png" }, entry("world")],
   graph: { hello: ["world"], world: [] },
   backlinks: { hello: [], world: ["hello"] },
   search: [{ id: "hello", slug: "hello", href: "/blog/hello/", title: "hello", content: "hello content", tags: [], aliases: [] }],
@@ -46,6 +46,7 @@ describe("vault view", () => {
     const vault = createVaultView(index, "journal", "/site");
     expect(vault.id).toBe("journal");
     expect(vault.note("hello")?.entry.href).toBe("/site/blog/hello/");
+    expect(vault.note("hello")?.entry.socialImage).toBe("/site/blog/__svartz/social/hello.png");
     expect(vault.note("hello")?.entry.links.map((link) => link.href)).toEqual(["/site/blog/world/", null]);
     expect(vault.note("/site/blog/hello")?.outgoing.map((note) => note.slug)).toEqual(["world"]);
     expect(vault.note("/site/blog/world/")?.backlinks.map((note) => note.slug)).toEqual(["hello"]);

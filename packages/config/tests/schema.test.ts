@@ -69,6 +69,16 @@ describe("SvartzConfigSchema", () => {
     }))).toBe(true);
   });
 
+  it("accepts local favicon sources and rejects remote sources", () => {
+    const vault = { id: "blog", path: "vault", target: { type: "host" } };
+    expect(Either.isRight(decode(SvartzConfigSchema, {
+      version: "1.0.0", vaults: [{ ...vault, site: { title: "Blog", favicon: "./icon.webp" } }],
+    }))).toBe(true);
+    expect(Either.isLeft(decode(SvartzConfigSchema, {
+      version: "1.0.0", vaults: [{ ...vault, site: { title: "Blog", favicon: "https://example.test/icon.png" } }],
+    }))).toBe(true);
+  });
+
   it("rejects missing vaults field", () => {
     const result = decode(SvartzConfigSchema, { version: "1.0.0" });
     expect(Either.isLeft(result)).toBe(true);

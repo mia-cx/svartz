@@ -115,6 +115,13 @@ interface ThemePluginPreset {
   readonly plugins?: readonly SvartzPlugin[];
 }
 
+/** Public metadata a theme may place on a generated social preview. */
+interface SocialImageMetadata {
+  readonly title: string;
+  readonly description?: string;
+  readonly siteTitle: string;
+}
+
 // --- Main Theme Interface ---
 
 interface SvartzTheme {
@@ -136,6 +143,10 @@ interface SvartzTheme {
   readonly requiredFeatures?: readonly ThemeRequiredFeature[];
   readonly artifactRequirements?: ThemeArtifactRequirements;
   readonly pluginPreset?: ThemePluginPreset;
+  /** Return a complete SVG document; Svartz rasterizes it at build time. */
+  readonly socialImage?: (metadata: SocialImageMetadata) => string;
+  /** Default scalable favicon when no vault source is configured. */
+  readonly faviconSvg?: string;
   readonly defaults?: Record<string, unknown>;
   readonly hooks?: Record<string, unknown>;
 }
@@ -150,5 +161,6 @@ export type {
   ThemeRenderCapabilities,
   ThemeRequiredFeature,
   ThemePluginPreset,
+  SocialImageMetadata,
   SvartzTheme,
 };

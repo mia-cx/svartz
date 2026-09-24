@@ -21,6 +21,8 @@ const KNOWN_THEME_KEYS = new Set<string>([
   "requiredFeatures",
   "artifactRequirements",
   "pluginPreset",
+  "socialImage",
+  "faviconSvg",
   "defaults",
   "hooks",
 ]);
@@ -105,6 +107,20 @@ function validateTheme(theme: SvartzTheme): void {
     throw new ThemeValidationError({
       themeId: theme.id,
       message: `Theme "${theme.id}" has an unknown required feature`,
+    });
+  }
+
+  if (theme.socialImage !== undefined && typeof theme.socialImage !== "function") {
+    throw new ThemeValidationError({
+      themeId: theme.id,
+      message: "Theme socialImage must be a function returning SVG markup",
+    });
+  }
+
+  if (theme.faviconSvg !== undefined && typeof theme.faviconSvg !== "string") {
+    throw new ThemeValidationError({
+      themeId: theme.id,
+      message: "Theme faviconSvg must be SVG markup",
     });
   }
 

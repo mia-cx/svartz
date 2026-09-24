@@ -97,7 +97,7 @@ export type {
   SvartzTheme,
 } from "./theme/types";
 export { CONTRACT_VERSION, THEME_FEATURE_STAGES } from "./theme/types";
-export type { ThemeRequiredFeature } from "./theme/types";
+export type { SocialImageMetadata, ThemeRequiredFeature } from "./theme/types";
 export {
   matchThemeRoute,
   normalizePathname,
