@@ -3,26 +3,37 @@ import {
   normalizePlugin,
   type NormalizedSvartzPlugin,
   type ResolvedConfig,
+  type StageName,
   type SvartzPlugin,
   type SvartzTheme,
 } from "@svartz/core";
-import { CORE_PLUGIN_IDS, createCorePlugins } from "@svartz/plugins";
+import { createCorePlugins } from "@svartz/plugins";
+
+const REQUIRED_STAGES = [
+  "discoverFiles",
+  "parseFrontmatter",
+  "filterUnpublished",
+  "resolveLinks",
+  "indexContent",
+  "emitArtifacts",
+] as const satisfies readonly StageName[];
 
 function getThemePresetPlugins(theme: SvartzTheme | undefined): readonly SvartzPlugin[] {
   return theme?.pluginPreset?.plugins ?? [];
 }
 
-function assertRequiredCorePlugins(
-  plugins: readonly { readonly id: string }[],
+function assertRequiredStages(
+  plugins: readonly NormalizedSvartzPlugin[],
 ): void {
-  const activeIds = new Set(plugins.map((plugin) => plugin.id));
-  const missingCorePlugins = CORE_PLUGIN_IDS.filter((id) => !activeIds.has(id));
+  const missingStages = REQUIRED_STAGES.filter((stage) =>
+    !plugins.some((plugin) => plugin[stage]),
+  );
 
-  if (missingCorePlugins.length === 0) return;
+  if (missingStages.length === 0) return;
 
-  const formatted = missingCorePlugins.map((id) => `\`${id}\``).join(", ");
+  const formatted = missingStages.map((stage) => `\`${stage}\``).join(", ");
   throw new Error(
-    `core plugin(s) ${formatted} are disabled, but required for build.`,
+    `Required pipeline stage(s) ${formatted} have no plugin.`,
   );
 }
 
@@ -40,9 +51,9 @@ function resolveRuntimePlugins(
     config.plugins as readonly SvartzPlugin[],
   );
 
-  assertRequiredCorePlugins(merged);
-
-  return merged.map((plugin) => normalizePlugin(plugin as SvartzPlugin));
+  const normalized = merged.map((plugin) => normalizePlugin(plugin as SvartzPlugin));
+  assertRequiredStages(normalized);
+  return normalized;
 }
 
-export { assertRequiredCorePlugins, getThemePresetPlugins, resolveRuntimePlugins };
+export { assertRequiredStages, getThemePresetPlugins, resolveRuntimePlugins };

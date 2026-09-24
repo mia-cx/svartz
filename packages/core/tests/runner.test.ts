@@ -38,7 +38,7 @@ const makeCtx = (): PluginContext => ({
 });
 
 describe("executeStage", () => {
-  it("runs pre, default, and post hooks in order and batches default transforms", async () => {
+  it("runs mutating transforms in stable pre, default, and post order", async () => {
     const events: string[] = [];
     const plugins: SvartzPlugin[] = [
       {
@@ -54,18 +54,24 @@ describe("executeStage", () => {
       },
       {
         id: "default-a",
-        async transformGfm() {
-          events.push("a:start");
-          await wait(20);
-          events.push("a:end");
+        transformGfm: {
+          async run() {
+            events.push("a:start");
+            await wait(20);
+            events.push("a:end");
+          },
+          options: { parallel: true },
         },
       },
       {
         id: "default-b",
-        async transformGfm() {
-          events.push("b:start");
-          await wait(5);
-          events.push("b:end");
+        transformGfm: {
+          async run() {
+            events.push("b:start");
+            await wait(5);
+            events.push("b:end");
+          },
+          options: { parallel: true },
         },
       },
       {
@@ -82,12 +88,9 @@ describe("executeStage", () => {
 
     const result = await executeStage(plugins, "transformGfm", makeCtx());
     expect(result.errors).toEqual([]);
-    expect(events.slice(0, 2)).toEqual(["pre:start", "pre:end"]);
-
-    const firstParallelEnd = Math.min(events.indexOf("a:end"), events.indexOf("b:end"));
-    expect(events.indexOf("a:start")).toBeLessThan(firstParallelEnd);
-    expect(events.indexOf("b:start")).toBeLessThan(firstParallelEnd);
-    expect(events.slice(-2)).toEqual(["post:start", "post:end"]);
+    expect(events).toEqual([
+      "pre:start", "pre:end", "a:start", "a:end", "b:start", "b:end", "post:start", "post:end",
+    ]);
   });
 });
 

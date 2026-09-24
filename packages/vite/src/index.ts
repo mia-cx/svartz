@@ -46,7 +46,7 @@ import {
   type ThemeModule,
 } from "./theme-resolver";
 import {
-  assertRequiredCorePlugins,
+  assertRequiredStages,
   getThemePresetPlugins,
   resolveRuntimePlugins,
 } from "./plugins";
@@ -388,7 +388,7 @@ export {
   resolveThemeRuntimeImportId,
   loadVirtualModule,
   resolveVirtualModuleId,
-  assertRequiredCorePlugins,
+  assertRequiredStages,
   getThemePresetPlugins,
   resolveRuntimePlugins,
   createVaultChangeEvent,
