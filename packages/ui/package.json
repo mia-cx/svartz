@@ -33,6 +33,15 @@
 			"svelte": "./dist/index.js",
 			"import": "./dist/index.js",
 			"default": "./dist/index.js"
+		},
+		"./runtime": {
+			"types": "./dist/runtime/index.d.ts",
+			"svelte": "./dist/runtime/index.js",
+			"import": "./dist/runtime/index.js",
+			"default": "./dist/runtime/index.js"
+		},
+		"./virtual-modules": {
+			"types": "./dist/runtime/virtual-modules.d.ts"
 		}
 	},
 	"peerDependencies": {

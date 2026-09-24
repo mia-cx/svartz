@@ -1,7 +1,7 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import SvartzRuntimePage from '$lib/svartz/SvartzRuntimePage.svelte';
+import SvartzRuntimePage from '@svartz/ui/runtime';
 
 describe('/+page.svelte', () => {
 	it('renders the runtime layout and page from virtual modules', async () => {

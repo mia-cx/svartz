@@ -1,6 +1,6 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
-import SvartzRuntimePage from './SvartzRuntimePage.svelte';
+import SvartzRuntimePage from '@svartz/ui/runtime';
 
 describe('SvartzRuntimePage SSR', () => {
 	it('renders the layout and note content without a loading placeholder', () => {
