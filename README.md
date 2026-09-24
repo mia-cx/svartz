@@ -66,7 +66,7 @@ pnpm svartz:preview
 - `@svartz/theme-minimal` is the built-in fallback theme used when config does not specify one.
 - Any other configured theme is resolved from the active app/workspace root, so published themes can be installed at the workspace root without becoming dependencies of `@svartz/vite`.
 - During `svartz dev`, source aliasing only applies to theme packages that resolve to a local workspace package; published themes are loaded from their installed package entry instead.
-- Tailwind source scanning is generated per vault by the CLI: `apps/web` imports a virtual CSS bridge, and the CLI writes that file with `@source` directives for the resolved theme and its component-library dependencies.
+- Tailwind source scanning is generated per vault by the CLI: `apps/web` and initialized hosts import a virtual CSS bridge, and the CLI writes that file with `@source` directives for the resolved theme and its component-library dependencies. Host builds include the Tailwind entry so packed theme utilities reach emitted CSS.
 
 ## Dev Watch Contract
 

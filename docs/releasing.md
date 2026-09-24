@@ -14,7 +14,7 @@ pnpm release:check
 pnpm test
 ```
 
-`release:check` builds the workspace, packs the seven packages with pnpm, checks the license, runtime files, types, and resolved dependency ranges, then installs the tarballs outside the monorepo. It initializes, builds, and serves a fresh site. It also checks an existing Vite 8 SvelteKit host: the CLI resolves Vite 8, Svelte type checks pass, Tailwind scans the packed theme and UI files, and both the host home and mounted note route build and serve. The check never publishes to npm. Set `SVARTZ_RELEASE_VERBOSE=1` to show consumer command output. Set `SVARTZ_RELEASE_KEEP_TEMP=1` to retain its temporary fixtures after a failure.
+`release:check` builds the workspace, packs the seven packages with pnpm, checks the license, runtime files, types, and resolved dependency ranges, then installs the tarballs outside the monorepo. It initializes, builds, and serves a fresh site. It also checks an existing Vite 8 SvelteKit host: the CLI resolves Vite 8, Svelte type checks pass, emitted CSS contains a utility from the packed theme/UI components, and both the host home and mounted note route build and serve. The check never publishes to npm. Set `SVARTZ_RELEASE_VERBOSE=1` to show consumer command output. Set `SVARTZ_RELEASE_KEEP_TEMP=1` to retain its temporary fixtures after a failure.
 
 Publish only after the release check and review of the merged commit. Confirm npm access to the `@svartz` scope, then publish in dependency order:
 
