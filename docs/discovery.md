@@ -19,7 +19,7 @@ When `site.url` exists, each vault emits `<mountPath>/rss.xml` and `<mountPath>/
 }
 ```
 
-`feed.content` can be `summary` or `full`. Full content renders published Markdown with the vault's active compiler plugins. Executable `.svx` notes and encrypted or hidden notes never enter feeds. Sitemaps include published note, tag, and folder routes, but omit encrypted and hidden notes. `published_at` publishes immediately and controls feed order when sorting by `published`; it never schedules a future build. Date sources are tried in the configured order for creation and modification dates. New files without Git history fall through to filesystem dates.
+`feed.content` can be `summary` or `full`. Full content renders published Markdown with the vault's active compiler plugins. Executable `.svx` notes and encrypted or hidden notes never enter feeds. Sitemaps include published note, tag, and folder routes, but omit encrypted and hidden notes. `published_at` publishes immediately and controls feed order when sorting by `published`; it never schedules a future build. Blank and `false` publication values do not override `draft: true`. If `published_at` is blank, the configured publication field applies to both filtering and feed dates. Date sources are tried in the configured order for creation and modification dates. New files without Git history fall through to filesystem dates.
 
 An existing SvelteKit host can opt into one combined feed or sitemap by selecting vault IDs in its own route. This keeps the host route, title, and adapter under the host's control:
 
