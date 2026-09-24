@@ -99,7 +99,7 @@ export const indexContent = definePlugin(() => ({
       const protectedEntries = new Map<string, IndexEntry[]>();
       const search: SearchDocument[] = [];
       const tagCounts = new Map<string, number>();
-      const folderCounts = new Map<string, number>();
+      const folderMembers = new Map<string, string[]>();
       const noteRouteSet = new Set<string>();
       const publicAssetPaths = ctx.meta.get("svartz:publicAssetPaths") as ReadonlySet<string> | undefined;
       const assetRecords = ctx.files
@@ -231,7 +231,9 @@ export const indexContent = definePlugin(() => ({
 
         if (!file.protection?.hidden) {
           for (const folderSlug of folderSlugsFromPath(file.path)) {
-            folderCounts.set(folderSlug, (folderCounts.get(folderSlug) ?? 0) + 1);
+            const members = folderMembers.get(folderSlug) ?? [];
+            members.push(file.slug);
+            folderMembers.set(folderSlug, members);
           }
         }
 
@@ -289,12 +291,13 @@ export const indexContent = definePlugin(() => ({
           href: routeHref(`${routeConfig.tags}/${slug}`, mountPath),
         }));
 
-      const folders: FolderIndexEntry[] = [...folderCounts.entries()]
+      const folders: FolderIndexEntry[] = [...folderMembers.entries()]
         .sort(([left], [right]) => left.localeCompare(right))
-        .map(([slug, noteCount]) => ({
+        .map(([slug, noteSlugs]) => ({
           slug,
           title: folderTitle(slug),
-          noteCount,
+          noteCount: noteSlugs.length,
+          noteSlugs: noteSlugs.sort(),
           href: routeHref(`${routeConfig.folders}/${slug}`, mountPath),
         }));
 

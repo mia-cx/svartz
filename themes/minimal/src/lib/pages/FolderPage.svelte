@@ -7,15 +7,16 @@
 		title: string;
 		description?: string;
 	};
+	type Folder = { slug: string; noteSlugs: readonly string[] };
 
 	let {
 		match,
-		index = { entries: [] },
+		index = { entries: [], folders: [] },
 		vault
 	}: {
 		match?: { params?: { slug?: string } };
-		index?: { entries: readonly Entry[] };
-		vault?: { entries: readonly Entry[] };
+		index?: { entries: readonly Entry[]; folders: readonly Folder[] };
+		vault?: { entries: readonly Entry[]; folders: readonly Folder[] };
 	} = $props();
 
 	const currentFolder = $derived(match?.params?.slug ?? '');
@@ -24,11 +25,11 @@
 			? titleFromSlugSegment(currentFolder.split('/').at(-1) ?? currentFolder)
 			: 'Folder'
 	);
-	const entries = $derived(
-		(vault?.entries ?? index.entries).filter(
-			(entry) => entry.slug === currentFolder || entry.slug.startsWith(currentFolder + '/')
-		)
-	);
+	const entries = $derived.by(() => {
+		const folder = (vault?.folders ?? index.folders).find((item) => item.slug === currentFolder);
+		const members = new Set(folder?.noteSlugs ?? []);
+		return (vault?.entries ?? index.entries).filter((entry) => members.has(entry.slug));
+	});
 </script>
 
 <section class="grid gap-4">

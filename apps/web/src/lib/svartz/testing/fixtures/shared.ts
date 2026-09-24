@@ -50,7 +50,7 @@ export const testIndex = {
 	backlinks: { index: [] },
 	search: [],
 	tags: [{ slug: 'testing', title: 'Testing', noteCount: 1, href: '/tags/testing/' }],
-	folders: [{ slug: 'guides', title: 'Guides', noteCount: 1, href: '/folders/guides/' }],
+	folders: [{ slug: 'guides', title: 'Guides', noteCount: 1, noteSlugs: ['guides/intro'], href: '/folders/guides/' }],
 	routes: {
 		mountPath: '',
 		notes: ['/', '/guides/intro/'],
