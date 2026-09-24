@@ -13,3 +13,5 @@ alwaysApply: false
 `virtual:svartz/artifacts` exports `vault`, built from the post-publication index. Host loaders and themes use `vault.note()`, `vault.entries`, and its tag/folder/route projections. Their `href` values already include SvelteKit's deployment base and the vault mount. Do not derive note URLs from slugs or compose those prefixes again.
 
 `index` remains the raw artifact contract for build/runtime internals. The browser search index stores pre-base URLs; map search result IDs through `vault.search` for navigation. Only published notes enter the view, graph, backlinks, and search.
+
+SvelteKit changes `$app/paths.base` to a relative link prefix during server rendering. Use the configured deployment base to parse request paths and the published vault view for navigation. Resolve already-based canonical and social paths against the site origin; resolve raw favicon paths against `site.url`.
