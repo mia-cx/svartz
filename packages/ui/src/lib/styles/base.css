@@ -195,16 +195,15 @@ a.sv-tag:hover {
 	transform: none;
 }
 
-/* Site title. The site's name, set in the title face. */
+/* Site title. The site's name in bold Archivo. */
 .sv-wordmark {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.45em;
 	font-family: var(--sv-font-sans);
 	font-size: var(--sv-step-2);
-	font-stretch: 112%;
-	font-weight: 800;
-	letter-spacing: -0.02em;
+	font-weight: 700;
+	letter-spacing: -0.01em;
 	line-height: 1;
 	color: var(--sv-ink);
 	text-decoration: none;

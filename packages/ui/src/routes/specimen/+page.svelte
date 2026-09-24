@@ -175,9 +175,8 @@
 	}
 
 	.display {
-		font-stretch: 112%;
-		font-weight: 800;
-		letter-spacing: -0.02em;
+		font-weight: 700;
+		letter-spacing: -0.01em;
 	}
 
 	.face {

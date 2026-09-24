@@ -31,7 +31,7 @@
 	margin-block-start: 0;
 }
 
-/* Headings: Archivo, stepping down in size, weight, and width. */
+/* Headings: Archivo at normal width, stepping down in size. */
 .sv-prose :is(h1, h2, h3, h4, h5, h6) {
 	position: relative;
 	margin: 1.6em 0 0.5em;
@@ -42,9 +42,9 @@
 	scroll-margin-block-start: var(--sv-space-6);
 }
 
-.sv-prose h1 { font-size: var(--sv-step-4); font-stretch: 112%; font-weight: 800; letter-spacing: -0.02em; }
-.sv-prose h2 { font-size: var(--sv-step-3); font-stretch: 108%; letter-spacing: -0.015em; }
-.sv-prose h3 { font-size: var(--sv-step-2); font-stretch: 104%; }
+.sv-prose h1 { font-size: var(--sv-step-4); letter-spacing: -0.015em; }
+.sv-prose h2 { font-size: var(--sv-step-3); letter-spacing: -0.01em; }
+.sv-prose h3 { font-size: var(--sv-step-2); }
 .sv-prose h4 { font-size: var(--sv-step-1); }
 .sv-prose :is(h5, h6) { font-size: var(--sv-step-0); font-weight: 600; }
 

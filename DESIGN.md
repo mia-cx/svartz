@@ -42,7 +42,7 @@ The faces come from Mia's mCX Obsidian theme ([obsidian-theme-mcx](https://githu
 
 Both are self-hosted through Fontsource, so no page requests a font CDN.
 
-**Hierarchy through Archivo's axes.** Page titles and H1 are 800 at 112% width; H2 700 at 108%; H3 700 at 104%; H4 700; H5 and H6 600. The site name matches the page title.
+**Hierarchy through size.** Headings and titles are Archivo 700 at normal width (H5 and H6 at 600), stepping down the type scale. Only the label voice uses the width axis.
 
 **The label voice.** mCX's overline: Archivo in capitals at 125% width (`.sv-label`, 0.7rem, 0.08em tracking, `--sv-label-stretch`). Metadata, callout titles, kind badges, method pills, dates, and counts all use it. This is the thread that ties the themes together: a Svartz page always labels things the same way.
 

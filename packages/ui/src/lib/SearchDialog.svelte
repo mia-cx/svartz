@@ -378,7 +378,6 @@
 	.sv-search-title {
 		color: var(--sv-ink);
 		font-size: var(--sv-step-1);
-		font-stretch: 104%;
 		font-weight: 700;
 		line-height: 1.25;
 	}

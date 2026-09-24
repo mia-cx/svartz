@@ -292,9 +292,8 @@
 		color: var(--sv-ink);
 		font-family: var(--sv-font-sans);
 		font-size: var(--sv-step-5);
-		font-stretch: 112%;
-		font-weight: 800;
-		letter-spacing: -0.025em;
+		font-weight: 700;
+		letter-spacing: -0.02em;
 		line-height: 1.05;
 		text-wrap: balance;
 	}
