@@ -4,7 +4,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { lstat, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import chokidar, { type FSWatcher } from "chokidar";
 import { Command } from "commander";
 import { Data, Effect, Either } from "effect";
@@ -482,11 +482,10 @@ const createAppConfig = (
       modules: [getGeneratedRuntimeArtifactsModulePath(item), getGeneratedRuntimeThemeModulePath(item)],
       path: getGeneratedHostStylesPath(hostRegistryPath, item.id),
     }));
-    if (hostApp) {
-      process.env["SVARTZ_HOST_STYLE_MAP"] = JSON.stringify(styleManifests);
-    } else {
-      delete process.env["SVARTZ_HOST_STYLE_MAP"];
-    }
+    const standalonePluginPath = path.join(path.dirname(hostRegistryPath), "standalone-vite-plugin.mjs");
+    process.env["SVARTZ_HOST_STYLE_MAP"] = JSON.stringify(styleManifests);
+    if (hostApp) delete process.env["SVARTZ_VITE_PLUGINS_MODULE_PATH"];
+    else process.env["SVARTZ_VITE_PLUGINS_MODULE_PATH"] = pathToFileURL(standalonePluginPath).href;
     yield* Effect.tryPromise({
       try: async () => {
         await mkdir(path.dirname(hostRegistryPath), { recursive: true });
@@ -496,6 +495,10 @@ const createAppConfig = (
           await writeFile(stylesPath, "[]\n");
         }));
         await writeFile(hostRegistryPath, createHostRegistrySource(vaults));
+        if (!hostApp) await writeFile(standalonePluginPath, [
+          `import { hostStylesPlugin } from ${JSON.stringify(import.meta.resolve("@svartz/vite/host"))};`,
+          `export default hostStylesPlugin(${JSON.stringify(styleManifests)});`,
+        ].join("\n"));
       },
       catch: (cause) => cause as Error,
     });

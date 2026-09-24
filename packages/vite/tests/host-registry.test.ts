@@ -40,6 +40,8 @@ describe("host registry", () => {
     expect(getGeneratedHostRegistryPath("/workspace")).toBe("/workspace/.svartz/host/runtime.ts");
     expect(getGeneratedHostStylesPath("/workspace/.svartz/host/runtime.ts", "../../../package"))
       .toMatch(/^\/workspace\/\.svartz\/host\/styles\/[^/]+\.json$/);
+    expect(getGeneratedHostStylesPath("/workspace/.svartz/host/runtime.ts", "aaa").toLowerCase())
+      .not.toBe(getGeneratedHostStylesPath("/workspace/.svartz/host/runtime.ts", "aaG").toLowerCase());
   });
 
   it("uses the target or canonical host URL as the deployment base", () => {
