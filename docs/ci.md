@@ -1,6 +1,6 @@
 # GitHub Actions for a Svartz site
 
-`svartz init` creates a normal SvelteKit project. Commit its `package-lock.json`, then add this file as `.github/workflows/ci.yml` in that project:
+For a new project created by `svartz init`, commit its `package-lock.json`, then add this npm workflow as `.github/workflows/ci.yml`:
 
 ```yaml
 name: CI
@@ -26,7 +26,7 @@ jobs:
       - run: npm run test --if-present
 ```
 
-For a Svartz vault added to an existing SvelteKit app, replace `npm run build` with `npm run svartz:build`. That command builds the vault through Svartz while leaving the host's adapter and routes in charge. Keep the host's own test step if it has one. For a scaffolded site, the build output is `.svartz/vaults/notes/dist`; an existing host writes wherever its adapter is configured to write.
+For a Svartz vault added to an existing SvelteKit app, keep that app's package-manager setup, cache, lockfile install, and test steps. Replace its build command with the corresponding `svartz:build` script, such as `pnpm svartz:build` or `npm run svartz:build`. That command builds the vault through Svartz while leaving the host's adapter and routes in charge. For a scaffolded site, the build output is `.svartz/vaults/notes/dist`; an existing host writes wherever its adapter is configured to write.
 
 The workflow caches npm's package cache through `setup-node`. It installs dependencies from the lockfile on every run. [GitHub's setup-node guide](https://github.com/actions/setup-node/blob/main/docs/advanced-usage.md#caching-packages-data) documents this cache behavior.
 
