@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { resolve } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import {
   loadConfig,
   parseConfig,
@@ -9,6 +11,7 @@ import {
 } from "../src/index";
 
 const FIXTURES = resolve(__dirname, "fixtures/configs");
+const temporaryDirectories: string[] = [];
 
 describe("parseConfig", () => {
   it("decodes a valid raw object", async () => {
@@ -107,8 +110,38 @@ describe("parseConfig", () => {
 });
 
 describe("loadConfig", () => {
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllEnvs();
+    await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  });
+
+  it.each(["mjs", "js", "ts"])("reloads an edited .%s config", async (extension) => {
+    const directory = await mkdtemp(join(tmpdir(), "svartz-config-reload-"));
+    temporaryDirectories.push(directory);
+    if (extension === "js") await writeFile(join(directory, "package.json"), '{"type":"module"}');
+    const configPath = join(directory, `svartz.config.${extension}`);
+    const source = (id: string) => `export default { version: "1.0.0", vaults: [{ id: "${id}", path: ".", target: { type: "static" } }] };`;
+
+    await writeFile(configPath, source("first"));
+    expect((await loadConfig(configPath)).vaults[0]!.id).toBe("first");
+    await writeFile(configPath, source("second"));
+    expect((await loadConfig(configPath)).vaults[0]!.id).toBe("second");
+  });
+
+  it("keeps CommonJS .js configuration loading", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "svartz-cjs-config-"));
+    temporaryDirectories.push(directory);
+    const configPath = join(directory, "svartz.config.js");
+    await writeFile(configPath, 'module.exports = { version: "1.0.0", vaults: [{ id: "cjs", path: ".", target: { type: "static" } }] };');
+    expect((await loadConfig(configPath)).vaults[0]!.id).toBe("cjs");
+  });
+
+  it("keeps top-level await in .mjs configuration", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "svartz-async-config-"));
+    temporaryDirectories.push(directory);
+    const configPath = join(directory, "svartz.config.mjs");
+    await writeFile(configPath, 'export default await Promise.resolve({ version: "1.0.0", vaults: [{ id: "async", path: ".", target: { type: "static" } }] });');
+    expect((await loadConfig(configPath)).vaults[0]!.id).toBe("async");
   });
 
   it("loads a valid .mjs config file", async () => {

@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect";
-import { access, stat } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { access, readFile, stat } from "node:fs/promises";
+import { dirname, extname, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { createJiti } from "jiti";
 import { major as semverMajor } from "semver";
 import { resolveConfig } from "./resolver";
@@ -18,6 +19,26 @@ import { getPackageVersion } from "./utils";
 
 const CONFIG_FILENAMES = ["svartz.config", ".svartzrc"];
 const CONFIG_EXTENSIONS = [".ts", ".mjs", ".js"] as const;
+let esmImportVersion = 0;
+
+const usesNativeEsm = async (configPath: string): Promise<boolean> => {
+  const extension = extname(configPath);
+  if (extension === ".mjs") return true;
+  if (extension !== ".js") return false;
+
+  let directory = dirname(configPath);
+  while (true) {
+    try {
+      const packageJson = JSON.parse(await readFile(resolve(directory, "package.json"), "utf8")) as { type?: unknown };
+      return packageJson.type === "module";
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const parent = dirname(directory);
+    if (parent === directory) return false;
+    directory = parent;
+  }
+};
 
 /**
  * Parse (validate) a raw JS object against the config schema, then check that the
@@ -123,8 +144,16 @@ const importConfig = (
 ): Effect.Effect<unknown, ConfigImportFailed> =>
   Effect.tryPromise({
     try: async () => {
-      const jiti = createJiti(import.meta.url, { moduleCache: false });
-      const mod = (await jiti.import(configPath)) as Record<string, unknown>;
+      let mod: Record<string, unknown>;
+      if (await usesNativeEsm(configPath)) {
+        // Jiti delegates ESM to Node, whose cache ignores Jiti's moduleCache option.
+        const url = pathToFileURL(configPath);
+        url.searchParams.set("svartz-reload", String(++esmImportVersion));
+        mod = await import(url.href) as Record<string, unknown>;
+      } else {
+        const jiti = createJiti(import.meta.url, { moduleCache: false });
+        mod = await jiti.import(configPath) as Record<string, unknown>;
+      }
       return mod["default"] ?? mod;
     },
     catch: (cause) =>
