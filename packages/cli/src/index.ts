@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { lstat, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -485,7 +486,7 @@ const createAppConfig = (
     const standalonePluginPath = path.join(path.dirname(hostRegistryPath), "standalone-vite-plugin.mjs");
     process.env["SVARTZ_HOST_STYLE_MAP"] = JSON.stringify(styleManifests);
     if (hostApp) delete process.env["SVARTZ_VITE_PLUGINS_MODULE_PATH"];
-    else process.env["SVARTZ_VITE_PLUGINS_MODULE_PATH"] = pathToFileURL(standalonePluginPath).href;
+    else process.env["SVARTZ_VITE_PLUGINS_MODULE_PATH"] = `${pathToFileURL(standalonePluginPath).href}?build=${randomUUID()}`;
     yield* Effect.tryPromise({
       try: async () => {
         await mkdir(path.dirname(hostRegistryPath), { recursive: true });
