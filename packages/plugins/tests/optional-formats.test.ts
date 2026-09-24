@@ -8,6 +8,7 @@ import { roamFlavoredMarkdown } from "../src/roam-flavored-markdown";
 import { oxHugoFlavoredMarkdown } from "../src/oxhugo-flavored-markdown";
 import { parseFrontmatter } from "../src/parse-frontmatter";
 import { citations } from "../src/citations";
+import { compileProtectedNoteSource } from "../src/emit-artifacts";
 import { renderMarkdown } from "../src/internal/render-markdown";
 
 const roots: string[] = [];
@@ -101,6 +102,11 @@ describe("optional content formats", () => {
       "  journal = {Example Journal},",
       "  year = {2020}",
       "}",
+      "@article{private2021,",
+      "  author = {Private, Pat},",
+      "  title = {Unpublished Vault Detail},",
+      "  year = {2021}",
+      "}",
     ].join("\n"));
     const markdown = "Research [@doe2020].";
     const disabled = context(root, markdown);
@@ -113,6 +119,15 @@ describe("optional content formats", () => {
     expect(html).toContain("2020");
     expect(html).toContain("A Published Example");
     expect(html).toContain("data-no-popover");
+    expect(html).not.toContain("Unpublished Vault Detail");
+
+    const protectedNote = context(root, markdown);
+    protectedNote.files[0]!.extension = ".svx";
+    protectedNote.files[0]!.protection = { group: "team", hidden: false };
+    citations({ bibliographyFile: "bibliography.bib" }).transformGfm!.run(protectedNote);
+    const protectedSource = await compileProtectedNoteSource(protectedNote, protectedNote.files[0]!);
+    expect(protectedSource).toContain("A Published Example");
+    expect(protectedSource).not.toContain("Unpublished Vault Detail");
 
     const suppressed = context(root, markdown);
     citations({ suppressBibliography: true }).transformGfm!.run(suppressed);

@@ -103,6 +103,12 @@ async function checkFresh(project, launcher, archives) {
   await command(path.join(launcher, 'node_modules/.bin/svartz'), ['init', '--no-install', '--no-git'], project);
   await localDependencies(project, archives);
   await command('npm', ['install', '--no-audit', '--no-fund'], project);
+  await command('node', ['--input-type=module', '-e', [
+    "import { citations, hardLineBreaks, oxHugoFlavoredMarkdown, roamFlavoredMarkdown } from '@svartz/plugins';",
+    'for (const plugin of [citations(), hardLineBreaks(), oxHugoFlavoredMarkdown(), roamFlavoredMarkdown()]) {',
+    "  if (!plugin.id) throw new Error('Packed optional plugin export is invalid');",
+    '}',
+  ].join('\n')], project);
   await command('npm', ['run', 'build'], project);
   const html = await readFile(path.join(project, '.svartz/vaults/notes/dist/index.html'), 'utf8');
   assert.match(html, /Svartz/);
