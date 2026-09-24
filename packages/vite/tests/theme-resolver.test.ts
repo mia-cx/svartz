@@ -90,4 +90,21 @@ describe("@svartz/vite theme bridge", () => {
     expect(resolveThemePackageRoot(themeName, tempDir)).toBe(themeRoot);
     expect(loadedTheme.id).toBe(themeName);
   });
+
+  it("loads an absolute theme outside the app root", async () => {
+    const themeName = "@acme/theme-external";
+    const { themeRoot, tempDir } = await createThemeFixture(themeName);
+    const appRoot = path.join(tempDir, "app");
+    await mkdir(appRoot);
+
+    expect(resolveThemePackageRoot(themeRoot, appRoot)).toBe(themeRoot);
+    expect((await loadThemeModule((id) => import(id), createConfig(themeRoot), appRoot)).id).toBe(themeName);
+  });
+
+  it("fails on a missing configured theme instead of falling back", async () => {
+    const missing = createConfig("@acme/theme-missing");
+    await expect(loadThemeModule((id) => import(id), missing, os.tmpdir())).rejects.toThrow(
+      'Could not resolve theme "@acme/theme-missing"',
+    );
+  });
 });

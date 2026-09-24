@@ -1,10 +1,13 @@
 import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { resolveConfig } from "@svartz/config";
+import { resolveThemePackageRoot, resolveThemeRuntimeImportId } from "@svartz/vite";
 import {
-  findPackageRootForModule,
   getConfigWatchDescriptors,
+  getThemeWatchDescriptors,
   isLocalWorkspacePackage,
   matchesWatchDescriptor,
   uniqBuildFilters,
@@ -87,18 +90,70 @@ describe("CLI dev watch helpers", () => {
   it("resolves theme package roots from the app root", async () => {
     const { appRoot, localThemeRoot } = await createWorkspaceFixture();
 
-    expect(findPackageRootForModule("@acme/theme-local", appRoot)).toBe(localThemeRoot);
+    expect(resolveThemePackageRoot("@acme/theme-local", appRoot)).toBe(localThemeRoot);
   });
 
   it("treats only non-node_modules packages inside the workspace as local themes", async () => {
     const { appRoot, localThemeRoot, workspaceRoot } = await createWorkspaceFixture();
 
-    const resolvedThemeRoot = findPackageRootForModule("@acme/theme-local", appRoot);
+    const resolvedThemeRoot = resolveThemePackageRoot("@acme/theme-local", appRoot);
 
     expect(resolvedThemeRoot).toBe(localThemeRoot);
     expect(isLocalWorkspacePackage(localThemeRoot, workspaceRoot)).toBe(true);
     expect(
       isLocalWorkspacePackage(path.join(workspaceRoot, "node_modules", "@acme", "theme-local"), workspaceRoot),
     ).toBe(false);
+  });
+
+  it("watches local theme source and builds by package name", async () => {
+    const { appRoot, localThemeRoot, workspaceRoot } = await createWorkspaceFixture();
+    await mkdir(path.join(localThemeRoot, "src"));
+
+    const descriptors = getThemeWatchDescriptors(localThemeRoot, appRoot, workspaceRoot);
+    expect(descriptors).toContainEqual(expect.objectContaining({
+      path: path.join(localThemeRoot, "src"),
+      buildFilters: ["@acme/theme-local"],
+    }));
+    expect(descriptors.some((descriptor) =>
+      matchesWatchDescriptor(path.join(localThemeRoot, "src", "index.ts"), descriptor),
+    )).toBe(true);
+  });
+
+  it("uses the same project-relative theme in config and Vite", async () => {
+    const { appRoot, localThemeRoot, workspaceRoot } = await createWorkspaceFixture();
+    await mkdir(path.join(workspaceRoot, "vault"));
+    const resolved = await resolveConfig({
+      version: "1.0.0",
+      vaults: [{
+        id: "docs",
+        path: "vault",
+        theme: "./themes/local",
+        target: { type: "static" },
+      }],
+    }, workspaceRoot);
+    const vault = resolved.vaults[0]!;
+
+    expect(vault.theme.base).toBe(localThemeRoot);
+    expect(resolveThemeRuntimeImportId(vault, appRoot)).toBe(
+      pathToFileURL(path.join(localThemeRoot, "index.js")).href,
+    );
+    expect(getThemeWatchDescriptors(vault.theme.base, appRoot, workspaceRoot)[0]?.buildFilters).toEqual(
+      ["@acme/theme-local"],
+    );
+  });
+
+  it("watches an external absolute theme without a workspace build filter", async () => {
+    const { appRoot, workspaceRoot } = await createWorkspaceFixture();
+    const externalThemeRoot = path.join(await mkdtemp(path.join(os.tmpdir(), "svartz-external-theme-")), "theme");
+    tempDirs.push(path.dirname(externalThemeRoot));
+    await mkdir(externalThemeRoot);
+    await writeFile(path.join(externalThemeRoot, "package.json"), JSON.stringify({
+      name: "@acme/theme-external", main: "./index.js",
+    }));
+    await writeFile(path.join(externalThemeRoot, "index.js"), "module.exports = {};\n");
+
+    const descriptors = getThemeWatchDescriptors(externalThemeRoot, appRoot, workspaceRoot);
+    expect(descriptors).toEqual([{ path: await realpath(externalThemeRoot), label: `${externalThemeRoot} source` }]);
+    expect(matchesWatchDescriptor(path.join(externalThemeRoot, "index.js"), descriptors[0]!)).toBe(true);
   });
 });

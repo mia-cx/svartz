@@ -20,6 +20,17 @@ function createRequireFromDirectory(resolveFromDirectory: string) {
   return createRequire(path.join(resolveFromDirectory, "__svartz_theme_resolver__.js"));
 }
 
+function resolveThemeEntry(moduleId: string, resolveFromDirectory: string): string {
+  try {
+    return createRequireFromDirectory(resolveFromDirectory).resolve(moduleId);
+  } catch (cause) {
+    throw new Error(
+      `Could not resolve theme "${moduleId}" from "${resolveFromDirectory}". Check its path or install it in the host app.`,
+      { cause },
+    );
+  }
+}
+
 function resolvePackageRootFromEntry(resolvedEntryPath: string): string | undefined {
   let current = path.dirname(resolvedEntryPath);
 
@@ -45,8 +56,7 @@ function resolveThemeRuntimeImportId(
   const themeModuleId = resolveThemeModuleId(config);
   const runtimeModuleId =
     themeModuleId === BUILTIN_THEME_MODULE_ID ? BUILTIN_THEME_RUNTIME_MODULE_ID : themeModuleId;
-  const requireFromDirectory = createRequireFromDirectory(resolveFromDirectory);
-  return pathToFileURL(requireFromDirectory.resolve(runtimeModuleId)).href;
+  return pathToFileURL(resolveThemeEntry(runtimeModuleId, resolveFromDirectory)).href;
 }
 
 function resolveThemeBuildImportId(
@@ -58,17 +68,16 @@ function resolveThemeBuildImportId(
     return themeModuleId;
   }
 
-  const requireFromDirectory = createRequireFromDirectory(resolveFromDirectory);
-  return pathToFileURL(requireFromDirectory.resolve(themeModuleId)).href;
+  return pathToFileURL(resolveThemeEntry(themeModuleId, resolveFromDirectory)).href;
 }
 
+/** Find a package root from the host app for Vite, CLI, and Tailwind consumers. */
 function resolveThemePackageRoot(
   moduleId: string,
   resolveFromDirectory = process.cwd(),
 ): string | undefined {
   try {
-    const requireFromDirectory = createRequireFromDirectory(resolveFromDirectory);
-    return resolvePackageRootFromEntry(requireFromDirectory.resolve(moduleId));
+    return resolvePackageRootFromEntry(createRequireFromDirectory(resolveFromDirectory).resolve(moduleId));
   } catch {
     return undefined;
   }

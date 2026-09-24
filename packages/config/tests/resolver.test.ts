@@ -142,6 +142,25 @@ describe("resolveConfigPaths", () => {
     });
   });
 
+  it("resolves project-relative themes from the config directory", async () => {
+    const config: SvartzConfig = {
+      ...minimalConfig,
+      defaults: { theme: "./themes/custom" },
+    };
+    const resolved = await resolveConfig(config, PKG_ROOT);
+    expect(resolved.vaults[0]?.theme.base).toBe(resolve(PKG_ROOT, "themes/custom"));
+  });
+
+  it("preserves absolute theme paths", async () => {
+    const themePath = resolve(PKG_ROOT, "themes/custom");
+    const config: SvartzConfig = {
+      ...minimalConfig,
+      defaults: { theme: themePath },
+    };
+    const resolved = await resolveConfig(config, PKG_ROOT);
+    expect(resolved.vaults[0]?.theme.base).toBe(themePath);
+  });
+
   it("merges default and vault theme configs", async () => {
     const config: SvartzConfig = {
       version: "1.0.0",
