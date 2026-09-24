@@ -17,6 +17,7 @@ export default withSvartzHost(defineConfig({ plugins: [sveltekit()] }));
 ## Runtime modules
 
 - `virtual:svartz/artifacts` exposes the generated note components, published index, route data, and browser resources for one vault.
+- `mountBrowserResources(pathname)` mounts a vault's browser scripts and returns a disposer. The disposer calls every script cleanup, then reports any errors.
 - `virtual:svartz/theme` exposes the theme, its route matcher, and a `ready` promise that loads lazy components.
 - `virtual:svartz/host` exposes each host vault's published metadata, combined routes, `resolveHostVault(pathname)`, and `prepareHostVault(pathname)`. The latter loads only the selected vault's runtime code.
 

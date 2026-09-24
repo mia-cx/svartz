@@ -17,6 +17,11 @@ describe("inert Markdown content compilation", () => {
     expect(content).toContain('"language":"typescript"');
   });
 
+  it("passes an ordinary fenced language to the code-block slot", async () => {
+    const content = compileContent(await renderMarkdownTree(ctx, "```ts\nconst x = 1\n```"));
+    expect(content).toContain('"language":"ts"');
+  });
+
   it("keeps a callout title separate from its first body paragraph", async () => {
     const file = { path: "note.md", slug: "note", extension: ".md", content: "> [!note] Read this\n> First line" };
     const context = { ...ctx, config: { theme: { base: "minimal" } }, files: [file] } as unknown as PluginContext;
@@ -68,5 +73,12 @@ describe("inert Markdown content compilation", () => {
     expect(() => compile(`<script>let { contentComponents } = $props();</script>${content}`, {
       filename: "inert.svelte", generate: "server",
     })).not.toThrow();
+  });
+
+  it("matches the embed class as a complete token", async () => {
+    const content = compileContent(await renderMarkdownTree(ctx,
+      '<div class="not-svartz-embed">Ordinary</div>\n<div class="other svartz-embed">Embedded</div>'));
+    expect(content.match(/<contentComponents\.embed/g)).toHaveLength(1);
+    expect(content).toContain("Ordinary");
   });
 });
