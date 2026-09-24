@@ -52,3 +52,16 @@ it("rejects unknown selections and cross-host sitemaps", () => {
   expect(() => renderHostSitemap([vaults[0]!, otherHost], ["blog", "work"]))
     .toThrow("share one public host");
 });
+
+it("keeps an authored home page's modification date", () => {
+  const work = vaults[1]!;
+  const index = work.artifacts.index;
+  const authoredHome = {
+    ...work,
+    artifacts: { ...work.artifacts, index: { ...index, entries: [...index.entries, {
+      ...index.entries[0]!, href: "/work/", modifiedAt: new Date("2026-05-04"),
+    }] } },
+  };
+  expect(renderHostSitemap([authoredHome], ["work"]))
+    .toContain("<loc>https://example.com/site/work/</loc><lastmod>2026-05-04T00:00:00.000Z</lastmod>");
+});

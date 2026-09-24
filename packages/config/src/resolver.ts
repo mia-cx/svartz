@@ -87,9 +87,10 @@ const mergeSite = (
   vaultId: string,
   configDir: string,
 ): ResolvedSiteConfig => {
-  const merged = { title: vaultId, ...defaultSite, ...vaultSite };
+  const merged = { ...defaultSite, ...vaultSite };
   return {
     ...merged,
+    title: vaultSite?.title ?? defaultSite?.title ?? vaultId,
     ...(merged.url !== undefined && { url: merged.url.replace(/\/+$/, "") }),
     ...(merged.favicon !== undefined && { favicon: resolve(configDir, merged.favicon) }),
   };

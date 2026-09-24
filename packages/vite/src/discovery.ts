@@ -94,7 +94,8 @@ export function renderHostSitemap(
       if (!entry.properties.encrypted && !entry.properties.hidden) pages.set(noteUrl(vault, entry.href), entry.modifiedAt);
     }
     const home = `${index.routes.mountPath}/`;
-    if (index.routes.all.includes(home)) pages.set(noteUrl(vault, home), undefined);
+    const homeUrl = noteUrl(vault, home);
+    if (index.routes.all.includes(home) && !pages.has(homeUrl)) pages.set(homeUrl, undefined);
     for (const href of [...index.routes.tags, ...index.routes.folders, ...index.routes.feed]) {
       const url = noteUrl(vault, href);
       if (!pages.has(url)) pages.set(url, undefined);

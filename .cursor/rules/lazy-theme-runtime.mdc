@@ -10,4 +10,4 @@ The generated theme module must not use top-level await. A lazy page can import 
 
 Every SvelteKit route that renders `SvartzRuntimePage` awaits `prepareHostVault(pathname)` in universal `load`, including the CLI template and standalone shell. This finishes theme materialization before SSR and hydration. A manual host route that renders the runtime component has the same obligation; unrelated manual routes do not.
 
-When `SVARTZ_THEME_SOURCE_PATH` selects a local workspace theme, the generated theme module must import the bare theme ID so Vite applies the source alias. An absolute runtime URL bypasses that alias.
+When `SVARTZ_THEME_SOURCE_PATH` and `SVARTZ_THEME_SOURCE_ID` select one local workspace theme, the generated theme module must import the bare theme ID so Vite applies the source alias. An absolute runtime URL bypasses that alias. The artifact pipeline loads the Node-safe source manifest through Jiti, and both the repository shell and host wrapper restore the alias for Kit's secondary build.

@@ -169,6 +169,7 @@ describe("@svartz/vite plugin", () => {
       expect.any(Function),
       testConfig,
       process.cwd(),
+      undefined,
     );
     expect(resolveRuntimePluginsMock).toHaveBeenCalled();
     expect(runStagesMock).toHaveBeenCalled();
@@ -181,6 +182,7 @@ describe("@svartz/vite plugin", () => {
 
   it("imports the source theme through its Vite alias when configured", async () => {
     vi.stubEnv("SVARTZ_THEME_SOURCE_PATH", "/tmp/theme/src/lib/index.ts");
+    vi.stubEnv("SVARTZ_THEME_SOURCE_ID", "@svartz/theme-docs");
     try {
       const plugin = svartz({ config: testConfig, env: {}, mode: "test" });
       const viteConfig = await plugin.config?.call({} as never, { command: "serve", mode: "test" } as never);
@@ -191,6 +193,10 @@ describe("@svartz/vite plugin", () => {
       });
       expect(plugin.load?.call({} as never, RESOLVED_THEME_VIRTUAL_ID))
         .toBe("theme-source:@svartz/theme-docs");
+      await plugin.buildStart?.call({} as never);
+      expect(loadThemeModuleMock).toHaveBeenCalledWith(
+        expect.any(Function), testConfig, process.cwd(), "/tmp/theme/src/lib/index.ts",
+      );
     } finally {
       vi.unstubAllEnvs();
     }

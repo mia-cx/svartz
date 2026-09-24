@@ -98,6 +98,23 @@ describe("@svartz/vite theme bridge", () => {
     expect(runtimeImportId.endsWith("/dist/runtime.js")).toBe(true);
   });
 
+  it("loads an unbuilt local source manifest for the artifact pipeline", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "svartz-theme-source-"));
+    tempDirs.push(tempDir);
+    const sourcePath = path.join(tempDir, "index.ts");
+    await writeFile(sourcePath, `export default {
+      id: "source-theme", version: "1.0.0", contractVersion: "1.0.0",
+      layouts: { defaultPage: { default: {} }, notePage: { default: {} } },
+      routes: [{ id: "note", pattern: "/:slug", layoutSlot: "notePage", priority: 1 }],
+    };`);
+
+    const theme = await loadThemeModule(
+      () => Promise.reject(new Error("packaged theme should not load")),
+      createConfig("@unbuilt/theme"), tempDir, sourcePath,
+    );
+    expect(theme.id).toBe("source-theme");
+  });
+
   it("resolves non-default themes from the provided app root", async () => {
     const themeName = "@acme/theme-published";
     const { tempDir, themeRoot } = await createThemeFixture(themeName);

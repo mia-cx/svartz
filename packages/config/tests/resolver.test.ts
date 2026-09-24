@@ -152,6 +152,16 @@ describe("resolveConfigPaths", () => {
     expect((await resolveConfig(config, PKG_ROOT)).vaults[0]!.site.title).toBe("main");
   });
 
+  it("does not let an undefined vault title erase the inherited title", async () => {
+    const config: SvartzConfig = {
+      ...minimalConfig,
+      defaults: { site: { title: "Shared" } },
+      vaults: [{ ...minimalConfig.vaults[0]!, site: { title: undefined } }],
+    };
+    expect((await resolveConfig(config, PKG_ROOT)).vaults[0]!.site.title).toBe("Shared");
+    expect((await resolveConfig({ ...config, defaults: {} }, PKG_ROOT)).vaults[0]!.site.title).toBe("main");
+  });
+
   it("enables discovery when public URL exists and merges vault overrides", async () => {
     const config: SvartzConfig = {
       ...minimalConfig,

@@ -70,6 +70,18 @@ describe("discovery output", () => {
     expect(ctx.artifacts.has("assets/sitemap.xml")).toBe(false);
   });
 
+  it("keeps the authored home page modification date in the sitemap", async () => {
+    const ctx = context();
+    const index = ctx.index!;
+    ctx.index = { ...index, entries: [...index.entries, {
+      ...index.entries[0]!, slug: "index", href: "/blog/", path: "index.md",
+      modifiedAt: new Date("2026-05-04"),
+    }] };
+    await emitDiscovery().emitArtifacts!.run(ctx);
+    expect(String(ctx.artifacts.get("assets/sitemap.xml")?.contents))
+      .toContain("<loc>https://example.com/site/blog/</loc><lastmod>2026-05-04T00:00:00.000Z</lastmod>");
+  });
+
   it("requires a public URL only for enabled production output", async () => {
     const ctx = context({ site: { title: "Blog" } });
     await expect(emitDiscovery().emitArtifacts!.run(ctx)).rejects.toThrow("needs site.url");

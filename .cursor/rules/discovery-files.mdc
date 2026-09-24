@@ -1,9 +1,6 @@
 ---
 description: Generated discovery files and host ownership
-globs:
-  - packages/plugins/src/emit-discovery.ts
-  - packages/vite/src/discovery.ts
-  - apps/web/src/routes/**
+globs: packages/plugins/src/emit-discovery.ts, packages/vite/src/discovery.ts, apps/web/src/routes/**
 alwaysApply: false
 ---
 

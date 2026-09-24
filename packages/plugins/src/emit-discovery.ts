@@ -79,7 +79,7 @@ function sitemap(ctx: PluginContext, base: string): string {
     .filter((entry) => !entry.properties.encrypted && !entry.properties.hidden)
     .map((entry) => [entry.href, entry.modifiedAt]));
   const home = `${index?.routes.mountPath ?? ""}/`;
-  if (index?.routes.all.includes(home)) pages.set(home, undefined);
+  if (index?.routes.all.includes(home) && !pages.has(home)) pages.set(home, undefined);
   for (const href of [...(index?.routes.tags ?? []), ...(index?.routes.folders ?? []), ...(index?.routes.feed ?? [])]) {
     if (!pages.has(href)) pages.set(href, undefined);
   }

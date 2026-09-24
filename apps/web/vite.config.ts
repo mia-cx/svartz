@@ -10,6 +10,8 @@ const SVARTZ_ARTIFACTS_VIRTUAL_ID = 'virtual:svartz/artifacts';
 const SVARTZ_HOST_VIRTUAL_ID = 'virtual:svartz/host';
 const SVARTZ_TAILWIND_SOURCES_VIRTUAL_ID = 'virtual:svartz/tailwind-sources.css';
 const runtimeThemeModulePath = process.env.SVARTZ_THEME_MODULE_PATH;
+const runtimeThemeSourcePath = process.env.SVARTZ_THEME_SOURCE_PATH;
+const runtimeThemeSourceId = process.env.SVARTZ_THEME_SOURCE_ID;
 const runtimeArtifactsModulePath = process.env.SVARTZ_ARTIFACTS_MODULE_PATH;
 const runtimeHostModulePath = process.env.SVARTZ_HOST_MODULE_PATH;
 const runtimeTailwindSourcesPath = process.env.SVARTZ_TAILWIND_SOURCES_PATH;
@@ -34,6 +36,9 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: {
+			...(runtimeThemeSourceId && runtimeThemeSourcePath
+				? { [runtimeThemeSourceId]: runtimeThemeSourcePath }
+				: {}),
 			...(runtimeHostModulePath
 				? { [SVARTZ_HOST_VIRTUAL_ID]: runtimeHostModulePath }
 				: isVitest ? { [SVARTZ_HOST_VIRTUAL_ID]: testRuntimeHostModulePath } : {}),
