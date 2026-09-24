@@ -7,7 +7,7 @@ Wire the existing Giscus layout to decoded consumer configuration. Keep analytic
 - [x] Tests: config decoding, provider installation and navigation lifecycle, comments visibility, and full workspace checks.
 - [x] Capture knowledge: recorded resource options, tracker ownership, and Clarity masking in the plugin rule.
 - [x] Documentation: documented Giscus and analytics config, provider setup, and encrypted-content boundary.
-- [ ] Review & Close: inspect repeated mounts, host navigation, privacy, types, packed build, and issue status; file a stacked PR.
+- [x] Review & Close: checked repeated mounts, host navigation, privacy, types, and packed builds; filed stacked PR #64. Issue #49 closes on merge.
 
 ## Implementation
 
