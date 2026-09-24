@@ -151,7 +151,17 @@ function integrateManifest(manifest: Manifest): Manifest {
   return { ...manifest, scripts, devDependencies };
 }
 
-function integrateViteConfig(source: string): string {
+function integrateViteConfig(source: string, configPath: string): string {
+  if (/\.(?:cjs|cts)$/.test(configPath) && /\bmodule\.exports\s*=/.test(source)) {
+    if (source.includes("const __svartz_host_config = module.exports;")) return source;
+    return `${source.trimEnd()}
+const __svartz_host_config = module.exports;
+module.exports = async (env) => {
+  const { withSvartzHost } = await import('@svartz/vite/host');
+  return withSvartzHost(__svartz_host_config)(env);
+};
+`;
+  }
   if (
     /from\s+['"]@svartz\/vite\/host['"]/.test(source) &&
     source.includes("withSvartzHost(")
@@ -230,7 +240,7 @@ export async function initProject(
     const migrateCatchall = existsSync(catchallLoadPath) &&
       await readFile(catchallLoadPath, "utf8") === previousCatchallLoad;
     const viteSource = await readFile(location.viteConfigPath, "utf8");
-    const integratedViteSource = integrateViteConfig(viteSource);
+    const integratedViteSource = integrateViteConfig(viteSource, location.viteConfigPath);
     const integratedManifest = integrateManifest(existingManifest ?? {});
     const manifestChanged =
       JSON.stringify(existingManifest) !== JSON.stringify(integratedManifest);

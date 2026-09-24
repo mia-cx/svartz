@@ -5,12 +5,14 @@ import {
   mkdir,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
+import { loadConfigFromFile } from "vite";
 import { initProject } from "../src/init";
 
 const execFileAsync = promisify(execFile);
@@ -112,6 +114,29 @@ it("adds configuration to an existing Kit app without changing its routes or bui
   expect(await readFile(path.join(root, "src/routes/[...slug]/+page.ts"), "utf8"))
     .toContain('virtual:svartz/host');
 });
+
+it.each(["vite.config.cjs", "vite.config.cts"])(
+  "wraps a CommonJS host config in %s without replacing its config function",
+  async (fileName) => {
+    const root = await fixture();
+    const configPath = path.join(root, fileName);
+    await writeFile(configPath, "module.exports = (env) => ({ server: { port: env.command === 'serve' ? 4173 : 0 } });\n");
+    await writeFile(path.join(root, "package.json"), JSON.stringify({
+      devDependencies: { "@sveltejs/kit": "^2.0.0" },
+    }));
+
+    expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
+    const integrated = await readFile(configPath, "utf8");
+    expect(integrated).toContain("const __svartz_host_config = module.exports;");
+    expect(integrated).toContain("withSvartzHost(__svartz_host_config)(env)");
+    await mkdir(path.join(root, "node_modules/@svartz"), { recursive: true });
+    await symlink(path.resolve(import.meta.dirname, "../../vite"), path.join(root, "node_modules/@svartz/vite"), "dir");
+    const loaded = await loadConfigFromFile({ command: "serve", mode: "development" }, configPath, root);
+    expect(loaded?.config.server?.port).toBe(4173);
+    expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("already-configured");
+    expect(await readFile(configPath, "utf8")).toBe(integrated);
+  },
+);
 
 it("reuses existing host vault definitions and is idempotent", async () => {
   const root = await fixture();
