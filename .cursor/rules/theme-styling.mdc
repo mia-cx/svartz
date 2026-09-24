@@ -15,4 +15,5 @@ Five first-party themes (minimal, wiki, blog, docs, api-docs) must read as one v
 - **Layout props:** type layouts and pages with `ThemePageProps` from `@svartz/ui`. Prefer `vault` (URLs include base and mount) and `vault.note(slug)` over re-deriving from raw maps.
 - **Lucide:** import icons per file (`@lucide/svelte/icons/<name>`). The barrel pulls ~1,600 icons into SSR and stalls host dev.
 - **Runtime manifest pages are eager.** A lazy page that shares modules with eager ones stalls the Vite build at "rendering chunks" (#62).
+- **Folder notes publish with their folder's slug.** `guides/index.md` is `guides`, never `guides/index`. Match a folder note by `entry.slug === folder.slug`; `@svartz/ui`'s explorer and breadcrumbs already do.
 - **Frontmatter schemas are the theme–plugin contract.** Docs, api-docs, and wiki export typed frontmatter shapes; future ingestion plugins emit exactly those shapes.

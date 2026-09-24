@@ -94,8 +94,8 @@ How much accent a theme uses is a layout choice, not a new colour. A theme that 
 
 | Theme | Density | Ratio | Measure | Character |
 |---|---|---|---|---|
-| minimal | 1 | 1.2 | 42rem | Three columns, quiet sidebars |
-| wiki | 0.85 | 1.18 | 50rem | Dense, text-first, rules between sections |
-| blog | 1.15 | 1.28 | 38rem | Open, large display type, images lead |
+| minimal | 1 | 1.2 | 44rem | Three columns, quiet sidebars |
+| wiki | 0.85 | 1.18 | 52rem | Dense, text-first, rules between sections |
+| blog | 1.15 | 1.26 | 40rem | Open, large display type, images lead |
 | docs | 0.9 | 1.17 | 48rem | Structured, badges carry kind |
 | api-docs | 0.85 | 1.15 | 44rem + example pane | Dense, mono-heavy right pane |
