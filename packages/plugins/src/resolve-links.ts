@@ -58,7 +58,20 @@ function replaceLinkMarkup(
   href: string,
   label: string,
 ): string {
-  return markdown.split(raw).join(`<a href="${href}">${label}</a>`);
+  const pattern = new RegExp(`(?<!!)${raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "g");
+  return markdown.replace(pattern, () => `<a href="${href}">${escapeHtml(label)}</a>`);
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character]!);
+}
+
+function replaceMissingWikilink(markdown: string, raw: string, label: string): string {
+  const pattern = new RegExp(`(?<!!)${raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "g");
+  return markdown.replace(pattern, () =>
+    `<span class="svartz-unresolved-link" role="link" aria-disabled="true">${escapeHtml(label)}</span>`);
 }
 
 export const resolveLinks = definePlugin(() => ({
@@ -136,6 +149,8 @@ export const resolveLinks = definePlugin(() => ({
               toRelativeNoteHref(file.slug, target, rawLink.section),
               label,
             );
+          } else if (rawLink.type === "wikilink") {
+            rewrittenContent = replaceMissingWikilink(rewrittenContent, rawLink.raw, label);
           }
         }
 

@@ -3,6 +3,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
 import { lookup } from "mrmime";
 import {
@@ -198,7 +199,10 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     protectedBridgeModules = await writeProtectedBridgeModules(runnerContext);
     runnerMeta = runnerContext.meta;
     emittedArtifacts = [...runnerContext.artifacts.values()];
-    emittedBrowserResources = [...(runnerContext.compiler?.browserResources.values() ?? [])];
+    emittedBrowserResources = [...(runnerContext.compiler?.browserResources.values() ?? [])]
+      .map((resource) => resource.importId.startsWith("@svartz/plugins/")
+        ? { ...resource, importId: fileURLToPath(import.meta.resolve(resource.importId)) }
+        : resource);
     emittedAssets = new Map(emittedArtifacts
       .filter((artifact) => artifact.type === "asset" && artifact.key.startsWith("assets/"))
       .map((artifact) => [assetOutputPath(artifact), artifact]));

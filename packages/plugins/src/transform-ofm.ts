@@ -5,11 +5,17 @@
  * comments, inline highlights, and callout markers.
  */
 
-import { definePlugin } from "@svartz/core";
+import { definePlugin, getCompilerContributions } from "@svartz/core";
+import { posix } from "node:path";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
+import { visit } from "unist-util-visit";
 
 const HTML_COMMENT_REGEX = /<!--[\s\S]*?-->/g;
 const OBSIDIAN_COMMENT_REGEX = /%%([\s\S]*?)%%/g;
 const PROTECTED_SEGMENT_PREFIX = "__SVARTZ_PROTECTED_SEGMENT_";
+const INLINE_TAG = /(^|\s)#([-_\p{L}\p{M}\p{Extended_Pictographic}\d]+(?:\/[-_\p{L}\p{M}\p{Extended_Pictographic}\d]+)*)/gu;
+const markdownParser = unified().use(remarkParse);
 
 interface SegmentStore {
   readonly prefix: string;
@@ -124,13 +130,13 @@ function transformCallouts(markdown: string): string {
       const match = /^([ \t]*(?:>[ \t]*)+)\[!([^\]\s]+)\]([+-])?\s*(.*)$/.exec(line);
       if (!match) return line;
 
-      const [, quotePrefix, rawType = "note", fold, customTitle] = match;
+      const [, quotePrefix = "> ", rawType = "note", fold, customTitle] = match;
       const type = normalizeCalloutType(rawType);
       const title = customTitle || titleCaseCalloutType(rawType);
       const foldState = fold === "+" ? "open" : fold === "-" ? "closed" : undefined;
       const foldAttribute = foldState ? ` data-callout-fold="${foldState}"` : "";
 
-      return `${quotePrefix}<span class="callout-marker" data-callout="${type}"${foldAttribute} aria-hidden="true"></span> **${title}**`;
+      return `${quotePrefix}<span class="callout-marker" data-callout="${type}"${foldAttribute} aria-hidden="true"></span> **${title}**\n${quotePrefix.trimEnd()}`;
     })
     .join("\n");
 }
@@ -159,7 +165,63 @@ function sanitizeMarkdownForSvelte(markdown: string): string {
     .join("\n");
 }
 
-function transformMarkdown(markdown: string): string {
+function transformInlineTags(markdown: string, sourceSlug: string, tagsRoute: string): { content: string; tags: string[] } {
+  const tags = new Set<string>();
+  const replacements: { start: number; end: number; html: string }[] = [];
+  visit(markdownParser.parse(markdown), "text", (node, _index, parent) => {
+    if (parent?.type === "link" || parent?.type === "linkReference") return;
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (start === undefined || end === undefined) return;
+    for (const match of markdown.slice(start, end).matchAll(INLINE_TAG)) {
+      const rawTag = match[2]!;
+      if (/^[\d/]+$/.test(rawTag)) continue;
+      const tag = rawTag.toLowerCase();
+      const target = `/${tagsRoute.replace(/^\/+|\/+$/g, "")}/${tag}/`;
+      const from = sourceSlug === "index" ? "/" : `/${sourceSlug}/`;
+      const relative = posix.relative(from, target);
+      const href = relative === "" ? "./" : relative.endsWith("/") ? relative : `${relative}/`;
+      tags.add(tag);
+      const offset = start + match.index! + match[1]!.length;
+      replacements.push({ start: offset, end: offset + rawTag.length + 1,
+        html: `<a class="tag-link" href="${href}">#${rawTag}</a>` });
+    }
+  });
+  let content = markdown;
+  for (const replacement of replacements.reverse()) {
+    content = content.slice(0, replacement.start) + replacement.html + content.slice(replacement.end);
+  }
+  return { content, tags: [...tags] };
+}
+
+function escapeDiagram(value: string): string {
+  return value.replace(/[&<>"'{}]/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    "{": "&#123;", "}": "&#125;",
+  })[character]!);
+}
+
+function hasMermaid(markdown: string): boolean {
+  let found = false;
+  visit(markdownParser.parse(markdown), "code", (node) => {
+    if (node.lang?.toLowerCase() === "mermaid") found = true;
+  });
+  return found;
+}
+
+function remarkMermaid() {
+  return (tree: ReturnType<typeof markdownParser.parse>) => {
+    visit(tree, "code", (node, index, parent) => {
+      if (node.lang?.toLowerCase() !== "mermaid" || index === undefined || !parent) return;
+      parent.children[index] = {
+        type: "html",
+        value: `<pre class="svartz-mermaid">${escapeDiagram(node.value)}</pre>`,
+      };
+    });
+  };
+}
+
+function transformMarkdown(markdown: string, sourceSlug: string, tagsRoute: string): { content: string; tags: string[] } {
   const store = createSegmentStore(markdown);
   const protectedCode = protectCode(markdown, store);
   const normalizedComments = normalizeComments(protectedCode);
@@ -167,8 +229,8 @@ function transformMarkdown(markdown: string): string {
   const transformed = sanitizeMarkdownForSvelte(
     transformCallouts(transformHighlights(protectedComments)),
   );
-
-  return restoreSegments(transformed, store);
+  const tagged = transformInlineTags(transformed, sourceSlug, tagsRoute);
+  return { content: restoreSegments(tagged.content, store), tags: tagged.tags };
 }
 
 export const transformOfm = definePlugin(() => ({
@@ -176,10 +238,22 @@ export const transformOfm = definePlugin(() => ({
 
   transformOfm: {
     run(ctx) {
+      const routes = ctx.config.theme.routes as { tags?: string } | undefined;
+      let mermaid = false;
       for (const file of ctx.files) {
         if (!file.extension || ![".md", ".mdx", ".svx"].includes(file.extension)) continue;
 
-        file.content = transformMarkdown(file.content);
+        const transformed = transformMarkdown(file.content, file.slug, routes?.tags ?? "tags");
+        file.content = transformed.content;
+        file.inlineTags = transformed.tags;
+        mermaid ||= hasMermaid(file.content);
+      }
+      if (mermaid) {
+        const compiler = getCompilerContributions(ctx);
+        compiler.remarkPlugins.push(remarkMermaid);
+        compiler.browserResources.set("core:mermaid", {
+          id: "core:mermaid", kind: "script", importId: "@svartz/plugins/browser-mermaid",
+        });
       }
     },
     options: { fatal: true },

@@ -112,9 +112,10 @@ export const indexContent = definePlugin(() => ({
             ? fmTitle
             : "Untitled";
 
-        const tags = Array.isArray(frontmatter[fm.tagsField])
-          ? [...new Set(frontmatter[fm.tagsField] as string[])]
-          : [];
+        const tags = [...new Set([
+          ...(Array.isArray(frontmatter[fm.tagsField]) ? frontmatter[fm.tagsField] as string[] : []),
+          ...(file.inlineTags ?? []),
+        ])];
 
         const aliases = alternateNames(frontmatter, fm.aliasesField);
 
