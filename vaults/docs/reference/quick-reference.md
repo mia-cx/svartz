@@ -195,34 +195,16 @@ export default defineConfig({
   version: "1.0.0",
 
   defaults: {
-    vault: {
-      include: ["**/*.md"],
-      exclude: ["node_modules/**", ".git/**"],
-      frontmatterFields: {
-        titleField: "title",
-        publishedField: "published",
-      },
-    },
     theme: "@svartz/theme-minimal",
+    publicationMode: "exclusion",
+    exclude: ["internal/**"],
     plugins: [],
   },
 
-  vaults: {
-    docs: {
-      path: "./docs",
-    },
-    wiki: {
-      path: "./wiki",
-      theme: {
-        base: "@svartz/theme-minimal",
-        tailwind: {
-          extend: {
-            /* ... */
-          },
-        },
-      },
-    },
-  },
+  vaults: [
+    { id: "docs", path: "./docs", target: { type: "static" } },
+    { id: "wiki", path: "./wiki", target: { type: "static" } },
+  ],
 });
 ```
 

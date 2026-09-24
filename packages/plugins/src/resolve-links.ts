@@ -10,7 +10,11 @@
 import GithubSlugger from "github-slugger";
 import { posix } from "node:path";
 import { definePlugin } from "@svartz/core";
+import { createAssetResolver } from "./internal/asset-references";
 import { resolveLink, buildSlugMap } from "./internal/resolve";
+
+const MARKDOWN_ASSET = /(!?\[[^\]]*\]\()([^\s)]+)(\))/g;
+const HTML_ASSET = /(<(?:a|audio|iframe|img|source|video)\b[^>]*\b(?:href|src)\s*=\s*["'])([^"']+)(["'][^>]*>)/gi;
 
 function isMarkdownFile(extension: string | undefined): boolean {
   return extension !== undefined && [".md", ".mdx", ".svx"].includes(extension);
@@ -42,7 +46,9 @@ function toRelativeAssetHref(sourceSlug: string, assetPath: string): string {
     slugToRouteDirectory(sourceSlug),
     `/${assetPath}`,
   );
-  return relative.length === 0 ? "./" : relative;
+  return relative.length === 0
+    ? "./"
+    : relative.split("/").map(encodeURIComponent).join("/");
 }
 
 function replaceLinkMarkup(
@@ -72,11 +78,7 @@ export const resolveLinks = definePlugin(() => ({
       });
 
       const slugMap = buildSlugMap(slugSources);
-      const assetMap = new Map<string, string>();
-      for (const asset of assetFiles) {
-        assetMap.set(asset.path.toLowerCase(), asset.path);
-        assetMap.set((asset.path.split("/").pop() ?? asset.path).toLowerCase(), asset.path);
-      }
+      const resolveAsset = createAssetResolver(assetFiles);
 
       for (const file of ctx.files) {
         if (!isMarkdownFile(file.extension)) {
@@ -84,17 +86,28 @@ export const resolveLinks = definePlugin(() => ({
           continue;
         }
 
-        if (!file.rawLinks) {
-          file.links = [];
-          continue;
-        }
-
         const resolved = new Set<string>();
-        let rewrittenContent = file.content;
+        let rewrittenContent = file.content.replace(
+          MARKDOWN_ASSET,
+          (raw, start: string, target: string, end: string) => {
+            const assetPath = resolveAsset(file, target);
+            return assetPath
+              ? `${start}${toRelativeAssetHref(file.slug, assetPath)}${end}`
+              : raw;
+          },
+        );
+        rewrittenContent = rewrittenContent.replace(
+          HTML_ASSET,
+          (raw, start: string, target: string, end: string) => {
+            const assetPath = resolveAsset(file, target);
+            return assetPath
+              ? `${start}${toRelativeAssetHref(file.slug, assetPath)}${end}`
+              : raw;
+          },
+        );
 
-        for (const rawLink of file.rawLinks) {
-          const normalizedTarget = rawLink.target.trim().toLowerCase();
-          const assetPath = assetMap.get(normalizedTarget);
+        for (const rawLink of file.rawLinks ?? []) {
+          const assetPath = resolveAsset(file, rawLink.target);
           const label = rawLink.label ?? rawLink.target;
 
           if (assetPath) {

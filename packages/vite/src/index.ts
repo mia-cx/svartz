@@ -2,8 +2,9 @@ import {
   mkdir,
   writeFile,
 } from "node:fs/promises";
-import { dirname } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { Effect } from "effect";
+import { lookup } from "mrmime";
 import {
   executeHandleChange,
   runStages,
@@ -82,11 +83,29 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   let theme: SvartzTheme | undefined;
   let plugins = resolveRuntimePlugins(context.config);
   let emittedArtifacts: Artifact[] = [];
+  let emittedAssets = new Map<string, Artifact>();
   let runnerMeta = new Map<string, unknown>();
   let devServer: ViteDevServer | undefined;
   let pendingChange: ChangeEvent | undefined;
   let rebuildPromise: Promise<void> | undefined;
   let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function assetForRequest(url: string, base: string): Artifact | undefined {
+    let pathname: string;
+    try {
+      pathname = decodeURIComponent(new URL(url, "http://localhost").pathname);
+    } catch {
+      return;
+    }
+
+    const prefix = base === "/" ? "/" : `${base.replace(/\/$/, "")}/`;
+    if (!pathname.startsWith(prefix)) return;
+    return emittedAssets.get(pathname.slice(prefix.length));
+  }
+
+  function publicAssets(): Artifact[] {
+    return [...emittedAssets.values()];
+  }
 
   function writeGeneratedModule(path: string, source: string): Effect.Effect<void, Error> {
     return Effect.gen(function* () {
@@ -156,6 +175,9 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     await runStages(plugins, runnerContext, PIPELINE_STAGES);
     runnerMeta = runnerContext.meta;
     emittedArtifacts = [...runnerContext.artifacts.values()];
+    emittedAssets = new Map(emittedArtifacts
+      .filter((artifact) => artifact.type === "asset" && artifact.key.startsWith("assets/"))
+      .map((artifact) => [artifact.key.slice("assets/".length), artifact]));
 
     await Effect.runPromise(
       Effect.all(
@@ -230,7 +252,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
 
   return {
     name: "svartz:vite",
-    enforce: "pre",
+    enforce: "post",
     config() {
       const alias: Record<string, string> = {
         "virtual:svartz/theme": getGeneratedRuntimeThemeModulePath(options.config),
@@ -253,9 +275,38 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     async buildStart() {
       await executePipeline();
     },
+    generateBundle() {
+      if (this.environment.name !== "client") return;
+      for (const artifact of publicAssets()) {
+        this.emitFile({
+          type: "asset",
+          fileName: artifact.key.slice("assets/".length),
+          source: artifact.contents,
+        });
+      }
+    },
+    async writeBundle(options) {
+      if (this.environment.name !== "ssr" || !options.dir) return;
+      if (basename(options.dir) !== "server" || basename(dirname(options.dir)) !== "output") return;
+
+      const clientRoot = join(dirname(options.dir), "client");
+      await Promise.all(publicAssets().map(async (artifact) => {
+        const path = join(clientRoot, artifact.key.slice("assets/".length));
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, artifact.contents);
+      }));
+    },
     configureServer(server) {
       devServer = server;
       server.watcher.add(context.config.path);
+      server.middlewares.use((request, response, next) => {
+        if (request.method !== "GET" && request.method !== "HEAD") return next();
+        const artifact = assetForRequest(request.url ?? "", server.config.base ?? "/");
+        if (!artifact) return next();
+
+        response.setHeader("Content-Type", lookup(extname(artifact.key)) ?? "application/octet-stream");
+        response.end(request.method === "HEAD" ? undefined : artifact.contents);
+      });
 
       let watcherPrimed = false;
       const primeTimer = setTimeout(() => {

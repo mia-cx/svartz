@@ -23,7 +23,6 @@ const FrontmatterFieldsSchema = Schema.Struct({
   createdAtField: Schema.optional(Schema.String),
   updatedAtField: Schema.optional(Schema.String),
   publishedField: Schema.optional(Schema.String),
-  publicationMode: Schema.optional(Schema.Literal("opt-out", "explicit")),
   dateFormat: Schema.optional(Schema.String),
 });
 
@@ -51,6 +50,7 @@ const PluginEntrySchema = Schema.Unknown;
 
 /** Shared vault options; defaults and VaultConfig both use this shape. */
 const VaultOptionsSchema = Schema.Struct({
+  publicationMode: Schema.optional(Schema.Literal("exclusion", "inclusion")),
   include: Schema.optional(Schema.Array(Schema.String)),
   exclude: Schema.optional(Schema.Array(Schema.String)),
   linkResolution: Schema.optional(LinkResolutionStrategySchema),
@@ -95,6 +95,7 @@ const VaultConfigSchema = Schema.Struct({
   id: Schema.String,
   path: Schema.String,
   target: TargetConfigSchema,
+  publicationMode: Schema.optional(Schema.Literal("exclusion", "inclusion")),
   include: Schema.optional(Schema.Array(Schema.String)),
   exclude: Schema.optional(Schema.Array(Schema.String)),
   linkResolution: Schema.optional(LinkResolutionStrategySchema),

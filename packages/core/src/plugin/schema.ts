@@ -45,6 +45,7 @@ const PluginSchema = Schema.Struct({
   transformDescription: Schema.optional(HookInputSchema),
   transformSyntax: Schema.optional(HookInputSchema),
   transformLatex: Schema.optional(HookInputSchema),
+  transformEmbeds: Schema.optional(HookInputSchema),
   indexContent: Schema.optional(HookInputSchema),
   emitArtifacts: Schema.optional(HookInputSchema),
 });

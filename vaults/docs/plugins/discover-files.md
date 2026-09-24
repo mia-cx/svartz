@@ -133,7 +133,6 @@ After `discover`, `ctx.files`:
     slug: "docs/intro",
     content: "# Intro\nWelcome...",
     frontmatter: { title: "Introduction" },
-    published: true,
     // ... other fields
   },
   {
@@ -141,21 +140,18 @@ After `discover`, `ctx.files`:
     slug: "docs/getting-started",
     content: "# Getting Started\n...",
     frontmatter: {},
-    published: true,
   },
   {
     path: "notes/2024-01-01-first-note.md",
     slug: "notes/2024-01-01-first-note",
     content: "...",
     frontmatter: { date: "2024-01-01" },
-    published: true,
   },
   {
     path: "notes/Archive/old-note.md",
     slug: "notes/archive/old-note",
     content: "...",
     frontmatter: {},
-    published: true,
   },
 ];
 ```
@@ -164,8 +160,7 @@ After `discover`, `ctx.files`:
 
 **From `vaultConfig`:**
 
-- `include` — glob patterns to include (default: `["**/*.md"]`)
-- `exclude` — glob patterns to exclude (default: `["node_modules/**", ".git/**"]`)
+- `include` and `exclude` are applied after frontmatter parsing by `filterUnpublished`.
 - `frontmatterFields` — defines which frontmatter keys to extract
 
 **From `config.defaults.vaultConfig`:**

@@ -2,7 +2,7 @@
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, lstat, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import chokidar, { type FSWatcher } from "chokidar";
@@ -14,7 +14,6 @@ import {
   type ResolvedConfigSet,
 } from "@svartz/config";
 import {
-  getGeneratedArtifactsRoot,
   getGeneratedRuntimeArtifactsModulePath,
   getGeneratedRuntimeThemeModulePath,
   getVaultBuildRoot,
@@ -509,21 +508,6 @@ const createAppConfig = (
     return mergeConfig(loaded.config, inlineConfig);
   });
 
-const copyVaultAssets = (vault: ResolvedConfig): Effect.Effect<void, CliError> =>
-  Effect.tryPromise({
-    try: async () => {
-      const artifactsRoot = getGeneratedArtifactsRoot(vault);
-      const assetSource = path.join(artifactsRoot, "assets");
-      await mkdir(vault.outDir, { recursive: true });
-      await cp(assetSource, vault.outDir, { recursive: true, force: true }).catch(
-        (error: NodeJS.ErrnoException) => {
-          if (error.code !== "ENOENT") throw error;
-        },
-      );
-    },
-    catch: (cause) => cause as Error,
-  });
-
 const VAULT_BUILD_LOCK_RETRY_MS = 1000;
 const VAULT_BUILD_LOCK_MAX_WAIT_MS = 600_000; // 10 min
 const VAULT_BUILD_LOCK_ORPHAN_GRACE_MS = 5_000;
@@ -609,9 +593,6 @@ const buildVault = (
               createAppConfig(appRoot, supportedVault, "production", "build"),
             );
             await viteBuild(config);
-            if (supportedVault.target.type === "static") {
-              await runEffect(copyVaultAssets(supportedVault));
-            }
           } finally {
             await removeVaultKitSymlink(appRoot, supportedVault);
           }

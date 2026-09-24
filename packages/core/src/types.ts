@@ -21,7 +21,6 @@ interface ResolvedFrontmatterConfig {
   readonly createdAtField: string;
   readonly updatedAtField: string;
   readonly publishedField: string;
-  readonly publicationMode: "opt-out" | "explicit";
   readonly dateFormat?: string;
 }
 
@@ -46,6 +45,7 @@ interface ResolvedBuildConfig {
 interface ResolvedVaultDefaults {
   readonly include: readonly string[];
   readonly exclude: readonly string[];
+  readonly publicationMode: "exclusion" | "inclusion";
   readonly linkResolution: LinkResolutionStrategy;
   readonly theme: ResolvedThemeConfig;
   readonly frontmatter: ResolvedFrontmatterConfig;
@@ -61,6 +61,7 @@ interface ResolvedConfig {
   readonly outDir: string;
   readonly include: readonly string[];
   readonly exclude: readonly string[];
+  readonly publicationMode: "exclusion" | "inclusion";
   readonly linkResolution: LinkResolutionStrategy;
   readonly theme: ResolvedThemeConfig;
   readonly frontmatter: ResolvedFrontmatterConfig;

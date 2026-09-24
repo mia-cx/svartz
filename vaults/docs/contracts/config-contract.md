@@ -291,16 +291,11 @@ interface FrontmatterFieldsConfig {
   readonly aliasesField?: string;  // Alternative names
   readonly createdAtField?: string;  // Creation date
   readonly updatedAtField?: string;  // Last modified date
-  readonly publishedField?: string;  // Publication status (default: "published")
+  readonly publishedField?: string;  // Publication date (default: "published_at")
 }
 ```
 
-**Draft inference:**
-A file is considered "draft" if:
-1. The `publishedField` is missing, OR
-2. The `publishedField` is falsy (false, null, undefined, empty string)
-
-There is no explicit `draftField`.
+**Publication:** The default `publicationMode: "exclusion"` publishes notes unless their paths match `exclude`. `"inclusion"` publishes only `include` matches. Boolean `draft: true` hides a note; nonempty `published_at` publishes it immediately; boolean `private: true` always hides it. See [[guides/setup-config#Frontmatter]].
 
 ---
 
@@ -363,37 +358,15 @@ import { defineConfig } from "@svartz/config";
 
 export default defineConfig({
   version: "1.0.0",
-
   defaults: {
-    vault: {
-      include: ["**/*.md"],
-      exclude: ["node_modules/**", ".git/**"]
-    },
     theme: "@svartz/theme-minimal",
-    plugins: []
+    publicationMode: "exclusion",
+    exclude: ["internal/**"]
   },
-
-  vaults: {
-    docs: {
-      path: "./docs",
-      theme: "@svartz/theme-minimal",
-      frontmatterFields: {
-        titleField: "title",
-        publishedField: "published"
-      }
-    },
-    wiki: {
-      path: "./wiki",
-      theme: {
-        base: "@svartz/theme-minimal",
-        tailwind: {
-          extend: {
-            colors: { primary: "#0066cc" }
-          }
-        }
-      }
-    }
-  }
+  vaults: [
+    { id: "docs", path: "./docs", target: { type: "static" } },
+    { id: "wiki", path: "./wiki", target: { type: "static" } }
+  ]
 });
 ```
 

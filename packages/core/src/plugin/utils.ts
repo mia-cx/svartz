@@ -205,6 +205,11 @@ function normalizePlugin(plugin: SvartzPlugin): NormalizedSvartzPlugin {
       plugin.id,
       "transformLatex",
     ),
+    transformEmbeds: normalizeHook(
+      plugin.transformEmbeds,
+      plugin.id,
+      "transformEmbeds",
+    ),
     indexContent: normalizeHook(plugin.indexContent, plugin.id, "indexContent"),
     emitArtifacts: normalizeHook(
       plugin.emitArtifacts,

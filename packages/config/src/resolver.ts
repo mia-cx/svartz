@@ -21,18 +21,7 @@ import { VaultIdNotFound, VaultPathInvalid } from "./types/index";
 
 // --- Hardcoded defaults ---
 
-/**
- * Default vault include patterns: markdown plus file types that can be embedded in Obsidian
- * (and are handled by reference/quartz ofm). See Obsidian "Embed files" docs and
- * packages/reference/quartz/plugins/transformers/ofm.ts.
- */
-const DEFAULT_INCLUDE = [
-  "**/*.{md,mdx,svx}",
-  "**/*.{jpg,jpeg,png,gif,webp,avif,bmp,svg}",
-  "**/*.{mp3,m4a,wav,ogg,flac,webm,3gp}",
-  "**/*.{mp4,mov,mkv,ogv}",
-  "**/*.pdf",
-];
+const DEFAULT_INCLUDE: string[] = [];
 const DEFAULT_EXCLUDE = [".trash/**", "**/.trash/**"];
 const DEFAULT_LINK_RESOLUTION: LinkResolutionStrategy = "closest";
 const DEFAULT_THEME_BASE = "@svartz/theme-minimal";
@@ -48,8 +37,7 @@ const DEFAULT_FRONTMATTER: ResolvedFrontmatterConfig = {
   aliasesField: "aliases",
   createdAtField: "created_at",
   updatedAtField: "updated_at",
-  publishedField: "published",
-  publicationMode: "opt-out",
+  publishedField: "published_at",
 };
 
 // --- Theme normalization ---
@@ -155,6 +143,7 @@ const resolveVaultConfig = (
       outDir: outDirAbsolute,
       include: vault.include ?? defaults?.include ?? DEFAULT_INCLUDE,
       exclude: mergeExclude(defaults?.exclude, vault.exclude),
+      publicationMode: vault.publicationMode ?? defaults?.publicationMode ?? "exclusion",
       linkResolution:
         vault.linkResolution ??
         defaults?.linkResolution ??

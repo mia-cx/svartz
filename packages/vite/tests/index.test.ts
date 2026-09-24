@@ -1,4 +1,7 @@
 import { EventEmitter } from "node:events";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Artifact, ResolvedConfig } from "@svartz/core";
 import {
@@ -63,6 +66,7 @@ const testConfig: ResolvedConfig = {
   outDir: "/tmp/svartz-tests/.svartz/vaults/docs/dist",
   include: [],
   exclude: [],
+  publicationMode: "exclusion",
   linkResolution: "closest",
   theme: { base: "@svartz/theme-docs" },
   frontmatter: {
@@ -121,6 +125,13 @@ describe("@svartz/vite plugin", () => {
           pluginId: "core:emit-artifacts",
           contents: "export const index = {};",
         });
+        ctx.artifacts.set("assets/media/photo.png", {
+          key: "assets/media/photo.png",
+          path: join("/tmp/svartz-tests/.svartz/vaults/docs/artifacts", "assets/media/photo.png"),
+          type: "asset",
+          pluginId: "core:emit-artifacts",
+          contents: new Uint8Array([1, 2, 3]),
+        });
       },
     );
   });
@@ -175,6 +186,7 @@ describe("@svartz/vite plugin", () => {
 
     const server = {
       watcher,
+      middlewares: { use: vi.fn() },
       ws: { send: vi.fn() },
       moduleGraph: {
         getModulesByFile: vi.fn().mockReturnValue(new Set([{ id: "module" }])),
@@ -212,6 +224,65 @@ describe("@svartz/vite plugin", () => {
     });
     expect(server.moduleGraph.invalidateModule).toHaveBeenCalled();
 
+    dispose?.();
+  });
+
+  it("emits public assets into the client bundle for any SvelteKit adapter", async () => {
+    const plugin = svartz({ config: testConfig, env: {}, mode: "test" });
+    await plugin.buildStart?.call({} as never);
+    const emitFile = vi.fn();
+
+    plugin.generateBundle?.call({ environment: { name: "client" }, emitFile } as never, {} as never, {} as never, false);
+    expect(emitFile).toHaveBeenCalledWith({
+      type: "asset",
+      fileName: "media/photo.png",
+      source: new Uint8Array([1, 2, 3]),
+    });
+
+    emitFile.mockClear();
+    plugin.generateBundle?.call({ environment: { name: "server" }, emitFile } as never, {} as never, {} as never, false);
+    expect(emitFile).not.toHaveBeenCalled();
+  });
+
+  it("hands assets from SvelteKit's server build to its shared client output", async () => {
+    const plugin = svartz({ config: testConfig, env: {}, mode: "test" });
+    await plugin.buildStart?.call({} as never);
+    const root = await mkdtemp(join(tmpdir(), "svartz-kit-assets-"));
+    try {
+      await plugin.writeBundle?.call(
+        { environment: { name: "ssr" } } as never,
+        { dir: join(root, "output/server") } as never,
+        {} as never,
+      );
+      expect(await readFile(join(root, "output/client/media/photo.png"))).toEqual(Buffer.from([1, 2, 3]));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("serves only emitted assets under the dev base path", async () => {
+    const plugin = svartz({ config: testConfig, env: {}, mode: "test" });
+    await plugin.buildStart?.call({} as never);
+    const use = vi.fn();
+    const server = {
+      watcher: Object.assign(new EventEmitter(), { add: vi.fn() }),
+      middlewares: { use },
+      ws: { send: vi.fn() },
+      moduleGraph: { getModulesByFile: vi.fn() },
+      config: { base: "/blog/", logger: { warn: vi.fn(), error: vi.fn() } },
+    };
+    const dispose = plugin.configureServer?.(server as never);
+    const middleware = use.mock.calls[0]![0] as (request: { method: string; url: string }, response: { setHeader: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> }, next: ReturnType<typeof vi.fn>) => void;
+    const response = { setHeader: vi.fn(), end: vi.fn() };
+    const next = vi.fn();
+
+    middleware({ method: "GET", url: "/blog/media/photo.png" }, response, next);
+    expect(response.setHeader).toHaveBeenCalledWith("Content-Type", "image/png");
+    expect(response.end).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]));
+
+    middleware({ method: "GET", url: "/blog/media/private.png" }, response, next);
+    middleware({ method: "GET", url: "/media/photo.png" }, response, next);
+    expect(next).toHaveBeenCalledTimes(2);
     dispose?.();
   });
 });
