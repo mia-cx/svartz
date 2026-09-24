@@ -1,8 +1,6 @@
 ---
 description: Plugin and theme system conventions for @svartz/core and @svartz/plugins
-globs:
-  - packages/core/**
-  - packages/plugins/**
+globs: packages/core/**, packages/plugins/**
 alwaysApply: false
 ---
 
@@ -78,6 +76,7 @@ Duplicate ID replaces in-place; new ID appends; disabled removed.
 - `@svartz/vite` imports contributed browser resources from the generated artifacts bridge. A rebuild without the feature removes the import.
 - `.md` and `.mdx` render as inert Markdown HTML. Only `.svx` executes authored Svelte.
 - Markdown emits five content component slots: callout, codeBlock, image, link, embed. The host's `SvartzRuntimePage.contentComponents` wins over `theme.components`, then the built-in HTML element. Keep nested children as Svelte snippets when overriding.
+- Optional format plugins stay out of `createCorePlugins()`. Hard breaks, Roam, and citations contribute compiler steps through `transformGfm` after the built-in GFM hook; OxHugo normalizes source in `parseFrontmatter` before the required parser. Citation bibliography paths resolve from `ctx.config.path`, not process cwd.
 - Browser script modules export `mount(pathname)` and optionally return a disposer. Svartz mounts after hydration and disposes on navigation, vault change, and unmount. Do not install global listeners at import time.
 - Browser scripts may receive decoded, JSON-serializable resource `options` as a second mount argument. `core:analytics` contributes only when configured. Its browser module installs one tracker per provider settings and uses the route disposer to distinguish a return visit from a duplicate mount.
 - Keep decrypted content out of provider calls. `SvartzVaultPage` masks the whole vault DOM for Clarity, including content rendered after decryption.
