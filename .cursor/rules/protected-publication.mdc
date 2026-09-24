@@ -16,7 +16,9 @@ alwaysApply: false
 
 - Filter publication before links, embeds, indexes, and output. Keep unpublished and cross-group note content out of protected bundles too.
 - The public Vite graph imports locked shell components only. Compile transformed protected notes in a separate in-memory Vite build, then write ciphertext after the ordinary emitter clears its output directory.
+- A protected `.svx` loader handles the plain note ID only. Leave query-suffixed Svelte style requests to the Svelte plugin, or note source will be emitted as invalid CSS.
 - Give each group a fresh opaque token per build. Put the token, never the group name or password, in public shell URLs and authenticated payload IDs.
 - Bridge Svelte and client-safe Kit modules through host-generated facade chunks. A protected blob import must use the host's Svelte instance. Reject server-only imports before sealing.
 - Keep keys, decrypted code, and private attachment object URLs in browser memory. Revoke attachment URLs on lock. The browser needs `script-src blob:` to execute decrypted modules.
 - Keep `svartz:protectionReady` closed until host builds, browser mounting, output scans, and group search/graph behavior are verified. A partial implementation must fail the build instead of publishing a broken locked route.
+- `SVARTZ_TEST_PROTECTION=1` enables isolated acceptance builds while the release gate remains closed. Do not use it as a public feature toggle.
