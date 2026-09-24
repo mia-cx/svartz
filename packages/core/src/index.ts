@@ -110,6 +110,7 @@ export type {
 
 // Theme contract — utilities
 export { defineTheme, validateTheme, type ThemeFactory } from "./theme/define-theme";
+export { materializeTheme } from "./theme/materialize-theme";
 export { ThemeValidationError, type ThemeError } from "./theme/errors";
 
 // Tailwind — schema + types

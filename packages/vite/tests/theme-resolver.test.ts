@@ -43,7 +43,7 @@ async function createThemeFixture(themeName: string) {
       `  id: ${JSON.stringify(themeName)},`,
       "  version: '1.0.0',",
       `  contractVersion: ${JSON.stringify(CONTRACT_VERSION)},`,
-      "  layouts: { defaultPage: './DefaultPage.svelte', notePage: './NotePage.svelte' },",
+      "  layouts: { defaultPage: { default: {} }, notePage: { default: {} } },",
       "  routes: [{ id: 'note', pattern: '/:slug', layoutSlot: 'notePage', priority: 1 }],",
       "};",
       "",
@@ -62,10 +62,8 @@ describe("@svartz/vite theme bridge", () => {
     const source = createThemeVirtualModuleSource("@svartz/theme-minimal");
 
     expect(source).toContain('import * as themeModule from "@svartz/theme-minimal";');
-    expect(source).toMatch(/import \{ matchThemeRoute, resolveThemeRouteToArtifactKey \} from ".*\/core\/dist\/index\.js";/);
-    expect(source).toContain(
-      "export const theme = typeof _themeExport === 'function' ? _themeExport(_themeConfig) : _themeExport;",
-    );
+    expect(source).toMatch(/import \{ matchThemeRoute, materializeTheme, resolveThemeRouteToArtifactKey \} from ".*\/core\/dist\/index\.js";/);
+    expect(source).toContain("export const theme = await materializeTheme(_manifest);");
     expect(source).toContain("return matchThemeRoute(routes, input);");
     expect(source).toContain("return resolveThemeRouteToArtifactKey(routes, input);");
   });
