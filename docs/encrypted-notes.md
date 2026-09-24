@@ -12,7 +12,7 @@ export default {
 };
 ```
 
-Set `SVARTZ_FRIENDS_PASSWORD` in the build environment. A missing group or password fails the build. Do not put the password in `svartz.config.ts` or frontmatter.
+Set `SVARTZ_FRIENDS_PASSWORD` in the build environment. A missing group or password fails the build. Do not put the password in `svartz.config.ts` or frontmatter. Password variables cannot use the client-public `PUBLIC_` or `VITE_` prefixes. Cloudflare SvelteKit hosts should use their configured server-only `PRIVATE_` prefix.
 
 ```svx
 ---
@@ -24,7 +24,7 @@ password_group: friends
 <img src="./photo.webp" alt="Friends together" />
 ```
 
-Notes in the same group share one password and unlock together for the current browser page session. Locking clears that group's key, code, discovery data, and private attachment URLs from memory. Another group stays unlocked. Reloading the page requires the password again.
+Notes in the same group share one password and unlock together for the current browser page session. Locking removes the group's key, rendered content, discovery data, and private attachment URLs. A browser may retain imported module code until the page closes. Another group stays unlocked. Reloading the page requires the password again.
 
 Set `hide_locked: true` to omit a protected note from public navigation, search, feeds, sitemaps, and graphs. Its URL remains reachable by someone who knows it. Listed protected notes expose their title and URL before unlock. Search and graph details for listed notes appear only after unlock and disappear on lock. `draft: true` and `private: true` still prevent publication; `published_at` publishes immediately, without scheduling a future build.
 
@@ -37,7 +37,10 @@ kit: {
   csp: {
     directives: {
       'script-src': ['self', 'blob:'],
-      'style-src': ['self', 'blob:', 'unsafe-inline']
+      'style-src': ['self', 'blob:', 'unsafe-inline'],
+      'img-src': ['self', 'blob:'],
+      'media-src': ['self', 'blob:'],
+      'frame-src': ['self', 'blob:']
     }
   }
 }

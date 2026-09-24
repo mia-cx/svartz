@@ -9,6 +9,13 @@ Keep the site static. Compile protected `.svx` and its private dependencies outs
 - [x] Documentation: author password-group config, frontmatter, CSP, and unlock behavior in `docs/encrypted-notes.md`.
 - [ ] Review & Close: generated outputs and trust boundaries reviewed locally; request independent security review before release.
 
+## Review follow-up
+
+- [x] Tests: reproduce and cover the security and publication findings on PR #65.
+- [x] Capture Knowledge: correct the protected-publication rule and record the query-import boundary.
+- [x] Documentation: correct CSP and relock guarantees for host consumers.
+- [ ] Review & Close: resolve actionable PR threads, rerun focused and consumer checks, push the clean branch.
+
 ## Implementation slices
 
 1. [x] Define and validate password groups and protected note metadata. Missing group or password fails closed; a protected build remains blocked until the encrypted emitter is ready.
