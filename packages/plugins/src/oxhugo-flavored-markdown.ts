@@ -69,7 +69,8 @@ export const oxHugoFlavoredMarkdown = (userOptions: Partial<OxHugoOptions> = {})
     run(ctx) {
       const options = { ...defaults, ...userOptions };
       for (const file of ctx.files) {
-        if (!file.extension || ![".md", ".mdx", ".svx"].includes(file.extension)) continue;
+        // Ox-hugo exports Markdown. Never rewrite executable Svelte source.
+        if (!file.extension || ![".md", ".mdx"].includes(file.extension)) continue;
         const header = FRONTMATTER_HEADER.exec(file.content)?.[0] ?? "";
         file.content = header + normalizeBody(file.content.slice(header.length), options);
       }

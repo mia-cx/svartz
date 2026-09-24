@@ -3,6 +3,7 @@ import { definePlugin, getCompilerContributions } from "@svartz/core";
 import { findAndReplace, type FindAndReplaceList } from "mdast-util-find-and-replace";
 import type { Root } from "mdast";
 import { visit } from "unist-util-visit";
+import { extractRawLinks } from "./internal/parse";
 
 export interface RoamOptions {
   orComponent: boolean;
@@ -67,7 +68,7 @@ function expandParsedTasks(node: Extract<Root["children"][number], { type: "para
     const suffix = after.value.slice(3);
     node.children.splice(index, 3,
       ...(prefix ? [{ type: "text" as const, value: prefix }] : []),
-      { type: "html", value: `<input type="checkbox"${done ? " checked" : ""} disabled>` },
+      { type: "html", value: `<input type="checkbox" aria-label="${done ? "Done" : "To do"}"${done ? " checked" : ""} disabled>` },
       ...(suffix ? [{ type: "text" as const, value: suffix }] : []),
     );
   }
@@ -110,10 +111,10 @@ function remarkRoam(options: RoamOptions) {
       [/\^\^(.+?)\^\^/g, (_match, value: string) => ({ type: "html", value: `<span class="text-highlight">${escapeHtml(value)}</span>` })],
     ];
     if (options.orComponent) replacements.push([/\{\{or:([^{}]+)\}\}/g, (_match: string, choices: string) => ({
-      type: "html", value: `<select>${choices.split("|").map((choice) => `<option value="${escapeHtml(choice)}">${escapeHtml(choice)}</option>`).join("")}</select>`,
+      type: "html", value: `<select aria-label="Choose an option">${choices.split("|").map((choice) => `<option value="${escapeHtml(choice)}">${escapeHtml(choice)}</option>`).join("")}</select>`,
     })]);
-    if (options.TODOComponent) replacements.push([/\{\{(?:\[\[)?TODO(?:\]\])?\}\}/g, () => ({ type: "html", value: "<input type=\"checkbox\" disabled>" })]);
-    if (options.DONEComponent) replacements.push([/\{\{(?:\[\[)?DONE(?:\]\])?\}\}/g, () => ({ type: "html", value: "<input type=\"checkbox\" checked disabled>" })]);
+    if (options.TODOComponent) replacements.push([/\{\{(?:\[\[)?TODO(?:\]\])?\}\}/g, () => ({ type: "html", value: '<input type="checkbox" aria-label="To do" disabled>' })]);
+    if (options.DONEComponent) replacements.push([/\{\{(?:\[\[)?DONE(?:\]\])?\}\}/g, () => ({ type: "html", value: '<input type="checkbox" aria-label="Done" checked disabled>' })]);
     findAndReplace(tree, replacements, { ignore: ["link", "linkReference", "html"] });
   };
 }
@@ -121,6 +122,16 @@ function remarkRoam(options: RoamOptions) {
 /** Add Roam prose syntax after the normal GFM parser. */
 export const roamFlavoredMarkdown = (userOptions: Partial<RoamOptions> = {}) => definePlugin(() => ({
   id: "core:roam-flavored-markdown",
+  parseFrontmatter: {
+    run(ctx) {
+      ctx.meta.set("svartz:roamMedia", true);
+      for (const file of ctx.files) {
+        if (![".md", ".mdx", ".svx"].includes(file.extension ?? "")) continue;
+        file.rawLinks = extractRawLinks(file.content, true);
+      }
+    },
+    options: { fatal: true, enforce: "post" },
+  },
   transformGfm: {
     run(ctx) {
       const options = { ...defaults, ...userOptions };

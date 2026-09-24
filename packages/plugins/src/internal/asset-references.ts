@@ -7,7 +7,24 @@ import { visit } from "unist-util-visit";
 const WIKILINK = /!?\[\[([^\]]+)\]\]/g;
 const HTML_TAG = /<(?:a|audio|iframe|img|link|source|video)\b[^>]*>/gi;
 const HTML_ASSET = /\b(?:href|src|poster|srcset)\s*=\s*(["'])(.*?)\1/gi;
+const ROAM_MEDIA = /\{\{\[\[(?:audio|video|pdf)\]\]:\s*([^}\r\n]+)\}\}/gi;
 const markdown = unified().use(remarkParse);
+
+/** Source spans for local Roam media outside code and HTML. */
+export function roamMediaReferences(source: string): { start: number; end: number; target: string }[] {
+  const references: { start: number; end: number; target: string }[] = [];
+  visit(markdown.parse(source), "text", (node) => {
+    const offset = node.position?.start.offset;
+    if (offset === undefined) return;
+    for (const match of node.value.matchAll(ROAM_MEDIA)) {
+      const target = match[1]!;
+      const start = offset + match.index! + match[0].indexOf(target);
+      if (source.slice(start, start + target.length) !== target) continue;
+      references.push({ start, end: start + target.length, target: target.trim() });
+    }
+  });
+  return references;
+}
 
 function assetTarget(target: string): string | undefined {
   const path = target.split(/[?#]/, 1)[0]?.trim();
@@ -51,6 +68,7 @@ export function createAssetResolver(assets: readonly ProcessedFile[]) {
 export function referencedAssets(
   notes: readonly ProcessedFile[],
   assets: readonly ProcessedFile[],
+  roamMedia = false,
 ): Set<string> {
   const resolveAsset = createAssetResolver(assets);
   const selected = new Set<string>();
@@ -63,6 +81,10 @@ export function referencedAssets(
     for (const field of ["socialImage", "image", "cover"] as const) {
       const value = note.frontmatter?.[field];
       if (typeof value === "string") resolve(value);
+    }
+
+    if (roamMedia) {
+      for (const reference of roamMediaReferences(note.content)) resolve(reference.target);
     }
 
     visit(markdown.parse(note.content), (node) => {

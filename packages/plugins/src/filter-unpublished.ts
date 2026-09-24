@@ -77,13 +77,14 @@ export const filterUnpublished = definePlugin(() => ({
       const assets = ctx.files.filter(
         (file) => !isNote(file) && !matches(file.path, exclude),
       );
-      const usedAssets = referencedAssets(publishedNotes, assets);
-      ctx.meta.set("svartz:publicAssetPaths", referencedAssets(publishedNotes.filter((file) => !file.protection), assets));
+      const roamMedia = ctx.meta.get("svartz:roamMedia") === true;
+      const usedAssets = referencedAssets(publishedNotes, assets, roamMedia);
+      ctx.meta.set("svartz:publicAssetPaths", referencedAssets(publishedNotes.filter((file) => !file.protection), assets, roamMedia));
       const protectedAssetPaths = new Map<string, Set<string>>();
       for (const file of publishedNotes) {
         if (!file.protection) continue;
         const groupAssets = protectedAssetPaths.get(file.protection.group) ?? new Set<string>();
-        for (const path of referencedAssets([file], assets)) groupAssets.add(path);
+        for (const path of referencedAssets([file], assets, roamMedia)) groupAssets.add(path);
         protectedAssetPaths.set(file.protection.group, groupAssets);
       }
       ctx.meta.set("svartz:protectedAssetPaths", protectedAssetPaths);

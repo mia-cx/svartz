@@ -7,6 +7,8 @@ import { hardLineBreaks } from "../src/hard-line-breaks";
 import { roamFlavoredMarkdown } from "../src/roam-flavored-markdown";
 import { oxHugoFlavoredMarkdown } from "../src/oxhugo-flavored-markdown";
 import { parseFrontmatter } from "../src/parse-frontmatter";
+import { filterUnpublished } from "../src/filter-unpublished";
+import { resolveLinks } from "../src/resolve-links";
 import { citations } from "../src/citations";
 import { compileProtectedNoteSource } from "../src/emit-artifacts";
 import { renderMarkdown } from "../src/internal/render-markdown";
@@ -18,7 +20,12 @@ afterEach(async () => {
 
 function context(path: string, content: string): PluginContext {
   return {
-    config: { path } as ResolvedConfig,
+    config: {
+      path, publicationMode: "exclusion", include: [], exclude: [], mountPath: "",
+      linkResolution: "closest",
+      frontmatter: { publishedField: "published_at", aliasesField: "aliases" },
+      passwordGroups: {},
+    } as unknown as ResolvedConfig,
     files: [{ path: "note.md", slug: "note", extension: ".md", content }],
     artifacts: new Map(),
     meta: new Map(),
@@ -50,9 +57,9 @@ describe("optional content formats", () => {
     expect(html).toContain("<em>italic</em>");
     expect(html).toContain("<strong>bold</strong>");
     expect(html).toContain('<span class="text-highlight">highlight</span>');
-    expect(html).toContain('<input type="checkbox" disabled>');
-    expect(html).toContain('<input type="checkbox" checked disabled>');
-    expect(html).toContain('<select><option value="yes">yes</option><option value="no">no</option></select>');
+    expect(html).toContain('<input type="checkbox" aria-label="To do" disabled>');
+    expect(html).toContain('<input type="checkbox" aria-label="Done" checked disabled>');
+    expect(html).toContain('<select aria-label="Choose an option"><option value="yes">yes</option><option value="no">no</option></select>');
     expect(html).toContain("<blockquote>");
     expect(html).toContain("https://www.youtube.com/embed/abc123");
     expect(html).toContain("<code>{{[[TODO]]}}</code>");
@@ -62,11 +69,38 @@ describe("optional content formats", () => {
     protectedNote.files[0]!.protection = { group: "team", hidden: false };
     roamFlavoredMarkdown().transformGfm!.run(protectedNote);
     const protectedSource = await compileProtectedNoteSource(protectedNote, protectedNote.files[0]!);
-    expect(protectedSource).toContain("<select>");
+    expect(protectedSource).toContain('<select aria-label="Choose an option">');
     expect(protectedSource).toContain("<em>italic</em>");
     expect(protectedSource).toContain('type="checkbox"');
     expect(protectedSource).toContain("<blockquote>");
     expect(protectedSource).toContain("https://www.youtube.com/embed/abc123");
+  });
+
+  it("keeps Roam markers out of link rewriting and retains local media", async () => {
+    const ctx = context("/vault", "{{[[TODO]]}} [[TODO]]\n\n[[>]] A quote\n\n{{[[audio]]: media/clip.mp3}}");
+    ctx.files.push(
+      { path: "TODO.md", slug: "TODO", extension: ".md", content: "# Linked note" },
+      { path: "media/clip.mp3", slug: "media/clip.mp3", extension: ".mp3", content: "", sourcePath: "/vault/media/clip.mp3" },
+      { path: "private.md", slug: "private", extension: ".md", content: "---\nprivate: true\n---\n{{[[audio]]: media/secret.mp3}}" },
+      { path: "media/secret.mp3", slug: "media/secret.mp3", extension: ".mp3", content: "", sourcePath: "/vault/media/secret.mp3" },
+    );
+    const roam = roamFlavoredMarkdown();
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    roam.parseFrontmatter!.run(ctx);
+    filterUnpublished().filterUnpublished!.run(ctx);
+    resolveLinks().resolveLinks!.run(ctx);
+    roam.transformGfm!.run(ctx);
+
+    expect(ctx.files.map((file) => file.path)).toContain("media/clip.mp3");
+    expect(ctx.files.map((file) => file.path)).not.toContain("media/secret.mp3");
+    expect(ctx.files[0]!.rawLinks?.map((link) => link.target)).toEqual(["TODO"]);
+    expect(ctx.files[0]!.links).toEqual(["TODO"]);
+    expect(ctx.files[0]!.content).toContain("{{[[TODO]]}}");
+    expect(ctx.files[0]!.content).toContain("{{[[audio]]: ../media/clip.mp3}}");
+    const html = await renderMarkdown(ctx, ctx.files[0]!.content);
+    expect(html).toContain('<input type="checkbox" aria-label="To do" disabled>');
+    expect(html).toContain("<blockquote>");
+    expect(html).toContain('<audio controls src="../media/clip.mp3"></audio>');
   });
 
   it("lets Roam options disable controls and rejects executable media URLs", async () => {
@@ -101,6 +135,23 @@ describe("optional content formats", () => {
     const disabled = context("/vault", markdown);
     oxHugoFlavoredMarkdown({ wikilinks: false, removeHugoShortcode: false }).parseFrontmatter!.run(disabled);
     expect(disabled.files[0]!.content).toContain('[Hello]({{< relref "hello.md" >}})');
+  });
+
+  it("parses TOML privacy metadata before filtering and leaves SVX source intact", () => {
+    const ctx = context("/vault", "+++\nprivate = true\npublished_at = 2026-01-01\n+++\n# Secret");
+    oxHugoFlavoredMarkdown().parseFrontmatter!.run(ctx);
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    filterUnpublished().filterUnpublished!.run(ctx);
+    expect(ctx.files).toEqual([]);
+
+    const malformed = context("/vault", "+++\nprivate = true\n# Secret");
+    expect(() => parseFrontmatter().parseFrontmatter!.run(malformed)).toThrow(/frontmatter/i);
+
+    const svx = context("/vault", '<script>const link = "[Hello]({{< relref \\"hello.md\\" >}})";</script>\n{link}');
+    svx.files[0]!.extension = ".svx";
+    const original = svx.files[0]!.content;
+    oxHugoFlavoredMarkdown().parseFrontmatter!.run(svx);
+    expect(svx.files[0]!.content).toBe(original);
   });
 
   it("renders citations from a vault-local bibliography", async () => {
