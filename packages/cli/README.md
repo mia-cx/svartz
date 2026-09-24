@@ -16,6 +16,8 @@ svartz dev --vault docs
 
 `svartz build` now builds every configured vault sequentially.
 
+Parallel CLI processes also share a project build lock. A crashed build's lock recovers automatically on the next build. If a crash occurs during the brief recovery step, the CLI names the abandoned `.svartz/.vault-build.lock.recover` guard. Check that no Svartz build is running before removing that guard and retrying.
+
 `npx svartz@latest init` initializes the directory where it runs. A new project gets an editable SvelteKit shell, a `vault/index.md` starter note, the minimal theme dependency, and `svartz.config.ts`. It installs with npm unless an existing package manager is declared. It initializes Git for a new standalone project unless already inside a Git worktree. `--no-install` and `--no-git` skip those steps.
 
 In an existing SvelteKit app, `init` keeps routes, layouts, adapter, and existing scripts. It adds Svartz dependencies and scripts, wraps the existing Vite export with `withSvartzHost`, and preserves any existing Svartz config and vault definitions. This wrapper supplies virtual-module aliases during SvelteKit's client build. If a file cannot be safely integrated, `init` reports the conflict before writing.
