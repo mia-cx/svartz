@@ -21,12 +21,17 @@ function toRelativeGlob(fromDirectory: string, targetGlob: string): string {
   return `./${normalizedPath}`;
 }
 
+function packageContentGlob(packageRoot: string): string {
+  const sourceRoot = path.join(packageRoot, existsSync(path.join(packageRoot, "src")) ? "src" : "dist");
+  return path.join(sourceRoot, "**/*.{svelte,js,ts}");
+}
+
 /** Collects Tailwind source globs for the resolved theme and its package deps (for example @svartz/ui). */
 function getTailwindSourceGlobs(appRoot: string, vault: ResolvedConfig): string[] {
   const themeRoot = resolveThemePackageRoot(vault.theme.base, appRoot);
   if (!themeRoot) return [];
 
-  const sourceGlobs = [path.join(themeRoot, "src", "**/*.{svelte,ts}")];
+  const sourceGlobs = [packageContentGlob(themeRoot)];
   const packageJsonPath = path.join(themeRoot, "package.json");
 
   try {
@@ -36,16 +41,12 @@ function getTailwindSourceGlobs(appRoot: string, vault: ResolvedConfig): string[
 
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as {
       dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
     };
 
-    for (const packageName of Object.keys({
-      ...packageJson.dependencies,
-      ...packageJson.devDependencies,
-    })) {
+    for (const packageName of Object.keys(packageJson.dependencies ?? {})) {
       const packageRoot = resolveThemePackageRoot(packageName, appRoot);
       if (!packageRoot || packageRoot === themeRoot) continue;
-      sourceGlobs.push(path.join(packageRoot, "src", "**/*.{svelte,ts}"));
+      sourceGlobs.push(packageContentGlob(packageRoot));
     }
   } catch {
     // Best effort only. If theme package metadata is missing or malformed, still scan the theme itself.

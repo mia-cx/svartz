@@ -17,7 +17,7 @@ function createConfig(themeBase: string): ResolvedConfig {
   } as unknown as ResolvedConfig;
 }
 
-async function createPackage(root: string, name: string, dependencies?: Record<string, string>) {
+async function createPackage(root: string, name: string, dependencies?: Record<string, string>, packed = false) {
   await mkdir(root, { recursive: true });
   await writeFile(
     path.join(root, "package.json"),
@@ -31,7 +31,7 @@ async function createPackage(root: string, name: string, dependencies?: Record<s
     }),
   );
   await writeFile(path.join(root, "index.js"), "export default {};\n");
-  await mkdir(path.join(root, "src"), { recursive: true });
+  await mkdir(path.join(root, packed ? "dist" : "src"), { recursive: true });
 }
 
 afterEach(async () => {
@@ -51,8 +51,22 @@ describe("tailwind source generation", () => {
 
     const sourceGlobs = getTailwindSourceGlobs(appRoot, createConfig("@acme/theme-published"));
 
-    expect(sourceGlobs).toContain(path.join(await realpath(themeRoot), "src", "**/*.{svelte,ts}"));
-    expect(sourceGlobs).toContain(path.join(await realpath(uiRoot), "src", "**/*.{svelte,ts}"));
+    expect(sourceGlobs).toContain(path.join(await realpath(themeRoot), "src", "**/*.{svelte,js,ts}"));
+    expect(sourceGlobs).toContain(path.join(await realpath(uiRoot), "src", "**/*.{svelte,js,ts}"));
+  });
+
+  it("scans dist in packed theme and UI packages without src", async () => {
+    const appRoot = await mkdtemp(path.join(os.tmpdir(), "svartz-tailwind-packed-"));
+    tempDirs.push(appRoot);
+    const themeRoot = path.join(appRoot, "node_modules", "@acme", "theme-published");
+    const uiRoot = path.join(appRoot, "node_modules", "@acme", "ui");
+    await createPackage(uiRoot, "@acme/ui", undefined, true);
+    await createPackage(themeRoot, "@acme/theme-published", { "@acme/ui": "1.0.0" }, true);
+
+    expect(getTailwindSourceGlobs(appRoot, createConfig("@acme/theme-published"))).toEqual([
+      path.join(await realpath(themeRoot), "dist", "**/*.{svelte,js,ts}"),
+      path.join(await realpath(uiRoot), "dist", "**/*.{svelte,js,ts}"),
+    ]);
   });
 
   it("writes relative @source directives for the generated css bridge", () => {
@@ -62,15 +76,15 @@ describe("tailwind source generation", () => {
     );
     const cssSource = createTailwindSourcesCss(
       [
-        "/workspace/themes/minimal/src/**/*.{svelte,ts}",
-        "/workspace/node_modules/@svartz/ui/src/**/*.{svelte,ts}",
+        "/workspace/themes/minimal/src/**/*.{svelte,js,ts}",
+        "/workspace/node_modules/@svartz/ui/src/**/*.{svelte,js,ts}",
       ],
       cssFilePath,
     );
 
-    expect(cssSource).toContain('@source "../../../themes/minimal/src/**/*.{svelte,ts}";');
+    expect(cssSource).toContain('@source "../../../themes/minimal/src/**/*.{svelte,js,ts}";');
     expect(cssSource).toContain(
-      '@source "../../../node_modules/@svartz/ui/src/**/*.{svelte,ts}";',
+      '@source "../../../node_modules/@svartz/ui/src/**/*.{svelte,js,ts}";',
     );
   });
 
