@@ -103,6 +103,16 @@ describe('grouping', () => {
 		]);
 	});
 
+	it('sorts the root section first even when a folder note is titled Overview', () => {
+		const nav = symbolNav([{ ...entry('guides'), title: 'Overview' }, entry('guides/start'), entry('about')], [
+			{ slug: 'guides', title: 'guides', href: '/folders/guides/' }
+		]);
+		expect(nav.map((section) => [section.slug, section.title])).toEqual([
+			['', 'Overview'],
+			['guides', 'Overview']
+		]);
+	});
+
 	it('names and links a module with its folder note, and keeps its guides', () => {
 		const nav = symbolNav(
 			[{ ...entry('core'), title: 'Core API' }, entry('core/defineTheme', 'function'), entry('core/migration')],

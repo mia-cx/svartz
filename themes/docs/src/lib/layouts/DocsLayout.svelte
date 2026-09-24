@@ -112,7 +112,7 @@
 			<section class="modules" aria-labelledby="modules-heading">
 				<h2 id="modules-heading" class="sv-section-title">Browse the reference</h2>
 				<ul>
-					{#each modules as section (section.title)}
+					{#each modules as section (section.slug)}
 						<li>
 							{#if section.href}<a href={section.href} class:mono={section.symbols}>{section.title}</a>{:else}<span>{section.title}</span>{/if}
 							<span class="sv-label">{count(section.entries.length, section.symbols ? 'symbol' : 'page')}</span>

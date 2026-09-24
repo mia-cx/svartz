@@ -184,6 +184,8 @@ export function groupByKind<T extends NavEntry>(entries: readonly T[]): { kind: 
 }
 
 export interface NavSection<T> {
+	/** The top-level folder, or `""` for the Overview section of root notes. */
+	readonly slug: string;
 	readonly title: string;
 	readonly href?: string;
 	/** A module of symbols (grouped by kind) rather than a folder of guides. */
@@ -208,6 +210,7 @@ export function symbolNav<T extends NavEntry>(
 		.map((section): NavSection<T> => {
 			const sorted = [...section.entries].sort((left, right) => collator.compare(left.title, right.title));
 			return {
+				slug: section.slug,
 				title: section.slug ? section.title : 'Overview',
 				href: section.href,
 				symbols: sorted.some((entry) => kindOf(entry) !== undefined),
@@ -218,7 +221,7 @@ export function symbolNav<T extends NavEntry>(
 		.sort(
 			(left, right) =>
 				Number(left.symbols) - Number(right.symbols) ||
-				Number(right.title === 'Overview') - Number(left.title === 'Overview') ||
+				Number(right.slug === '') - Number(left.slug === '') ||
 				collator.compare(left.title, right.title)
 		);
 }

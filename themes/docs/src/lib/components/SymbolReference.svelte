@@ -17,11 +17,10 @@
 		children
 	}: { symbol: DocSymbol; entries: readonly IndexEntry[]; children?: Snippet } = $props();
 
-	// The layout stays mounted across pages, so the tab resets when the symbol changes.
-	let overload = $derived.by(() => {
-		void symbol;
-		return 0;
-	});
+	// The layout stays mounted across pages, so a chosen tab only counts for its own symbol.
+	// Raw, so `chosen.symbol` stays the same object as the prop rather than a proxy.
+	let chosen = $state.raw<{ symbol: DocSymbol; index: number }>();
+	const overload = $derived(chosen?.symbol === symbol ? chosen.index : 0);
 	// Overloaded and static/instance members can share a name; anchors stay unique.
 	const memberIds = $derived.by(() => {
 		const seen = new Map<string, number>();
@@ -74,7 +73,7 @@
 						id="overload-tab-{index}"
 						aria-selected={overload === index}
 						aria-controls="overload-panel"
-						onclick={() => (overload = index)}
+						onclick={() => (chosen = { symbol, index })}
 					>
 						Overload {index + 1}
 					</button>

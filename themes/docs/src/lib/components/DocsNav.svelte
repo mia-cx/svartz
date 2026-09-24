@@ -18,7 +18,7 @@
 </script>
 
 <nav class="docs-nav" aria-label="Reference">
-	{#each sections as section (section.title)}
+	{#each sections as section (section.slug)}
 		<section>
 			<h2 class="sv-section-title">
 				{#if section.href}<a href={section.href} aria-current={current(section.href)}>{section.title}</a>{:else}{section.title}{/if}
