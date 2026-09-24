@@ -11,7 +11,7 @@ alwaysApply: false
 ## Type ownership
 
 - `@svartz/core` owns resolved config types, pipeline types, plugin/theme interfaces, utilities, errors, and tailwind/wrangler schemas
-- `@svartz/plugins` owns core pipeline plugin implementations (13 plugins)
+- `@svartz/plugins` owns core pipeline plugin implementations
 - `@svartz/vite` owns Vite orchestration, theme resolution, and browser resource imports; `@svartz/core` owns stage dispatch
 - `@svartz/config` re-exports tailwind/wrangler schemas from core; owns config composition/resolution
 - `@svartz/plugins` depends only on `@svartz/core` (plus runtime deps like gray-matter, minimatch, moment)

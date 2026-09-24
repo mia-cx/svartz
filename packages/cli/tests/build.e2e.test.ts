@@ -45,7 +45,7 @@ describe("svartz CLI", () => {
 
       await expect(access(DIST_INDEX_PATH)).resolves.toBeUndefined();
       await expect(access(DIST_NOT_FOUND_PATH)).resolves.toBeUndefined();
-      await expect(access(DIST_SITEMAP_PATH)).resolves.toBeUndefined();
+      await expect(access(DIST_SITEMAP_PATH)).rejects.toMatchObject({ code: "ENOENT" });
 
       const html = await readFile(DIST_INDEX_PATH, "utf8");
       expect(html).toContain("<title>");

@@ -9,6 +9,8 @@ export type {
   ResolvedConfig,
   ResolvedFrontmatterConfig,
   ResolvedSiteConfig,
+  ResolvedDiscoveryConfig,
+  DateSource,
   ResolvedThemeConfig,
   ResolvedBuildConfig,
   ResolvedVaultDefaults,

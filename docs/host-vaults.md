@@ -19,3 +19,5 @@ export default defineConfig({
 Each vault gets its own theme, publication filter, generated artifacts, and asset URL namespace. A file named `image.png` in both vaults is served at `/journal/image.png` and `/work/image.png`. Overlapping mounts, including `/` beside `/journal`, fail config loading.
 
 The generated `virtual:svartz/host` module exposes `vaults`, combined `routes`, and `resolveHostVault(pathname)`. The default catchall uses `routes` for redirects and 404s. Hosts can import `virtual:svartz/artifacts` for a single-vault build or use the registry to select a vault in a composed build. See the [published vault view](vault-view.md) for typed note data.
+
+Each vault can emit its own RSS feed and sitemap. A host can also select vaults for a combined feed or sitemap in a manual SvelteKit route. See [feeds and sitemaps](discovery.md).

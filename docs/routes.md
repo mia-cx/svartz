@@ -11,7 +11,7 @@ export default {
 };
 ```
 
-The selected vault's note URLs, tags, folders, and redirects include its mount path. A `target.basePath` for a standalone build controls SvelteKit's deployment base; it is not a vault mount. The current CLI builds each host vault separately; combining two mounts in one host build is tracked in #51.
+The selected vault's note URLs, tags, folders, and redirects include its mount path. A `target.basePath` for a standalone build controls SvelteKit's deployment base; it is not a vault mount. One host build can serve multiple non-overlapping vault mounts.
 
 Published notes claim canonical URLs after publication filtering. An exact filename wins over a name that normalizes to the same URL. For example, `hello-world.md` takes `/hello-world/`, while `hello world.md` gets `/hello-world-3/` when `hello world 2.md` already owns `/hello-world-2/`. Allocation sorts source paths, so discovery order does not change the result. No URL is promised stable across a rename or a new collision.
 

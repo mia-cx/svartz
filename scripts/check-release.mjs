@@ -17,7 +17,7 @@ const packages = [
   ['@svartz/config', 'packages/config', ['dist/index.js', 'dist/index.d.ts']],
   ['@svartz/ui', 'packages/ui', ['dist/index.js', 'dist/runtime/index.js', 'dist/stores.d.ts']],
   ['@svartz/theme-minimal', 'themes/minimal', ['dist/index.js', 'dist/runtime.js', 'dist/theme.css']],
-  ['@svartz/vite', 'packages/vite', ['dist/index.js', 'dist/host.js', 'types/virtual-modules.d.ts']],
+  ['@svartz/vite', 'packages/vite', ['dist/index.js', 'dist/host.js', 'dist/discovery.js', 'types/virtual-modules.d.ts']],
   ['svartz', 'packages/cli', ['dist/index.js', 'template/vault/index.md', 'template/gitignore']],
 ];
 
@@ -129,13 +129,24 @@ async function checkHost(project, launcher, archives) {
   await write(project, 'src/routes/+page.svelte', '<h1>Portfolio home</h1>\n');
   await command(path.join(launcher, 'node_modules/.bin/svartz'), ['init', '--no-install'], project);
   await localDependencies(project, archives);
+  const configPath = path.join(project, 'svartz.config.ts');
+  const config = await readFile(configPath, 'utf8');
+  await writeFile(configPath, config.replace(/site: \{ title: ([^}]+) \}/,
+    "site: { title: $1, url: 'https://example.test' }"));
   await write(project, 'src/routes/check/+page.svelte', "<script lang=\"ts\">import { index } from 'virtual:svartz/artifacts';</script><p>Published notes: {index.entries.length}</p>\n");
+  await write(project, 'src/routes/rss.xml/+server.ts', [
+    "import { vaults } from 'virtual:svartz/host';",
+    "import { renderHostRss } from '@svartz/vite/discovery';",
+    'export const prerender = true;',
+    "export const GET = () => new Response(renderHostRss(vaults, ['notes'], { title: 'Portfolio', url: 'https://example.test' }), { headers: { 'content-type': 'application/rss+xml' } });",
+  ].join('\n'));
   await command('npm', ['install', '--no-audit', '--no-fund'], project);
   await command(path.join(project, 'node_modules/.bin/tsc'),
     ['--noEmit', '--skipLibCheck', '--module', 'esnext', '--moduleResolution', 'bundler', '--target', 'es2022', 'vite.config.ts', 'svartz.config.ts'], project);
   await command('npm', ['run', 'svartz:build'], project);
   assert.match(await readFile(path.join(project, 'src/routes/+page.svelte'), 'utf8'), /Portfolio home/);
   assert.match(await readFile(path.join(project, 'build/check.html'), 'utf8'), /Published notes: 1/);
+  assert.match(await readFile(path.join(project, 'build/rss.xml'), 'utf8'), /https:\/\/example\.test\//);
   await checkDev(project, 'Portfolio home');
   console.log('Packed Vite 8 host: integration, types, static build, and dev passed.');
 }

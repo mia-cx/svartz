@@ -9,6 +9,7 @@ import type {
   LinkResolutionStrategySchema,
   FrontmatterFieldsSchema,
   SiteConfigSchema,
+  DiscoveryConfigSchema,
 } from "../schemas";
 
 // --- Inferred types from Schema ---
@@ -28,6 +29,7 @@ type FrontmatterFields = Schema.Schema.Type<
   typeof FrontmatterFieldsSchema
 >;
 type SiteConfig = Schema.Schema.Type<typeof SiteConfigSchema>;
+type DiscoveryConfig = Schema.Schema.Type<typeof DiscoveryConfigSchema>;
 
 export {
   type SvartzConfig,
@@ -39,4 +41,5 @@ export {
   type LinkResolutionStrategy,
   type FrontmatterFields,
   type SiteConfig,
+  type DiscoveryConfig,
 };

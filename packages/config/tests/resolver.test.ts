@@ -112,6 +112,24 @@ describe("resolveConfigPaths", () => {
     expect(vault.linkResolution).toBe("closest");
     expect(vault.theme.base).toBe("@svartz/theme-minimal");
     expect(vault.theme).toEqual({ base: "@svartz/theme-minimal" });
+    expect(vault.discovery.feed).toEqual({ enabled: false, limit: 10, content: "summary", sort: "published" });
+    expect(vault.discovery.sitemap.enabled).toBe(false);
+    expect(vault.discovery.dateSources).toEqual(["frontmatter", "git", "filesystem"]);
+  });
+
+  it("enables discovery when public URL exists and merges vault overrides", async () => {
+    const config: SvartzConfig = {
+      ...minimalConfig,
+      defaults: {
+        site: { title: "Notes", url: "https://example.com/site" },
+        discovery: { feed: { limit: 20 }, dateSources: ["git", "filesystem"] },
+      },
+      vaults: [{ ...minimalConfig.vaults[0]!, discovery: { feed: { sort: "modified" }, sitemap: { enabled: false } } }],
+    };
+    const vault = (await resolveConfig(config, PKG_ROOT)).vaults[0]!;
+    expect(vault.discovery.feed).toEqual({ enabled: true, limit: 20, content: "summary", sort: "modified" });
+    expect(vault.discovery.sitemap.enabled).toBe(false);
+    expect(vault.discovery.dateSources).toEqual(["git", "filesystem"]);
   });
 
   it("applies hardcoded frontmatter defaults", async () => {
