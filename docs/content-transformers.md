@@ -6,6 +6,7 @@ Links shown in code samples, escaped prose, or raw HTML do not become graph edge
 Inline `#topic` and nested `#topic/subtopic` tags become links to the vault's tag routes. They join normalized frontmatter tags in listings and search. Tags in published note embeds become links too. Numeric-only tags and tags inside code or authored links are left alone. Publication filtering runs before tag extraction, so drafts and private notes do not add public tags.
 
 Highlights, `%%` comments, and inline tags also work in nested list items. Fenced, indented, and inline code stays literal, even when it contains those markers.
+Executable `.svx` script and HTML blocks stay literal too, including JavaScript template strings with those markers.
 
 Callouts use Obsidian's blockquote syntax. Their title and first body line render as separate paragraphs:
 
