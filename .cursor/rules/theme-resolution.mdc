@@ -1,0 +1,16 @@
+---
+description: Resolve configured themes consistently for build, dev, and host apps
+globs:
+  - packages/config/**
+  - packages/vite/**
+  - packages/cli/**
+alwaysApply: false
+---
+
+# Theme resolution
+
+- `@svartz/config` owns the built-in `@svartz/theme-minimal` default and resolves `./` and `../` theme paths against the config directory.
+- `@svartz/vite` owns theme entry and package-root lookup. Resolve npm names from the host SvelteKit app root; reuse its package-root function in the CLI.
+- Invalid explicit themes fail. Never silently substitute the default theme.
+- Local workspace theme source changes rebuild by package name and restart dev. External absolute theme changes restart dev without a workspace build filter. Installed npm themes are not watched as source packages.
+- Theme management commands are deferred until after v1.
