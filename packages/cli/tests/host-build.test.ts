@@ -33,7 +33,6 @@ afterEach(async () => {
 
 it("builds and serves two isolated vaults inside one existing host", async () => {
   vi.stubEnv("SVARTZ_TEST_PROTECTED_PASSWORD", "host-test-password");
-  vi.stubEnv("SVARTZ_TEST_PROTECTION", "1");
   const root = await mkdtemp(path.join(os.tmpdir(), "svartz-host-build-"));
   roots.push(root);
   await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "node_modules"), "dir");
@@ -136,7 +135,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   const protectedPayload = JSON.parse(new TextDecoder().decode(await openProtectedPayload(key, envelope, envelope.id)));
   expect(protectedPayload.css).toContain("protected-tone");
   await expect(access(path.join(root, "build/client/work/private.svg"))).rejects.toMatchObject({ code: "ENOENT" });
-  for (const directory of [path.join(root, "build/client"), path.join(root, ".svartz/vaults/work/artifacts")]) {
+  for (const directory of [path.join(root, "build"), path.join(root, ".svartz/vaults/work/artifacts"), path.join(root, ".svelte-kit/output")]) {
     for (const file of await readdir(directory, { recursive: true, withFileTypes: true })) {
       if (!file.isFile()) continue;
       expect((await readFile(path.join(file.parentPath, file.name))).toString("utf8"))

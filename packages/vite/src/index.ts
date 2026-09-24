@@ -178,8 +178,8 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     runnerContext.meta.set("svartz:mode", context.mode);
     runnerContext.meta.set("svartz:theme", theme);
     runnerContext.meta.set("svartz:protectedBridgeImports", new Set<string>());
-    // Internal acceptance builds exercise the still-gated publication path.
-    runnerContext.meta.set("svartz:protectionReady", process.env.SVARTZ_TEST_PROTECTION === "1");
+    // The emitter and host bridge are installed before publication filtering runs.
+    runnerContext.meta.set("svartz:protectionReady", true);
     if (context.config.target.type === "host") {
       runnerContext.meta.set("reservedRoutes", await staticHostRoutes(context.root, context.config.mountPath));
     }
