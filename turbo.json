@@ -8,6 +8,7 @@
       ],
       "inputs": [
         "src/**",
+        "template/**",
         "*.config.js",
         "*.config.ts",
         "vite.config.ts",
@@ -42,6 +43,7 @@
       ],
       "inputs": [
         "src/**",
+        "template/**",
         "package.json",
         "tsconfig.json",
         "vitest.config.*",

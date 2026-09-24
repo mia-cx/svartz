@@ -11,10 +11,14 @@
     "./virtual-modules": {
       "import": "./dist/virtual-modules.js",
       "types": "./types/virtual-modules.d.ts"
+    },
+    "./host": {
+      "import": "./dist/host.js",
+      "types": "./dist/host.d.ts"
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts && tsup src/virtual-modules.ts --format esm",
+    "build": "tsup src/index.ts src/host.ts --format esm --dts && tsup src/virtual-modules.ts --format esm",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
