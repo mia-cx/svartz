@@ -1,6 +1,6 @@
 # `@svartz/core`
 
-Shared plugin and theme contracts, resolved vault types, route matching, publication-safe vault views, and protected-note helpers. Plugin and theme author APIs do not require Effect; schemas validate them at runtime.
+Shared plugin and theme contracts, resolved vault types, route matching, publication-safe vault views, and protected-note helpers. Plugin and theme author APIs do not require Effect. Plugin shapes and key theme fields are checked at runtime.
 
 ## Plugin contract
 
@@ -43,4 +43,4 @@ export default defineTheme({
 });
 ```
 
-The contract major version must match `CONTRACT_VERSION`. Invalid declared fields fail validation; unknown fields warn. The source of truth for exported names is [`src/index.ts`](src/index.ts).
+The contract major version must match `CONTRACT_VERSION`. Required layouts, route IDs and patterns, and component loaders fail validation when malformed; unknown fields warn. TypeScript checks the rest of the declared contract. The source of truth for exported names is [`src/index.ts`](src/index.ts).

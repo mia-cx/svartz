@@ -119,6 +119,15 @@ describe("validateTheme", () => {
     );
   });
 
+  it.each([
+    { id: "other", pattern: null },
+    { id: "", pattern: "/other" },
+  ])("rejects a malformed route before matching it", (route) => {
+    expect(() => validateTheme(makeValidTheme({
+      routes: [{ id: "note", pattern: "/notes/:slug" }, route] as never,
+    }))).toThrow(/non-empty id and pattern/);
+  });
+
   it('throws when no route has id "note"', () => {
     expect(() =>
       validateTheme(
