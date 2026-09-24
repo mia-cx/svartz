@@ -36,6 +36,7 @@ const index: Index = {
     tags: ["/blog/tags/"],
     folders: [],
     feed: [],
+    theme: [],
     all: ["/blog/hello/", "/blog/world/", "/blog/hi/", "/blog/tags/"],
   },
   assets: [],

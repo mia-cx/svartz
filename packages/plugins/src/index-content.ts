@@ -17,6 +17,7 @@ import type {
   Index,
   RouteIndex,
   SearchDocument,
+  SvartzTheme,
   TagIndexEntry,
 } from "@svartz/core";
 import { countWords, extractDescription, stripMarkdownToText } from "./internal/parse";
@@ -43,6 +44,15 @@ function folderTitle(slug: string): string {
     ?.replace(/[-_]/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase())
     ?? "Folder";
+}
+
+function staticThemeRoutes(theme: SvartzTheme | undefined, mountPath: string): string[] {
+  return theme?.routes.flatMap((route) => {
+    const dynamic = route.pattern.split("/").some((segment) =>
+      segment === ":slug" || segment === "[slug]" || segment === "[...slug]");
+    if (!route.component || route.prerender === false || dynamic) return [];
+    return [routeHref(route.pattern.replace(/^\/+|\/+$/g, "") || "index", mountPath)];
+  }) ?? [];
 }
 
 function chooseDate(
@@ -294,6 +304,8 @@ export const indexContent = definePlugin(() => ({
       const home = routeHref("index", mountPath);
       const isManualRoute = (href: string) =>
         reservedPaths.has(href.slice(mountPath.length).replace(/^\/+|\/+$/g, ""));
+      const themeRoutes = staticThemeRoutes(ctx.meta.get("svartz:theme") as SvartzTheme | undefined, mountPath)
+        .filter((href) => !isManualRoute(href));
       const naturalFolderRoutes = folders
         .map((folder) => routeHref(folder.slug, mountPath))
         .filter((href) => !isManualRoute(href));
@@ -301,7 +313,7 @@ export const indexContent = definePlugin(() => ({
       const folderRoutes = [foldersRoot, ...folders.map((entry) => entry.href), ...naturalFolderRoutes]
         .filter((href) => !isManualRoute(href));
       const feedRoutes = entries.length > 0 && !isManualRoute(feedRoot) ? [feedRoot] : [];
-      const listingPaths = [home, ...tagRoutes, ...folderRoutes, ...feedRoutes]
+      const listingPaths = [home, ...tagRoutes, ...folderRoutes, ...feedRoutes, ...themeRoutes]
         .map((href) => href.slice(mountPath.length).replace(/^\/+|\/+$/g, ""));
       const redirects = allocateRedirects(
         ctx.files.filter((file) => !file.protection), mountPath,
@@ -315,12 +327,14 @@ export const indexContent = definePlugin(() => ({
         tags: tagRoutes,
         folders: folderRoutes,
         feed: feedRoutes,
+        theme: themeRoutes,
         all: [...new Set([
           ...(!isManualRoute(home) ? [home] : []),
           ...noteRouteSet,
           ...tagRoutes,
           ...folderRoutes,
           ...feedRoutes,
+          ...themeRoutes,
           ...Object.keys(redirects),
         ])].sort(),
       };

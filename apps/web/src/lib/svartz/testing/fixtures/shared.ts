@@ -58,6 +58,7 @@ export const testIndex = {
 		tags: ['/tags/', '/tags/testing/'],
 		folders: ['/folders/', '/folders/guides/'],
 		feed: ['/feed/'],
+		theme: [],
 		all: ['/', '/feed/', '/folders/', '/folders/guides/', '/guides/intro/', '/tags/', '/tags/testing/']
 	},
 	assets: []

@@ -11,7 +11,7 @@ function context(config: Partial<ResolvedConfig> = {}): PluginContext {
   ];
   const index = {
     entries,
-    routes: { mountPath: "/blog", tags: ["/blog/tags/"], folders: ["/blog/folders/", "/blog/earlier/"], feed: ["/blog/feed/"], all: ["/blog/", "/blog/feed/"] },
+    routes: { mountPath: "/blog", tags: ["/blog/tags/"], folders: ["/blog/folders/", "/blog/earlier/"], feed: ["/blog/feed/"], theme: ["/blog/about/"], all: ["/blog/", "/blog/feed/", "/blog/about/"] },
   } as unknown as Index;
   return {
     config: {
@@ -51,6 +51,7 @@ describe("discovery output", () => {
     expect(feed).not.toContain("<content:encoded>");
     expect(sitemap).toContain("https://example.com/site/blog/tags/");
     expect(sitemap).toContain("https://example.com/site/blog/feed/");
+    expect(sitemap).toContain("https://example.com/site/blog/about/");
     expect(sitemap).toContain("https://example.com/site/blog/</loc>");
     expect(sitemap.match(/example.com\/site\/blog\/earlier\//g)).toHaveLength(1);
     expect(sitemap).not.toContain("secret");
