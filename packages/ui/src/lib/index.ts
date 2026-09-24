@@ -17,7 +17,7 @@ export { default as DescText } from './DescText.svelte';
 export * from './content/index.js';
 export { COLOR_MODE_KEY, COLOR_MODE_SCRIPT, currentColorMode, setColorMode, type ColorMode } from './color-mode.js';
 export { formatDate, isoDate, readingTime } from './format.js';
-export { count, folderContents, newestFirst, noteDate, notesTagged } from './listing.js';
+export { count, folderContents, newestFirst, noteDate, notesTagged, topLevelSections, type FolderSection } from './listing.js';
 export { pageCrumbs, tagHrefFor } from './crumbs.js';
 export { assetHref } from './assets.js';
 export { wikilinkSegments, type LinkSegment } from './wikilinks.js';

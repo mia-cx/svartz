@@ -40,13 +40,16 @@ export function titleFromSlugSegment(segment: string): string {
 	return segment.replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-/** Returns folder ids that must be open so the given slug is visible in the explorer. */
+/**
+ * Folder ids to open so the given slug is visible in the explorer: every ancestor,
+ * plus the slug's own folder when it's a folder note (`guides`) or folder page.
+ */
 export function ancestorFolderIdsForSlug(slug: string | undefined): string[] {
 	if (!slug || slug === 'index') return [];
 	const segments = slug.split('/').filter(Boolean);
 	const ids: string[] = [];
 	let path = '';
-	for (let i = 0; i < segments.length - 1; i += 1) {
+	for (let i = 0; i < segments.length; i += 1) {
 		path = path ? `${path}/${segments[i]}` : (segments[i] ?? '');
 		ids.push(`folder:${path}`);
 	}

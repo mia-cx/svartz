@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { folderContents, newestFirst, notesTagged } from './listing.js';
+import { folderContents, newestFirst, notesTagged, topLevelSections } from './listing.js';
 
 const note = (slug: string, date?: string, tags: string[] = []) => ({
 	slug,
@@ -30,5 +30,27 @@ describe('listing helpers', () => {
 	it('matches a tag and its nested tags', () => {
 		const entries = [note('a', undefined, ['garden']), note('b', undefined, ['garden/herbs']), note('c', undefined, ['gardening'])];
 		expect(notesTagged(entries, 'garden').map((entry) => entry.slug)).toEqual(['a', 'b']);
+	});
+
+	it('groups notes by top-level folder; a folder note names and links its section', () => {
+		const entries = [
+			{ ...note('graphql'), title: 'GraphQL' },
+			note('graphql/pet'),
+			note('graphql/types/pet-type'),
+			note('pets/list'),
+			note('about'),
+			note('index')
+		];
+		const folders = [
+			{ slug: 'graphql', title: 'Graphql', href: '/folders/graphql/' },
+			{ slug: 'pets', title: 'Pets', href: '/folders/pets/' }
+		];
+		expect(
+			topLevelSections(entries, folders).map((section) => [section.slug, section.title, section.href, section.entries.map((entry) => entry.slug)])
+		).toEqual([
+			['graphql', 'GraphQL', '/graphql/', ['graphql/pet', 'graphql/types/pet-type']],
+			['pets', 'Pets', '/folders/pets/', ['pets/list']],
+			['', '', undefined, ['about']]
+		]);
 	});
 });

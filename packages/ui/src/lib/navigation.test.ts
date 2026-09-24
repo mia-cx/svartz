@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBreadcrumbs, buildExplorerTree } from './navigation';
+import { ancestorFolderIdsForSlug, buildBreadcrumbs, buildExplorerTree } from './navigation';
 
 describe('explorer tree', () => {
 	const entry = (slug: string, title: string) => ({ slug, title, href: `/${slug}/` });
@@ -29,6 +29,17 @@ describe('explorer tree', () => {
 			['Field guides', '/guides/']
 		]);
 		expect(tree[1]?.children.map((node) => node.title)).toEqual(['Setup']);
+	});
+});
+
+describe('ancestorFolderIdsForSlug', () => {
+	it("opens every ancestor, and a folder note's own folder", () => {
+		expect(ancestorFolderIdsForSlug('guides/setup/first-run')).toEqual([
+			'folder:guides',
+			'folder:guides/setup',
+			'folder:guides/setup/first-run'
+		]);
+		expect(ancestorFolderIdsForSlug('guides')).toEqual(['folder:guides']);
 	});
 });
 

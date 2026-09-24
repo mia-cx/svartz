@@ -29,11 +29,9 @@
 
 	const tree = $derived(buildExplorerTree(entries, folders));
 	const currentSlug = $derived(entries.find((entry) => entry.href === currentHref)?.slug);
-	// On a folder page, that folder opens too (its slug stands in for a child note's).
+	// On a folder page, that folder opens too.
 	const currentFolder = $derived(folders.find((folder) => folder.href === currentHref)?.slug);
-	const forcedOpen = $derived(
-		new Set(ancestorFolderIdsForSlug(currentFolder ? `${currentFolder}/_` : currentSlug))
-	);
+	const forcedOpen = $derived(new Set(ancestorFolderIdsForSlug(currentFolder ?? currentSlug)));
 
 	let expanded = $state(true);
 	let stored = $state<readonly string[]>([]);
