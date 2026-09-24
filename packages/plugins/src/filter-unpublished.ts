@@ -64,10 +64,13 @@ export const filterUnpublished = definePlugin(() => ({
       if (protectedCount > 0 && ctx.meta.get("svartz:protectionReady") !== true) {
         throw new Error("Protected notes require the encrypted publication pipeline");
       }
+      const previousTokens = ctx.meta.get("svartz:protectedGroupTokens") as ReadonlyMap<string, string> | undefined;
       const groupTokens = new Map<string, string>();
       for (const file of publishedNotes) {
         const group = file.protection?.group;
-        if (group && !groupTokens.has(group)) groupTokens.set(group, randomBytes(18).toString("base64url"));
+        if (group && !groupTokens.has(group)) {
+          groupTokens.set(group, previousTokens?.get(group) ?? randomBytes(18).toString("base64url"));
+        }
       }
       ctx.meta.set("svartz:protectedGroupTokens", groupTokens);
 
