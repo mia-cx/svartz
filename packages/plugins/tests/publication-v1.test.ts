@@ -200,6 +200,27 @@ describe("v1 publication boundary", () => {
     expect(ctx.files.map((file) => file.path)).toEqual(["public.md", "media/cover.png"]);
   });
 
+  it("includes attachment URLs in responsive images and media tags", () => {
+    const ctx = context([
+      note("locked.md", '<picture><source srcset="media/small.webp 1x, media/large.webp 2x"><img src="media/fallback.png"></picture><video poster="media/poster.jpg" src="media/clip.mp4"></video><a href="media/file.pdf">Download</a>', { password_group: "friends" }),
+      ...["small.webp", "large.webp", "fallback.png", "poster.jpg", "clip.mp4", "file.pdf", "unused.png"].map((name) => asset(`media/${name}`)),
+    ]);
+    vi.stubEnv("SVARTZ_TEST_PROTECTED_PASSWORD", "secret-password");
+    try {
+      Object.assign(ctx.config.passwordGroups, { friends: { env: "SVARTZ_TEST_PROTECTED_PASSWORD" } });
+      ctx.meta.set("svartz:protectionReady", true);
+      filterUnpublished().filterUnpublished!.run(ctx);
+      const selected = (ctx.meta.get("svartz:protectedAssetPaths") as Map<string, Set<string>>).get("friends");
+      expect([...selected ?? []].sort()).toEqual([
+        "media/clip.mp4", "media/fallback.png", "media/file.pdf", "media/large.webp",
+        "media/poster.jpg", "media/small.webp",
+      ]);
+      expect(ctx.files.map((file) => file.path)).not.toContain("media/unused.png");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("fails closed when a note declares malformed frontmatter", () => {
     const ctx = context([note("private.md", "---\nprivate: [\n---\nSecret")]);
     expect(() => parseFrontmatter().parseFrontmatter!.run(ctx)).toThrow("Invalid frontmatter in private.md");

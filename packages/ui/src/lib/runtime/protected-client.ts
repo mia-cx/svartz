@@ -113,7 +113,7 @@ export function protectedAssets(
 	node: HTMLElement,
 	assets: ReadonlyMap<string, string>
 ): { destroy(): void } {
-	const attributes = ['src', 'href', 'poster'] as const;
+	const attributes = ['src', 'href', 'poster', 'srcset'] as const;
 	const resolveAsset = (raw: string): string | undefined => {
 		if (/^(?:[a-z]+:|\/\/|#)/i.test(raw)) return;
 		let path: string;
@@ -134,6 +134,19 @@ export function protectedAssets(
 		for (const name of attributes) {
 			const raw = element.getAttribute(name);
 			if (!raw) continue;
+			if (name === 'srcset') {
+				const rewritten = raw
+					.split(',')
+					.map((candidate) => {
+						const match = candidate.match(/^(\s*)(\S+)(.*)$/);
+						if (!match) return candidate;
+						const url = resolveAsset(match[2]!);
+						return url ? `${match[1]}${url}${match[3]}` : candidate;
+					})
+					.join(',');
+				if (rewritten !== raw) element.setAttribute(name, rewritten);
+				continue;
+			}
 			const url = resolveAsset(raw);
 			if (url) element.setAttribute(name, url);
 		}

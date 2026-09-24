@@ -36,7 +36,10 @@ it('imports authenticated note code only after a successful browser unlock', asy
 		graph: { secret: [] },
 		js: 'export function note0() { return "unlocked"; }',
 		css: '.protected { color: red }',
-		assets: [{ path: 'photo.png', mimeType: 'image/png', data: 'AAEC' }],
+		assets: [
+			{ path: 'photo.png', mimeType: 'image/png', data: 'AAEC' },
+			{ path: 'poster.jpg', mimeType: 'image/jpeg', data: 'AAEC' }
+		],
 		bridgeImports: []
 	};
 	const envelope = await sealProtectedPayload(
@@ -56,10 +59,17 @@ it('imports authenticated note code only after a successful browser unlock', asy
 	expect(unlocked.css).toContain('color: red');
 	expect(unlocked.assets.get('photo.png')).toMatch(/^blob:/);
 	const wrapper = document.createElement('div');
-	wrapper.innerHTML = '<img src="photo.png"><a href="photo.png">Download</a>';
+	wrapper.innerHTML =
+		'<img src="photo.png" srcset="photo.png 1x, photo.png 2x"><a href="photo.png">Download</a><video poster="poster.jpg"></video>';
 	const binding = protectedAssets(wrapper, unlocked.assets);
 	expect(wrapper.querySelector('img')?.getAttribute('src')).toBe(unlocked.assets.get('photo.png'));
 	expect(wrapper.querySelector('a')?.getAttribute('href')).toBe(unlocked.assets.get('photo.png'));
+	expect(wrapper.querySelector('img')?.getAttribute('srcset')).toBe(
+		`${unlocked.assets.get('photo.png')} 1x, ${unlocked.assets.get('photo.png')} 2x`
+	);
+	expect(wrapper.querySelector('video')?.getAttribute('poster')).toBe(
+		unlocked.assets.get('poster.jpg')
+	);
 	binding.destroy();
 	expect(isProtectedGroupUnlocked(id)).toBe(true);
 	expect((await unlockProtectedNote(reference, '', loadBridgeUrls)).component).toBe(
