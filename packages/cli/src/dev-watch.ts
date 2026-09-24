@@ -8,6 +8,7 @@ type WatchDescriptor = {
   readonly label: string;
   readonly exact?: boolean;
   readonly buildFilters?: readonly string[];
+  readonly buildDirectory?: string;
 };
 
 const CONFIG_FILENAMES = ["svartz.config", ".svartzrc"] as const;
@@ -85,6 +86,7 @@ function getThemeWatchDescriptors(
   themeBase: string,
   appRoot: string,
   workspaceRoot: string,
+  hostApp = false,
 ): WatchDescriptor[] {
   const themeRoot = resolveThemePackageRoot(themeBase, appRoot);
   if (!themeRoot) return [];
@@ -98,18 +100,19 @@ function getThemeWatchDescriptors(
   const packageJsonPath = path.join(themeRoot, "package.json");
   const manifest = JSON.parse(readFileSync(packageJsonPath, "utf8")) as { name?: unknown };
   const buildFilters = typeof manifest.name === "string" ? [manifest.name] : [];
+  const build = hostApp ? { buildDirectory: themeRoot } : { buildFilters };
   const sourcePath = path.join(themeRoot, "src");
   return [
     {
       path: existsSync(sourcePath) ? sourcePath : themeRoot,
       label,
-      buildFilters,
+      ...build,
     },
     {
       path: packageJsonPath,
       label: `${themeBase} package`,
       exact: true,
-      buildFilters,
+      ...build,
     },
   ];
 }
