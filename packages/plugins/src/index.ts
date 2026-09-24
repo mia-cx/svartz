@@ -58,6 +58,7 @@ import { analytics, ANALYTICS_ID } from "./analytics";
 import { hardLineBreaks } from "./hard-line-breaks";
 import { roamFlavoredMarkdown } from "./roam-flavored-markdown";
 import { oxHugoFlavoredMarkdown } from "./oxhugo-flavored-markdown";
+import { citations } from "./citations";
 
 export const CORE_PLUGIN_IDS = [
   DISCOVER_FILES_ID,
@@ -234,6 +235,7 @@ export {
   hardLineBreaks,
   roamFlavoredMarkdown,
   oxHugoFlavoredMarkdown,
+  citations,
 };
 
 // Re-export IDs

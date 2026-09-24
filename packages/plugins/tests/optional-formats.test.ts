@@ -7,6 +7,7 @@ import { hardLineBreaks } from "../src/hard-line-breaks";
 import { roamFlavoredMarkdown } from "../src/roam-flavored-markdown";
 import { oxHugoFlavoredMarkdown } from "../src/oxhugo-flavored-markdown";
 import { parseFrontmatter } from "../src/parse-frontmatter";
+import { citations } from "../src/citations";
 import { renderMarkdown } from "../src/internal/render-markdown";
 
 const roots: string[] = [];
@@ -88,5 +89,38 @@ describe("optional content formats", () => {
     const disabled = context("/vault", markdown);
     oxHugoFlavoredMarkdown({ wikilinks: false, removeHugoShortcode: false }).parseFrontmatter!.run(disabled);
     expect(disabled.files[0]!.content).toContain('[Hello]({{< relref "hello.md" >}})');
+  });
+
+  it("renders citations from a vault-local bibliography", async () => {
+    const root = await mkdtemp(join(tmpdir(), "svartz-citations-"));
+    roots.push(root);
+    await writeFile(join(root, "bibliography.bib"), [
+      "@article{doe2020,",
+      "  author = {Doe, Jane},",
+      "  title = {A Published Example},",
+      "  journal = {Example Journal},",
+      "  year = {2020}",
+      "}",
+    ].join("\n"));
+    const markdown = "Research [@doe2020].";
+    const disabled = context(root, markdown);
+    expect(await renderMarkdown(disabled, markdown)).toContain("[@doe2020]");
+
+    const enabled = context(root, markdown);
+    citations({ bibliographyFile: "bibliography.bib", linkCitations: true }).transformGfm!.run(enabled);
+    const html = await renderMarkdown(enabled, markdown);
+    expect(html).toContain("Doe");
+    expect(html).toContain("2020");
+    expect(html).toContain("A Published Example");
+    expect(html).toContain("data-no-popover");
+
+    const suppressed = context(root, markdown);
+    citations({ suppressBibliography: true }).transformGfm!.run(suppressed);
+    expect(await renderMarkdown(suppressed, markdown)).not.toContain("A Published Example");
+  });
+
+  it("fails clearly when a configured citation bibliography is missing", () => {
+    const ctx = context("/missing-vault", "Research [@doe2020]");
+    expect(() => citations().transformGfm!.run(ctx)).toThrow("Citation bibliography not found");
   });
 });
