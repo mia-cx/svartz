@@ -20,9 +20,12 @@ Keep the site static. Compile protected `.svx` and its private dependencies outs
    - [ ] Encrypt note modules, CSS, assets, and group discovery before public emission.
 4. [ ] Bridge the host SvelteKit runtime and client-safe imports with live semantics. Reject transitive server-only imports.
    - [x] Generate host-owned runtime facade modules and record bridge imports inside the sealed group payload.
-   - [ ] Prove facade exports, shared Svelte context, and browser blob imports in a built SvelteKit host.
+   - [x] Verify that Vite keeps facade exports and their module URLs in a client build.
+   - [ ] Prove shared Svelte context and encrypted blob imports in a built SvelteKit host.
 5. [ ] Unlock/relock the group in the browser; keep session keys in memory and merge protected search/graph only for the session.
    - [x] Add the shared in-memory session and versioned decrypted payload shape.
+   - [x] Add a minimal unlock form, browser blob import, group reuse/relock, and private attachment object URLs.
+   - [ ] Merge protected search/graph after unlock, finish asset handling, and verify navigation lifecycle.
 6. [ ] Run wrong-password, tampering, CSP, navigation, repeated-mount, host, adapter, and output-scan acceptance checks.
 
 ## Notes
@@ -32,3 +35,5 @@ The two prototype branches prove static encryption and shared-runtime feasibilit
 The public index and eager artifact graph now use redacted locked entries and shell components. Protected-only attachments stay out of public assets; full note metadata and protected asset membership remain build-local. The encrypted emitter and browser unlock path must consume that build-local data before the fail-closed publication guard can be lifted.
 
 The Vite plugin now packages protected groups after the public emitter and writes ciphertext only. A build-local token links locked shells to their sealed group payload without exposing the group name. The compiler still rejects unclassified output assets and dynamic imports. The publication guard stays closed until browser unlock and host runtime tests pass.
+
+The browser loader now unlocks and mounts a protected component with its host bridge, and rewrites rendered attachment links to private blob URLs. This path has a browser unit test but no full static-host acceptance build yet. Hidden protected notes no longer affect public folder counts.
