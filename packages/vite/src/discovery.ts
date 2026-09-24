@@ -51,20 +51,23 @@ export function renderHostRss(
   }
   const selected = selectVaults(vaults, selectedIds);
   const entries = selected.flatMap((vault) => vault.artifacts.index.entries
-    .filter((entry) => !entry.properties.encrypted && !entry.properties.hidden && !entry.path.endsWith(".svx"))
+    .filter((entry) => !entry.locked && !entry.properties.encrypted && !entry.properties.hidden && !entry.path.endsWith(".svx"))
     .map((entry) => ({ entry, url: noteUrl(vault, entry.href) })));
-  const date = (item: typeof entries[number]): Date => options.sort === "modified"
+  const date = (item: typeof entries[number]): Date | undefined => options.sort === "modified"
     ? item.entry.modifiedAt : item.entry.publishedAt ?? item.entry.createdAt;
-  entries.sort((left, right) => date(right).getTime() - date(left).getTime() || left.url.localeCompare(right.url));
-  const items = entries.slice(0, options.limit ?? 10).map(({ entry, url }) => [
-    "<item>",
-    `<title>${xml(entry.title)}</title>`,
-    `<link>${xml(url)}</link>`,
-    `<guid isPermaLink="true">${xml(url)}</guid>`,
-    `<pubDate>${date({ entry, url }).toUTCString()}</pubDate>`,
-    `<description>${xml(entry.description ?? "")}</description>`,
-    "</item>",
-  ].join(""));
+  entries.sort((left, right) => (date(right)?.getTime() ?? 0) - (date(left)?.getTime() ?? 0) || left.url.localeCompare(right.url));
+  const items = entries.slice(0, options.limit ?? 10).map(({ entry, url }) => {
+    const entryDate = date({ entry, url });
+    return [
+      "<item>",
+      `<title>${xml(entry.title)}</title>`,
+      `<link>${xml(url)}</link>`,
+      `<guid isPermaLink="true">${xml(url)}</guid>`,
+      ...(entryDate ? [`<pubDate>${entryDate.toUTCString()}</pubDate>`] : []),
+      `<description>${xml(entry.description ?? "")}</description>`,
+      "</item>",
+    ].join("");
+  });
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<rss version="2.0"><channel>',

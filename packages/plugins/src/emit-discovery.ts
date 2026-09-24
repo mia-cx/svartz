@@ -31,11 +31,11 @@ function sortedEntries(ctx: PluginContext): IndexEntry[] {
   const sort = ctx.config.discovery.feed.sort;
   const sources = new Map(ctx.files.map((file) => [file.path, file]));
   return [...(ctx.index?.entries ?? [])]
-    .filter((entry) => !entry.properties.encrypted && !entry.properties.hidden && sources.get(entry.path)?.extension !== ".svx")
+    .filter((entry) => !entry.locked && !entry.properties.encrypted && !entry.properties.hidden && sources.get(entry.path)?.extension !== ".svx")
     .sort((left, right) => {
       const leftDate = sort === "modified" ? left.modifiedAt : left.publishedAt ?? left.createdAt;
       const rightDate = sort === "modified" ? right.modifiedAt : right.publishedAt ?? right.createdAt;
-      return rightDate.getTime() - leftDate.getTime() || left.href.localeCompare(right.href);
+      return (rightDate?.getTime() ?? 0) - (leftDate?.getTime() ?? 0) || left.href.localeCompare(right.href);
     });
 }
 
@@ -55,7 +55,7 @@ async function rss(ctx: PluginContext, base: string): Promise<string> {
       `<title>${xml(entry.title)}</title>`,
       `<link>${xml(link)}</link>`,
       `<guid isPermaLink="true">${xml(link)}</guid>`,
-      `<pubDate>${date.toUTCString()}</pubDate>`,
+      ...(date ? [`<pubDate>${date.toUTCString()}</pubDate>`] : []),
       `<description>${description}</description>`,
       ...(fullHtml ? [`<content:encoded><![CDATA[${fullHtml.replaceAll("]]>", "]]]]><![CDATA[>")}]]></content:encoded>`] : []),
       "</item>",

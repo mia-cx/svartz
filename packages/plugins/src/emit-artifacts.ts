@@ -145,7 +145,10 @@ export const emitArtifacts = definePlugin(() => ({
         noteFiles.map(async (file) => {
           const key = `pages/${file.slug}.svelte`;
           const path = join(artifactsRoot, key);
-          const contents = await compileNoteComponent(ctx, file, remarkPlugins, rehypePlugins);
+          // The public Vite graph may import this page. Protected source is compiled separately.
+          const contents = file.protection
+            ? "<div data-svartz-protected-note></div>"
+            : await compileNoteComponent(ctx, file, remarkPlugins, rehypePlugins);
 
           const artifact: Artifact = {
             key,
@@ -161,7 +164,10 @@ export const emitArtifacts = definePlugin(() => ({
       );
       const assetArtifacts = await Promise.all(
         assetFiles
-          .filter((file) => file.sourcePath)
+          .filter((file) => file.sourcePath && (
+            !ctx.meta.has("svartz:publicAssetPaths") ||
+            (ctx.meta.get("svartz:publicAssetPaths") as ReadonlySet<string>).has(file.path)
+          ))
           .map(async (file) => {
             const key = `assets/${file.path}`;
             const path = join(artifactsRoot, key);

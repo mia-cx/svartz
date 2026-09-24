@@ -38,6 +38,7 @@ export const filterUnpublished = definePlugin(() => ({
 
       let protectedCount = 0;
       for (const file of publishedNotes) {
+        delete file.protection;
         const group = file.frontmatter?.password_group;
         if (group === undefined) {
           if (file.frontmatter?.hide_locked === true) {
@@ -67,6 +68,15 @@ export const filterUnpublished = definePlugin(() => ({
         (file) => !isNote(file) && !matches(file.path, exclude),
       );
       const usedAssets = referencedAssets(publishedNotes, assets);
+      ctx.meta.set("svartz:publicAssetPaths", referencedAssets(publishedNotes.filter((file) => !file.protection), assets));
+      const protectedAssetPaths = new Map<string, Set<string>>();
+      for (const file of publishedNotes) {
+        if (!file.protection) continue;
+        const groupAssets = protectedAssetPaths.get(file.protection.group) ?? new Set<string>();
+        for (const path of referencedAssets([file], assets)) groupAssets.add(path);
+        protectedAssetPaths.set(file.protection.group, groupAssets);
+      }
+      ctx.meta.set("svartz:protectedAssetPaths", protectedAssetPaths);
       const publishedPaths = new Set(publishedNotes.map((file) => file.path));
       ctx.files = ctx.files.filter((file) =>
         isNote(file) ? publishedPaths.has(file.path) : usedAssets.has(file.path),

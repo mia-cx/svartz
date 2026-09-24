@@ -57,6 +57,16 @@ function relativeNoteHref(
   return `${normalizedBase}#${slugger.slug(section)}`;
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character]!);
+}
+
 function splitEmbedInner(inner: string): {
   target: string;
   section?: string;
@@ -122,11 +132,20 @@ export const transformEmbeds = definePlugin(() => ({
 
       const expandEmbed = (
         sourceSlug: string,
+        sourceGroup: string | undefined,
         targetSlug: string,
         section: string | undefined,
         alias: string | undefined,
         seen: Set<string>,
       ): string => {
+        const target = noteBySlug.get(targetSlug);
+        if (target?.protection && target.protection.group !== sourceGroup) {
+          const title = target.protection.hidden
+            ? "Locked note"
+            : String(target.frontmatter?.[ctx.config.frontmatter.titleField] ?? targetSlug);
+          return `<div class="svartz-embed svartz-embed-locked" data-svartz-locked><a href="${relativeNoteHref(sourceSlug, targetSlug, section)}">${escapeHtml(alias ?? title)}</a></div>`;
+        }
+
         const visitKey = `${targetSlug}#${section ?? ""}`;
         if (seen.has(visitKey)) {
           return `<p><a href="${relativeNoteHref(sourceSlug, targetSlug, section)}">${alias ?? targetSlug}</a></p>`;
@@ -169,6 +188,7 @@ export const transformEmbeds = definePlugin(() => ({
 
           return expandEmbed(
             sourceSlug,
+            sourceGroup,
             resolvedTarget,
             parsed.section,
             parsed.alias,
@@ -212,6 +232,7 @@ export const transformEmbeds = definePlugin(() => ({
 
           return expandEmbed(
             file.slug,
+            file.protection?.group,
             resolvedTarget,
             parsed.section,
             parsed.alias,

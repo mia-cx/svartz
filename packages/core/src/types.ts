@@ -240,6 +240,8 @@ interface IndexEntry {
     readonly comments: boolean;
   };
   readonly title: string;
+  /** Public shell for a protected note. Only its title and URL are authored metadata. */
+  readonly locked?: boolean;
   readonly tags: readonly string[];
   readonly aliases: readonly string[];
   readonly description?: string;
@@ -249,8 +251,8 @@ interface IndexEntry {
   readonly toc: readonly TocEntry[];
   readonly wordCount: number;
   readonly readingTimeMinutes: number;
-  readonly createdAt: Date;
-  readonly modifiedAt: Date;
+  readonly createdAt?: Date;
+  readonly modifiedAt?: Date;
   readonly publishedAt?: Date;
 }
 
