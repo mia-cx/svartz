@@ -95,15 +95,17 @@ describe("compiler contributions", () => {
           theme: { base: "minimal" },
         });
         ctx.files[0]!.extension = extension;
-        ctx.files.push({ path: "source.md", slug: "source", extension: ".md", content: "$x^2$" });
+        ctx.files.push({ path: "source.md", slug: "source", extension: ".md", content: "$\\frac{a}{b}$" });
         ctx.meta.set("sourceBodies", new Map(ctx.files.map((file) => [file.path, file.content])));
         transformLatex().transformLatex!.run(ctx);
-        expect(ctx.files[1]!.content).toBe("$x^2$");
+        expect(ctx.files[1]!.content).toBe("$\\frac{a}{b}$");
         transformEmbeds().transformEmbeds!.run(ctx);
         await emitArtifacts().emitArtifacts!.run(ctx);
         const page = String(ctx.artifacts.get("pages/note.svelte")?.contents);
         expect(page).toContain("katex");
-        expect(() => compileSvelte(page, { filename: "note.svelte", generate: false })).not.toThrow();
+        expect(page).toContain("&#123;");
+        const compiled = compileSvelte(page, { filename: "note.svelte", generate: "server" });
+        expect(compiled.js.code).not.toMatch(/\$\.escape\([ab]\)/);
       }
     } finally {
       await rm(root, { recursive: true, force: true });

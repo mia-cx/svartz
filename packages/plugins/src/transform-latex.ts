@@ -33,7 +33,7 @@ function renderSvxMath(source: string, options: Omit<KatexOptions, "displayMode"
         throwOnError: false,
         ...options,
         displayMode: node.type === "math",
-      }),
+      }).replaceAll("{", "&#123;").replaceAll("}", "&#125;"),
     });
   });
   let rendered = source;
