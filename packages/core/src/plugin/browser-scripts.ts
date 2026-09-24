@@ -15,9 +15,16 @@ export async function mountBrowserScripts(
   pathname: string,
 ): Promise<() => void> {
   const disposers: Array<() => void> = [];
-  const disposeAll = () => {
-    for (const dispose of disposers.reverse()) dispose();
-    disposers.length = 0;
+  const disposeAll = (): unknown[] => {
+    const errors: unknown[] = [];
+    for (const dispose of disposers.splice(0).reverse()) {
+      try {
+        dispose();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    return errors;
   };
 
   try {
@@ -30,9 +37,15 @@ export async function mountBrowserScripts(
       if (typeof dispose === "function") disposers.push(dispose);
     }
   } catch (error) {
-    disposeAll();
+    const cleanupErrors = disposeAll();
+    if (cleanupErrors.length) {
+      throw new AggregateError([error, ...cleanupErrors], "Browser script mount and cleanup failed");
+    }
     throw error;
   }
 
-  return disposeAll;
+  return () => {
+    const errors = disposeAll();
+    if (errors.length) throw new AggregateError(errors, "Browser script cleanup failed");
+  };
 }
