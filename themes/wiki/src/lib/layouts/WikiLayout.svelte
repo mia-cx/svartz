@@ -544,6 +544,7 @@
 		.rail {
 			position: fixed;
 			inset: 3.5rem 0 0;
+			align-self: stretch;
 			z-index: var(--sv-z-drawer);
 			max-block-size: none;
 			padding: var(--sv-space-5);
