@@ -126,7 +126,7 @@ describe("v1 publication boundary", () => {
           title: "Locked title", description: "DESCRIPTION_SECRET", tags: ["secret-tag"],
           aliases: ["SECRET_ALIAS"], password_group: "friends", created_at: "2026-01-01",
         }),
-        note("hidden.md", "HIDDEN_SECRET", { title: "HIDDEN_TITLE", password_group: "friends", hide_locked: true }),
+        note("secret-folder/hidden.md", "HIDDEN_SECRET", { title: "HIDDEN_TITLE", password_group: "friends", hide_locked: true }),
         asset("media/public.png"),
         asset("media/private.png"),
       ]);
@@ -143,7 +143,8 @@ describe("v1 publication boundary", () => {
         properties: {}, content: "", tags: [], aliases: [], links: [],
       });
       expect(index.entries[0]?.createdAt).toBeUndefined();
-      expect(index.routes.notes).toContain("/hidden/");
+      expect(index.routes.notes).toContain("/secret-folder/hidden/");
+      expect(index.folders).not.toContainEqual(expect.objectContaining({ slug: "secret-folder" }));
       expect(index.search.map((entry) => entry.slug)).toEqual(["public"]);
       expect(index.graph).toEqual({ public: [] });
       expect(index.assets.map((item) => item.path)).toEqual(["media/public.png"]);

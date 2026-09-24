@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { join } from "node:path";
 import { deriveProtectionKey, openProtectedPayload, resolveProtectedBridgeImports, type PluginContext, type ProcessedFile, type ProtectedEnvelope } from "@svartz/core";
 import { expect, it, vi } from "vitest";
+import { build } from "vite";
 import { compileProtectedGraph } from "../src/protected-compile";
 import { createProtectedGroupArtifact, emitProtectedGroupArtifacts } from "../src/protected-payload";
 import { writeProtectedBridgeModules } from "../src/protected-bridge";
@@ -103,6 +104,38 @@ it("encrypts group code, metadata, and attachments without plaintext output", as
       .toContain('export * from "svelte/internal/client";');
   } finally {
     vi.unstubAllEnvs();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("keeps runtime facade exports and its own URL in a Vite client build", async () => {
+  const root = await mkdtemp(join(process.cwd(), ".tmp-protected-bridge-"));
+  try {
+    const ctx = context(root, []);
+    ctx.meta.set("svartz:protectedBridgeImports", new Set(["svelte/internal/client"]));
+    const [bridge] = await writeProtectedBridgeModules(ctx);
+    const entry = join(root, "entry.js");
+    await writeFile(entry, `export const load = () => import(${JSON.stringify(bridge!.path)});`);
+    const result = await build({
+      root,
+      configFile: false,
+      logLevel: "silent",
+      build: {
+        write: false,
+        lib: { entry, formats: ["es"] },
+      },
+    });
+    const outputs = (Array.isArray(result) ? result : [result]).flatMap((bundle) =>
+      "output" in bundle ? bundle.output : [],
+    );
+    const facade = outputs.find((output) => output.type === "chunk" && output.code.includes("svartzBridgeUrl"));
+    expect(facade?.type).toBe("chunk");
+    if (facade?.type !== "chunk") return;
+    expect(facade.exports).toContain("svartzBridgeUrl");
+    expect(facade.exports).toContain("svartzBridgeExports");
+    expect(facade.exports).toContain("delegate");
+    expect(facade.code).toContain("import.meta.url");
+  } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
