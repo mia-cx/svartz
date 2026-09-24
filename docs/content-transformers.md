@@ -23,6 +23,8 @@ graph TD
 
 Highlighted code-block slots receive a `language` prop, such as `typescript`, alongside their rendered children and HTML attributes. A theme that replaces the code-block slot should preserve those children and attributes to keep highlighting and Mermaid diagrams functional.
 
+Math in a published note embed renders in both Markdown and executable `.svx` notes. Svartz keeps the authored `$...$` source for search and word counts, then renders KaTeX during compilation. To turn off a built-in transformer for one vault, replace its plugin by ID with its disabled factory, such as `transformLatex({ disabled: true })`.
+
 ## Optional formats
 
 The built-in GFM, Obsidian, math, and code transforms remain the default. Add an optional format only to the vault that uses it:

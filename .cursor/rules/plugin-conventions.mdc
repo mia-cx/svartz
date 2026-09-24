@@ -59,6 +59,7 @@ Hooks use granular names matching pipeline stages, not generic names:
 4. Config vault plugins (`config.vault.plugins`)
 
 Duplicate ID replaces in-place; new ID appends; disabled removed.
+`definePlugin` applies `{ disabled: true }` to static and factory plugins, even when a factory does not read that option.
 
 ## Core plugins
 
@@ -67,11 +68,12 @@ Duplicate ID replaces in-place; new ID appends; disabled removed.
 - `core:filter-unpublished` sets `enforce: "post"`
 - `createCorePlugins()` returns the canonical ordered array
 - `CORE_PLUGIN_IDS` is the readonly list of all core plugin IDs
-- Required build stages are `discoverFiles`, `parseFrontmatter`, `filterUnpublished`, `resolveLinks`, `indexContent`, and `emitArtifacts`. Validate providers by hook, not by built-in ID. Other core transforms can be disabled or replaced.
+- Required build stages are `discoverFiles`, `parseFrontmatter`, `filterUnpublished`, `resolveLinks`, `indexContent`, and `emitArtifacts`. Validate providers by hook after loading the theme preset, not by built-in ID before theme loading. Other core transforms can be disabled or replaced.
 
 ## Compiler and browser resources
 
-- Active plugins add remark/rehype steps and browser CSS, scripts, or assets through `getCompilerContributions(ctx)`. The emitter consumes these steps; it does not install math or highlighting itself.
+- Active plugins add remark/rehype steps, late SVX source transforms, and browser CSS, scripts, or assets through `getCompilerContributions(ctx)`. The emitter consumes these steps; it does not install math or highlighting itself.
+- `transformLatex` leaves note source intact through indexing and embeds. It contributes remark-math/rehype-katex for Markdown and a late KaTeX source transform for mdsvex's separate older SVX parser. Keep blank lines around embedded Markdown inside raw HTML wrappers so the compiler parses it.
 - The pipeline gets a fresh compiler contribution bag for each run, even when `ctx.meta` survives a dev rebuild. A disabled plugin contributes nothing. Resource IDs deduplicate within a build.
 - `@svartz/vite` imports contributed browser resources from the generated artifacts bridge. A rebuild without the feature removes the import.
 - `.md` and `.mdx` render as inert Markdown HTML. Only `.svx` executes authored Svelte.
