@@ -227,6 +227,9 @@ importers:
 
   packages/plugins:
     dependencies:
+      '@humanwhocodes/ico-to-png':
+        specifier: ^1.1.0
+        version: 1.1.0
       '@svartz/core':
         specifier: workspace:*
         version: link:../core
@@ -287,6 +290,9 @@ importers:
       remark-rehype:
         specifier: ^11.1.2
         version: 11.1.2
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
       shiki:
         specifier: ^1.26.2
         version: 1.29.2
@@ -1127,6 +1133,10 @@ packages:
   '@humanfs/node@0.16.7':
     resolution: {integrity: sha512-/zUx+yOsIrG4Y43Eh2peDeKCxlRt/gET6aHfaKpuq267qXdYDFViVHfMaLyygZOnl0kGWxFIgsBy8QFuTLUXEQ==}
     engines: {node: '>=18.18.0'}
+
+  '@humanwhocodes/ico-to-png@1.1.0':
+    resolution: {integrity: sha512-nKZu5Mwdx2OcWQ8fo4DozMkzIRZ86DK44AftTHJvzHu9KrPBJLwf9wM42pQBFwlL/EyVW0y5gylPIGSYbWNy2g==}
+    engines: {node: '>=18.18'}
 
   '@humanwhocodes/module-importer@1.0.1':
     resolution: {integrity: sha512-bxveV4V8v5Yb4ncFTT3rPSgZBOpCkjfK0y4oVVVJwIuDVBRMDXrPyXRL988i5ap9m9bnyEEjWfm5WkBmtffLfA==}
@@ -5264,6 +5274,8 @@ snapshots:
     dependencies:
       '@humanfs/core': 0.19.1
       '@humanwhocodes/retry': 0.4.3
+
+  '@humanwhocodes/ico-to-png@1.1.0': {}
 
   '@humanwhocodes/module-importer@1.0.1': {}
 

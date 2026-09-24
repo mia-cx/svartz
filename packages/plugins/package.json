@@ -26,6 +26,7 @@
   },
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
+    "@humanwhocodes/ico-to-png": "^1.1.0",
     "@svartz/core": "workspace:*",
     "effect": "^3.19.19",
     "github-slugger": "^2.0.0",
@@ -46,6 +47,7 @@
     "remark-math": "^6.0.0",
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.2",
+    "sharp": "^0.34.5",
     "shiki": "^1.26.2",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.1.0"

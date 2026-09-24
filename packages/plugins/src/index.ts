@@ -52,6 +52,7 @@ import {
 import { indexContent, INDEX_CONTENT_ID } from "./index-content";
 import { emitArtifacts, EMIT_ARTIFACTS_ID } from "./emit-artifacts";
 import { emitDiscovery, EMIT_DISCOVERY_ID } from "./emit-discovery";
+import { emitImages, EMIT_IMAGES_ID } from "./emit-images";
 
 export const CORE_PLUGIN_IDS = [
   DISCOVER_FILES_ID,
@@ -68,6 +69,7 @@ export const CORE_PLUGIN_IDS = [
   TRANSFORM_EMBEDS_ID,
   INDEX_CONTENT_ID,
   EMIT_DISCOVERY_ID,
+  EMIT_IMAGES_ID,
   EMIT_ARTIFACTS_ID,
 ] as const;
 
@@ -128,6 +130,7 @@ function shouldHandleCoreChange(
     case ALLOCATE_ROUTES_ID:
     case INDEX_CONTENT_ID:
     case EMIT_DISCOVERY_ID:
+    case EMIT_IMAGES_ID:
     case EMIT_ARTIFACTS_ID:
       return true;
     case PARSE_FRONTMATTER_ID:
@@ -195,6 +198,7 @@ export function createCorePlugins(): NormalizedSvartzPlugin[] {
     transformEmbeds(),
     indexContent(),
     emitDiscovery(),
+    emitImages(),
     emitArtifacts(),
   ].map(attachCoreHandleChange);
 }
@@ -215,6 +219,7 @@ export {
   transformEmbeds,
   indexContent,
   emitDiscovery,
+  emitImages,
   emitArtifacts,
 };
 
@@ -234,5 +239,6 @@ export {
   TRANSFORM_EMBEDS_ID,
   INDEX_CONTENT_ID,
   EMIT_DISCOVERY_ID,
+  EMIT_IMAGES_ID,
   EMIT_ARTIFACTS_ID,
 };
