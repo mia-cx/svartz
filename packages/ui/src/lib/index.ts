@@ -7,6 +7,7 @@ export { default as NoteHeader } from './NoteHeader.svelte';
 export { default as RecentNotes } from './RecentNotes.svelte';
 export { default as SearchBox } from './SearchBox.svelte';
 export { default as TableOfContents } from './TableOfContents.svelte';
+export { SVARTZ_MARK_SVG } from './brand';
 export {
 	buildBreadcrumbs,
 	buildExplorerTree,
