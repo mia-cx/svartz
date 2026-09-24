@@ -1,10 +1,6 @@
 ---
 description: Prepare lazy theme components without top-level await in generated runtime modules
-globs:
-  - packages/vite/src/theme-resolver.ts
-  - packages/vite/src/host-registry.ts
-  - packages/cli/template/src/routes/**
-  - apps/web/src/routes/**
+globs: packages/vite/src/theme-resolver.ts, packages/vite/src/host-registry.ts, packages/cli/template/src/routes/**, apps/web/src/routes/**
 alwaysApply: false
 ---
 
