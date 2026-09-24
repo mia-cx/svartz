@@ -13,3 +13,4 @@ alwaysApply: false
 - `target: { type: "host" }` leaves adapter selection to the host. The CLI keeps repository-only adapter and Turbo behavior for the standalone `apps/web` shell.
 - Svartz-generated artifacts stay under `.svartz/vaults/<id>`; the host's build output stays where its adapter puts it.
 - Local workspace theme package builds use the package name, not a theme path. Ordinary host apps restart on local theme edits without running a pnpm workspace filter.
+- A host build composes all configured host vaults in one Vite run. `virtual:svartz/host` selects mount-scoped artifact and theme modules; `virtual:svartz/artifacts` remains the single-vault contract. Keep generated asset output names under each mount to prevent filename collisions. `--vault` does not narrow a host build.

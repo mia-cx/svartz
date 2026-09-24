@@ -138,12 +138,11 @@ function freshManifest(root: string): Manifest {
   };
 }
 
-function integrateManifest(manifest: Manifest, vaultId?: string): Manifest {
-  const vaultFlag = vaultId ? ` --vault ${vaultId}` : "";
+function integrateManifest(manifest: Manifest): Manifest {
   const scripts = { ...manifest.scripts };
-  scripts["svartz:dev"] ??= `svartz dev${vaultFlag}`;
-  scripts["svartz:build"] ??= `svartz build${vaultFlag}`;
-  scripts["svartz:preview"] ??= `svartz preview${vaultFlag}`;
+  scripts["svartz:dev"] ??= "svartz dev";
+  scripts["svartz:build"] ??= "svartz build";
+  scripts["svartz:preview"] ??= "svartz preview";
   const devDependencies = { ...manifest.devDependencies };
   for (const name of svartzDependencies) {
     if (!manifest.dependencies?.[name] && !devDependencies[name])
@@ -219,18 +218,19 @@ export async function initProject(
   const manager = packageManager(root, existingManifest);
 
   if (location.hostApp) {
+    const catchallRoot = path.join(root, "src", "routes", "[...slug]");
+    const installCatchall = !existsSync(path.join(catchallRoot, "+page.svelte")) &&
+      !existsSync(path.join(catchallRoot, "+page.ts"));
     const viteSource = await readFile(location.viteConfigPath, "utf8");
     const integratedViteSource = integrateViteConfig(viteSource);
-    const integratedManifest = integrateManifest(
-      existingManifest ?? {},
-      existingConfig ? undefined : "notes",
-    );
+    const integratedManifest = integrateManifest(existingManifest ?? {});
     const manifestChanged =
       JSON.stringify(existingManifest) !== JSON.stringify(integratedManifest);
     if (
       existingConfig &&
       integratedViteSource === viteSource &&
-      !manifestChanged
+      !manifestChanged &&
+      !installCatchall
     ) {
       return { kind: "already-configured", packageManager: manager };
     }
@@ -256,6 +256,14 @@ export async function initProject(
     }
     if (integratedViteSource !== viteSource)
       await writeFile(location.viteConfigPath, integratedViteSource);
+    if (installCatchall) {
+      for (const name of ["+page.svelte", "+page.ts"]) {
+        await writeNewFile(
+          path.join(catchallRoot, name),
+          await readFile(path.join(templateRoot, "src", "routes", "[...slug]", name), "utf8"),
+        );
+      }
+    }
     if (manifestChanged)
       await writeFile(
         existingManifestPath,

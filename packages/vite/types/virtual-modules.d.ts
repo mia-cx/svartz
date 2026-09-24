@@ -56,3 +56,17 @@ declare module "virtual:svartz/artifacts" {
     image?: string;
   }>;
 }
+
+declare module "virtual:svartz/host" {
+  export const vaults: readonly {
+    readonly id: string;
+    readonly mountPath: string;
+    readonly artifacts: typeof import("virtual:svartz/artifacts");
+    readonly theme: typeof import("virtual:svartz/theme");
+  }[];
+  export const routes: {
+    readonly all: readonly string[];
+    readonly redirects: Readonly<Record<string, string>>;
+  };
+  export function resolveHostVault(pathname: string): typeof vaults[number] | undefined;
+}

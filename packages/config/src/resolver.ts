@@ -17,7 +17,7 @@ import type {
   VaultConfig,
   VaultThemeConfig,
 } from "./types/index";
-import { VaultIdNotFound, VaultPathInvalid } from "./types/index";
+import { VaultIdConflict, VaultIdNotFound, VaultMountConflict, VaultPathInvalid } from "./types/index";
 
 // --- Hardcoded defaults ---
 
@@ -179,7 +179,7 @@ const resolveVaultConfig = (
 export const resolveConfig = (
   config: SvartzConfig,
   configDir: string,
-): Effect.Effect<ResolvedConfigSet, VaultPathInvalid> =>
+): Effect.Effect<ResolvedConfigSet, VaultPathInvalid | VaultMountConflict | VaultIdConflict> =>
   Effect.gen(function* () {
     const buildDefaults = resolveBuildDefaults(config.build);
     const vaults = yield* Effect.forEach(
@@ -191,6 +191,34 @@ export const resolveConfig = (
         }),
       { concurrency: buildDefaults.concurrency },
     );
+
+    const seenIds = new Set<string>();
+    for (const vault of vaults) {
+      if (seenIds.has(vault.id)) {
+        return yield* new VaultIdConflict({
+          vaultId: vault.id,
+          message: `Vault id "${vault.id}" appears more than once. Give each vault a unique id.`,
+        });
+      }
+      seenIds.add(vault.id);
+    }
+
+    const hostVaults = vaults.filter((vault) => vault.target.type === "host");
+    for (let first = 0; first < hostVaults.length; first++) {
+      for (const second of hostVaults.slice(first + 1)) {
+        const current = hostVaults[first]!;
+        if (current.mountPath !== "" && second.mountPath !== "" &&
+          current.mountPath !== second.mountPath &&
+          !current.mountPath.startsWith(`${second.mountPath}/`) &&
+          !second.mountPath.startsWith(`${current.mountPath}/`)) continue;
+        return yield* new VaultMountConflict({
+          firstVaultId: current.id,
+          secondVaultId: second.id,
+          mountPath: second.mountPath,
+          message: `Vault mounts overlap: "${current.id}" (${current.mountPath || "/"}) and "${second.id}" (${second.mountPath || "/"}). Give each host vault a distinct, non-overlapping mountPath.`,
+        });
+      }
+    }
 
     return {
       version: config.version,

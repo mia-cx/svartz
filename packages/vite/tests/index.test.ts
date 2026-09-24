@@ -64,6 +64,7 @@ const testConfig: ResolvedConfig = {
   id: "docs",
   path: "/tmp/svartz-tests/vaults/docs",
   outDir: "/tmp/svartz-tests/.svartz/vaults/docs/dist",
+  mountPath: "",
   include: [],
   exclude: [],
   publicationMode: "exclusion",

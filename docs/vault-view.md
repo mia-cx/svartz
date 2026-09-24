@@ -1,6 +1,6 @@
 # Published vault view
 
-`virtual:svartz/artifacts` exports `vault`, a typed view of the current published vault. It is available to SvelteKit server loaders and themes. `vault.id` identifies the vault. `vault.entries`, `vault.search`, `vault.tags`, `vault.folders`, and `vault.routes` carry final URLs. Those URLs already include the SvelteKit deployment base and the vault's `mountPath`.
+`virtual:svartz/artifacts` exports `vault`, a typed view of the current published vault in a single-vault build. In a host with multiple mounts, select `resolveHostVault(appPathname)?.artifacts.vault` from `virtual:svartz/host`, after removing SvelteKit's deployment base from the pathname. The view is available to SvelteKit server loaders and themes. `vault.id` identifies the vault. `vault.entries`, `vault.search`, `vault.tags`, `vault.folders`, and `vault.routes` carry final URLs. Those URLs already include the SvelteKit deployment base and the vault's `mountPath`.
 
 ```ts
 // src/routes/[...slug]/+page.server.ts in a Svartz-enabled SvelteKit app
@@ -19,4 +19,4 @@ export const load: PageServerLoad = ({ url }) => {
 
 Search uses one MiniSearch schema in the artifact producer and browser. `searchOptions` and `searchIndex` are also exported by the virtual module. Use `vault.search` to map result IDs to final URLs, because a stored search index contains URLs before SvelteKit's deployment base is applied.
 
-This view belongs to one vault. Multiple vaults in one host build are tracked in [#51](https://github.com/mia-cx/svartz/issues/51).
+This view belongs to one vault. A [multi-vault host](host-vaults.md) selects the view by mount.

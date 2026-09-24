@@ -28,7 +28,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-it("builds and serves a vault inside an existing host without replacing host files", async () => {
+it("builds and serves two isolated vaults inside one existing host", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "svartz-host-build-"));
   roots.push(root);
   await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "node_modules"), "dir");
@@ -36,6 +36,7 @@ it("builds and serves a vault inside an existing host without replacing host fil
   await mkdir(path.join(root, "src/routes/blog/about"), { recursive: true });
   await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
   await mkdir(path.join(root, "vault"));
+  await mkdir(path.join(root, "work-vault"));
   await mkdir(path.join(root, ".svelte-kit"));
 
   const packageJson = JSON.stringify({
@@ -64,7 +65,11 @@ it("builds and serves a vault inside an existing host without replacing host fil
     await writeFile(path.join(root, "src/routes/[...slug]", name),
       await readFile(path.join(workspaceRoot, "packages/cli/template/src/routes/[...slug]", name)));
   }
-  await writeFile(path.join(root, "vault/index.md"), "# Published note\n\nVault content.\n");
+  await writeFile(path.join(root, "vault/index.md"), "# Published note\n\nVault content. ![](shared.png)\n");
+  await writeFile(path.join(root, "vault/shared.png"), "blog asset");
+  await writeFile(path.join(root, "work-vault/index.md"), "# Work landing\n\nWork content. ![](shared.png)\n");
+  await writeFile(path.join(root, "work-vault/shared.png"), "work asset");
+  await writeFile(path.join(root, "work-vault/private.md"), "---\nprivate: true\n---\n# Secret project\n");
   await writeFile(path.join(root, "vault/about.md"), "---\naliases: [about-alt]\n---\n# Vault about\n\nVault about body.\n");
   await writeFile(path.join(root, "svartz.config.ts"), `export default {
     version: "1.0.0",
@@ -75,6 +80,13 @@ it("builds and serves a vault inside an existing host without replacing host fil
       theme: ${JSON.stringify(path.join(workspaceRoot, "themes/minimal"))},
       target: { type: "host" },
       site: { title: "Notes", url: "https://example.test" },
+    }, {
+      id: "work",
+      path: "work-vault",
+      mountPath: "/work",
+      theme: ${JSON.stringify(path.join(workspaceRoot, "themes/minimal"))},
+      target: { type: "host" },
+      site: { title: "Work", url: "https://example.test" },
     }],
   };\n`);
 
@@ -91,11 +103,17 @@ it("builds and serves a vault inside an existing host without replacing host fil
   expect(await readFile(path.join(root, ".svelte-kit/keep"), "utf8")).toBe("host state");
   await expect(access(path.join(root, "turbo.json"))).rejects.toMatchObject({ code: "ENOENT" });
   await access(path.join(root, "build/index.js"));
+  expect(await readFile(path.join(root, "build/client/blog/shared.png"), "utf8")).toBe("blog asset");
+  expect(await readFile(path.join(root, "build/client/work/shared.png"), "utf8")).toBe("work asset");
   await access(path.join(root, ".svelte-kit/output/server/entries/pages/other/_page.svelte.js"));
   expect(await readFile(path.join(root, ".svartz/vaults/notes/artifacts/pages/index.svelte"), "utf8"))
     .toContain("Published note");
   expect(await readFile(path.join(root, ".svartz/vaults/notes/artifacts/pages/about-2.svelte"), "utf8"))
     .toContain("Vault about body");
+  expect(await readFile(path.join(root, ".svartz/vaults/work/artifacts/pages/index.svelte"), "utf8"))
+    .toContain("Work content");
+  await expect(access(path.join(root, ".svartz/vaults/work/artifacts/pages/private.svelte")))
+    .rejects.toMatchObject({ code: "ENOENT" });
 
   const port = await freePort();
   const dev = spawn(process.execPath, [
@@ -103,6 +121,8 @@ it("builds and serves a vault inside an existing host without replacing host fil
     "dev:runner",
     "--config",
     path.join(root, "svartz.config.ts"),
+    "--vault",
+    "notes",
     "--host",
     "127.0.0.1",
     "--port",
@@ -130,10 +150,24 @@ it("builds and serves a vault inside an existing host without replacing host fil
     const vaultBody = await vault.text();
     expect(vault.status, `${stderr}\n${vaultBody}`).toBe(200);
     expect(vaultBody).toContain("Vault about body");
+    const blogHome = await fetch(`http://127.0.0.1:${port}/blog/`);
+    const blogBody = await blogHome.text();
+    expect(blogBody).toContain("Vault content");
+    expect(blogBody).toContain("Index | Notes");
+    const workHome = await fetch(`http://127.0.0.1:${port}/work/`);
+    const workBody = await workHome.text();
+    expect(workHome.status, `${stderr}\n${workBody}`).toBe(200);
+    expect(workBody).toContain("Work content");
+    expect(workBody).toContain("Index | Work");
+    expect(workBody).not.toContain("Vault content");
+    expect(await (await fetch(`http://127.0.0.1:${port}/blog/shared.png`)).text()).toBe("blog asset");
+    expect(await (await fetch(`http://127.0.0.1:${port}/work/shared.png`)).text()).toBe("work asset");
+    expect((await fetch(`http://127.0.0.1:${port}/work/private`)).status).toBe(404);
     const alias = await fetch(`http://127.0.0.1:${port}/blog/about-alt`, { redirect: "manual" });
     expect(alias.status).toBe(308);
     expect(alias.headers.get("location")).toBe("/blog/about-2/");
     expect((await fetch(`http://127.0.0.1:${port}/blog/missing`)).status).toBe(404);
+    expect((await fetch(`http://127.0.0.1:${port}/outside`)).status).toBe(404);
   } finally {
     dev.kill("SIGTERM");
     if (dev.exitCode === null) await once(dev, "exit");

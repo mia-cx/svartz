@@ -101,12 +101,14 @@ it("adds configuration to an existing Kit app without changing its routes or bui
   );
   expect(manifest.scripts).toMatchObject({
     build: "vite build",
-    "svartz:build": "svartz build --vault notes",
+    "svartz:build": "svartz build",
   });
   expect(manifest.devDependencies).toHaveProperty("svartz", "latest");
   expect(await readFile(path.join(root, "svartz.config.ts"), "utf8")).toContain(
     '"host-app"',
   );
+  expect(await readFile(path.join(root, "src/routes/[...slug]/+page.ts"), "utf8"))
+    .toContain('virtual:svartz/host');
 });
 
 it("reuses existing host vault definitions and is idempotent", async () => {
@@ -149,6 +151,23 @@ it("reuses existing host vault definitions and is idempotent", async () => {
     await readFile(path.join(root, "package.json"), "utf8"),
   );
   expect(manifest.scripts["svartz:dev"]).toBe("svartz dev");
+});
+
+it("keeps a host-owned catchall route", async () => {
+  const root = await fixture();
+  await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
+  await writeFile(path.join(root, "src/routes/[...slug]/+page.svelte"), "<h1>Host catchall</h1>\n");
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    name: "host-app",
+    dependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  await initProject({ cwd: root, install: false, git: false });
+  expect(await readFile(path.join(root, "src/routes/[...slug]/+page.svelte"), "utf8"))
+    .toBe("<h1>Host catchall</h1>\n");
+  await expect(access(path.join(root, "src/routes/[...slug]/+page.ts")))
+    .rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("reports an existing config without a Kit app instead of replacing it", async () => {

@@ -16,6 +16,8 @@ import {
 import {
   getGeneratedRuntimeArtifactsModulePath,
   getGeneratedRuntimeThemeModulePath,
+  createHostRegistrySource,
+  getGeneratedHostRegistryPath,
   getVaultBuildRoot,
   resolveThemePackageRoot,
   svartz,
@@ -38,7 +40,7 @@ import {
   uniqBuildFilters,
   type WatchDescriptor,
 } from "./dev-watch";
-import { writeGeneratedTailwindSourcesFile } from "./tailwind-sources";
+import { writeGeneratedHostTailwindSourcesFile, writeGeneratedTailwindSourcesFile } from "./tailwind-sources";
 import { syncManagedTurboFiles } from "./turbo-sync";
 import { resolveAppLocation, type AppLocation } from "./workspace";
 import { initProject } from "./init";
@@ -96,7 +98,6 @@ type WorkspaceContext = AppLocation & {
 
 type DevWatchContext = {
   readonly workspace: WorkspaceContext;
-  readonly vault: ResolvedConfig;
   readonly workspaceRoot: string;
   readonly descriptors: readonly WatchDescriptor[];
 };
@@ -388,7 +389,10 @@ const loadDevWatchContext = async (
   options: DevOptions,
 ): Promise<DevWatchContext> => {
   const workspace = await runEffect(loadWorkspace(options.config));
-  const vault = await runEffect(selectVault(workspace.config, options.vault));
+  if (options.vault) await runEffect(selectVault(workspace.config, options.vault));
+  const vaults = workspace.hostApp
+    ? workspace.config.vaults
+    : [await runEffect(selectVault(workspace.config, options.vault))];
   const workspaceRoot = workspace.projectRoot;
 
   const descriptors: WatchDescriptor[] = [
@@ -401,11 +405,12 @@ const loadDevWatchContext = async (
     ...(!workspace.hostApp ? createWorkspaceSourceWatchDescriptors(workspaceRoot) : []),
   ];
 
-  descriptors.push(...getThemeWatchDescriptors(vault.theme.base, workspace.appRoot, workspaceRoot, !workspace.hostApp));
+  for (const vault of vaults) {
+    descriptors.push(...getThemeWatchDescriptors(vault.theme.base, workspace.appRoot, workspaceRoot, !workspace.hostApp));
+  }
 
   return {
     workspace,
-    vault,
     workspaceRoot,
     descriptors: dedupeWatchDescriptors(descriptors),
   };
@@ -424,14 +429,15 @@ const ensureBuildTargetSupported = (
 
 const createAppConfig = (
   workspace: WorkspaceContext,
-  vault: ResolvedConfig,
+  vaults: readonly ResolvedConfig[],
   mode: "development" | "production",
   command: "serve" | "build",
   serverOptions?: Partial<ServerOptions>,
 ): Effect.Effect<InlineConfig, CliError> =>
   Effect.gen(function* () {
     const { appRoot, projectRoot, hostApp, viteConfigPath } = workspace;
-    yield* ensureVaultWorkspace(appRoot, vault);
+    const vault = vaults[0]!;
+    yield* Effect.forEach(vaults, (item) => ensureVaultWorkspace(appRoot, item), { concurrency: 1 });
     if (!hostApp) yield* ensureVaultKitSymlink(appRoot, vault);
     process.chdir(appRoot);
     if (!hostApp) applyPlatformEnvForVault(vault);
@@ -443,13 +449,23 @@ const createAppConfig = (
     else process.env["SVARTZ_TARGET_TYPE"] = vault.target.type;
     process.env["SVARTZ_THEME_MODULE_PATH"] = getGeneratedRuntimeThemeModulePath(vault);
     process.env["SVARTZ_ARTIFACTS_MODULE_PATH"] = getGeneratedRuntimeArtifactsModulePath(vault);
-    const themeRoot = resolveThemePackageRoot(vault.theme.base, appRoot);
+    const hostRegistryPath = getGeneratedHostRegistryPath(projectRoot);
+    process.env["SVARTZ_HOST_MODULE_PATH"] = hostRegistryPath;
+    yield* Effect.tryPromise({
+      try: async () => {
+        await mkdir(path.dirname(hostRegistryPath), { recursive: true });
+        await writeFile(hostRegistryPath, createHostRegistrySource(vaults));
+      },
+      catch: (cause) => cause as Error,
+    });
+    const themeRoots = vaults.flatMap((item) => resolveThemePackageRoot(item.theme.base, appRoot) ?? []);
+    const themeRoot = themeRoots[0];
     const workspaceRoot = projectRoot;
     const themeSourceCandidate = themeRoot
       ? path.join(themeRoot, "src", "lib", "index.ts")
       : "";
     if (
-      themeRoot &&
+      vaults.length === 1 && themeRoot &&
       isLocalWorkspacePackage(themeRoot, workspaceRoot) &&
       themeSourceCandidate &&
       existsSync(themeSourceCandidate)
@@ -460,7 +476,9 @@ const createAppConfig = (
     }
 
     process.env["SVARTZ_TAILWIND_SOURCES_PATH"] = yield* Effect.tryPromise({
-      try: () => writeGeneratedTailwindSourcesFile(appRoot, vault),
+      try: () => vaults.length === 1
+        ? writeGeneratedTailwindSourcesFile(appRoot, vault)
+        : writeGeneratedHostTailwindSourcesFile(appRoot, projectRoot, vaults),
       catch: (cause) => cause as Error,
     });
 
@@ -487,10 +505,11 @@ const createAppConfig = (
       mode,
       // Workspace packages resolve compatible Vite runtimes at runtime, but their
       // published type graphs can diverge slightly inside the monorepo.
-      plugins: [svartz({ config: vault, mode }) as never],
+      plugins: vaults.map((item) => svartz({ config: item, mode, exposeVirtualModules: vaults.length === 1 }) as never),
+      resolve: { alias: { "virtual:svartz/host": hostRegistryPath } },
       server: {
         fs: {
-          allow: [workspaceRoot, ...(themeRoot ? [themeRoot] : [])],
+          allow: [workspaceRoot, ...themeRoots],
         },
         ...serverOptions,
       },
@@ -569,35 +588,39 @@ const withVaultBuildLock = (
     tryAcquire();
   });
 
-const buildVault = (
+const buildVaults = (
   workspace: WorkspaceContext,
-  vault: ResolvedConfig,
+  vaults: readonly ResolvedConfig[],
 ): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
-    const supportedVault = workspace.hostApp ? vault : yield* ensureBuildTargetSupported(vault);
+    const supportedVaults = workspace.hostApp
+      ? vaults
+      : yield* Effect.forEach(vaults, ensureBuildTargetSupported);
     yield* Effect.tryPromise({
       try: () =>
         withVaultBuildLock(workspace.projectRoot, async () => {
           try {
             const config = await runEffect(
-              createAppConfig(workspace, supportedVault, "production", "build"),
+              createAppConfig(workspace, supportedVaults, "production", "build"),
             );
             await viteBuild(config);
           } finally {
-            if (!workspace.hostApp) await removeVaultKitSymlink(workspace.appRoot, supportedVault);
+            if (!workspace.hostApp) await removeVaultKitSymlink(workspace.appRoot, supportedVaults[0]!);
           }
         }),
       catch: (cause) => cause as Error,
     });
   });
 
-const devVault = (
+const devVaults = (
   workspace: WorkspaceContext,
-  vault: ResolvedConfig,
+  vaults: readonly ResolvedConfig[],
   options: DevOptions,
 ): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
-    const supportedVault = workspace.hostApp ? vault : yield* ensureBuildTargetSupported(vault);
+    const supportedVaults = workspace.hostApp
+      ? vaults
+      : yield* Effect.forEach(vaults, ensureBuildTargetSupported);
     const serverOptions: Partial<ServerOptions> = {};
 
     if (options.host) serverOptions.host = options.host;
@@ -605,7 +628,7 @@ const devVault = (
 
     const config = yield* createAppConfig(
       workspace,
-      supportedVault,
+      supportedVaults,
       "development",
       "serve",
       serverOptions,
@@ -625,23 +648,25 @@ const devVault = (
     });
   });
 
-const previewVault = (
+const previewVaults = (
   workspace: WorkspaceContext,
-  vault: ResolvedConfig,
+  vaults: readonly ResolvedConfig[],
   options: PreviewOptions,
 ): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
-    const supportedVault = workspace.hostApp ? vault : yield* ensureBuildTargetSupported(vault);
+    const supportedVaults = workspace.hostApp
+      ? vaults
+      : yield* Effect.forEach(vaults, ensureBuildTargetSupported);
     const config = yield* createAppConfig(
       workspace,
-      supportedVault,
+      supportedVaults,
       "production",
       "build",
     );
     // base is set via SVARTZ_BASE_PATH → svelte.config.js kit.paths.base; SvelteKit
     // overrides Vite's base, so merging base here would trigger the override warning.
     const previewConfig = mergeConfig(config, {
-      ...(workspace.hostApp ? {} : { build: { outDir: supportedVault.outDir } }),
+      ...(workspace.hostApp ? {} : { build: { outDir: supportedVaults[0]!.outDir } }),
       preview: {
         ...(options.host && { host: options.host }),
         ...(options.port && { port: Number(options.port) }),
@@ -658,7 +683,7 @@ const previewCommand = (options: PreviewOptions): Effect.Effect<void, CliError> 
   Effect.gen(function* () {
     const workspace = yield* loadWorkspace(options.config);
     const vault = yield* selectVault(workspace.config, options.vault);
-    yield* previewVault(workspace, vault, options);
+    yield* previewVaults(workspace, workspace.hostApp ? workspace.config.vaults : [vault], options);
   });
 
 const createDevWatcher = (
@@ -691,7 +716,7 @@ const devRunnerCommand = (options: DevOptions): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
     const workspace = yield* loadWorkspace(options.config);
     const vault = yield* selectVault(workspace.config, options.vault);
-    yield* devVault(workspace, vault, options);
+    yield* devVaults(workspace, workspace.hostApp ? workspace.config.vaults : [vault], options);
   });
 
 const runDevSupervisor = async (options: DevOptions): Promise<void> => {
@@ -799,13 +824,19 @@ const buildCommand = (options: BuildOptions): Effect.Effect<void, CliError> =>
     const workspace = yield* loadWorkspace(options.config);
     if (options.vault) {
       const vault = yield* selectVault(workspace.config, options.vault);
-      yield* buildVault(workspace, vault);
+      yield* buildVaults(workspace, workspace.hostApp ? workspace.config.vaults : [vault]);
+      return;
+    }
+
+    if (workspace.hostApp) {
+      yield* selectVault(workspace.config);
+      yield* buildVaults(workspace, workspace.config.vaults);
       return;
     }
 
     yield* Effect.forEach(
       workspace.config.vaults,
-      (vault) => buildVault(workspace, vault),
+      (vault) => buildVaults(workspace, [vault]),
       { concurrency: 1 },
     );
   });
@@ -813,9 +844,14 @@ const buildCommand = (options: BuildOptions): Effect.Effect<void, CliError> =>
 const buildAllCommand = (options: SharedOptions): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
     const workspace = yield* loadWorkspace(options.config);
+    if (workspace.hostApp) {
+      yield* selectVault(workspace.config);
+      yield* buildVaults(workspace, workspace.config.vaults);
+      return;
+    }
     yield* Effect.forEach(
       workspace.config.vaults,
-      (vault) => buildVault(workspace, vault),
+      (vault) => buildVaults(workspace, [vault]),
       { concurrency: 1 },
     );
   });
@@ -861,7 +897,7 @@ function createProgram(): Command {
 
   program
     .command("build:all")
-    .description("Build all configured vaults sequentially")
+    .description("Build all configured vaults")
     .option("--config <path>", "Path to svartz.config.ts")
     .action(async (options: SharedOptions) => {
       await runEffect(buildAllCommand(options));
@@ -869,7 +905,7 @@ function createProgram(): Command {
 
   program
     .command("dev")
-    .description("Run the dev server for one vault")
+    .description("Run a standalone vault or all vaults in a SvelteKit host")
     .option("--config <path>", "Path to svartz.config.ts")
     .option("--vault <id>", "Vault ID to serve")
     .option("--host <host>", "Dev server host")
@@ -880,7 +916,7 @@ function createProgram(): Command {
 
   program
     .command("preview")
-    .description("Serve the built output for one vault (run build first)")
+    .description("Serve built output (run build first)")
     .option("--config <path>", "Path to svartz.config.ts")
     .option("--vault <id>", "Vault ID to preview")
     .option("--host <host>", "Preview server host")

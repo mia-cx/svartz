@@ -53,6 +53,7 @@ import {
 } from "./plugins";
 import { createVaultChangeEvent } from "./watch";
 import { isHostRouteFile, staticHostRoutes } from "./manual-routes";
+import { createHostRegistrySource, getGeneratedHostRegistryPath } from "./host-registry";
 
 const PIPELINE_STAGES: readonly StageName[] = [
   "discoverFiles",
@@ -93,6 +94,11 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   let pendingChange: ChangeEvent | undefined;
   let rebuildPromise: Promise<void> | undefined;
   let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function assetOutputPath(artifact: Artifact): string {
+    const relative = artifact.key.slice("assets/".length);
+    return `${context.config.mountPath.replace(/^\//, "")}/${relative}`.replace(/^\//, "");
+  }
 
   function assetForRequest(url: string, base: string): Artifact | undefined {
     let pathname: string;
@@ -185,7 +191,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     emittedBrowserResources = [...(runnerContext.compiler?.browserResources.values() ?? [])];
     emittedAssets = new Map(emittedArtifacts
       .filter((artifact) => artifact.type === "asset" && artifact.key.startsWith("assets/"))
-      .map((artifact) => [artifact.key.slice("assets/".length), artifact]));
+      .map((artifact) => [assetOutputPath(artifact), artifact]));
 
     await Effect.runPromise(
       Effect.all(
@@ -261,10 +267,10 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   }
 
   return {
-    name: "svartz:vite",
+    name: options.exposeVirtualModules === false ? `svartz:vite:${options.config.id}` : "svartz:vite",
     enforce: "post",
     config() {
-      const alias: Record<string, string> = {
+      const alias: Record<string, string> = options.exposeVirtualModules === false ? {} : {
         "virtual:svartz/theme": getGeneratedRuntimeThemeModulePath(options.config),
         "virtual:svartz/artifacts": getGeneratedRuntimeArtifactsModulePath(options.config),
       };
@@ -290,7 +296,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       for (const artifact of publicAssets()) {
         this.emitFile({
           type: "asset",
-          fileName: artifact.key.slice("assets/".length),
+          fileName: assetOutputPath(artifact),
           source: artifact.contents,
         });
       }
@@ -301,7 +307,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
 
       const clientRoot = join(dirname(options.dir), "client");
       await Promise.all(publicAssets().map(async (artifact) => {
-        const path = join(clientRoot, artifact.key.slice("assets/".length));
+        const path = join(clientRoot, assetOutputPath(artifact));
         await mkdir(dirname(path), { recursive: true });
         await writeFile(path, artifact.contents);
       }));
@@ -360,9 +366,11 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       };
     },
     resolveId(id) {
+      if (options.exposeVirtualModules === false) return null;
       return resolveVirtualModuleId(id) ?? null;
     },
     load(id) {
+      if (options.exposeVirtualModules === false) return null;
       if (id === RESOLVED_THEME_VIRTUAL_ID) {
         return createThemeVirtualModuleSource(themeModuleId, extractThemeConfig(context.config.theme));
       }
@@ -409,6 +417,8 @@ export {
   getThemePresetPlugins,
   resolveRuntimePlugins,
   createVaultChangeEvent,
+  createHostRegistrySource,
+  getGeneratedHostRegistryPath,
 };
 export type {
   ResolvedSvartzVirtualModuleId,
