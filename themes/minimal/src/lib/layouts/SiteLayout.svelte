@@ -13,7 +13,6 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import {
-		buildBreadcrumbs,
 		ColorModeToggle,
 		Comments,
 		formatDate,
@@ -28,18 +27,15 @@
 	import Graph from '../components/Graph.svelte';
 	import Toc from '../components/Toc.svelte';
 	import { minimalConfig } from '../config.js';
-	import { tagHrefFor } from '../routes.js';
+	import { pageCrumbs, tagHrefFor } from '../routes.js';
 
-	let { children, entry, vault, site, themeConfig, searchIndex, searchOptions }: ThemePageProps = $props();
+	let { children, entry, vault, site, match, themeConfig, searchIndex, searchOptions }: ThemePageProps = $props();
 
 	const config = $derived(minimalConfig(themeConfig));
 	const homeHref = $derived(`${vault.routes.mountPath}/`);
 	const currentHref = $derived(page.url.pathname);
-	const isHome = $derived(entry?.slug === 'index');
 	const noteLayout = $derived(Boolean(entry));
-	const crumbs = $derived(
-		entry && !isHome ? buildBreadcrumbs(entry.slug, vault.entries, homeHref, vault.folders).slice(0, -1) : []
-	);
+	const crumbs = $derived(pageCrumbs(vault, entry, match));
 	const tagHref = $derived(tagHrefFor(vault));
 	const backlinks = $derived(entry ? (vault.note(entry.slug)?.backlinks ?? []) : []);
 	const date = $derived(entry ? (entry.modifiedAt ?? entry.publishedAt ?? entry.createdAt) : undefined);
@@ -90,8 +86,12 @@
 		{#if crumbs.length > 0}
 			<nav class="crumbs" aria-label="Breadcrumbs">
 				<ol>
-					{#each crumbs as crumb (crumb.href)}
-						<li><a href={crumb.href}>{crumb.title}</a></li>
+					{#each crumbs as crumb, index (crumb.href)}
+						<li>
+							{#if index === crumbs.length - 1}<span aria-current="page">{crumb.title}</span>{:else}<a
+									href={crumb.href}>{crumb.title}</a
+								>{/if}
+						</li>
 					{/each}
 				</ol>
 			</nav>
@@ -161,6 +161,8 @@
 
 	.minimal {
 		--side: 16rem;
+		/* Quartz's top spacing: all three columns start 6rem down. */
+		--top: 6rem;
 		display: grid;
 		grid-template-columns: var(--side) minmax(0, 1fr) var(--side);
 		grid-template-areas:
@@ -183,7 +185,7 @@
 		gap: var(--sv-space-5);
 		align-self: start;
 		max-block-size: 100dvh;
-		padding-block: var(--sv-space-7) var(--sv-space-5);
+		padding-block: var(--top) var(--sv-space-5);
 		overflow-y: auto;
 		overscroll-behavior: contain;
 		scrollbar-width: thin;
@@ -243,7 +245,7 @@
 	.center {
 		grid-area: center;
 		min-inline-size: 0;
-		padding-block: var(--sv-space-7) var(--sv-space-6);
+		padding-block: var(--top) var(--sv-space-6);
 		outline: none;
 	}
 
@@ -275,6 +277,10 @@
 
 	.crumbs a:hover {
 		color: var(--sv-accent-text);
+	}
+
+	.crumbs [aria-current] {
+		color: var(--sv-ink);
 	}
 
 	.note-head {

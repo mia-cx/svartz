@@ -5,13 +5,14 @@
 	let { vault }: ThemePageProps = $props();
 </script>
 
-<ListHeader label="404" title="This page isn’t here" />
-<p class="lead">It may be private, renamed, or never published. Try a search, or start from the <a href="{vault.routes.mountPath}/">home page</a>.</p>
+<ListHeader title="404" />
+<p class="lead">This page is private, was renamed, or doesn’t exist.</p>
+<p class="lead"><a href="{vault.routes.mountPath}/">Return to the home page</a></p>
 
 <style>
 	.lead {
 		max-inline-size: 34rem;
-		margin: 0;
+		margin: 0 0 var(--sv-space-3);
 		color: var(--sv-text);
 		font-size: var(--sv-step-1);
 	}

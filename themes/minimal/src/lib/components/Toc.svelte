@@ -3,6 +3,7 @@
 	with a native <details>, so it works before hydration.
 -->
 <script lang="ts">
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import type { TocEntry } from '@svartz/core';
 
 	let { items }: { items: readonly TocEntry[] } = $props();
@@ -29,7 +30,7 @@
 
 {#if items.length > 0}
 	<details class="toc" open>
-		<summary class="sv-label">On this page</summary>
+		<summary class="sv-section-title">Table of contents <ChevronDown aria-hidden="true" /></summary>
 		<ol>
 			{#each items as item (item.slug)}
 				<li style:--depth={item.depth - shallowest}>
@@ -56,12 +57,8 @@
 		display: none;
 	}
 
-	summary::after {
-		content: ' −';
-	}
-
-	.toc:not([open]) summary::after {
-		content: ' +';
+	.toc:not([open]) summary :global(svg) {
+		rotate: -90deg;
 	}
 
 	ol {

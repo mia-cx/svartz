@@ -13,5 +13,5 @@
 	const notes = $derived(newestFirst(vault.entries.filter((entry) => !FEED_SLUGS.includes(entry.slug))));
 </script>
 
-<ListHeader title={intro?.title ?? 'Recent notes'} count={intro?.description} />
+<ListHeader title={intro?.title ?? 'Recent notes'} summary={intro?.description} />
 <PageList {notes} tagHref={tagHrefFor(vault)} />

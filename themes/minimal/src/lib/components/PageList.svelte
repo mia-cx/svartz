@@ -19,20 +19,15 @@
 	{#each folders as folder (folder.slug)}
 		<li class="row">
 			<span class="sv-label">Folder</span>
-			<div>
-				<a class="title" href={folder.href}>{folder.title}</a>
-				<p class="description">{folder.noteCount} {folder.noteCount === 1 ? 'note' : 'notes'}</p>
-			</div>
+			<a class="title" href={folder.href}>{folder.title}</a>
+			<span class="sv-label count">{folder.noteCount} {folder.noteCount === 1 ? 'note' : 'notes'}</span>
 		</li>
 	{/each}
 	{#each notes as note (note.slug)}
 		{@const date = noteDate(note)}
 		<li class="row">
 			{#if date}<time class="sv-label" datetime={isoDate(date)}>{formatDate(date)}</time>{:else}<span></span>{/if}
-			<div>
-				<a class="title" href={note.href} data-sv-internal>{note.title}</a>
-				{#if note.description}<p class="description">{note.description}</p>{/if}
-			</div>
+			<a class="title" href={note.href} data-sv-internal>{note.title}</a>
 			{#if note.tags.length > 0}
 				<ul class="row-tags" aria-label="Tags">
 					{#each note.tags.slice(0, 3) as tag (tag)}<li><a class="sv-tag" href={tagHref(tag)}>{tag}</a></li>{/each}
@@ -71,10 +66,8 @@
 		color: var(--sv-accent-text);
 	}
 
-	.description {
-		margin: var(--sv-space-1) 0 0;
-		color: var(--sv-muted);
-		font-size: var(--sv-step--1);
+	.count {
+		justify-self: end;
 	}
 
 	.row-tags {

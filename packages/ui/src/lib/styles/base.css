@@ -43,6 +43,38 @@ body {
 	color: var(--sv-muted);
 }
 
+/* Section heading for sidebar panels (explorer, graph, contents, backlinks). */
+.sv-section-title {
+	display: flex;
+	align-items: center;
+	gap: var(--sv-space-1);
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--sv-ink);
+	font: inherit;
+	font-size: var(--sv-step-0);
+	font-weight: 700;
+	line-height: 1.3;
+	text-align: start;
+}
+
+button.sv-section-title {
+	cursor: pointer;
+}
+
+.sv-section-title > svg {
+	inline-size: 1rem;
+	block-size: 1rem;
+	color: var(--sv-muted);
+	transition: rotate var(--sv-duration) var(--sv-ease);
+}
+
+.sv-section-title[aria-expanded='false'] > svg {
+	rotate: -90deg;
+}
+
 /* Tag pill: `#name`, links to a tag page. */
 .sv-tag {
 	display: inline-flex;

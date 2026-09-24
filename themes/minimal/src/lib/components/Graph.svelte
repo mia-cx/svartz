@@ -44,13 +44,14 @@
 </script>
 
 <section class="graph" aria-labelledby="graph-heading">
-	<div class="graph-head">
-		<h2 id="graph-heading" class="sv-label">Graph</h2>
-		<button class="sv-icon-button" type="button" onclick={show} aria-label="Open the full graph" aria-haspopup="dialog">
+	<h2 id="graph-heading" class="sv-section-title graph-title">Graph view</h2>
+	<!-- As in Quartz, the full-graph button sits in the box's corner. -->
+	<div class="graph-box">
+		<canvas bind:this={localCanvas} class="graph-canvas" aria-label="Notes linked to this one"></canvas>
+		<button class="sv-icon-button graph-expand" type="button" onclick={show} aria-label="Open the full graph" aria-haspopup="dialog">
 			<Maximize2 aria-hidden="true" />
 		</button>
 	</div>
-	<canvas bind:this={localCanvas} class="graph-canvas" aria-label="Notes linked to this one"></canvas>
 </section>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
@@ -63,7 +64,7 @@
 >
 	<div class="graph-dialog-panel">
 		<div class="graph-head">
-			<h2 class="sv-label">All notes</h2>
+			<h2 class="sv-section-title">All notes</h2>
 			<button class="sv-icon-button" type="button" onclick={() => dialog?.close()} aria-label="Close">
 				<X aria-hidden="true" />
 			</button>
@@ -80,6 +81,20 @@
 		align-items: center;
 		justify-content: space-between;
 		margin-block-end: var(--sv-space-1);
+	}
+
+	.graph-title {
+		margin-block-end: var(--sv-space-2);
+	}
+
+	.graph-box {
+		position: relative;
+	}
+
+	.graph-expand {
+		position: absolute;
+		inset-block-start: var(--sv-space-1);
+		inset-inline-end: var(--sv-space-1);
 	}
 
 	h2 {

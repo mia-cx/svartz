@@ -1,20 +1,16 @@
+<!-- A list page's title and its count sentence ("29 items under this folder."), as in Quartz. -->
 <script lang="ts">
-	let { title, count, label }: { title: string; count?: string; label?: string } = $props();
+	let { title, summary }: { title: string; summary?: string } = $props();
 </script>
 
 <header class="list-header">
-	{#if label}<p class="sv-label">{label}</p>{/if}
 	<h1>{title}</h1>
-	{#if count}<p class="count">{count}</p>{/if}
+	{#if summary}<p class="summary">{summary}</p>{/if}
 </header>
 
 <style>
 	.list-header {
 		margin-block-end: var(--sv-space-5);
-	}
-
-	.sv-label {
-		margin: 0 0 var(--sv-space-1);
 	}
 
 	h1 {
@@ -28,8 +24,8 @@
 		line-height: 1.05;
 	}
 
-	.count {
-		margin: var(--sv-space-2) 0 0;
-		color: var(--sv-muted);
+	.summary {
+		margin: var(--sv-space-3) 0 0;
+		color: var(--sv-text);
 	}
 </style>

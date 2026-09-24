@@ -7,7 +7,7 @@
 
 {#if notes.length > 0}
 	<section class="backlinks" aria-labelledby="backlinks-heading">
-		<h2 id="backlinks-heading" class="sv-label">Linked from</h2>
+		<h2 id="backlinks-heading" class="sv-section-title">Backlinks</h2>
 		<ul>
 			{#each notes as note (note.slug)}
 				<li><a href={note.href} data-sv-internal>{note.title}</a></li>

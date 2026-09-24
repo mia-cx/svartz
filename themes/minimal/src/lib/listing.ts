@@ -11,6 +11,9 @@ interface Folder {
 	readonly slug: string;
 }
 
+/** `1 note`, `3 notes`. */
+export const count = (n: number, word: string) => `${n} ${n === 1 ? word : `${word}s`}`;
+
 /** The date a list shows for a note: last modified, else published, else created. */
 export const noteDate = (entry: Listable) => entry.modifiedAt ?? entry.publishedAt ?? entry.createdAt;
 

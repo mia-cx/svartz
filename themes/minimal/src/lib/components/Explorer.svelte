@@ -4,6 +4,7 @@
 	folders above the current note always open.
 -->
 <script lang="ts">
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import {
 		ancestorFolderIdsForSlug,
@@ -28,8 +29,13 @@
 
 	const tree = $derived(buildExplorerTree(entries, folders));
 	const currentSlug = $derived(entries.find((entry) => entry.href === currentHref)?.slug);
-	const forcedOpen = $derived(new Set(ancestorFolderIdsForSlug(currentSlug)));
+	// On a folder page, that folder opens too (its slug stands in for a child note's).
+	const currentFolder = $derived(folders.find((folder) => folder.href === currentHref)?.slug);
+	const forcedOpen = $derived(
+		new Set(ancestorFolderIdsForSlug(currentFolder ? `${currentFolder}/_` : currentSlug))
+	);
 
+	let expanded = $state(true);
 	let stored = $state<readonly string[]>([]);
 	// Ancestors the reader closed by hand on this page; they stay closed until navigation.
 	const closedAncestors = new SvelteSet<string>();
@@ -84,13 +90,40 @@
 	</ul>
 {/snippet}
 
-<nav class="explorer" aria-label="Explorer">
-	{@render branch(tree, 0)}
+<nav class="explorer" aria-labelledby="explorer-heading">
+	<button
+		class="sv-section-title explorer-toggle"
+		id="explorer-heading"
+		type="button"
+		aria-expanded={expanded}
+		aria-controls="explorer-tree"
+		onclick={() => (expanded = !expanded)}
+	>
+		Explorer <ChevronDown aria-hidden="true" />
+	</button>
+	<div class="explorer-tree" id="explorer-tree" hidden={!expanded}>
+		{@render branch(tree, 0)}
+	</div>
 </nav>
 
 <style>
 	.explorer {
 		font-size: var(--sv-step--1);
+	}
+
+	.explorer-toggle {
+		margin-block-end: var(--sv-space-3);
+	}
+
+	/* Phones open the explorer from the menu drawer instead. */
+	@media (max-width: 50rem) {
+		.explorer-toggle {
+			display: none;
+		}
+
+		.explorer-tree[hidden] {
+			display: block;
+		}
 	}
 
 	.explorer-list {
