@@ -21,6 +21,7 @@ export const theme = {
 };
 
 export const routes = theme.routes;
+export const ready = Promise.resolve();
 
 export function resolveRuntimeRoute(input: { pathname: string; slug?: string }) {
 	if (input.pathname === '/tags/other/' || input.pathname === '/tags/other') {

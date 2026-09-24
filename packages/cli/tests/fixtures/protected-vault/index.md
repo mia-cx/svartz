@@ -1,5 +1,6 @@
 ---
 title: Public home
+tags: [guides]
 ---
 
 [Locked note](./locked.svx)
