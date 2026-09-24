@@ -10,7 +10,7 @@ Active plugins alone control compiler steps and browser resources. Optional tran
 - [x] Add typed compiler contributions; move GFM, math, and syntax setup into their hooks. Test disable and replacement behavior.
 - [x] Let plugins contribute browser resources, reject unmet theme requirements, and verify repeat-build resource removal.
 - [x] Compile `.md` as inert Markdown and `.svx` as executable Svelte, with a behavioral test.
-- [ ] Capture Knowledge: update plugin conventions with the compiler/resource lifecycle and stage requirements.
+- [x] Capture Knowledge: update plugin conventions with the compiler/resource lifecycle and stage requirements.
 - [ ] Documentation: update authoring and pipeline docs for plugin options and note formats.
 - [ ] Review & Close: run focused and workspace checks, inspect build output, and file a stacked PR.
 

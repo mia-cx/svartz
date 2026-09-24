@@ -11,11 +11,11 @@ alwaysApply: false
 ## Type ownership
 
 - `@svartz/core` owns resolved config types, pipeline types, plugin/theme interfaces, utilities, errors, and tailwind/wrangler schemas
-- `@svartz/plugins` owns core pipeline plugin implementations (12 plugins)
-- `@svartz/vite-plugin` owns runner/orchestration (stage dispatch, error collection, theme resolution)
+- `@svartz/plugins` owns core pipeline plugin implementations (13 plugins)
+- `@svartz/vite` owns Vite orchestration, theme resolution, and browser resource imports; `@svartz/core` owns stage dispatch
 - `@svartz/config` re-exports tailwind/wrangler schemas from core; owns config composition/resolution
 - `@svartz/plugins` depends only on `@svartz/core` (plus runtime deps like gray-matter, minimatch, moment)
-- `@svartz/core` depends on `effect` (internal validation); author-facing types are Effect-free
+- `@svartz/core` depends on `effect` and `unified`; author-facing APIs are Effect-free
 
 ## Internal layout
 
@@ -51,7 +51,7 @@ Hooks use granular names matching pipeline stages, not generic names:
 
 ## Hook options are per-hook, not per-plugin
 
-`fatal`, `enforce`, `parallel` live on `hook.options`, not on the plugin object.
+`fatal`, `enforce`, `parallel` live on `hook.options`, not on the plugin object. Transformer hooks always run sequentially in pre, normal, post order; `parallel: true` does not override that safety rule.
 
 ## Plugin merge order
 
@@ -67,15 +67,23 @@ Duplicate ID replaces in-place; new ID appends; disabled removed.
 - All core plugin IDs start with `core:` prefix
 - All core hooks set `fatal: true`
 - `core:filter-unpublished` sets `enforce: "post"`
-- `core:emit-artifacts` sets `parallel: true`
 - `createCorePlugins()` returns the canonical ordered array
 - `CORE_PLUGIN_IDS` is the readonly list of all core plugin IDs
+- Required build stages are `discoverFiles`, `parseFrontmatter`, `filterUnpublished`, `resolveLinks`, `indexContent`, and `emitArtifacts`. Validate providers by hook, not by built-in ID. Other core transforms can be disabled or replaced.
+
+## Compiler and browser resources
+
+- Active plugins add remark/rehype steps and browser CSS, scripts, or assets through `getCompilerContributions(ctx)`. The emitter consumes these steps; it does not install math or highlighting itself.
+- The pipeline gets a fresh compiler contribution bag for each run, even when `ctx.meta` survives a dev rebuild. A disabled plugin contributes nothing. Resource IDs deduplicate within a build.
+- `@svartz/vite` imports contributed browser resources from the generated artifacts bridge. A rebuild without the feature removes the import.
+- `.md` and `.mdx` render as inert Markdown HTML. Only `.svx` executes authored Svelte.
 
 ## Theme contract
 
 - `defineTheme` accepts static object or factory; validates on each invocation
 - Required: `id`, `version`, `contractVersion`, `layouts` (with `defaultPage` + `notePage`), `routes` (with `note` route containing `:slug`)
-- Optional: `displayName`, `description`, `author`, `homepage`, `components`, `capabilities`, `artifactRequirements`, `pluginPreset`, `defaults`, `hooks`
+- Optional: `displayName`, `description`, `author`, `homepage`, `components`, `capabilities`, `requiredFeatures`, `artifactRequirements`, `pluginPreset`, `defaults`, `hooks`
+- `capabilities` says what a theme can display; only `requiredFeatures` makes a disabled transformer a configuration error
 - `search` and `toc` are derived from the canonical index — not independent artifacts
 - `ThemeComponentLoader`: sync `{ default: unknown }` or lazy `() => Promise<{ default: unknown }>`
 
