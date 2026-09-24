@@ -15,7 +15,8 @@ const absoluteUrl = (base: string, href: string): string =>
   new URL(href.replace(/^\/+/, ""), `${base.replace(/\/+$/, "")}/`).href;
 
 function addAsset(ctx: PluginContext, name: string, contents: string): void {
-  if (ctx.files.some((file) => file.path === name)) {
+  const publicAssets = ctx.meta.get("svartz:publicAssetPaths") as ReadonlySet<string> | undefined;
+  if (ctx.files.some((file) => file.path === name && (!publicAssets || publicAssets.has(name)))) {
     throw new Error(`Published vault asset "${name}" conflicts with a generated Svartz discovery file.`);
   }
   const key = `assets/${name}`;

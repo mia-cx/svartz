@@ -10,6 +10,37 @@ import remarkRehype from "remark-rehype";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
 
+function absoluteOrAuthored(value: string, baseUrl: string): string {
+  try {
+    return new URL(value, baseUrl).href;
+  } catch {
+    return value;
+  }
+}
+
+/** Keep data URLs intact: their embedded comma is part of the URL, not a candidate separator. */
+function resolveSrcset(value: string, baseUrl: string): string {
+  const candidates: string[] = [];
+  let position = 0;
+  while (position < value.length) {
+    while (/[\s,]/.test(value[position] ?? "")) position++;
+    if (position >= value.length) break;
+    const start = position;
+    while (position < value.length && !/\s/.test(value[position]!)) position++;
+    const rawUrl = value.slice(start, position);
+    const url = rawUrl.replace(/,+$/, "");
+    const hasSeparator = url.length !== rawUrl.length;
+    const descriptorStart = position;
+    if (!hasSeparator) {
+      while (position < value.length && value[position] !== ",") position++;
+    }
+    const descriptor = value.slice(descriptorStart, position).trim();
+    if (position < value.length) position++;
+    candidates.push(`${absoluteOrAuthored(url, baseUrl)}${descriptor ? ` ${descriptor}` : ""}`);
+  }
+  return candidates.join(", ");
+}
+
 function createMarkdownProcessor(ctx: PluginContext) {
   const compiler = getCompilerContributions(ctx);
   return unified()
@@ -38,8 +69,10 @@ export async function renderMarkdown(ctx: PluginContext, content: string, baseUr
     visit(tree, "element", (node) => {
       for (const name of ["href", "src"] as const) {
         const value = node.properties[name];
-        if (typeof value === "string" && value) node.properties[name] = new URL(value, baseUrl).href;
+        if (typeof value === "string" && value) node.properties[name] = absoluteOrAuthored(value, baseUrl);
       }
+      const srcset = node.properties.srcSet;
+      if (typeof srcset === "string" && srcset) node.properties.srcSet = resolveSrcset(srcset, baseUrl);
     });
     return toHtml(tree);
   }
