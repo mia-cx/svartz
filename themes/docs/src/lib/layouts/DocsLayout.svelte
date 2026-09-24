@@ -152,7 +152,8 @@
 		align-items: center;
 		gap: var(--sv-space-3);
 		block-size: 3.5rem;
-		padding-inline: var(--sv-space-5);
+		/* Edges line up with the centred page below on wide screens. */
+		padding-inline: max(var(--sv-space-5), (100% - 90rem) / 2 + var(--sv-space-5));
 		border-block-end: var(--sv-rule-width) solid var(--sv-rule);
 		background: var(--sv-paper);
 	}
