@@ -2,7 +2,6 @@
 import { definePlugin, getCompilerContributions } from "@svartz/core";
 import { findAndReplace, type FindAndReplaceList } from "mdast-util-find-and-replace";
 import type { Root } from "mdast";
-import { toString } from "mdast-util-to-string";
 import { visit } from "unist-util-visit";
 
 export interface RoamOptions {
@@ -54,9 +53,29 @@ function mediaHtml(type: "video" | "audio" | "pdf", rawUrl: string): string | un
   return `<video controls src="${escapeHtml(url)}"></video>`;
 }
 
+function expandParsedTasks(node: Extract<Root["children"][number], { type: "paragraph" }>, options: RoamOptions): void {
+  for (let index = 0; index < node.children.length - 2; index += 1) {
+    const before = node.children[index];
+    const reference = node.children[index + 1];
+    const after = node.children[index + 2];
+    if (before?.type !== "text" || reference?.type !== "linkReference" || after?.type !== "text") continue;
+    if (!before.value.endsWith("{{[") || !after.value.startsWith("]}}")) continue;
+    const done = reference.identifier.toUpperCase() === "DONE";
+    if (!done && reference.identifier.toUpperCase() !== "TODO") continue;
+    if (!(done ? options.DONEComponent : options.TODOComponent)) continue;
+    const prefix = before.value.slice(0, -3);
+    const suffix = after.value.slice(3);
+    node.children.splice(index, 3,
+      ...(prefix ? [{ type: "text" as const, value: prefix }] : []),
+      { type: "html", value: `<input type="checkbox"${done ? " checked" : ""} disabled>` },
+      ...(suffix ? [{ type: "text" as const, value: suffix }] : []),
+    );
+  }
+}
+
 function remarkRoam(options: RoamOptions) {
-  return (tree: Root, file: { value: unknown }) => {
-    const markdown = String(file.value);
+  return (tree: Root, file: { value?: unknown; contents?: unknown }) => {
+    const markdown = String(file.contents ?? file.value ?? "");
     visit(tree, "strong", (node, index, parent) => {
       const offset = node.position?.start.offset;
       if (offset === undefined || index === undefined || !parent) return;
@@ -68,14 +87,19 @@ function remarkRoam(options: RoamOptions) {
 
     visit(tree, "paragraph", (node, index, parent) => {
       if (index === undefined || !parent) return;
-      const source = toString(node).trim();
+      const start = node.position?.start.offset;
+      const end = node.position?.end.offset;
+      const source = start === undefined || end === undefined ? "" : markdown.slice(start, end).trim();
       const quote = options.blockquoteComponent && /^\[\[>\]\]\s*(.+)$/.exec(source);
       if (quote) {
         parent.children[index] = { type: "blockquote", children: [{ type: "paragraph", children: [{ type: "text", value: quote[1]! }] }] };
         return;
       }
       const media = /^\{\{\[\[(audio|video|pdf)\]\]:\s*(.+)\}\}$/i.exec(source);
-      if (!media) return;
+      if (!media) {
+        expandParsedTasks(node, options);
+        return;
+      }
       const type = media[1]!.toLowerCase() as "audio" | "video" | "pdf";
       if (!options[`${type}Component`]) return;
       const html = mediaHtml(type, media[2]!);

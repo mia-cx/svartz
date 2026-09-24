@@ -56,6 +56,17 @@ describe("optional content formats", () => {
     expect(html).toContain("<blockquote>");
     expect(html).toContain("https://www.youtube.com/embed/abc123");
     expect(html).toContain("<code>{{[[TODO]]}}</code>");
+
+    const protectedNote = context("/vault", "__italic__ {{or:yes|no}} {{[[TODO]]}}\n\n[[>]] A quote\n\n{{[[video]]: https://youtu.be/abc123}}");
+    protectedNote.files[0]!.extension = ".svx";
+    protectedNote.files[0]!.protection = { group: "team", hidden: false };
+    roamFlavoredMarkdown().transformGfm!.run(protectedNote);
+    const protectedSource = await compileProtectedNoteSource(protectedNote, protectedNote.files[0]!);
+    expect(protectedSource).toContain("<select>");
+    expect(protectedSource).toContain("<em>italic</em>");
+    expect(protectedSource).toContain('type="checkbox"');
+    expect(protectedSource).toContain("<blockquote>");
+    expect(protectedSource).toContain("https://www.youtube.com/embed/abc123");
   });
 
   it("lets Roam options disable controls and rejects executable media URLs", async () => {
