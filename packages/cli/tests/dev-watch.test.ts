@@ -129,8 +129,24 @@ describe("CLI dev watch helpers", () => {
     expect(descriptors.some((descriptor) =>
       matchesWatchDescriptor(path.join(localThemeRoot, "src", "index.ts"), descriptor),
     )).toBe(true);
-    expect(getThemeWatchDescriptors(localThemeRoot, appRoot, workspaceRoot, false)[0]?.buildFilters)
-      .toEqual([]);
+    expect(getThemeWatchDescriptors(localThemeRoot, appRoot, workspaceRoot)[0]?.buildFilters)
+      .toEqual(["@acme/theme-local"]);
+  });
+
+  it("rebuilds a local theme whose package entry points to dist", async () => {
+    const { appRoot, localThemeRoot, workspaceRoot } = await createWorkspaceFixture();
+    await mkdir(path.join(localThemeRoot, "src"));
+    await mkdir(path.join(localThemeRoot, "dist"));
+    await writeFile(path.join(localThemeRoot, "dist/index.js"), "export default {};\n");
+    await writeFile(path.join(localThemeRoot, "package.json"), JSON.stringify({
+      name: "@acme/theme-local", exports: "./dist/index.js",
+    }));
+
+    expect(getThemeWatchDescriptors("@acme/theme-local", appRoot, workspaceRoot)[0]).toEqual({
+      path: path.join(localThemeRoot, "src"),
+      label: "@acme/theme-local source",
+      buildFilters: ["@acme/theme-local"],
+    });
   });
 
   it("uses the same project-relative theme in config and Vite", async () => {
