@@ -285,4 +285,22 @@ describe("@svartz/vite plugin", () => {
     expect(next).toHaveBeenCalledTimes(2);
     dispose?.();
   });
+
+  it("drops an unused browser resource on the next pipeline run", async () => {
+    let run = 0;
+    runStagesMock.mockImplementation(async (_plugins: unknown, ctx: { compiler?: { browserResources: Map<string, { id: string; kind: "css"; importId: string }> } }) => {
+      if (run++ === 0) {
+        ctx.compiler = {
+          browserResources: new Map([["math", { id: "math", kind: "css", importId: "/math.css" }]]),
+        };
+      }
+    });
+    const plugin = svartz({ config: testConfig, env: {}, mode: "test" });
+
+    await plugin.buildStart?.call({} as never);
+    expect(plugin.load?.call({} as never, RESOLVED_ARTIFACTS_VIRTUAL_ID)).toContain('import "/math.css";');
+
+    await plugin.buildStart?.call({} as never);
+    expect(plugin.load?.call({} as never, RESOLVED_ARTIFACTS_VIRTUAL_ID)).not.toContain("math.css");
+  });
 });

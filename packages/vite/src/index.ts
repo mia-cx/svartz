@@ -9,6 +9,7 @@ import {
   executeHandleChange,
   runStages,
   type Artifact,
+  type BrowserResource,
   type ChangeEvent,
   type PluginContext,
   type StageName,
@@ -84,6 +85,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   let plugins = resolveRuntimePlugins(context.config);
   let emittedArtifacts: Artifact[] = [];
   let emittedAssets = new Map<string, Artifact>();
+  let emittedBrowserResources: BrowserResource[] = [];
   let runnerMeta = new Map<string, unknown>();
   let devServer: ViteDevServer | undefined;
   let pendingChange: ChangeEvent | undefined;
@@ -175,6 +177,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     await runStages(plugins, runnerContext, PIPELINE_STAGES);
     runnerMeta = runnerContext.meta;
     emittedArtifacts = [...runnerContext.artifacts.values()];
+    emittedBrowserResources = [...(runnerContext.compiler?.browserResources.values() ?? [])];
     emittedAssets = new Map(emittedArtifacts
       .filter((artifact) => artifact.type === "asset" && artifact.key.startsWith("assets/"))
       .map((artifact) => [artifact.key.slice("assets/".length), artifact]));
@@ -194,6 +197,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
               getGeneratedSearchModulePath(context.config),
               extractThemeConfig(context.config.theme),
               context.config.site,
+              emittedBrowserResources,
             ),
           ),
         ],
@@ -359,6 +363,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
           getGeneratedSearchModulePath(context.config),
           extractThemeConfig(context.config.theme),
           context.config.site,
+          emittedBrowserResources,
         );
       }
 

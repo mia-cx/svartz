@@ -1,6 +1,7 @@
 import {
   mergePlugins,
   normalizePlugin,
+  THEME_FEATURE_STAGES,
   type NormalizedSvartzPlugin,
   type ResolvedConfig,
   type StageName,
@@ -37,6 +38,18 @@ function assertRequiredStages(
   );
 }
 
+function assertThemeRequirements(
+  theme: SvartzTheme | undefined,
+  plugins: readonly NormalizedSvartzPlugin[],
+): void {
+  if (!theme?.requiredFeatures) return;
+  const missing = theme.requiredFeatures.filter((feature) =>
+    !plugins.some((plugin) => plugin[THEME_FEATURE_STAGES[feature]]),
+  );
+  if (missing.length === 0) return;
+  throw new Error(`Theme "${theme.id}" requires disabled feature(s): ${missing.join(", ")}.`);
+}
+
 /**
  * Merge runtime plugins in specificity order.
  * `config.plugins` is already the defaults→vault merge from @svartz/config.
@@ -53,7 +66,8 @@ function resolveRuntimePlugins(
 
   const normalized = merged.map((plugin) => normalizePlugin(plugin as SvartzPlugin));
   assertRequiredStages(normalized);
+  assertThemeRequirements(theme, normalized);
   return normalized;
 }
 
-export { assertRequiredStages, getThemePresetPlugins, resolveRuntimePlugins };
+export { assertRequiredStages, assertThemeRequirements, getThemePresetPlugins, resolveRuntimePlugins };

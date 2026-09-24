@@ -1,5 +1,5 @@
 import type { SvartzTheme } from "./types";
-import { CONTRACT_VERSION } from "./types";
+import { CONTRACT_VERSION, THEME_FEATURE_STAGES } from "./types";
 import { ThemeValidationError } from "./errors";
 
 type ThemeFactory<
@@ -18,6 +18,7 @@ const KNOWN_THEME_KEYS = new Set<string>([
   "homepage",
   "components",
   "capabilities",
+  "requiredFeatures",
   "artifactRequirements",
   "pluginPreset",
   "defaults",
@@ -95,6 +96,15 @@ function validateTheme(theme: SvartzTheme): void {
     throw new ThemeValidationError({
       themeId: theme.id,
       message: 'Theme note route pattern must contain a ":slug" segment',
+    });
+  }
+
+  if (theme.requiredFeatures !== undefined &&
+    (!Array.isArray(theme.requiredFeatures) ||
+      theme.requiredFeatures.some((feature) => !Object.hasOwn(THEME_FEATURE_STAGES, feature)))) {
+    throw new ThemeValidationError({
+      themeId: theme.id,
+      message: `Theme "${theme.id}" has an unknown required feature`,
     });
   }
 

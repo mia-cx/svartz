@@ -8,7 +8,7 @@ Active plugins alone control compiler steps and browser resources. Optional tran
 
 - [x] Tests: verify ordered mutating hooks and required-stage validation.
 - [x] Add typed compiler contributions; move GFM, math, and syntax setup into their hooks. Test disable and replacement behavior.
-- [ ] Let plugins contribute browser resources, reject unmet theme requirements, and verify repeat-build resource removal.
+- [x] Let plugins contribute browser resources, reject unmet theme requirements, and verify repeat-build resource removal.
 - [ ] Compile `.md` as inert Markdown and `.svx` as executable Svelte, with a behavioral test.
 - [ ] Capture Knowledge: update plugin conventions with the compiler/resource lifecycle and stage requirements.
 - [ ] Documentation: update authoring and pipeline docs for plugin options and note formats.
@@ -22,3 +22,4 @@ The accepted contract is in #29. Keep fixed stage names, same-ID replacement, pr
 
 - Step 1: package build, 90 core tests, and 16 Vite tests pass.
 - Step 2: core and plugin builds plus 72 plugin tests pass. The emitter no longer installs math or highlighting itself.
+- Step 3: 91 core and 19 Vite tests pass. A static docs build emitted KaTeX CSS/fonts for a math note; the next build removed them with the note.

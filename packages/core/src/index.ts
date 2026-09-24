@@ -92,7 +92,8 @@ export type {
   ThemePluginPreset,
   SvartzTheme,
 } from "./theme/types";
-export { CONTRACT_VERSION } from "./theme/types";
+export { CONTRACT_VERSION, THEME_FEATURE_STAGES } from "./theme/types";
+export type { ThemeRequiredFeature } from "./theme/types";
 export {
   matchThemeRoute,
   normalizePathname,

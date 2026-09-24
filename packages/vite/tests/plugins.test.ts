@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ResolvedConfig, SvartzPlugin } from "@svartz/core";
+import type { ResolvedConfig, SvartzPlugin, SvartzTheme } from "@svartz/core";
 import { resolveRuntimePlugins } from "../src/plugins";
 
 function config(plugins: SvartzPlugin[] = []): ResolvedConfig {
@@ -36,5 +36,22 @@ describe("runtime plugin requirements", () => {
     expect(position).toBeGreaterThan(0);
     expect(plugins[position - 1]?.id).toBe("core:transform-description");
     expect(plugins[position + 1]?.id).toBe("core:transform-latex");
+  });
+
+  it("fails only when a theme explicitly requires a disabled feature", () => {
+    const noMath = config([{ id: "core:transform-latex", disabled: true }]);
+    const supported = { id: "theme", capabilities: { math: true } } as SvartzTheme;
+    expect(() => resolveRuntimePlugins(noMath, supported)).not.toThrow();
+
+    const required = { ...supported, requiredFeatures: ["math"] } as SvartzTheme;
+    expect(() => resolveRuntimePlugins(noMath, required)).toThrow(
+      'Theme "theme" requires disabled feature(s): math.',
+    );
+
+    const replacement = config([
+      { id: "core:transform-latex", disabled: true },
+      { id: "custom:math", transformLatex() {} },
+    ]);
+    expect(() => resolveRuntimePlugins(replacement, required)).not.toThrow();
   });
 });
