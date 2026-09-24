@@ -2,16 +2,28 @@
 	The section bar under the wiki header, built from the vault's folders. Each
 	top-level folder links to its page and drops down its pages; a subfolder in a
 	dropdown opens a flyout. Mouse hover opens menus, the chevrons open them by
-	click, tap, or keyboard, and Esc closes them. Without JavaScript the folder
-	links still work.
+	click, tap, or keyboard, and Esc or a tap elsewhere closes them. A panel that
+	would run past the viewport opens the other way. Without JavaScript the
+	folder links still work.
 -->
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
-	import type { MenuFolder, MenuLink } from '../wiki.js';
+	import { inFolder, type MenuFolder } from '../wiki.js';
 
-	let { menu, currentPath }: { menu: readonly MenuFolder[]; currentPath: string } = $props();
+	let {
+		menu,
+		currentPath,
+		currentSlug
+	}: {
+		menu: readonly MenuFolder[];
+		currentPath: string;
+		/** The page's note or folder slug, for highlighting its section. */
+		currentSlug: string | undefined;
+	} = $props();
+
+	let nav = $state<HTMLElement>();
 
 	let open = $state<string>();
 	let flyout = $state<string>();
@@ -20,8 +32,6 @@
 		flyout = undefined;
 	});
 
-	const holds = (item: MenuLink): boolean =>
-		item.href === currentPath || (item.folder?.items.some(holds) ?? false);
 	const current = (href: string) => (href === currentPath ? 'page' : undefined);
 
 	/** Runs `action` for mouse pointers only; touch and pen use the chevrons. */
@@ -32,6 +42,25 @@
 	/** A mouse click keeps a hover-opened menu open; keyboard and touch toggle it. */
 	const toggled = (event: MouseEvent, id: string, active: string | undefined) =>
 		(event as PointerEvent).pointerType === 'mouse' || active !== id ? id : undefined;
+
+	/** Touch browsers don't always move focus on tap, so a tap outside closes menus too. */
+	function closeOnOutsidePointer(event: PointerEvent) {
+		if (nav && !nav.contains(event.target as Node)) open = flyout = undefined;
+	}
+
+	/** Flips an open panel to the other side when it would run past the viewport's right edge. */
+	function keepInView(panel: HTMLElement, isOpen: boolean) {
+		// Measured next frame (still before paint): the `hidden` update may not have landed yet.
+		const place = (isOpen: boolean) => {
+			delete panel.dataset.flip;
+			if (!isOpen) return;
+			requestAnimationFrame(() => {
+				if (panel.getBoundingClientRect().right > document.documentElement.clientWidth) panel.dataset.flip = '';
+			});
+		};
+		place(isOpen);
+		return { update: place };
+	}
 
 	function closeOnFocusOut(event: FocusEvent, close: () => void) {
 		const item = event.currentTarget as HTMLElement;
@@ -47,7 +76,9 @@
 	}
 </script>
 
-<nav class="sections" aria-label="Sections">
+<svelte:window onpointerdown={closeOnOutsidePointer} />
+
+<nav class="sections" aria-label="Sections" bind:this={nav}>
 	<ul class="bar">
 		{#each menu as folder, index (folder.id)}
 			{@const closeTop = () => {
@@ -57,7 +88,7 @@
 			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 			<li
 				class="top"
-				class:current={folder.href === currentPath || folder.items.some(holds)}
+				class:current={inFolder(folder.id, currentSlug)}
 				onpointerenter={(event) => withMouse(event, () => (open = folder.id))}
 				onpointerleave={(event) => withMouse(event, closeTop)}
 				onfocusout={(event) => closeOnFocusOut(event, closeTop)}
@@ -68,13 +99,18 @@
 					class="toggle"
 					type="button"
 					aria-expanded={open === folder.id}
-					aria-controls="section-{index}"
+					aria-controls="wiki-sections-{index}"
 					aria-label="{folder.title} pages"
 					onclick={(event) => (open = toggled(event, folder.id, open))}
 				>
 					<ChevronDown aria-hidden="true" />
 				</button>
-				<ul class="panel dropdown" id="section-{index}" hidden={open !== folder.id}>
+				<ul
+					class="panel dropdown"
+					id="wiki-sections-{index}"
+					hidden={open !== folder.id}
+					use:keepInView={open === folder.id}
+				>
 					{#each folder.items as item, itemIndex (item.id)}
 						{#if item.folder}
 							{@const closeFlyout = () => {
@@ -93,13 +129,18 @@
 									class="toggle"
 									type="button"
 									aria-expanded={flyout === item.id}
-									aria-controls="section-{index}-{itemIndex}"
+									aria-controls="wiki-sections-{index}-{itemIndex}"
 									aria-label="{item.title} pages"
 									onclick={(event) => (flyout = toggled(event, item.id, flyout))}
 								>
 									<ChevronRight aria-hidden="true" />
 								</button>
-								<ul class="panel flyout" id="section-{index}-{itemIndex}" hidden={flyout !== item.id}>
+								<ul
+									class="panel flyout"
+									id="wiki-sections-{index}-{itemIndex}"
+									hidden={flyout !== item.id}
+									use:keepInView={flyout === item.id}
+								>
 									{#each item.folder.items as leaf (leaf.id)}
 										<li class="item"><a href={leaf.href} aria-current={current(leaf.href)}>{leaf.title}</a></li>
 									{/each}
@@ -207,6 +248,15 @@
 		inset-inline-start: calc(100% + var(--sv-space-1) + var(--sv-rule-width));
 	}
 
+	/* Near the right edge: the dropdown aligns to its item's end, the flyout opens left. */
+	.dropdown:global([data-flip]) {
+		inset-inline: auto calc(-1 * var(--sv-space-3));
+	}
+
+	.flyout:global([data-flip]) {
+		inset-inline: auto calc(100% + var(--sv-space-1) + var(--sv-rule-width));
+	}
+
 	.item {
 		position: relative;
 		display: flex;
@@ -221,6 +271,10 @@
 		inset-block: 0;
 		inset-inline-start: 100%;
 		inline-size: calc(var(--sv-space-1) + var(--sv-rule-width));
+	}
+
+	.has-flyout:has(> .flyout:global([data-flip]))::after {
+		inset-inline: auto 100%;
 	}
 
 	.item:hover,

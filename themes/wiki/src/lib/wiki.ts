@@ -144,3 +144,13 @@ export function sectionMenu(
 	});
 	return tree.filter((node) => node.isFolder).map((node) => toFolder(node, 1));
 }
+
+/**
+ * Whether the page `slug` is a menu folder's note or sits anywhere inside it
+ * (`folder:characters` holds `characters/lamplighters/mirelle-ashford`). Pages past
+ * the dropdown limit or deeper than a flyout still count.
+ */
+export function inFolder(folderId: string, slug: string | undefined): boolean {
+	const folder = folderId.replace(/^folder:/, '');
+	return slug !== undefined && (slug === folder || slug.startsWith(`${folder}/`));
+}

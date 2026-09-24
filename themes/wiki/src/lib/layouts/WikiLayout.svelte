@@ -32,9 +32,9 @@
 	import Infobox from '../components/Infobox.svelte';
 	import SectionBar from '../components/SectionBar.svelte';
 	import { wikiRoutes } from '../manifest.js';
-	import { featuredNote, readHatnote, readInfobox, sectionMenu, type MenuLink } from '../wiki.js';
+	import { featuredNote, inFolder, readHatnote, readInfobox, sectionMenu, type MenuLink } from '../wiki.js';
 
-	let { children, entry, vault, site, themeConfig, searchIndex, searchOptions }: ThemePageProps = $props();
+	let { children, entry, vault, site, match, themeConfig, searchIndex, searchOptions }: ThemePageProps = $props();
 
 	const RECENT_ON_MAIN_PAGE = 6;
 
@@ -57,10 +57,8 @@
 	const recent = $derived(newestFirst(vault.entries.filter((note) => note.slug !== 'index')).slice(0, RECENT_ON_MAIN_PAGE));
 	const comments = $derived(entry?.page.comments ? settings.comments : undefined);
 	const menu = $derived(sectionMenu(buildExplorerTree(vault.entries, vault.folders), vault.folders));
-	const holds = (item: MenuLink): boolean =>
-		item.href === page.url.pathname || (item.folder?.items.some(holds) ?? false);
-	// The rail sticks under the header, whose height depends on the section bar.
-	let headerHeight = $state(0);
+	// A note page, or a folder page, marks its section in the bar and the drawer.
+	const currentSlug = $derived(entry?.slug ?? (match?.route.id === 'folder' ? match.params.slug : undefined));
 
 	const portal = $derived([
 		{ label: 'Main page', href: homeHref },
@@ -81,7 +79,7 @@
 
 <a class="sv-skip-link" href="#content">Skip to content</a>
 
-<header class="wiki-header" bind:offsetHeight={headerHeight}>
+<header class="wiki-header">
 	<div class="header-inner">
 	<button
 		class="sv-icon-button menu"
@@ -96,7 +94,7 @@
 	<a class="sv-wordmark" href={homeHref}>{site.title}</a>
 	<div class="search"><SearchDialog documents={vault.search} {searchIndex} {searchOptions} /></div>
 	<ColorModeToggle />
-	{#if menu.length > 0}<div class="section-bar"><SectionBar {menu} currentPath={page.url.pathname} /></div>{/if}
+	{#if menu.length > 0}<div class="section-bar"><SectionBar {menu} currentPath={page.url.pathname} {currentSlug} /></div>{/if}
 	</div>
 </header>
 
@@ -106,7 +104,7 @@
 		{#each items as item (item.id)}
 			<li>
 				{#if item.folder}
-					<details open={holds(item)}>
+					<details open={inFolder(item.folder.id, currentSlug)}>
 						<summary>{item.title}</summary>
 						{@render sectionTree(item.folder.items, item.folder.href, item.folder.allHref, item.folder.more)}
 					</details>
@@ -119,13 +117,13 @@
 	</ul>
 {/snippet}
 
-<div class="wiki" style:--wiki-head={headerHeight ? `${headerHeight}px` : undefined}>
+<div class="wiki">
 	<aside class="rail" id="wiki-rail" data-open={drawer ? '' : undefined} aria-label="Site">
 		{#if menu.length > 0}
 			<nav class="drawer-sections" aria-labelledby="drawer-sections-heading">
 				<h2 id="drawer-sections-heading" class="sv-section-title">Sections</h2>
 				{#each menu as folder (folder.id)}
-					<details open={folder.href === page.url.pathname || folder.items.some(holds)}>
+					<details open={inFolder(folder.id, currentSlug)}>
 						<summary>{folder.title}</summary>
 						{@render sectionTree(folder.items, folder.href, folder.allHref, folder.more)}
 					</details>
@@ -242,9 +240,18 @@
 		--sv-density: 0.85;
 		--sv-ratio: 1.18;
 		--sv-measure: 52rem;
+		/* The sticky header's height: the rail sits under it and anchors scroll clear of it. */
+		--wiki-head: 3.5rem;
+		scroll-padding-block-start: var(--wiki-head);
+	}
+
+	:global(:root:has(.section-bar)) {
+		--wiki-head: 5.75rem;
 	}
 
 	.wiki-header {
+		box-sizing: border-box;
+		block-size: var(--wiki-head);
 		position: sticky;
 		inset-block-start: 0;
 		z-index: var(--sv-z-sticky);
@@ -257,10 +264,12 @@
 		display: grid;
 		grid-template-columns: 14rem minmax(0, 36rem) 1fr;
 		align-items: center;
+		grid-template-rows: calc(3.5rem - var(--sv-rule-width));
+		grid-auto-rows: 2.25rem;
 		column-gap: var(--sv-space-7);
 		max-inline-size: 84rem;
 		margin-inline: auto;
-		padding: var(--sv-space-3) var(--sv-space-5);
+		padding-inline: var(--sv-space-5);
 	}
 
 	.header-inner > :global(.sv-color-mode) {
@@ -270,7 +279,7 @@
 	/* Under the search, aligned with the article. */
 	.section-bar {
 		grid-column: 2 / -1;
-		margin-block: var(--sv-space-1) calc(-1 * var(--sv-space-2));
+		align-self: end;
 	}
 
 	.drawer-sections {
@@ -306,11 +315,11 @@
 
 	.rail {
 		position: sticky;
-		inset-block-start: var(--wiki-head, 4rem);
+		inset-block-start: var(--wiki-head);
 		display: grid;
 		align-content: start;
 		gap: var(--sv-space-6);
-		max-block-size: calc(100dvh - var(--wiki-head, 4rem));
+		max-block-size: calc(100dvh - var(--wiki-head));
 		padding-block: var(--sv-space-6);
 		overflow-y: auto;
 		scrollbar-width: thin;
@@ -567,6 +576,11 @@
 
 	/* Phone and tablet: the rail becomes a drawer under the header. */
 	@media (max-width: 56rem) {
+		/* The bar moves into the drawer, so the header is one row again. */
+		:global(:root:has(.section-bar)) {
+			--wiki-head: 3.5rem;
+		}
+
 		.menu {
 			display: inline-grid;
 		}
@@ -616,6 +630,7 @@
 		}
 
 		.header-inner {
+			block-size: 100%;
 			display: flex;
 			gap: var(--sv-space-2);
 			padding-inline: var(--sv-space-3);
@@ -636,7 +651,7 @@
 
 		.rail {
 			position: fixed;
-			inset: 3.5rem 0 0;
+			inset: var(--wiki-head) 0 0;
 			align-self: stretch;
 			z-index: var(--sv-z-drawer);
 			max-block-size: none;
