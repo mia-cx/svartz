@@ -1,0 +1,13 @@
+---
+description: Apply when generating social images or favicons, changing the theme image hooks, or exposing image URLs in Svartz runtime. Preserve publication filtering and host ownership.
+globs: packages/plugins/src/emit-images.ts, packages/core/src/theme/**, packages/ui/src/lib/runtime/**, themes/*/src/lib/manifest.ts
+alwaysApply: false
+---
+
+# Generated image ownership
+
+Run image emission after publication filtering and indexing, before the index module is serialized. Store only Svartz-generated files under each vault's mounted `__svartz/` path. This keeps rebuild cleanup and multi-vault isolation under the existing artifact pipeline.
+
+Pass only public title, description, and site title to the theme's SVG preview template. Encrypted or hidden notes use the configured site fallback, and unpublished notes never reach the emitter. A note's explicit image may retain a published attachment, but an excluded attachment must fail rather than leak through.
+
+Host apps own their favicon until `discovery.favicon.enabled` is true. The favicon source path resolves from the config directory. SvelteKit's static prerenderer crawls local icon links; use an absolute public URL when available, and an inlined icon when no `site.url` exists. See `docs/images.md` for the consumer contract.

@@ -15,7 +15,7 @@ export const load: PageServerLoad = ({ url }) => {
 };
 ```
 
-`vault.note()` accepts a canonical slug or final URL path. It returns `undefined` for a missing or unpublished note. Its entry contains `properties` (published frontmatter), `page.toc`, `page.comments`, heading `toc`, resolved `links`, dates, and canonical `href`. Graph and backlinks contain published notes only. Unresolved links have a null `href`.
+`vault.note()` accepts a canonical slug or final URL path. It returns `undefined` for a missing or unpublished note. Its entry contains `properties` (published frontmatter), `page.toc`, `page.comments`, heading `toc`, resolved `links`, dates, canonical `href`, and optional `socialImage`. Generated image paths in the view already include the deployment base and vault mount. Graph and backlinks contain published notes only. Unresolved links have a null `href`.
 
 Search uses one MiniSearch schema in the artifact producer and browser. `searchOptions` and `searchIndex` are also exported by the virtual module. Use `vault.search` to map result IDs to final URLs, because a stored search index contains URLs before SvelteKit's deployment base is applied.
 
