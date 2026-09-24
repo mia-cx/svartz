@@ -175,9 +175,10 @@ describe("v1 publication boundary", () => {
       await emitArtifacts().emitArtifacts!.run(ctx);
 
       expect([...ctx.artifacts.keys()].sort()).toEqual(["index.ts", "pages/locked.svelte", "search.ts"]);
-      expect(ctx.artifacts.get("pages/locked.svelte")?.contents).toBe("<div data-svartz-protected-note></div>");
+      expect(ctx.artifacts.get("pages/locked.svelte")?.contents).toMatch(/svartzProtected.*__svartz\/protected\/[A-Za-z0-9_-]+\.json/);
+      expect(ctx.artifacts.get("pages/locked.svelte")?.contents).toContain("<div data-svartz-protected-note></div>");
       expect([...ctx.artifacts.values()].map((item) => String(item.contents)).join(""))
-        .not.toMatch(/EXECUTABLE_SECRET|private\.png|secret-password/);
+        .not.toMatch(/EXECUTABLE_SECRET|private\.png|secret-password|friends/);
     } finally {
       vi.unstubAllEnvs();
       await rm(root, { recursive: true, force: true });

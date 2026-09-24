@@ -1,9 +1,10 @@
-import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { deriveProtectionKey, openProtectedPayload, type PluginContext, type ProcessedFile, type ProtectedEnvelope } from "@svartz/core";
+import { deriveProtectionKey, openProtectedPayload, resolveProtectedBridgeImports, type PluginContext, type ProcessedFile, type ProtectedEnvelope } from "@svartz/core";
 import { expect, it, vi } from "vitest";
 import { compileProtectedGraph } from "../src/protected-compile";
-import { createProtectedGroupArtifact } from "../src/protected-payload";
+import { createProtectedGroupArtifact, emitProtectedGroupArtifacts } from "../src/protected-payload";
+import { writeProtectedBridgeModules } from "../src/protected-bridge";
 
 function context(root: string, files: ProcessedFile[]): PluginContext {
   return {
@@ -46,6 +47,8 @@ it("bundles transformed SVX and nested Svelte imports only in memory", async () 
     expect(result.js).not.toContain("RAW_SECRET");
     expect(result.js).toContain("Nested counter");
     expect(result.css).toContain("color:red");
+    expect(result.bridgeImports).toContain("svelte/internal/client");
+    expect(result.js).toContain("svartz:bridge/");
     expect(result.modules.some((id) => id.endsWith("Note.svx"))).toBe(true);
     expect(result.modules.some((id) => id.endsWith("Counter.svelte"))).toBe(true);
     expect(await readdir(root)).toEqual(["vault"]);
@@ -68,6 +71,7 @@ it("encrypts group code, metadata, and attachments without plaintext output", as
     ]);
     ctx.meta.set("svartz:protectedEntries", new Map([["friends", [{ slug: "Note", title: "GROUP_METADATA_SECRET" }]]]));
     ctx.meta.set("svartz:protectedAssetPaths", new Map([["friends", new Set(["photo.png"])]]));
+    ctx.meta.set("svartz:protectedGroupTokens", new Map([["friends", "fixtureToken"]]));
 
     const artifact = await createProtectedGroupArtifact(ctx, "friends", root);
     const serialized = String(artifact.contents);
@@ -82,7 +86,21 @@ it("encrypts group code, metadata, and attachments without plaintext output", as
     expect(payload.js).toContain("GROUP_BODY_SECRET");
     expect(payload.entries[0].title).toBe("GROUP_METADATA_SECRET");
     expect(payload.notes).toEqual([{ slug: "Note", exportName: "note0" }]);
+    expect(payload.bridgeImports).toContain("svelte/internal/client");
+    const bridgeUrls = Object.fromEntries(payload.bridgeImports.map((id: string) =>
+      [id, `https://example.test/${encodeURIComponent(id)}.js`]));
+    expect(resolveProtectedBridgeImports(payload, bridgeUrls)).not.toContain("svartz:bridge/");
     expect(payload.assets).toEqual([{ path: "photo.png", mimeType: "image/png", data: "AAEC/w==" }]);
+
+    await emitProtectedGroupArtifacts(ctx, root);
+    const written = await readFile(artifact.path, "utf8");
+    expect(written).toBe(ctx.artifacts.get(artifact.key)?.contents);
+    expect(written).not.toMatch(/GROUP_BODY_SECRET|GROUP_METADATA_SECRET|test-only-password|photo\.png/);
+    const bridges = await writeProtectedBridgeModules(ctx);
+    const clientBridge = bridges.find((bridge) => bridge.id === "svelte/internal/client");
+    expect(clientBridge).toBeDefined();
+    expect(await readFile(clientBridge!.path, "utf8"))
+      .toContain('export * from "svelte/internal/client";');
   } finally {
     vi.unstubAllEnvs();
     await rm(root, { recursive: true, force: true });
