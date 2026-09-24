@@ -65,6 +65,7 @@ export async function readGitDates(vaultPath: string): Promise<ReadonlyMap<strin
           if (status === "A") {
             renamedTo.delete(source);
             endedLifetimes.add(currentPath);
+            endedLifetimes.add(source);
           }
         }
       }
