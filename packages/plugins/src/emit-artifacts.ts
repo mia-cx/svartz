@@ -152,9 +152,16 @@ export const emitArtifacts = definePlugin(() => ({
           const key = `pages/${file.slug}.svelte`;
           const path = join(artifactsRoot, key);
           // The public Vite graph may import this page. Protected source is compiled separately.
-          const contents = file.protection
-            ? "<div data-svartz-protected-note></div>"
-            : await compileNoteComponent(ctx, file, remarkPlugins, rehypePlugins);
+          let contents: string;
+          if (file.protection) {
+            const token = (ctx.meta.get("svartz:protectedGroupTokens") as ReadonlyMap<string, string> | undefined)
+              ?.get(file.protection.group);
+            if (!token) throw new Error(`Protected note "${file.path}" has no encrypted group token`);
+            const payloadPath = `${ctx.config.mountPath ?? ""}/__svartz/protected/${token}.json`;
+            contents = `<script module>export const svartzProtected = ${JSON.stringify({ slug: file.slug, payloadPath })};</script>\n<div data-svartz-protected-note></div>`;
+          } else {
+            contents = await compileNoteComponent(ctx, file, remarkPlugins, rehypePlugins);
+          }
 
           const artifact: Artifact = {
             key,

@@ -1,5 +1,6 @@
 /** Compile one password group's note graph without writing plaintext artifacts. */
-import { builtinModules } from "node:module";
+import { realpath } from "node:fs/promises";
+import { builtinModules, createRequire } from "node:module";
 import { resolve } from "node:path";
 import { svelte, vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import type { PluginContext, ProcessedFile } from "@svartz/core";
@@ -7,13 +8,41 @@ import { compileProtectedNoteSource } from "@svartz/plugins";
 import { build, type Plugin } from "vite";
 
 const RESOLVED_ENTRY_ID = "\0svartz-protected-entry";
+const BRIDGE_PREFIX = "svartz:bridge/";
 const NODE_BUILTINS = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
+const CLIENT_APP_MODULES = new Set([
+  "$app/environment", "$app/forms", "$app/navigation", "$app/paths", "$app/state", "$app/stores",
+  "$env/static/public", "$env/dynamic/public",
+]);
 
 export interface ProtectedGraph {
   readonly js: string;
   readonly css: string;
   readonly modules: readonly string[];
   readonly notes: readonly { slug: string; exportName: string }[];
+  readonly bridgeImports: readonly string[];
+}
+
+async function assertSharedSvelteInstallation(root: string): Promise<void> {
+  const hostRequire = createRequire(resolve(root, "package.json"));
+  const compilerRequire = createRequire(import.meta.url);
+  const [host, compiler] = await Promise.all([
+    realpath(hostRequire.resolve("svelte/package.json")),
+    realpath(compilerRequire.resolve("svelte/package.json")),
+  ]);
+  if (host !== compiler) {
+    throw new Error("Protected notes must compile against the host app's Svelte installation");
+  }
+}
+
+function sharedRuntimeImport(id: string): boolean {
+  if (CLIENT_APP_MODULES.has(id)) return true;
+  return (id === "svelte" || id.startsWith("svelte/")) &&
+    id !== "svelte/compiler" && id !== "svelte/server" && !id.startsWith("svelte/internal/server");
+}
+
+function bridgeId(id: string): string {
+  return `${BRIDGE_PREFIX}${encodeURIComponent(id)}`;
 }
 
 function assertClientModule(id: string): void {
@@ -23,6 +52,11 @@ function assertClientModule(id: string): void {
     normalized === "$app/server" ||
     normalized.startsWith("$env/static/private") ||
     normalized.startsWith("$env/dynamic/private") ||
+    normalized === "svelte/compiler" ||
+    normalized === "svelte/server" ||
+    normalized.startsWith("svelte/internal/server") ||
+    normalized.startsWith("$app/") && !CLIENT_APP_MODULES.has(normalized) ||
+    normalized.startsWith("$env/") && !CLIENT_APP_MODULES.has(normalized) ||
     normalized === "$lib/server" ||
     normalized.startsWith("$lib/server/") ||
     /(?:^|\/)server(?:\/|$)/.test(normalized) ||
@@ -43,6 +77,7 @@ function protectedSourcePlugin(ctx: PluginContext, group: string, files: readonl
     resolveId(id) {
       assertClientModule(id);
       if (id === entryId) return RESOLVED_ENTRY_ID;
+      if (sharedRuntimeImport(id)) return { id: bridgeId(id), external: true };
     },
     async load(id) {
       if (id === RESOLVED_ENTRY_ID) {
@@ -75,6 +110,7 @@ export async function compileProtectedGraph(ctx: PluginContext, group: string, r
   for (const file of files) {
     if (!file.sourcePath) throw new Error(`Protected note "${file.path}" has no source path`);
   }
+  await assertSharedSvelteInstallation(root);
   const entryId = resolve(root, ".svartz-protected-entry.js");
 
   const result = await build({
@@ -99,8 +135,9 @@ export async function compileProtectedGraph(ctx: PluginContext, group: string, r
   const bundles = Array.isArray(result) ? result : [result];
   const output = bundles.flatMap((bundle) => "output" in bundle ? bundle.output : []);
   const chunks = output.filter((item) => item.type === "chunk");
-  if (chunks.length !== 1 || chunks[0]!.imports.length || chunks[0]!.dynamicImports.length) {
-    throw new Error(`Protected group "${group}" did not compile to one self-contained module`);
+  if (chunks.length !== 1 || chunks[0]!.dynamicImports.length ||
+    chunks[0]!.imports.some((id) => !id.startsWith(BRIDGE_PREFIX))) {
+    throw new Error(`Protected group "${group}" has an unclassified module import`);
   }
   const unexpectedAssets = output.filter((item) => item.type === "asset" && !item.fileName.endsWith(".css"));
   if (unexpectedAssets.length > 0) {
@@ -113,5 +150,6 @@ export async function compileProtectedGraph(ctx: PluginContext, group: string, r
     css: output.filter((item) => item.type === "asset").map((item) => String(item.source)).join("\n"),
     modules,
     notes: files.map((file, index) => ({ slug: file.slug, exportName: `note${index}` })),
+    bridgeImports: chunks[0]!.imports.map((id) => decodeURIComponent(id.slice(BRIDGE_PREFIX.length))),
   };
 }

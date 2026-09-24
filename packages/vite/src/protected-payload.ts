@@ -1,7 +1,6 @@
 /** Package one password group's executable notes and metadata as ciphertext. */
-import { randomBytes } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import {
   createProtectionSalt,
   deriveProtectionKey,
@@ -26,6 +25,9 @@ export async function createProtectedGroupArtifact(
   if (!entries?.length) throw new Error(`Password group "${group}" has no protected index`);
 
   const graph = await compileProtectedGraph(ctx, group, root);
+  const bridgeImports = (ctx.meta.get("svartz:protectedBridgeImports") as Set<string> | undefined) ?? new Set<string>();
+  for (const id of graph.bridgeImports) bridgeImports.add(id);
+  ctx.meta.set("svartz:protectedBridgeImports", bridgeImports);
   const paths = (ctx.meta.get("svartz:protectedAssetPaths") as Map<string, Set<string>> | undefined)?.get(group);
   const assets = await Promise.all([...paths ?? []].sort().map(async (path) => {
     const file = ctx.files.find((candidate) => candidate.path === path);
@@ -37,11 +39,12 @@ export async function createProtectedGroupArtifact(
     };
   }));
 
-  const token = randomBytes(18).toString("base64url");
+  const token = (ctx.meta.get("svartz:protectedGroupTokens") as ReadonlyMap<string, string> | undefined)?.get(group);
+  if (!token) throw new Error(`Password group "${group}" has no public token`);
   const id = `vault:${ctx.config.id}:group:${token}`;
   const salt = createProtectionSalt();
   const key = await deriveProtectionKey(password, salt);
-  const payload = { version: 1, notes: graph.notes, entries, js: graph.js, css: graph.css, assets };
+  const payload = { version: 1, notes: graph.notes, entries, js: graph.js, css: graph.css, assets, bridgeImports: graph.bridgeImports };
   const envelope = await sealProtectedPayload(key, salt, id, new TextEncoder().encode(JSON.stringify(payload)));
   const artifactKey = `assets/__svartz/protected/${token}.json`;
   return {
@@ -52,4 +55,16 @@ export async function createProtectedGroupArtifact(
     contents: JSON.stringify(envelope),
     mimeType: "application/json",
   };
+}
+
+/** Emit only sealed group artifacts after the ordinary public emitter runs. */
+export async function emitProtectedGroupArtifacts(ctx: PluginContext, root: string): Promise<void> {
+  const groups = ctx.meta.get("svartz:protectedGroupTokens") as ReadonlyMap<string, string> | undefined;
+  if (!groups) return;
+  for (const group of [...groups.keys()].sort()) {
+    const artifact = await createProtectedGroupArtifact(ctx, group, root);
+    await mkdir(dirname(artifact.path), { recursive: true });
+    await writeFile(artifact.path, artifact.contents);
+    ctx.artifacts.set(artifact.key, artifact);
+  }
 }

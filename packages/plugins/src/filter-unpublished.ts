@@ -1,4 +1,5 @@
 /** Publish notes after frontmatter parsing and retain only assets they reference. */
+import { randomBytes } from "node:crypto";
 import { minimatch } from "minimatch";
 import { extname } from "node:path";
 import { definePlugin, type ProcessedFile } from "@svartz/core";
@@ -63,6 +64,12 @@ export const filterUnpublished = definePlugin(() => ({
       if (protectedCount > 0 && ctx.meta.get("svartz:protectionReady") !== true) {
         throw new Error("Protected notes require the encrypted publication pipeline");
       }
+      const groupTokens = new Map<string, string>();
+      for (const file of publishedNotes) {
+        const group = file.protection?.group;
+        if (group && !groupTokens.has(group)) groupTokens.set(group, randomBytes(18).toString("base64url"));
+      }
+      ctx.meta.set("svartz:protectedGroupTokens", groupTokens);
 
       const assets = ctx.files.filter(
         (file) => !isNote(file) && !matches(file.path, exclude),
