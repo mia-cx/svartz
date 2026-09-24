@@ -57,6 +57,7 @@ import { emitImages, EMIT_IMAGES_ID } from "./emit-images";
 import { analytics, ANALYTICS_ID } from "./analytics";
 import { hardLineBreaks } from "./hard-line-breaks";
 import { roamFlavoredMarkdown } from "./roam-flavored-markdown";
+import { oxHugoFlavoredMarkdown } from "./oxhugo-flavored-markdown";
 
 export const CORE_PLUGIN_IDS = [
   DISCOVER_FILES_ID,
@@ -232,6 +233,7 @@ export {
   emitArtifacts,
   hardLineBreaks,
   roamFlavoredMarkdown,
+  oxHugoFlavoredMarkdown,
 };
 
 // Re-export IDs

@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { PluginContext, ResolvedConfig } from "@svartz/core";
 import { hardLineBreaks } from "../src/hard-line-breaks";
 import { roamFlavoredMarkdown } from "../src/roam-flavored-markdown";
+import { oxHugoFlavoredMarkdown } from "../src/oxhugo-flavored-markdown";
+import { parseFrontmatter } from "../src/parse-frontmatter";
 import { renderMarkdown } from "../src/internal/render-markdown";
 
 const roots: string[] = [];
@@ -63,5 +65,28 @@ describe("optional content formats", () => {
     expect(html).toContain("{{[[TODO]]}}");
     expect(html).not.toContain("<iframe");
     expect(html).not.toContain("<video");
+  });
+
+  it("normalizes ox-hugo prose before frontmatter and link extraction", () => {
+    const markdown = [
+      "---", "private: false", "---",
+      '[Hello]({{< relref "hello.md" >}})',
+      "# Heading {#old-anchor}",
+      '<figure src="photo.png">', "",
+      "\\(x\\_1\\)",
+      "\\[y\\]",
+      "```md", '[Keep]({{< relref "code.md" >}})', "```",
+    ].join("\n");
+    const ctx = context("/vault", markdown);
+    oxHugoFlavoredMarkdown().parseFrontmatter!.run(ctx);
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    expect(ctx.files[0]!.frontmatter).toEqual({ private: false });
+    expect(ctx.files[0]!.rawLinks?.map((link) => link.target)).toEqual(["hello.md"]);
+    expect(ctx.files[0]!.content).toContain("# Heading\n![](photo.png)\n\n$x_1$\n$$y$$");
+    expect(ctx.files[0]!.content).toContain('[Keep]({{< relref "code.md" >}})');
+
+    const disabled = context("/vault", markdown);
+    oxHugoFlavoredMarkdown({ wikilinks: false, removeHugoShortcode: false }).parseFrontmatter!.run(disabled);
+    expect(disabled.files[0]!.content).toContain('[Hello]({{< relref "hello.md" >}})');
   });
 });
