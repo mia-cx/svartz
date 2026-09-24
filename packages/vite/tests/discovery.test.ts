@@ -53,6 +53,17 @@ it("rejects unknown selections and cross-host sitemaps", () => {
     .toThrow("share one public host");
 });
 
+it("excludes executable notes with mixed-case SVX extensions from host RSS", () => {
+  const blog = vaults[0]!;
+  const entry = { ...blog.artifacts.index.entries[0]!, title: "Executable", path: "Post.SVX" };
+  const withExecutable = {
+    ...blog,
+    artifacts: { ...blog.artifacts, index: { ...blog.artifacts.index, entries: [...blog.artifacts.index.entries, entry] } },
+  };
+  expect(renderHostRss([withExecutable], ["blog"], { title: "Blog", url: "https://example.com/site" }))
+    .not.toContain("Executable");
+});
+
 it("keeps an authored home page's modification date", () => {
   const work = vaults[1]!;
   const index = work.artifacts.index;

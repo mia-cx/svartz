@@ -15,6 +15,9 @@ const absoluteUrl = (base: string, href: string): string =>
   new URL(href.replace(/^\/+/, ""), `${base.replace(/\/+$/, "")}/`).href;
 
 function addAsset(ctx: PluginContext, name: string, contents: string): void {
+  if (ctx.files.some((file) => file.path === name)) {
+    throw new Error(`Published vault asset "${name}" conflicts with a generated Svartz discovery file.`);
+  }
   const key = `assets/${name}`;
   const artifact: Artifact = {
     key,
@@ -49,7 +52,7 @@ async function rss(ctx: PluginContext, base: string): Promise<string> {
     const description = xml(entry.description ?? "");
     const file = ctx.files.find((candidate) => candidate.path === entry.path);
     const fullHtml = discovery.feed.content === "full" && file?.extension !== ".svx" && file
-      ? await renderMarkdown(ctx, file.content) : undefined;
+      ? await renderMarkdown(ctx, file.content, link) : undefined;
     return [
       "<item>",
       `<title>${xml(entry.title)}</title>`,

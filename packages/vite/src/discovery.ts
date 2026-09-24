@@ -51,7 +51,7 @@ export function renderHostRss(
   }
   const selected = selectVaults(vaults, selectedIds);
   const entries = selected.flatMap((vault) => vault.artifacts.index.entries
-    .filter((entry) => !entry.locked && !entry.properties.encrypted && !entry.properties.hidden && !entry.path.endsWith(".svx"))
+    .filter((entry) => !entry.locked && !entry.properties.encrypted && !entry.properties.hidden && !entry.path.toLowerCase().endsWith(".svx"))
     .map((entry) => ({ entry, url: noteUrl(vault, entry.href) })));
   const date = (item: typeof entries[number]): Date | undefined => options.sort === "modified"
     ? item.entry.modifiedAt : item.entry.publishedAt ?? item.entry.createdAt;

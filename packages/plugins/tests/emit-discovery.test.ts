@@ -62,11 +62,14 @@ describe("discovery output", () => {
       feed: { enabled: true, limit: 1, content: "full", sort: "modified" },
       sitemap: { enabled: false }, dateSources: ["filesystem"],
     } });
+    ctx.files[1]!.content = "# Earlier\n\n[Later](../later/) ![Photo](./media/photo.png)";
     await emitDiscovery().emitArtifacts!.run(ctx);
     const feed = String(ctx.artifacts.get("assets/rss.xml")?.contents);
     expect(feed).toContain("/blog/earlier/");
-    expect(feed).not.toContain("/blog/later/");
+    expect(feed).not.toContain("<item><title>Later");
     expect(feed).toContain("<content:encoded><![CDATA[<h1 id=\"earlier\">Earlier");
+    expect(feed).toContain('href="https://example.com/site/blog/later/"');
+    expect(feed).toContain('src="https://example.com/site/blog/earlier/media/photo.png"');
     expect(ctx.artifacts.has("assets/sitemap.xml")).toBe(false);
   });
 
@@ -96,5 +99,13 @@ describe("discovery output", () => {
     await emitDiscovery().emitArtifacts!.run(ctx);
     expect(ctx.artifacts.has("assets/rss.xml")).toBe(false);
     expect(ctx.artifacts.has("assets/sitemap.xml")).toBe(true);
+  });
+
+  it.each(["rss.xml", "sitemap.xml"])("rejects a vault asset at the generated %s path", async (name) => {
+    const ctx = context();
+    ctx.files.push({ path: name, slug: name, extension: ".xml", content: "user asset" });
+    await expect(emitDiscovery().emitArtifacts!.run(ctx)).rejects.toThrow(
+      `Published vault asset "${name}" conflicts with a generated Svartz discovery file.`,
+    );
   });
 });
