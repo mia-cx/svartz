@@ -9,3 +9,5 @@ alwaysApply: false
 Build folder ancestry from each published note's physical vault path. A folder's `index.md` normalizes to the folder URL, so the canonical slug alone loses that folder membership. Count each published note once per ancestor; unpublished notes must never contribute to counts or listing content.
 
 The route index provides URLs to static prerendering and the host catchall. Keep generated folder and tag routes there, but exclude manual host routes. At runtime, an authored note at a listing URL wins over the generated listing. Use the typed vault view's `href` fields when rendering links, because they already contain the deployment base and vault mount.
+
+Concrete theme component routes belong in the same route index and sitemap when prerendered. Exclude dynamic patterns, `prerender: false`, and manual host routes. Keep authored note precedence when a theme route shares a URL.
