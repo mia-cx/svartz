@@ -84,4 +84,6 @@ Current behavior is correctness-first:
 
 - Test runtime fixtures live in `apps/web/src/lib/svartz/testing/fixtures/`.
 - `apps/web/vite.config.ts` aliases `virtual:svartz/theme` and `virtual:svartz/artifacts` to those files only in Vitest mode.
+
+Host apps and themes can read the published [vault view](docs/vault-view.md) from `virtual:svartz/artifacts`.
 - `@svartz/vite` tests cover vault change classification, rebuild triggering, and browser full-reload signaling.
