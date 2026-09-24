@@ -24,8 +24,8 @@ The rail also has a Random page button. On narrow screens the rail becomes a men
 ```yaml
 hatnote: For the guild she leads, see Lamplighters' Guild.
 featured: true        # show on the main page
+image: portrait.svg   # the infobox image; a vault attachment here is published with the page
 infobox:
-  image: portrait.svg # a vault attachment or a URL
   caption: Mirelle in the 1.4 update
   rows:
     Role: Lamplighter
@@ -36,7 +36,7 @@ infobox:
         Trim wick: Doubles a lantern's burn time
 ```
 
-The types are exported as `Infobox` and `InfoboxSection`. Plugins that generate wiki pages should emit this shape.
+`infobox.image` also works, but only for URLs: the pipeline publishes attachments named by top-level `image`, `cover`, or `socialImage`. The types are exported as `Infobox` and `InfoboxSection`. Plugins that generate wiki pages should emit this shape.
 
 ## Settings
 

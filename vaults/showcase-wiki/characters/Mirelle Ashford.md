@@ -6,8 +6,8 @@ featured: true
 hatnote: For the guild she leads, see Lamplighters' Guild.
 created_at: 2026-08-02
 updated_at: 2026-09-18
+image: mirelle.svg
 infobox:
-  image: mirelle.svg
   caption: Mirelle in the 1.4 update
   rows:
     Role: Lamplighter

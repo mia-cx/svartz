@@ -41,7 +41,11 @@
 	const tagHref = $derived(tagHrefFor(vault));
 	const isMainPage = $derived(entry?.slug === 'index');
 	const infobox = $derived(entry ? readInfobox(entry.properties) : undefined);
-	const infoboxImage = $derived(infobox?.image ? assetHref(vault, infobox.image) : undefined);
+	// The pipeline publishes attachments named by top-level `image`, so that is the portable field.
+	const infoboxImageName = $derived(
+		infobox?.image ?? (typeof entry?.properties.image === 'string' ? entry.properties.image : undefined)
+	);
+	const infoboxImage = $derived(infoboxImageName ? assetHref(vault, infoboxImageName) : undefined);
 	const hatnote = $derived(entry ? readHatnote(entry.properties) : undefined);
 	const edited = $derived(entry ? noteDate(entry) : undefined);
 	const linksHere = $derived(entry ? (vault.note(entry.slug)?.backlinks ?? []) : []);
@@ -333,6 +337,11 @@
 	}
 
 	/* Wikipedia sections: a rule under each second-level heading. */
+	/* Boxed blocks stay beside a floated infobox instead of running under it. */
+	.wiki-prose :global(:is(.sv-callout, .sv-code, .svartz-embed)) {
+		overflow: hidden;
+	}
+
 	/* flow-root keeps the heading (and its rule) beside a floated infobox, not under it. */
 	.wiki-prose :global(h2) {
 		display: flow-root;
