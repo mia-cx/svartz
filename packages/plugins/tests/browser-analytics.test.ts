@@ -41,9 +41,17 @@ describe("analytics browser resource", () => {
     expect(scripts).toHaveLength(1);
     const events = (window as { dataLayer: unknown[][] }).dataLayer.filter((entry) => entry[0] === "event");
     expect(events).toEqual([
-      ["event", "page_view", { page_location: "https://example.test/blog/one/", page_title: "Public title" }],
-      ["event", "page_view", { page_location: "https://example.test/blog/two/", page_title: "Public title" }],
+      ["event", "page_view", { page_location: "https://example.test/blog/one/", page_title: "Public title", send_to: "G-123" }],
+      ["event", "page_view", { page_location: "https://example.test/blog/two/", page_title: "Public title", send_to: "G-123" }],
     ]);
+  });
+
+  it("routes each host vault's Google pageviews to its own tag", async () => {
+    const { mount } = await import("../src/browser-analytics");
+    mount("/blog/", { provider: "google", tagId: "G-BLOG" });
+    mount("/work/", { provider: "google", tagId: "G-WORK" });
+    const events = (window as { dataLayer: unknown[][] }).dataLayer.filter((entry) => entry[0] === "event");
+    expect(events.map((entry) => (entry[2] as { send_to: string }).send_to)).toEqual(["G-BLOG", "G-WORK"]);
   });
 
   it("counts a return to the same route after its mount has ended", async () => {
@@ -73,10 +81,13 @@ describe("analytics browser resource", () => {
     expect(scripts[0]?.attributes).toMatchObject({
       "data-website-id": "public-id",
       "data-auto-pageview": "false",
+      "data-auto-track": "false",
     });
-    (window as { umami?: { track: () => void } }).umami = { track };
+    (window as { umami?: { track: typeof track } }).umami = { track };
     scripts[0]?.listeners.load?.();
     expect(track).toHaveBeenCalledTimes(2);
+    expect(track.mock.calls.map(([transform]) => transform({ website: "public-id", title: "Public title" }).url))
+      .toEqual(["/blog/one/", "/blog/two/"]);
   });
 
   it("sends only public Rybbit page metadata once per route", async () => {

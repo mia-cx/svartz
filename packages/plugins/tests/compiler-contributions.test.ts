@@ -97,4 +97,20 @@ describe("compiler contributions", () => {
       options: { provider: "google", tagId: "G-123" },
     });
   });
+
+  it("rejects Clarity in a host vault because recording outlives its route", () => {
+    const host = context("/out", content, {
+      target: { type: "host" },
+      analytics: { provider: "clarity", projectId: "public-id" },
+    });
+    expect(() => analytics().emitArtifacts!.run(host)).toThrow(/Clarity.*host vault/i);
+    expect(getCompilerContributions(host).browserResources.size).toBe(0);
+
+    const standalone = context("/out", content, {
+      target: { type: "static" },
+      analytics: { provider: "clarity", projectId: "public-id" },
+    });
+    analytics().emitArtifacts!.run(standalone);
+    expect(getCompilerContributions(standalone).browserResources.has("core:analytics")).toBe(true);
+  });
 });

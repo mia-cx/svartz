@@ -80,6 +80,7 @@ Duplicate ID replaces in-place; new ID appends; disabled removed.
 - Markdown compiler callbacks receive source as `file.value` in Unified and `file.contents` in mdsvex. A syntax plugin that needs source offsets must handle both; the `.md` renderer alone cannot verify `.svx` behavior.
 - Browser script modules export `mount(pathname)` and optionally return a disposer. Svartz mounts after hydration and disposes on navigation, vault change, and unmount. Do not install global listeners at import time.
 - Browser scripts may receive decoded, JSON-serializable resource `options` as a second mount argument. `core:analytics` contributes only when configured. Its browser module installs one tracker per provider settings and uses the route disposer to distinguish a return visit from a duplicate mount.
+- Per-vault analytics must not collect unrelated host routes. Target Google pageviews at the configured tag, preserve queued Umami paths with automatic tracking disabled, and reject per-vault Clarity in a host because its recorder has no route-scoped stop API.
 - Keep decrypted content out of provider calls. `SvartzVaultPage` masks the whole vault DOM for Clarity, including content rendered after decryption.
 
 ## Theme contract

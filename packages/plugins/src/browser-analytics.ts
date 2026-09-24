@@ -12,7 +12,7 @@ type AnalyticsWindow = Window & {
   dataLayer?: unknown[];
   gtag?: (...args: unknown[]) => void;
   plausible?: ((event: string, options?: unknown) => void) & { init?: (options: unknown) => void; q?: unknown[] };
-  umami?: { track: () => void };
+  umami?: { track: (payload: (properties: Record<string, unknown>) => Record<string, unknown>) => void };
   goatcounter?: { no_onload?: boolean; endpoint?: string; count?: (options: { path: string }) => void };
   tinylytics?: { triggerUpdate: () => void };
   _paq?: unknown[][];
@@ -55,6 +55,7 @@ function createTracker(config: AnalyticsConfig): Tracker {
         ready((pathname) => w.gtag?.("event", "page_view", {
           page_location: `${location.origin}${pathname}`,
           page_title: document.title,
+          send_to: config.tagId,
         }));
       });
     case "plausible":
@@ -74,7 +75,8 @@ function createTracker(config: AnalyticsConfig): Tracker {
         appendScript(`${config.host ?? "https://cloud.umami.is"}/script.js`, {
           "data-website-id": config.websiteId,
           "data-auto-pageview": "false",
-        }, () => ready(() => browserWindow().umami?.track()));
+          "data-auto-track": "false",
+        }, () => ready((pathname) => browserWindow().umami?.track((properties) => ({ ...properties, url: pathname }))));
       });
     case "goatcounter":
       return manualTracker((ready) => {
