@@ -146,7 +146,7 @@ const resolveVaultConfig = (
   vault: VaultConfig,
   defaults: SvartzDefaults | undefined,
   configDir: string,
-  metadata: Pick<ResolvedConfig, "version" | "$schema">,
+  metadata: Pick<ResolvedConfig, "version" | "$schema" | "passwordGroups">,
 ): Effect.Effect<ResolvedConfig, VaultPathInvalid> =>
   Effect.gen(function* () {
     const absolutePath = resolve(configDir, vault.path);
@@ -202,6 +202,7 @@ const resolveVaultConfig = (
       mountPath: normalizeMountPath(vault.mountPath ?? defaults?.mountPath),
       target: vault.target,
       plugins,
+      passwordGroups: metadata.passwordGroups,
     };
   });
 
@@ -219,6 +220,7 @@ export const resolveConfig = (
         resolveVaultConfig(vault, config.defaults, configDir, {
           version: config.version,
           $schema: config.$schema,
+          passwordGroups: config.passwordGroups ?? {},
         }),
       { concurrency: buildDefaults.concurrency },
     );
@@ -256,6 +258,7 @@ export const resolveConfig = (
       ...(config.$schema !== undefined && { $schema: config.$schema }),
       configDir,
       build: buildDefaults,
+      passwordGroups: config.passwordGroups,
       vaults,
     };
   });

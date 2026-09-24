@@ -105,6 +105,8 @@ interface ResolvedConfig {
   readonly mountPath: string;
   readonly target: TargetConfig;
   readonly plugins: readonly unknown[];
+  /** Environment variable names only. Password values never enter resolved config. */
+  readonly passwordGroups: Readonly<Record<string, { readonly env: string }>>;
 }
 
 // --- Artifact model ---
@@ -200,6 +202,8 @@ interface ProcessedFile {
   slug: string;
   content: string;
   frontmatter?: Record<string, unknown>;
+  /** Set only after publication filtering has confirmed this note is public. */
+  protection?: { readonly group: string; readonly hidden: boolean };
   rawLinks?: RawLink[];
   links?: string[];
   linkTargets?: Record<string, string>;

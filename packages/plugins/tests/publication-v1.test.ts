@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,6 +61,7 @@ const context = (
       theme: { base: "minimal" },
       target: { type: "static" },
       plugins: [],
+      passwordGroups: {},
     },
     files,
     artifacts: new Map(),
@@ -68,6 +69,34 @@ const context = (
   }) as PluginContext;
 
 describe("v1 publication boundary", () => {
+  it("fails closed for missing protected groups or passwords after publication filtering", () => {
+    const unknown = context([note("locked.md", "SECRET", { password_group: "friends" })]);
+    expect(() => filterUnpublished().filterUnpublished!.run(unknown)).toThrow(/undefined password group/);
+
+    const missing = context([note("locked.md", "SECRET", { password_group: "friends" })]);
+    Object.assign(missing.config.passwordGroups, { friends: { env: "SVARTZ_TEST_PROTECTED_PASSWORD" } });
+    expect(() => filterUnpublished().filterUnpublished!.run(missing)).toThrow(/SVARTZ_TEST_PROTECTED_PASSWORD/);
+
+    const unpublished = context([note("private.md", "SECRET", { private: true, password_group: "friends" })]);
+    filterUnpublished().filterUnpublished!.run(unpublished);
+    expect(unpublished.files).toEqual([]);
+  });
+
+  it("marks public protected notes without putting password values on files", () => {
+    vi.stubEnv("SVARTZ_TEST_PROTECTED_PASSWORD", "not-a-public-value");
+    try {
+      const ctx = context([note("locked.md", "SECRET", { password_group: "friends", hide_locked: true })]);
+      Object.assign(ctx.config.passwordGroups, { friends: { env: "SVARTZ_TEST_PROTECTED_PASSWORD" } });
+      expect(() => filterUnpublished().filterUnpublished!.run(ctx)).toThrow(/encrypted publication pipeline/);
+      ctx.meta.set("svartz:protectionReady", true);
+      filterUnpublished().filterUnpublished!.run(ctx);
+      expect(ctx.files[0]?.protection).toEqual({ group: "friends", hidden: true });
+      expect(JSON.stringify(ctx.files[0]?.protection)).not.toContain("not-a-public-value");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("keeps a public note's frontmatter social image but not a private note's image", () => {
     const ctx = context([
       note("public.md", "", { socialImage: "media/cover.png" }),

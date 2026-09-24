@@ -36,6 +36,33 @@ export const filterUnpublished = definePlugin(() => ({
         return published;
       });
 
+      let protectedCount = 0;
+      for (const file of publishedNotes) {
+        const group = file.frontmatter?.password_group;
+        if (group === undefined) {
+          if (file.frontmatter?.hide_locked === true) {
+            throw new Error(`Note "${file.path}" uses hide_locked without password_group`);
+          }
+          continue;
+        }
+        if (typeof group !== "string" || group.trim() !== group || group.length === 0) {
+          throw new Error(`Note "${file.path}" needs a nonempty password_group name`);
+        }
+        const setting = ctx.config.passwordGroups?.[group];
+        if (!setting) throw new Error(`Note "${file.path}" names undefined password group "${group}"`);
+        if (!process.env[setting.env]) {
+          throw new Error(`Password group "${group}" needs environment variable ${setting.env}`);
+        }
+        if (file.frontmatter?.hide_locked !== undefined && typeof file.frontmatter.hide_locked !== "boolean") {
+          throw new Error(`Note "${file.path}" needs boolean hide_locked`);
+        }
+        file.protection = { group, hidden: file.frontmatter?.hide_locked === true };
+        protectedCount++;
+      }
+      if (protectedCount > 0 && ctx.meta.get("svartz:protectionReady") !== true) {
+        throw new Error("Protected notes require the encrypted publication pipeline");
+      }
+
       const assets = ctx.files.filter(
         (file) => !isNote(file) && !matches(file.path, exclude),
       );
