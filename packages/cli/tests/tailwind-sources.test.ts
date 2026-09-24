@@ -69,6 +69,28 @@ describe("tailwind source generation", () => {
     ]);
   });
 
+  it("scans runtime component peers but skips dev-only and framework packages", async () => {
+    const appRoot = await mkdtemp(path.join(os.tmpdir(), "svartz-tailwind-peers-"));
+    tempDirs.push(appRoot);
+    const themeRoot = path.join(appRoot, "node_modules", "@acme", "theme");
+    const uiRoot = path.join(appRoot, "node_modules", "@acme", "ui");
+    const devRoot = path.join(appRoot, "node_modules", "@acme", "build-tools");
+    await createPackage(uiRoot, "@acme/ui", undefined, true);
+    await createPackage(devRoot, "@acme/build-tools", undefined, true);
+    await createPackage(themeRoot, "@acme/theme", undefined, true);
+    await writeFile(path.join(themeRoot, "package.json"), JSON.stringify({
+      name: "@acme/theme",
+      exports: { ".": "./index.js" },
+      peerDependencies: { "@acme/ui": "^1.0.0", svelte: "^5.0.0" },
+      devDependencies: { "@acme/ui": "^1.0.0", "@acme/build-tools": "^1.0.0" },
+    }));
+
+    const globs = getTailwindSourceGlobs(appRoot, createConfig("@acme/theme"));
+    expect(globs).toContain(path.join(await realpath(uiRoot), "dist", "**/*.{svelte,js,ts}"));
+    expect(globs.some((glob) => glob.includes("build-tools"))).toBe(false);
+    expect(globs.some((glob) => glob.includes("/svelte/"))).toBe(false);
+  });
+
   it("writes relative @source directives for the generated css bridge", () => {
     const cssFilePath = path.join(
       "/workspace/.svartz/vaults/docs",
