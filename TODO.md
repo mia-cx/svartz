@@ -1,41 +1,21 @@
-# Svartz TODO
+# Svartz v1 status
 
-Current backlog after landing the runtime plugin/theme/artifact architecture.
+The v1 backend is implemented in the pull request stack above [#16](https://github.com/mia-cx/svartz/pull/16), through [#70](https://github.com/mia-cx/svartz/pull/70). It is not yet integrated into `sveltekit-rewrite`. [#17](https://github.com/mia-cx/svartz/issues/17) tracks that integration.
 
-## Foundation already in place
+The backend stack includes publication filtering, configurable Markdown plugins, canonical routes, multi-vault SvelteKit hosts, `npx svartz init`, static discovery outputs, package archives, content overrides, analytics, encrypted SVX, and lazy theme pages. The seven v1 archives use MCX v1.0. Packed fresh and host consumers have been tested; no package has been published to npm.
 
-- Single-vault `ResolvedConfig` contract and flattened config handoff.
-- Theme contract, plugin contract, plugin runner, and route matcher in `@svartz/core`.
-- Core pipeline in `@svartz/plugins`, including artifact emission to vault-scoped runtime outputs.
-- Runtime-driven `@svartz/vite` package with `virtual:svartz/theme` and `virtual:svartz/artifacts`.
-- Thin `apps/web` runtime shells for `/` and `[...slug]`.
-- Multi-vault-safe output layout under `.svartz/vaults/<vaultId>/{artifacts,dist}`.
+The shared UI and first-party themes are being built separately under [#21](https://github.com/mia-cx/svartz/issues/21). Do not treat the old `feat/mvp-launch` demo UI as the finished v1 theme.
 
-## Active backlog
+## Still required for v1
 
-High-priority implementation is in **NEXT_STEPS.md** (markdown/embedding, theme-minimal, @svartz/ui, CLI E2E, watch/HMR, then additional themes). The items below are either out of scope for that queue or deferred.
+- Review and integrate the backend PR stack in order, then incorporate the finished UI branch. Keep host routes, adapters, plugin hooks, and vault privacy intact.
+- Revalidate the integrated branch with serial builds, tests, a public-URL static build, a mounted host build, and packed consumers. See [#17](https://github.com/mia-cx/svartz/issues/17).
+- Finish the shared UI and first-party theme handoff in [#21](https://github.com/mia-cx/svartz/issues/21).
+- Keep npm publication and deployment as separate release actions after integration. The docs vault has no public URL in the repository config.
 
-### 1) SEO and feeds
+## After v1
 
-- Add sitemap generation.
-- Add RSS/Atom support if still desired.
-- Add OpenGraph/meta support.
-- Add shared vault/site metadata config fields. Tracked in GitHub issue `#14`.
-
-### 2) Dev experience and docs
-
-- Document GitHub Actions workflow setup for Svartz CI.
-- Improve caching/incremental rebuild behavior once watch mode is implemented.
-- Add migration notes from Quartz v4 once the first production-ready flow is stable.
-- Investigate shared i18n/l10n tooling and package shape. Tracked in GitHub issue `#10`.
-
-## Keep open / deferred
-
-- Vite+ migration after GA. Tracked in GitHub issue `#15`.
-- Obsidian plugin for Svartz mdsvex support.
-
-## Notes
-
-- Multi-vault support is already in place.
-- The runtime Vite bridge exists, but watch/HMR and CLI orchestration are still unfinished.
-- `apps/web` should keep local ambient typings/test stubs for Svartz virtual modules and should not depend directly on `@svartz/vite` just for type resolution.
+- Community translations and a translation platform: [#24](https://github.com/mia-cx/svartz/issues/24).
+- Community plugin/theme browser and management commands: [#35](https://github.com/mia-cx/svartz/issues/35).
+- Vite+ migration after GA: [#15](https://github.com/mia-cx/svartz/issues/15).
+- Obsidian sync plugin: [#12](https://github.com/mia-cx/svartz/issues/12).

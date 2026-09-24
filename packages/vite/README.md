@@ -1,38 +1,8 @@
-# @svartz/vite
+# `@svartz/vite`
 
-`@svartz/vite` is the runtime-driven Vite integration layer for Svartz.
+The Vite plugin runs one resolved vault through `@svartz/plugins` and writes its runtime artifacts under `.svartz/vaults/<id>/artifacts`. The CLI composes several vault plugins into one existing SvelteKit host build, or uses the repository's static `apps/web` shell. A host keeps its routes, layouts, adapter, scripts, and `.svelte-kit` directory.
 
-It consumes a pre-resolved single-vault `ResolvedConfig`, runs the Svartz plugin pipeline, exposes runtime virtual modules, and bridges generated artifacts into SvelteKit without generating route files into `apps/web`.
-
-## What It Does
-
-- Accepts a CLI-resolved `ResolvedConfig` for exactly one vault.
-- Loads and validates the configured Svartz theme.
-- Merges runtime plugins in specificity order:
-  1. core plugins
-  2. theme plugin preset
-  3. config defaults plugins
-  4. config vault plugins
-- Runs the Svartz pipeline inside Vite before module loading.
-- Emits vault-scoped artifacts under `.svartz/vaults/<vaultId>/artifacts`.
-- Exposes `virtual:svartz/theme` and `virtual:svartz/artifacts` for `apps/web`.
-
-## Usage
-
-```ts
-import { svartz } from "@svartz/vite";
-import type { ResolvedConfig } from "@svartz/core";
-
-export function createSvartzVitePlugin(config: ResolvedConfig) {
-  return svartz({
-    config,
-    mode: "production",
-    env: {},
-  });
-}
-```
-
-The CLI injects this pipeline plugin during build and dev. A SvelteKit host that imports Svartz virtual modules also wraps its Vite export so SvelteKit's secondary client build retains their aliases:
+The CLI injects `svartz()` during build and dev. A host with Svartz virtual imports also wraps its Vite export so SvelteKit's secondary build sees the same aliases:
 
 ```ts
 import { withSvartzHost } from '@svartz/vite/host';
@@ -42,65 +12,14 @@ import { defineConfig } from 'vite';
 export default withSvartzHost(defineConfig({ plugins: [sveltekit()] }));
 ```
 
-`svartz init` adds this wrapper to an existing Kit config while preserving its original config expression. It does not change routes or the adapter.
+`svartz init` adds that wrapper without replacing the host's Vite expression. A manual SvelteKit route wins over a vault URL at the same path.
 
-## Generated Output
+## Runtime modules
 
-Given `ResolvedConfig.outDir = .svartz/vaults/docs/dist`, the plugin writes runtime inputs to:
+- `virtual:svartz/artifacts` exposes the generated note components, published index, route data, and browser resources for one vault.
+- `virtual:svartz/theme` exposes the theme, its route matcher, and a `ready` promise that loads lazy components.
+- `virtual:svartz/host` exposes all configured vault modules, combined routes, `resolveHostVault(pathname)`, and `prepareHostVault(pathname)`.
 
-```text
-.svartz/vaults/docs/
-├── .svelte-kit/
-├── artifacts/
-│   ├── index.ts
-│   └── pages/
-│       └── **/*.svelte
-└── dist/
-```
+The generated catchall awaits `prepareHostVault` in universal `load` before rendering. A custom route that renders `SvartzRuntimePage` must do the same, after removing SvelteKit's deployment base from the pathname. The helper avoids top-level await in the generated theme module, which can stall SSR chunk rendering when a lazy page imports a shared package. See [`@svartz/ui`](../ui/README.md) for a working route example.
 
-- `index.ts` eagerly exports `index`, `graph`, `backlinks`, and `search`.
-- `pages/**/*.svelte` contains one compiled page artifact per note slug.
-- The final Vite/SvelteKit bundle still goes to `ResolvedConfig.outDir`.
-- The CLI, not `@svartz/vite`, is responsible for pointing `apps/web` at the vault-scoped `.svelte-kit` directory and preparing the workspace so prerender can resolve dependencies.
-
-## Virtual Modules
-
-### `virtual:svartz/theme`
-
-Exports the validated theme surface and runtime route helpers:
-
-- `theme`
-- `routes`
-- `resolveRuntimeRoute({ pathname, slug? })`
-- `resolveRouteToArtifactKey({ pathname, slug? })`
-
-This module re-exports from the real theme package rather than serializing loaders.
-
-### `virtual:svartz/artifacts`
-
-Exports the generated artifact bridge:
-
-- `artifacts`
-- `hasNoteArtifact(key)` and `getNoteArtifact(key)`
-- `browserResources`, a map of contributed asset IDs to bundled URLs
-- `index`
-- `graph`
-- `backlinks`
-- `search`
-
-This module imports the index, note page artifacts, and browser resources contributed by active hooks. CSS and script imports participate in Vite's bundle. Removing the contributing hook or last note that uses it removes the resource on the next build.
-
-## Route Shell Model
-
-`apps/web` owns static route files. Svartz does not generate SvelteKit route files into the app.
-
-- `src/routes/+page.svelte` and `src/routes/[...slug]/+page.svelte` act as runtime shells.
-- Static SvelteKit routes in `apps/web/src/routes` still win over the catch-all route.
-- Theme layouts are resolved from `virtual:svartz/theme`.
-- Note components are loaded from `virtual:svartz/artifacts`.
-
-## Notes
-
-- `core:emit-artifacts` runs as a final `post` emitter hook.
-- The emitter itself writes files in parallel internally using Effect.
-- `apps/web` should use local ambient declarations for Svartz virtual modules and local test stubs for browser tests; it should not depend on `@svartz/vite` just for types.
+The plugin re-runs the pipeline and triggers a full browser reload for vault edits. The CLI restarts dev for config, theme, or workspace-package source changes. Generated assets stay inside each vault's mount path; SvelteKit's adapter owns the host output.

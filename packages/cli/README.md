@@ -22,7 +22,7 @@ In an existing SvelteKit app, `init` keeps routes, layouts, adapter, and existin
 
 Rerun `npx svartz@latest init` after upgrading a scaffolded host. It updates only the exact older generated catchall loader to await lazy theme pages; a custom catchall remains yours.
 
-Use `svartz build --vault <id>` when you want to target a single vault.
+Use `svartz build --vault <id>` to target one standalone vault. A SvelteKit host always builds all configured host vaults together, because they share one Vite build and adapter output.
 
 ## Turbo task sync
 
@@ -33,7 +33,7 @@ For the repository shell, the CLI syncs a managed Turbo/package surface at the c
 
 The CLI only rewrites those managed `svartz:*` / `//#svartz:*` entries, so existing non-Svartz scripts and Turbo tasks stay untouched.
 
-After initialization, `build` and `dev` leave the host's `package.json`, `turbo.json`, routes, Vite config, adapter, and `.svelte-kit` alone. Run `svartz build --vault <id>` or `svartz dev --vault <id>` with `target: { type: "host" }` for each vault. The host's adapter controls its final output. Host route files continue to take precedence. The host can import `virtual:svartz/artifacts` for published metadata and note components.
+After initialization, `build` and `dev` leave the host's `package.json`, `turbo.json`, routes, Vite config, adapter, and `.svelte-kit` alone. Set `target: { type: "host" }` on each mounted vault. The host's adapter controls its final output, and its route files continue to take precedence. The host can import `virtual:svartz/host` to select published vault data. A custom route rendering `SvartzRuntimePage` awaits `prepareHostVault(pathname)` in universal `load`; the generated catchall already does so.
 
 ## Per-Vault Workspace Contract
 
@@ -59,5 +59,7 @@ The CLI derives and sets:
 - `SVARTZ_TARGET_TYPE`
 - `SVARTZ_THEME_MODULE_PATH`
 - `SVARTZ_ARTIFACTS_MODULE_PATH`
+- `SVARTZ_HOST_MODULE_PATH` for a composed host build
+- `SVARTZ_TAILWIND_SOURCES_PATH`
 
 For provider-style targets that rely on `adapter-auto`, the CLI also sets the matching platform environment variables for the selected vault before invoking Vite.
