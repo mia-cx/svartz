@@ -1,0 +1,11 @@
+<script>
+  import { getContext } from 'svelte';
+  let { input, onAction } = $props();
+  const host = getContext('host-state');
+</script>
+
+# SVX_SECRET_CONTROL_d87421
+
+<p data-probe="prop">Prop: {input.label}</p>
+<p data-probe="context">Context: {host.count}</p>
+<button onclick={onAction}>Call host callback</button>

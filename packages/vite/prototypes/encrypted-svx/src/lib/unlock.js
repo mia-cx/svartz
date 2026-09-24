@@ -4,7 +4,7 @@ const bytes = (value) => Uint8Array.from(atob(value), (character) => character.c
 export const hasSession = () => Boolean(sessionKey);
 export const resetSession = () => { sessionKey = undefined; };
 
-export async function unlock(url, password, target) {
+export async function unlock(url, password, target, options) {
   const response = await fetch(url);
   if (!response.ok) throw new Error('Protected payload unavailable');
   const envelope = await response.json();
@@ -48,7 +48,7 @@ export async function unlock(url, password, target) {
     styles.href = blob(css, 'text/css');
     document.head.append(styles);
     module = await import(/* @vite-ignore */ blob(source, 'text/javascript'));
-    instance = module.render(target);
+    instance = module.render(target, options);
     return cleanup;
   } catch (error) {
     await cleanup();

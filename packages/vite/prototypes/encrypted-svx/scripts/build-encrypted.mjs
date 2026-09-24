@@ -8,9 +8,40 @@ import { resolve } from 'node:path';
 const password = process.env.SVARTZ_PROTOTYPE_PASSWORD;
 if (!password) throw new Error('Set SVARTZ_PROTOTYPE_PASSWORD before building');
 const assetToken = 'svartz-protected-asset:diagram';
+const mode = process.env.SVARTZ_PROTOTYPE_RUNTIME ?? 'shared';
+if (!['shared', 'isolated'].includes(mode)) throw new Error('Unknown runtime mode');
+const bridgedExports = {
+  svelte: Object.keys(await import('svelte')),
+  'svelte/internal/client': Object.keys(await import('svelte/internal/client')),
+  'svelte/store': Object.keys(await import('svelte/store')),
+  '$app/state': ['page', 'navigating', 'updated'],
+  '$app/navigation': ['goto', 'afterNavigate'],
+  '$app/paths': ['base', 'assets'],
+  '$lib/host-context.js': ['getHostContext', 'setHostContext']
+};
+const sideEffects = new Set(['svelte/internal/disclose-version', 'svelte/internal/flags/legacy']);
 const result = await build({
   configFile: false,
   plugins: [
+    {
+      name: 'prototype-host-runtime-bridge',
+      enforce: 'pre',
+      resolveId(id) {
+        if (mode === 'isolated' && id === './Note.svx') return resolve('private/Control.svx');
+        if (mode !== 'shared') return;
+        if (id in bridgedExports || sideEffects.has(id)) return '\0host-bridge:' + id;
+        if (id.startsWith('$app/') || id.startsWith('$env/') || id.startsWith('svelte/')) {
+          throw new Error('Unclassified protected runtime import: ' + id);
+        }
+      },
+      load(id) {
+        if (!id.startsWith('\0host-bridge:')) return;
+        const name = id.slice('\0host-bridge:'.length);
+        if (sideEffects.has(name)) return 'export {};';
+        return 'const host = globalThis.__svartzPrototypeHost[' + JSON.stringify(name) + '];\n' +
+          bridgedExports[name].map((key, index) => `const value${index} = host[${JSON.stringify(key)}]; export { value${index} as ${key} };`).join('\n');
+      }
+    },
     {
       name: 'prototype-protected-attachment',
       enforce: 'pre',
@@ -50,3 +81,5 @@ await writeFile('static/protected/note.json', JSON.stringify({
   id, iterations, salt: salt.toString('base64'), iv: iv.toString('base64'), ciphertext: Buffer.from(ciphertext).toString('base64')
 }));
 console.log(JSON.stringify({ protectedModuleBytes: chunks[0].code.length, payloadBytes: Buffer.byteLength(payload), encryptedBytes: ciphertext.byteLength }));
+await mkdir('evidence', { recursive: true });
+await writeFile('evidence/build-' + mode + '.json', JSON.stringify({ mode, protectedModuleBytes: chunks[0].code.length, payloadBytes: Buffer.byteLength(payload), encryptedBytes: ciphertext.byteLength }, null, 2) + '\n');

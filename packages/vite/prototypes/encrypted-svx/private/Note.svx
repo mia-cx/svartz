@@ -1,6 +1,8 @@
 <script>
   import Counter from './Counter.svelte';
   import diagram from './diagram.svg?url';
+  import HostProbe from './HostProbe.svelte';
+  let { input, onAction } = $props();
 </script>
 
 # SVX_SECRET_BODY_6e1d72
@@ -8,6 +10,7 @@
 This text exists only inside the encrypted bundle.
 
 <Counter />
+<HostProbe {input} {onAction} />
 
 <img src={diagram} alt="Protected diagram" width="180" height="80" />
 

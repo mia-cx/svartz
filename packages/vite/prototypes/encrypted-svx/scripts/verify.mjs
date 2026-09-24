@@ -10,11 +10,13 @@ import { serve } from './serve.mjs';
 const password = process.env.SVARTZ_PROTOTYPE_PASSWORD;
 if (!password) throw new Error('Set SVARTZ_PROTOTYPE_PASSWORD to the build password');
 const results = [];
+const mode = process.env.SVARTZ_PROTOTYPE_RUNTIME ?? 'shared';
 const check = async (name, run) => {
   try { await run(); results.push({ name, pass: true }); console.log('PASS ' + name); }
   catch (error) { results.push({ name, pass: false, error: String(error) }); throw error; }
 };
 const secrets = ['SVX_SECRET_BODY_6e1d72', 'SVX_SECRET_CSS_982ab1', 'SVX_SECRET_COUNTER_9bb812', 'SVX_SECRET_DYNAMIC_bcad32', 'SVX_SECRET_ASSET_6aa84f', password];
+secrets.push('SVX_SECRET_HOST_89ae12', 'SVX_SECRET_CONTROL_d87421');
 const files = [];
 async function walk(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -83,6 +85,24 @@ try {
     assert.equal(await page.locator('[data-protected-mounted]').count(), 0);
     assert.equal(await page.locator('[data-protected-style]').count(), 0);
   });
+  if (mode === 'isolated') {
+    await check('Isolated runtime reads initial props/context but misses host reactive updates', async () => {
+      await submit(password);
+      await status('Unlocked');
+      await page.getByText('Prop: initial', { exact: true }).waitFor();
+      await page.getByText('Context: 0', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Change host prop' }).click();
+      await page.getByRole('button', { name: 'Increment host', exact: true }).click();
+      await page.getByText('Host prop: changed', { exact: true }).waitFor();
+      await page.getByText('Shared host component (host): 1', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Call host callback' }).click();
+      await page.getByText('Host callbacks: 1', { exact: true }).waitFor();
+      await page.waitForTimeout(100);
+      assert.equal(await page.locator('[data-probe=prop]').textContent(), 'Prop: initial');
+      assert.equal(await page.locator('[data-probe=context]').textContent(), 'Context: 0');
+      await page.screenshot({ path: 'evidence/isolated-stale.png' });
+    });
+  } else {
   await check('Correct password decrypts and imports interactive SVX with scoped CSS and image', async () => {
     await submit(password);
     await status('Unlocked');
@@ -99,14 +119,41 @@ try {
     assert.equal(await page.locator('html').getAttribute('data-protected-mounted'), 'yes');
     await page.screenshot({ path: 'evidence/unlocked.png' });
   });
+  await check('Shared runtime preserves reactive props, context keys, callbacks, and imported host components', async () => {
+    await page.getByText('Shared context identity: yes', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Change host prop' }).click();
+    await page.getByText('Prop: changed', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Increment host', exact: true }).click();
+    await page.getByText('Context: 1', { exact: true }).waitFor();
+    await page.getByText('Shared host component (protected): 1', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Increment from protected' }).click();
+    await page.getByText('Shared host component (host): 2', { exact: true }).waitFor();
+    await page.getByText('Context: 2', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Call host callback' }).click();
+    await page.getByText('Host callbacks: 1', { exact: true }).waitFor();
+  });
+  await check('Protected app state and navigation use the live host router without reload', async () => {
+    await page.getByText('Route: /prototype/?step=', { exact: true }).waitFor();
+    const callbacksBefore = Number((await page.locator('[data-probe=navigation]').textContent()).split(': ')[1]);
+    await page.evaluate(() => { window.__svartzNavigationWitness = 'same-document'; });
+    await page.getByRole('button', { name: 'Protected navigation' }).click();
+    await page.getByText('Route: /prototype/?step=2', { exact: true }).waitFor();
+    await page.getByText('Navigation callbacks: ' + (callbacksBefore + 1), { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => window.__svartzNavigationWitness), 'same-document');
+    await page.getByText('Prop: changed', { exact: true }).waitFor();
+    await page.screenshot({ path: 'evidence/shared-host.png', fullPage: true });
+  });
   await check('SvelteKit navigation unmounts protected runtime and removes its styles', async () => {
     await page.getByRole('link', { name: 'Public page', exact: true }).click();
     await page.getByRole('heading', { name: 'Public page', exact: true }).waitFor();
     await page.waitForFunction(() => !document.documentElement.dataset.protectedMounted);
     assert.equal(await page.locator('[data-protected-style]').count(), 0);
     assert(!(await page.content()).includes(secrets[0]));
+    await page.getByText('Host observed disposals: 1', { exact: true }).waitFor();
+    const hooksAfterDisposal = await page.locator('[data-host=hooks]').textContent();
     await page.getByRole('link', { name: 'Locked note' }).click();
     await status('Locked');
+    assert.equal(await page.locator('[data-host=hooks]').textContent(), hooksAfterDisposal);
     await submit('');
     await status('Unlocked');
     await page.getByRole('heading', { name: secrets[0] }).waitFor();
@@ -143,9 +190,10 @@ try {
     assert.equal(await page.locator('[data-protected-mounted]').count(), 0);
     assert.equal(await page.locator('[data-protected-style]').count(), 0);
   });
-  await writeFile('evidence/browser.json', JSON.stringify({ browser: browser.version(), basePath: '/prototype/', staticFiles: files.length, checks: results }, null, 2) + '\n');
+  }
+  await writeFile('evidence/browser-' + mode + '.json', JSON.stringify({ mode, browser: browser.version(), node: process.version, basePath: '/prototype/', staticFiles: files.length, checks: results }, null, 2) + '\n');
 } catch (error) {
-  await writeFile('evidence/browser.json', JSON.stringify({ checks: results, error: String(error) }, null, 2) + '\n');
+  await writeFile('evidence/browser-' + mode + '.json', JSON.stringify({ mode, checks: results, error: String(error) }, null, 2) + '\n');
   throw error;
 } finally {
   await context?.close();

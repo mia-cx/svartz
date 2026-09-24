@@ -1,0 +1,94 @@
+{
+  "shared": {
+    "mode": "shared",
+    "browser": "151.0.7922.173",
+    "node": "v24.19.0",
+    "basePath": "/prototype/",
+    "staticFiles": 21,
+    "checks": [
+      {
+        "name": "No protected markers, password, source maps, or SVX in static output",
+        "pass": true
+      },
+      {
+        "name": "Locked static shell hydrates with no protected content or assets",
+        "pass": true
+      },
+      {
+        "name": "Wrong password reveals nothing and mounts no component",
+        "pass": true
+      },
+      {
+        "name": "Correct password decrypts and imports interactive SVX with scoped CSS and image",
+        "pass": true
+      },
+      {
+        "name": "Shared runtime preserves reactive props, context keys, callbacks, and imported host components",
+        "pass": true
+      },
+      {
+        "name": "Protected app state and navigation use the live host router without reload",
+        "pass": true
+      },
+      {
+        "name": "SvelteKit navigation unmounts protected runtime and removes its styles",
+        "pass": true
+      },
+      {
+        "name": "Relock clears the session key and removes rendered content",
+        "pass": true
+      },
+      {
+        "name": "Modified ciphertext fails authentication before executing code",
+        "pass": true
+      },
+      {
+        "name": "Supported CSP emits no uncaught errors",
+        "pass": true
+      },
+      {
+        "name": "CSP without blob script permission blocks the encrypted component",
+        "pass": true
+      }
+    ]
+  },
+  "isolated": {
+    "mode": "isolated",
+    "browser": "151.0.7922.173",
+    "node": "v24.19.0",
+    "basePath": "/prototype/",
+    "staticFiles": 21,
+    "checks": [
+      {
+        "name": "No protected markers, password, source maps, or SVX in static output",
+        "pass": true
+      },
+      {
+        "name": "Locked static shell hydrates with no protected content or assets",
+        "pass": true
+      },
+      {
+        "name": "Wrong password reveals nothing and mounts no component",
+        "pass": true
+      },
+      {
+        "name": "Isolated runtime reads initial props/context but misses host reactive updates",
+        "pass": true
+      }
+    ]
+  },
+  "builds": {
+    "shared": {
+      "mode": "shared",
+      "protectedModuleBytes": 7064,
+      "payloadBytes": 7938,
+      "encryptedBytes": 7954
+    },
+    "isolated": {
+      "mode": "isolated",
+      "protectedModuleBytes": 46004,
+      "payloadBytes": 48274,
+      "encryptedBytes": 48290
+    }
+  }
+}

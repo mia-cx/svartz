@@ -1,7 +1,12 @@
 <script>
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, getAllContexts } from 'svelte';
   import { base } from '$app/paths';
   import { unlock, resetSession, hasSession } from '$lib/unlock.js';
+  import { registerHostBridge } from '$lib/host-bridge.js';
+  const context = getAllContexts();
+  const input = $state({ label: 'initial' });
+  let callbacks = $state(0);
+  const props = { input, onAction: () => { callbacks++; } };
   let password = $state('');
   let status = $state('Locked');
   let target;
@@ -14,7 +19,7 @@
     busy = true;
     status = 'Unlocking';
     try {
-      const cleanup = await unlock(base + '/protected/note.json', password, target);
+      const cleanup = await unlock(base + '/protected/note.json', password, target, { props, context });
       if (disposed) await cleanup();
       else { dispose = cleanup; status = 'Unlocked'; }
     } catch (error) {
@@ -33,7 +38,7 @@
     status = 'Locked';
   }
   onDestroy(() => { disposed = true; void dispose?.(); });
-  onMount(() => { sessionAvailable = hasSession(); });
+  onMount(() => { registerHostBridge(); sessionAvailable = hasSession(); });
 </script>
 <svelte:head><title>Encrypted SVX prototype</title></svelte:head>
 <h1>Encrypted SVX prototype</h1>
@@ -45,4 +50,7 @@
 </form>
 <p role="status">{status}</p>
 <p>Session group available: {sessionAvailable ? 'yes' : 'no'}</p>
+<button onclick={() => { input.label = 'changed'; }}>Change host prop</button>
+<p data-host="callbacks">Host callbacks: {callbacks}</p>
+<p data-host="prop">Host prop: {input.label}</p>
 <div bind:this={target}></div>
