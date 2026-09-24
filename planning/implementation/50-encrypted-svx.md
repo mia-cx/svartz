@@ -15,7 +15,8 @@ Keep the site static. Compile protected `.svx` and its private dependencies outs
 2. [ ] Split public and protected indexes, embeds, assets, and discovery before public emission. Hidden routes stay reachable without index entries.
 3. [ ] Compile and encrypt executable SVX module graphs, CSS, and assets without writing plaintext output or source maps.
    - [x] Share one versioned AES-GCM/PBKDF2 envelope between build and browser code, with password, tamper, and route-binding tests.
-   - [ ] Compile each protected graph in memory and classify every dependency.
+   - [x] Compile transformed group notes and nested Svelte imports in memory; reject server-only, cross-group, and unpublished-note imports.
+   - [ ] Classify arbitrary client-safe dependencies and protected assets before emission.
    - [ ] Encrypt note modules, CSS, assets, and group discovery before public emission.
 4. [ ] Bridge the host SvelteKit runtime and client-safe imports with live semantics. Reject transitive server-only imports.
 5. [ ] Unlock/relock the group in the browser; keep session keys in memory and merge protected search/graph only for the session.
@@ -26,3 +27,5 @@ Keep the site static. Compile protected `.svx` and its private dependencies outs
 The two prototype branches prove static encryption and shared-runtime feasibility, but use fixed imports and a throwaway global registry. Production must classify imports and own the bridge internally. The public Vite graph eagerly imports note artifacts, so protected notes must enter it only as locked shells.
 
 The public index and eager artifact graph now use redacted locked entries and shell components. Protected-only attachments stay out of public assets; full note metadata and protected asset membership remain build-local. The encrypted emitter and browser unlock path must consume that build-local data before the fail-closed publication guard can be lifted.
+
+The in-memory graph compiler is not yet called by the Vite publication plugin. It currently rejects unclassified output assets and requires a single self-contained JS chunk. The host-runtime bridge will replace that temporary isolation rule.
