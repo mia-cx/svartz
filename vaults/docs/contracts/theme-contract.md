@@ -4,7 +4,7 @@ Complete contract for `@svartz/core` theme system. Defines the shape, validation
 
 ## Overview
 
-Themes are Svelte component packages that define layouts, routes, and optional plugin presets. Authored with `defineTheme` factory, themes include rich metadata about capabilities and artifact requirements.
+Themes are Svelte component packages that define layouts, routes, and optional plugin presets. Authored with `defineTheme`, they can declare rendering capabilities and explicit feature requirements. A capability does not force its transformer to remain active; `requiredFeatures` does.
 
 ## Core Types
 
@@ -237,7 +237,7 @@ const theme = {
     plugins: [
       {
         id: "theme:custom-highlight",
-        transformContent: (ctx) => { /* custom syntax highlighting */ }
+        transformSyntax: (ctx) => { /* custom syntax highlighting */ }
       }
     ]
   }

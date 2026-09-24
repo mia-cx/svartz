@@ -74,16 +74,7 @@ vaults/docs/
 
 ### Stages
 
-Plugins hook into 6 sequential stages:
-
-1. **discover** — Traverse vault, parse frontmatter, generate slugs
-2. **filterUnpublished** — Remove drafts
-3. **transformContent** — Modify markdown (runs in parallel by default)
-4. **indexContent** — Build search index and metadata
-5. **resolveLinks** — Resolve wikilinks to slugs (stub)
-6. **emit** — Write artifacts to disk
-
-See [[plugins/overview#Stages Breakdown]] for details.
+Plugins use fixed hooks for discovery, frontmatter, publication, links, individual content transforms, indexing, and emission. Content transforms run serially. See [[plugins/overview]] for the ordered list.
 
 ### Plugin Merge Order
 
@@ -143,7 +134,7 @@ See [[contracts/plugin-contract]], [[contracts/theme-contract]]
 
 ### `@svartz/plugins`
 
-- 10 core plugins across all stages
+- 13 core plugins across all stages
 - Internal utilities (slug, ignore, parse, resolve)
 - All plugins use `definePlugin()` factory
 
@@ -229,7 +220,7 @@ import { definePlugin } from "@svartz/core";
 
 export const myPlugin = definePlugin(() => ({
   id: "custom:my-plugin",
-  transformContent: (ctx) => {
+  transformOfm: (ctx) => {
     ctx.files.forEach(file => {
       file.content = /* transform */;
     });

@@ -17,12 +17,12 @@ export function sortPluginsForStage(
 
 ## Description
 
-Returns plugins in order: **pre** (serial) → **default** (parallel) → **post** (serial). Preserves order within each enforce level.
+Returns plugins in order: **pre** → **default** → **post**. Preserves order within each enforce level. Content transform hooks run serially.
 
 ## Parameters
 
 - **plugins** — Array of (normalized) plugins
-- **stage** — Stage name (`discover`, `transformContent`, etc.)
+- **stage** — Stage name (`discoverFiles`, `transformGfm`, etc.)
 
 ## Returns
 
@@ -34,11 +34,11 @@ Sorted plugin array ready for stage execution.
 import { sortPluginsForStage } from "@svartz/core";
 
 const plugins = [
-  { id: "a", transformContent: { run: (...), options: { enforce: "post" } } },
-  { id: "b", transformContent: (ctx) => { } }, // default
-  { id: "c", transformContent: { run: (...), options: { enforce: "pre" } } }
+  { id: "a", transformGfm: { run: (ctx) => {}, options: { enforce: "post" } } },
+  { id: "b", transformGfm: (ctx) => {} },
+  { id: "c", transformGfm: { run: (ctx) => {}, options: { enforce: "pre" } } }
 ];
-const sorted = sortPluginsForStage(plugins, "transformContent");
+const sorted = sortPluginsForStage(plugins, "transformGfm");
 // sorted === [c (pre), b (default), a (post)]
 ```
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ResolvedConfig, SvartzPlugin, SvartzTheme } from "@svartz/core";
+import { runStages, type PluginContext, type ResolvedConfig, type SvartzPlugin, type SvartzTheme } from "@svartz/core";
 import { resolveRuntimePlugins } from "../src/plugins";
 
 function config(plugins: SvartzPlugin[] = []): ResolvedConfig {
@@ -36,6 +36,23 @@ describe("runtime plugin requirements", () => {
     expect(position).toBeGreaterThan(0);
     expect(plugins[position - 1]?.id).toBe("core:transform-description");
     expect(plugins[position + 1]?.id).toBe("core:transform-latex");
+  });
+
+  it("does not retain browser resources from a replaced transformer", async () => {
+    const plugins = resolveRuntimePlugins(config([
+      { id: "core:transform-latex", transformLatex() {} },
+    ]));
+    const ctx = {
+      config: config(),
+      files: [{ path: "math.md", slug: "math", extension: ".md", content: "$x$" }],
+      artifacts: new Map(),
+      meta: new Map(),
+    } as unknown as PluginContext;
+
+    await runStages(plugins, ctx, ["transformLatex"]);
+
+    expect(ctx.files[0]?.content).toBe("$x$");
+    expect(ctx.compiler?.browserResources.size ?? 0).toBe(0);
   });
 
   it("fails only when a theme explicitly requires a disabled feature", () => {

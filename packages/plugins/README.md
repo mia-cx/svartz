@@ -19,7 +19,7 @@ Core pipeline plugins for the Svartz build system. These plugins handle the cano
 | `core:index`                 | `indexContent`         | default | Build canonical index (search + graph + backlinks) |
 | `core:emit-artifacts`        | `emitArtifacts`        | default | Write index.json to disk                           |
 
-All core hooks set `fatal: true`. `core:emit-artifacts` sets `parallel: true`.
+All core hooks set `fatal: true`. Mutating transform hooks run serially.
 
 ## Ordering Contract
 
@@ -39,15 +39,9 @@ Execution order is deterministic:
 6. **indexContent** — requires all transforms complete
 7. **emitArtifacts** — requires index built
 
-## Published Semantics
+## Publication
 
-| Frontmatter value              | Result          |
-| ------------------------------ | --------------- |
-| missing / `null` / `undefined` | published       |
-| `true`                         | published       |
-| `"2025-01-01"` (datetime)      | published       |
-| `false`                        | **unpublished** |
-| `""` (empty string)            | **unpublished** |
+Publication defaults to exclusion mode. The optional inclusion mode publishes only paths in `include[]`. `exclude[]` applies to both modes. `draft: true` hides a note, `published_at` publishes it immediately, and `private: true` always hides it. Only assets referenced by published notes remain in the pipeline. Other hidden note content cannot reach embeds, links, search, or the graph.
 
 ## Determinism Guarantees
 
@@ -72,10 +66,6 @@ Individual plugin factories are also exported for selective use:
 import { discoverFiles, parseFrontmatter } from "@svartz/plugins";
 ```
 
-## Deferred: @svartz/plugin-mdsvex
+## Compiler ownership
 
-mdsvex is a rendering/adapter concern, not a core pipeline plugin. It will be implemented as an optional `@svartz/plugin-mdsvex` package that:
-
-- Integrates at the renderer/emit boundary
-- Does not own canonical parse/transform/index semantics
-- Is not included in the default core plugin set
+The GFM and syntax hooks contribute remark/rehype steps. The math hook renders KaTeX and contributes CSS only when a published note uses math. The emitter consumes active contributions. `.svx` is the only note format that executes authored Svelte; `.md` and `.mdx` render as inert Markdown.
