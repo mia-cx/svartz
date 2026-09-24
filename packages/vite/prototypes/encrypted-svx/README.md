@@ -1,79 +1,81 @@
-# Encrypted SVX on a static SvelteKit site
+# Encrypted SVX sharing its SvelteKit host
 
-Throwaway compiler/browser prototype for [encrypted-note publication](https://github.com/mia-cx/svartz/issues/34). This is evidence for a design decision, not production encryption code.
+Throwaway extension of the [original static-encryption proof](https://github.com/mia-cx/svartz/blob/82f46d7b/packages/vite/prototypes/encrypted-svx/README.md), for [the backend/UI contract](https://github.com/mia-cx/svartz/issues/32). Production code is unchanged.
 
-## Verdict
+## Result
 
-Encrypted executable SVX works on pure static hosting. A separately bundled browser module can be encrypted at build time, decrypted after password entry, dynamically imported through a blob URL, and mounted into a prerendered SvelteKit shell.
+Protected SVX can share reactive props, context, and the live SvelteKit router while its source remains encrypted in static output. Use the host's existing Svelte runtime instead of bundling another runtime into each protected note.
 
-The experiment requires no authentication server, runtime compilation, or plaintext protected JavaScript on the host. The public shell is prerendered; the protected component mounts after unlocking.
+The isolated-runtime control reads initial props/context and calls host callbacks, but its displayed values do not update when the host's reactive objects change. The shared-runtime fixture follows those changes in both directions. These are different fixtures; their byte counts are not a controlled size comparison.
 
-## Run
+The shared fixture passes 11 checks. The isolated control passes four checks, including confirmation of the stale-reactivity limitation. Actual results and versions are in [host-results.json](./host-results.json). [results.json](./results.json) remains historical evidence from the original experiment.
 
-From this directory, using Node 22 and pnpm 9:
+## Reproduce
+
+Run from this directory after `pnpm install --frozen-lockfile`. This run used Node 24.19.0, pnpm 9.14.2, Svelte 5.53.7, SvelteKit 2.53.4, Vite 7.3.1, adapter-static 3.0.10, and Chromium 151.0.7922.173.
+
+Shared runtime:
 
 ```sh
-pnpm install --frozen-lockfile
 SVARTZ_PROTOTYPE_PASSWORD=demo-encrypted-note pnpm build
 SVARTZ_PROTOTYPE_PASSWORD=demo-encrypted-note pnpm verify
-pnpm preview
 ```
 
-Open http://127.0.0.1:4178/prototype/ and use the demonstration password from the commands above. It is a public test fixture, not a real secret. Verification starts and stops its own static servers and Chromium process; the preview command is optional.
+Isolated-runtime control:
 
-Dependencies match the existing MVP lockfile versions where applicable. This nested package has its own workspace and lockfile, so it does not install or alter the repository's application dependencies.
+```sh
+SVARTZ_PROTOTYPE_RUNTIME=isolated SVARTZ_PROTOTYPE_PASSWORD=demo-encrypted-note pnpm build
+SVARTZ_PROTOTYPE_RUNTIME=isolated SVARTZ_PROTOTYPE_PASSWORD=demo-encrypted-note pnpm verify
+```
 
-## What the build does
+The password is a public demonstration fixture. Verification starts its own static servers and Chromium CDP session, enables focus emulation, and cleans them up. Screenshots and raw results go into ignored `evidence/`. No daily-driver application or preview is used.
 
-1. mdsvex and Svelte compile `private/Note.svx`, its imported counter, and a nested dynamic import.
-2. Vite produces one self-contained ESM bundle, including its Svelte runtime. `write: false` keeps intermediate plaintext outputs in memory.
-3. The prototype collects extracted scoped CSS and an SVG attachment. A fixed attachment token proves replacement with a decrypted blob URL.
-4. PBKDF2-SHA-256 derives an AES-256-GCM key using a random salt and 600,000 iterations. Encryption uses a random 96-bit IV and the payload ID as authenticated additional data.
-5. Only an encrypted envelope enters `static/protected`. The public application imports the loader, never the protected source.
-6. SvelteKit's static adapter prerenders the public pages under a non-root `/prototype` base path.
+## What is proved
 
-The browser authenticates/decrypts the payload, creates attachment/CSS/module blob URLs, imports the module, and mounts it. Navigation unmounts the component and revokes its URLs. The key stays in memory during same-document navigation; Lock clears it.
+- Reactive host props update protected DOM. Callback props update the host.
+- A reactive context object stays reactive in both directions. A shared public `createContext` helper retains its private key identity, including inside an imported host-authored component.
+- `$app/state` page URL changes update the protected DOM. `$app/navigation` `goto` navigates without replacing the document. Its `afterNavigate` hook observes navigation and is removed on disposal. `$app/paths` supplies the `/prototype` base.
+- Scoped CSS, encrypted images, local component state, and a nested dynamic import still work.
+- Navigation disposes the protected root and its resources. Relocking clears the key; wrong passwords and tampered ciphertext mount no protected component.
+- The fixture's protected markers, password, source maps, and SVX sources are absent from static output. Strict CSP without blob scripts blocks import. The supported hash/blob CSP causes no uncaught errors and requires neither unsafe-eval nor unsafe-inline.
 
-## Verified behavior
+Screenshots were inspected. The isolated screenshot shows changed host values beside stale protected values. The shared screenshot shows updated props/context and the live router URL.
 
-The exact machine-readable result is in [results.json](./results.json). Nine focused checks pass in Chromium 151.0.7922.173:
+## Mechanism
 
-- Static output contains none of the five distinctive protected-content markers or the password. It contains no source maps or SVX sources.
-- The locked shell hydrates without protected DOM, CSS, or images. Direct requests for fixture source/plaintext chunks return 404.
-- A wrong password mounts nothing.
-- A correct password renders the note, updates the imported counter, loads the nested dynamic module, applies scoped CSS, and displays the decrypted image.
-- SvelteKit navigation unmounts the protected component, removes its CSS, and permits another unlock with the in-memory key.
-- Lock clears the key and removes rendered content.
-- Modified ciphertext fails authentication before module import.
-- Supported CSP produces no uncaught browser errors.
-- A stricter CSP excluding blob scripts blocks the import and leaves no mounted component or protected styles.
+The public application imports its Svelte runtime, SvelteKit client modules, and an explicitly shared context helper through its normal Vite build. `src/lib/host-bridge.js` exposes their existing namespace objects through a throwaway registry. It never imports protected sources.
 
-Screenshots and fresh results are written to ignored `evidence/`. The protected module is 48,466 bytes; the JSON payload is 50,987 bytes; authenticated ciphertext is 51,003 bytes before base64. These are fixture sizes, not production size forecasts.
+The protected library build compiles its own SVX dependency graph in memory. A Vite plugin redirects known shared imports to facades referencing those host namespace objects. The protected bundle contains its component code, but no second Svelte runtime or router. After decryption, the host passes props and its context map to the protected entry's `mount` call.
 
-## Constraints that matter for v1
+Sharing Svelte alone is insufficient if a module creating context keys executes twice. This prototype explicitly shares the already-public context helper. The imported host component is compiled into the protected payload while using the same helper and runtime.
 
-**Isolation must happen before normal public bundling.** Adding a dynamic import to the current eager note-artifact graph alone does not protect content. Every note-bearing JS/CSS/asset dependency needs classification before publication. Public source maps, preload files, indexes, prerendered HTML, and obsolete build outputs must obey the same boundary.
+Protected JS, CSS, and the attachment are encrypted before the public SvelteKit build sees protected output. The AES-GCM envelope, password derivation, and blob loader retain the original experiment's mechanism.
 
-**CSP must permit the loader.** The tested shell uses SvelteKit-generated hashes for its bootstrap script and permits `blob:` for scripts, styles, and images. It needs neither `unsafe-eval` nor `unsafe-inline`. A consuming app's stricter HTTP CSP still applies; a meta policy cannot loosen it.
+## Production direction and limits
 
-**This prototype mounts an isolated Svelte runtime.** It bundles framework code with the protected note rather than sharing the host runtime. It proves ordinary imported browser components, local state, lifecycle cleanup, CSS, a nested dynamic import, and an attachment. It does not prove automatic inheritance of host Svelte context or support for `$app/*` imports. A production bridge needs an explicit props/context/runtime contract.
+Generate a dependency bridge internally from resolved module ownership; the global registry is not a proposed public API. Reuse public dependencies and keep protected-only dependencies encrypted. An import is not permission to publish protected data.
 
-**One note and one password group are tested.** No reload-persistent session cache, multi-group assets, protected search index, encrypted graph, arbitrary dependency cycles, imported worker/Wasm modules, or HMR implementation is included. The nested dynamic dependency is bundled eagerly but its dynamic-import call still resolves after unlock.
+Compile protected components against the host's installed Svelte compiler/runtime. Compiler-generated `svelte/internal/*` imports need version-compatible handling. Broad namespace exports simplify this fixture; production should retain only needed exports.
 
-**Asset rewriting is deliberately narrow.** One fixture SVG import maps to a placeholder. General Markdown attachments, CSS URLs, and transitive asset imports need the production resource collector.
+Client-compatible SvelteKit APIs can use the host modules. Only the APIs listed above were tested. Forms, remote functions, `$app/stores`, other navigation methods, arbitrary package singletons, workers, Wasm, HMR, other adapters, and other framework versions were not tested. Arbitrary mutable shared module exports also need live-binding support beyond these constant facades.
 
-**Locking is UI/session cleanup, not erasure of previously disclosed content.** Browsers retain evaluated module records, and authorized readers can retain decrypted content. Revoking blob URLs does not unload JavaScript already imported.
+Server-only modules and private environment imports remain subject to normal SvelteKit client restrictions. Encryption must not bypass them. This prototype rejects unclassified `$app/*` and `$env/*` imports; it does not implement the full transitive server-only module analysis. That is a production gate.
 
-This is a bounded feasibility check, not a security audit. Marker scans demonstrate this fixture's output isolation; they do not establish a universal information-flow guarantee.
+The host supplies props/context at runtime, rather than serializing them into ciphertext. Protected content mounts in the browser after unlock; its public shell remains prerendered.
 
-## Attempts and sources
+Session keys remain in memory during same-document navigation. Reload persistence, multiple groups, encrypted discovery data, and general dependency/asset classification remain production work. Disposal removes listeners and rendered resources, but cannot erase content already disclosed to a reader.
 
-The first build exposed Vite's array return value for library builds; normalizing it fixed collection of in-memory outputs. The first verification used an uppercase CSP attribute match; generated HTML correctly uses lowercase. Visual inspection found a stale session-status label; it now tracks unlock/lock state. Final build and verification pass.
+The host CSP must permit the blob loader; Svartz cannot loosen a stricter host policy. Sharing the runtime adds no new CSP requirement. Marker scans are fixture evidence, not a universal security audit or a completed v1 backend.
 
-- [Vite code splitting](https://vite.dev/guide/features.html#glob-import)
-- [Vite library builds](https://vite.dev/guide/build.html#library-mode)
-- [Browser dynamic imports and blob URLs](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import)
-- [Web Crypto decryption](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/decrypt)
-- [Svelte mount/unmount](https://svelte.dev/docs/svelte/svelte)
-- [SvelteKit static generation](https://svelte.dev/docs/kit/adapter-static)
-- [SvelteKit CSP](https://svelte.dev/docs/kit/configuration#csp)
+## Attempts
+
+The first bridge build declared an export named `await`, a reserved binding name. Safe local identifiers with export aliases fixed it. Both subsequent builds and browser checks passed. Vite reported the existing mdsvex sourcemap warning; sourcemaps are disabled and absent from public output.
+
+## Primary references
+
+- [Svelte mount and context-map APIs](https://svelte.dev/docs/svelte/svelte#mount)
+- [Svelte context and reactive state](https://svelte.dev/docs/svelte/context)
+- [SvelteKit page state](https://svelte.dev/docs/kit/$app-state)
+- [SvelteKit navigation and lifecycle](https://svelte.dev/docs/kit/$app-navigation)
+- [SvelteKit server-only modules](https://svelte.dev/docs/kit/server-only-modules)
+- [SvelteKit CSP configuration](https://svelte.dev/docs/kit/configuration#csp)
