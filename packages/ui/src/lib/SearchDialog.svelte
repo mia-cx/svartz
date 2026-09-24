@@ -1,13 +1,15 @@
 <!--
-	Vault search. A trigger button plus a modal <dialog> with results and, on wide
-	screens, a preview of the selected note. Ctrl/⌘+K opens it; Ctrl/⌘+Shift+K
-	opens it in tag mode. Mount once per page.
+	Vault search, laid out like Quartz's: a floating input bar over a wide panel,
+	result titles on the left and the selected note on the right with its matches
+	highlighted. Ctrl/⌘+K opens it; Ctrl/⌘+Shift+K opens it in tag mode.
+	Narrow screens drop the preview and show an excerpt under each title.
+	Mount once per page.
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import Search from '@lucide/svelte/icons/search';
 	import { onMount, tick } from 'svelte';
-	import { fetchPreview } from './preview.js';
+	import { fetchPreview, markTerms } from './preview.js';
 	import {
 		createSearch,
 		excerpt,
@@ -36,7 +38,8 @@
 		variant?: 'field' | 'icon';
 	} = $props();
 
-	const WIDE_QUERY = '(min-width: 56rem)';
+	const WIDE_QUERY = '(min-width: 50rem)';
+	const PREVIEW_SCROLL_MARGIN_PX = 48;
 
 	let dialog = $state<HTMLDialogElement>();
 	let input = $state<HTMLInputElement>();
@@ -49,11 +52,9 @@
 
 	const search = $derived(createSearch(documents, searchOptions, searchIndex));
 	const hits = $derived(search(query));
+	const parsed = $derived(parseSearchQuery(query));
 	// A query worth an empty state: a named tag, or two characters of text. A bare "#" is not.
-	const searched = $derived.by(() => {
-		const parsed = parseSearchQuery(query);
-		return Boolean(parsed.tag) || (parsed.text.length >= 2 && !parsed.text.startsWith('#'));
-	});
+	const searched = $derived(Boolean(parsed.tag) || (parsed.text.length >= 2 && !parsed.text.startsWith('#')));
 	const active = $derived<SearchHit | undefined>(hits[selected]);
 
 	$effect(() => {
@@ -67,7 +68,9 @@
 		void fetchPreview(hit.href).then(({ nodes }) => {
 			if (cancelled || !previewBody) return;
 			previewBody.replaceChildren(...nodes);
-			previewBody.scrollTop = 0;
+			// As in Quartz: highlight the matches and bring the first into view.
+			const first = markTerms(previewBody, hit.terms);
+			previewBody.scrollTop = first ? Math.max(0, first.offsetTop - PREVIEW_SCROLL_MARGIN_PX) : 0;
 		});
 		return () => {
 			cancelled = true;
@@ -160,31 +163,29 @@
 	class="sv-search"
 	bind:this={dialog}
 	onclose={onClose}
-	onclick={(event) => event.target === dialog && close()}
+	onclick={(event) => (event.target === dialog || event.target === event.currentTarget.firstElementChild) && close()}
 	aria-label="Search"
 >
-	<div class="sv-search-panel" data-has-results={hits.length > 0 ? '' : undefined}>
-		<div class="sv-search-field">
-			<Search aria-hidden="true" />
-			<input
-				bind:this={input}
-				bind:value={query}
-				onkeydown={onKeydown}
-				type="text"
-				role="combobox"
-				aria-expanded={hits.length > 0}
-				aria-controls="sv-search-results"
-				aria-activedescendant={active ? `sv-search-hit-${selected}` : undefined}
-				aria-autocomplete="list"
-				placeholder="Search notes, or #tag"
-				autocomplete="off"
-				spellcheck="false"
-			/>
-			<button class="sv-kbd sv-search-close" type="button" onclick={close}>Esc</button>
-		</div>
+	<div class="sv-search-space">
+		<input
+			class="sv-search-bar"
+			bind:this={input}
+			bind:value={query}
+			onkeydown={onKeydown}
+			type="text"
+			role="combobox"
+			aria-expanded={hits.length > 0}
+			aria-controls="sv-search-results"
+			aria-activedescendant={active ? `sv-search-hit-${selected}` : undefined}
+			aria-autocomplete="list"
+			aria-label="Search notes"
+			placeholder="Search for something, or #tag"
+			autocomplete="off"
+			spellcheck="false"
+		/>
 
 		{#if hits.length > 0}
-			<div class="sv-search-body">
+			<div class="sv-search-layout">
 				<ul class="sv-search-results" id="sv-search-results" role="listbox" aria-label="Results">
 					{#each hits as hit, index (hit.document.id)}
 						<li
@@ -199,16 +200,16 @@
 										{#if part.match}<mark>{part.text}</mark>{:else}{part.text}{/if}
 									{/each}
 								</span>
-								{#if hit.document.content || hit.document.description}
+								{#if parsed.tag && hit.document.tags?.length}
+									<span class="sv-search-tags">
+										{#each hit.document.tags as tag (tag)}<span class="sv-tag">{tag}</span>{/each}
+									</span>
+								{/if}
+								{#if !wide && (hit.document.content || hit.document.description)}
 									<span class="sv-search-excerpt">
 										{#each highlight(excerpt(hit.document.content || hit.document.description || '', hit.terms, 22), hit.terms) as part, partIndex (partIndex)}
 											{#if part.match}<mark>{part.text}</mark>{:else}{part.text}{/if}
 										{/each}
-									</span>
-								{/if}
-								{#if hit.document.tags?.length}
-									<span class="sv-search-tags">
-										{#each hit.document.tags.slice(0, 3) as tag (tag)}<span class="sv-tag">{tag}</span>{/each}
 									</span>
 								{/if}
 							</a>
@@ -222,12 +223,6 @@
 		{:else if searched}
 			<p class="sv-search-empty">No notes match “{query.trim()}”.</p>
 		{/if}
-
-		<p class="sv-search-hints sv-label" aria-hidden="true">
-			<span><span class="sv-kbd">↑</span><span class="sv-kbd">↓</span> move</span>
-			<span><span class="sv-kbd">↵</span> open</span>
-			<span><span class="sv-kbd">#</span> filter by tag</span>
-		</p>
 	</div>
 </dialog>
 
@@ -279,24 +274,25 @@
 		justify-content: end;
 	}
 
+	/* Full-viewport dialog; the scrim is the dialog itself, the panel floats in it. */
 	.sv-search {
-		inline-size: min(56rem, calc(100vw - 2rem));
+		inline-size: 100vw;
+		block-size: 100dvh;
 		max-inline-size: none;
 		max-block-size: none;
-		margin: 10vh auto auto;
+		margin: 0;
 		padding: 0;
 		border: 0;
 		background: transparent;
 		color: var(--sv-text);
-		overflow: visible;
 	}
 
 	.sv-search::backdrop {
 		background: var(--sv-scrim);
-		backdrop-filter: blur(3px);
+		backdrop-filter: blur(4px);
 	}
 
-	.sv-search[open] {
+	.sv-search[open] .sv-search-space {
 		animation: sv-search-in var(--sv-duration) var(--sv-ease);
 	}
 
@@ -307,75 +303,63 @@
 		}
 	}
 
-	.sv-search-panel {
+	.sv-search-space {
 		display: grid;
-		overflow: hidden;
+		align-content: start;
+		gap: var(--sv-space-5);
+		inline-size: min(80%, 76rem);
+		block-size: 100%;
+		margin-inline: auto;
+		padding-block-start: 12vh;
+		box-sizing: border-box;
+	}
+
+	.sv-search-bar,
+	.sv-search-layout,
+	.sv-search-empty {
 		border: var(--sv-rule-width) solid var(--sv-rule);
 		border-radius: var(--sv-radius-l);
 		background: var(--sv-paper);
 		box-shadow: var(--sv-shadow);
 	}
 
-	.sv-search-field {
-		display: flex;
-		align-items: center;
-		gap: var(--sv-space-3);
-		padding: var(--sv-space-3) var(--sv-space-4);
-		border-block-end: var(--sv-rule-width) solid var(--sv-rule);
-		color: var(--sv-muted);
-	}
-
-	.sv-search-field :global(svg) {
-		flex: none;
-		inline-size: 1.15rem;
-		block-size: 1.15rem;
-	}
-
-	.sv-search-field input {
-		flex: 1;
-		min-inline-size: 0;
-		padding: var(--sv-space-1) 0;
-		border: 0;
-		background: transparent;
+	.sv-search-bar {
+		inline-size: 100%;
+		box-sizing: border-box;
+		padding: 0.6em 1em;
 		color: var(--sv-ink);
 		font: inherit;
 		font-size: var(--sv-step-1);
 		outline: none;
-		/* Host form resets (Tailwind forms) draw their own ring; the panel is the focus cue. */
-		box-shadow: none;
+		/* Host form resets (Tailwind forms) draw their own ring. */
 		appearance: none;
 	}
 
-	.sv-search-field input::placeholder {
+	.sv-search-bar:focus-visible {
+		border-color: var(--sv-rule-strong);
+	}
+
+	.sv-search-bar::placeholder {
 		color: var(--sv-muted);
 	}
 
-	.sv-search-close {
-		cursor: pointer;
-		background: transparent;
-	}
-
-	.sv-search-body {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		block-size: min(60vh, 32rem);
-	}
-
-	@media (min-width: 56rem) {
-		.sv-search-body {
-			grid-template-columns: minmax(16rem, 2fr) 3fr;
-		}
+	.sv-search-layout {
+		display: flex;
+		block-size: 63vh;
+		overflow: hidden;
 	}
 
 	.sv-search-results {
+		flex: 0 0 min(30%, 28rem);
 		margin: 0;
-		padding: var(--sv-space-2);
+		padding: 0;
 		overflow-y: auto;
+		border-inline-end: var(--sv-rule-width) solid var(--sv-rule);
 		list-style: none;
 	}
 
 	.sv-search-results li {
-		border-radius: var(--sv-radius-m);
+		border-block-end: var(--sv-rule-width) solid var(--sv-rule);
 	}
 
 	.sv-search-results li[aria-selected='true'] {
@@ -385,15 +369,18 @@
 
 	.sv-search-results a {
 		display: grid;
-		gap: var(--sv-space-1);
-		padding: var(--sv-space-2) var(--sv-space-3);
+		gap: var(--sv-space-2);
+		padding: var(--sv-space-4);
 		color: inherit;
 		text-decoration: none;
 	}
 
 	.sv-search-title {
 		color: var(--sv-ink);
-		font-weight: 600;
+		font-size: var(--sv-step-1);
+		font-stretch: 104%;
+		font-weight: 700;
+		line-height: 1.25;
 	}
 
 	.sv-search-excerpt {
@@ -403,8 +390,8 @@
 		font-size: var(--sv-step--1);
 		line-height: 1.5;
 		-webkit-box-orient: vertical;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
+		-webkit-line-clamp: 3;
+		line-clamp: 3;
 	}
 
 	.sv-search-tags {
@@ -413,22 +400,22 @@
 		gap: var(--sv-space-1);
 	}
 
-	.sv-search-results mark {
+	.sv-search-results mark,
+	.sv-search-preview :global(.sv-search-match) {
 		border-radius: 2px;
 		background: var(--sv-mark);
 		color: inherit;
 	}
 
 	.sv-search-preview {
+		flex: 1;
 		max-inline-size: none;
-		padding: var(--sv-space-5) var(--sv-space-6);
+		padding: var(--sv-space-5) var(--sv-space-7);
 		overflow-y: auto;
-		border-inline-start: var(--sv-rule-width) solid var(--sv-rule);
-		font-size: var(--sv-step--1);
 	}
 
 	.sv-search .sv-search-preview :global(h1) {
-		font-size: var(--sv-step-3);
+		font-size: var(--sv-step-4);
 	}
 
 	.sv-search-empty {
@@ -438,28 +425,16 @@
 		text-align: center;
 	}
 
-	.sv-search-hints {
-		display: flex;
-		gap: var(--sv-space-4);
-		margin: 0;
-		padding: var(--sv-space-2) var(--sv-space-4);
-		border-block-start: var(--sv-rule-width) solid var(--sv-rule);
-		background: var(--sv-surface);
-	}
-
-	.sv-search-hints > span {
-		display: inline-flex;
-		align-items: center;
-		gap: 3px;
-	}
-
-	@media (max-width: 40rem) {
-		.sv-search {
-			margin-block-start: var(--sv-space-3);
+	/* Narrow: no preview; the results take the panel. */
+	@media (max-width: 50rem) {
+		.sv-search-space {
+			inline-size: calc(100% - 2 * var(--sv-space-3));
+			padding-block-start: var(--sv-space-3);
 		}
 
-		.sv-search-hints {
-			display: none;
+		.sv-search-results {
+			flex: 1;
+			border-inline-end: 0;
 		}
 	}
 </style>
