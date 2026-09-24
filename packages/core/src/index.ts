@@ -38,6 +38,7 @@ export {
   openProtectedPayload,
   type ProtectedEnvelope,
 } from "./protection";
+export { ProtectedSession, resolveProtectedBridgeImports, type ProtectedGroupPayload } from "./protected-session";
 
 // Plugin contract — types
 export type {
