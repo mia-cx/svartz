@@ -478,10 +478,15 @@ const createAppConfig = (
     process.env["SVARTZ_ARTIFACTS_MODULE_PATH"] = getGeneratedRuntimeArtifactsModulePath(vault);
     const hostRegistryPath = getGeneratedHostRegistryPath(projectRoot);
     process.env["SVARTZ_HOST_MODULE_PATH"] = hostRegistryPath;
-    process.env["SVARTZ_HOST_STYLE_MAP"] = JSON.stringify(vaults.map((item) => ({
+    const styleManifests = vaults.map((item) => ({
       modules: [getGeneratedRuntimeArtifactsModulePath(item), getGeneratedRuntimeThemeModulePath(item)],
       path: getGeneratedHostStylesPath(hostRegistryPath, item.id),
-    })));
+    }));
+    if (hostApp) {
+      process.env["SVARTZ_HOST_STYLE_MAP"] = JSON.stringify(styleManifests);
+    } else {
+      delete process.env["SVARTZ_HOST_STYLE_MAP"];
+    }
     yield* Effect.tryPromise({
       try: async () => {
         await mkdir(path.dirname(hostRegistryPath), { recursive: true });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ResolvedConfig } from "@svartz/core";
-import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath, svelteKitBasePath } from "../src/host-registry";
+import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath, getGeneratedHostStylesPath, svelteKitBasePath } from "../src/host-registry";
 
 const vault = (id: string, mountPath: string): ResolvedConfig => ({
   version: "1.0.0",
@@ -38,6 +38,8 @@ describe("host registry", () => {
     expect(source).toContain("await theme.ready;");
     expect(source).toContain("await preparing.get(selected.id);");
     expect(getGeneratedHostRegistryPath("/workspace")).toBe("/workspace/.svartz/host/runtime.ts");
+    expect(getGeneratedHostStylesPath("/workspace/.svartz/host/runtime.ts", "../../../package"))
+      .toMatch(/^\/workspace\/\.svartz\/host\/styles\/[^/]+\.json$/);
   });
 
   it("uses the target or canonical host URL as the deployment base", () => {

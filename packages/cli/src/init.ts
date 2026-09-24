@@ -445,11 +445,10 @@ const initProjectEffect = (
         "  import 'virtual:svartz/tailwind-sources.css';\n",
         "",
       );
-      const migrateCatchallPage =
-        existsSync(catchallPagePath) &&
-        [previousStyledCatchallPage, previousCatchallPage].includes(yield* operation("read host catchall page", () =>
+      const existingCatchallPage = existsSync(catchallPagePath)
+        ? yield* operation("read host catchall page", () =>
           readFile(catchallPagePath, "utf8"),
-        ));
+        ) : undefined;
       const catchallLoadTemplate = yield* operation(
         "read catchall load template",
         () =>
@@ -466,11 +465,18 @@ const initProjectEffect = (
         .replace("import { prepareHostVault, routes }", "import { routes }")
         .replace("export const load = async", "export const load =")
         .replace("  await prepareHostVault(pathname);\n", "");
-      const migrateCatchall =
-        existsSync(catchallLoadPath) &&
-        [previousStyledCatchallLoad, previousCatchallLoad].includes(yield* operation("read host catchall", () =>
+      const existingCatchallLoad = existsSync(catchallLoadPath)
+        ? yield* operation("read host catchall", () =>
           readFile(catchallLoadPath, "utf8"),
-        ));
+        ) : undefined;
+      const migrateCatchall = existingCatchallLoad !== undefined &&
+        [previousStyledCatchallLoad, previousCatchallLoad].includes(existingCatchallLoad);
+      const compatibleCatchallLoad = migrateCatchall || existingCatchallLoad === catchallLoadTemplate;
+      const catchallPageUpdate =
+        compatibleCatchallLoad && [previousStyledCatchallPage, previousCatchallPage].includes(existingCatchallPage ?? "")
+          ? catchallPageTemplate
+          : existingCatchallPage === previousCatchallPage ? previousStyledCatchallPage : undefined;
+      const migrateCatchallPage = catchallPageUpdate !== undefined && catchallPageUpdate !== existingCatchallPage;
       const viteSource = yield* operation("read host Vite config", () =>
         readFile(location.viteConfigPath, "utf8"),
       );
@@ -560,9 +566,9 @@ const initProjectEffect = (
         yield* operation("update host catchall load", () =>
           writeFile(catchallLoadPath, catchallLoadTemplate),
         );
-      if (migrateCatchallPage)
+      if (migrateCatchallPage && catchallPageUpdate !== undefined)
         yield* operation("update host catchall page", () =>
-          writeFile(catchallPagePath, catchallPageTemplate),
+          writeFile(catchallPagePath, catchallPageUpdate),
         );
       if (migrateRootLayout)
         yield* operation("update host root layout", () =>

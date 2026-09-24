@@ -73,7 +73,7 @@ export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitB
 }
 
 export function getGeneratedHostStylesPath(hostRegistryPath: string, vaultId: string): string {
-  return join(dirname(hostRegistryPath), "styles", `${vaultId}.json`);
+  return join(dirname(hostRegistryPath), "styles", `${Buffer.from(vaultId).toString("base64url") || "_"}.json`);
 }
 
 export function getGeneratedHostRegistryPath(configDir: string): string {

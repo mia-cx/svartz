@@ -443,6 +443,28 @@ it("upgrades generated host routes to link SSR styles without changing custom ro
   expect(await readFile(loadPath, "utf8")).toBe(load);
 });
 
+it("preserves an old generated page when its loader was customized", async () => {
+  const root = await fixture();
+  await mkdir(path.join(root, "src/routes"), { recursive: true });
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    name: "host-app", dependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+  await initProject({ cwd: root, install: false, git: false });
+
+  const pagePath = path.join(root, "src/routes/[...slug]/+page.svelte");
+  const loadPath = path.join(root, "src/routes/[...slug]/+page.ts");
+  const oldPage = (await readFile(pagePath, "utf8"))
+    .replace("  import type { PageData } from './$types';\n", "")
+    .replace("  let { data }: { data: PageData } = $props();\n", "")
+    .replace(/\n<svelte:head>[\s\S]*?<\/svelte:head>\n/, "");
+  await writeFile(pagePath, oldPage);
+  await writeFile(loadPath, "export const load = () => ({ custom: true });\n");
+
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("already-configured");
+  expect(await readFile(pagePath, "utf8")).toBe(oldPage);
+});
+
 it("reports an existing config without a Kit app instead of replacing it", async () => {
   const root = await fixture();
   await writeFile(path.join(root, "svartz.config.mjs"), "export default {};\n");
