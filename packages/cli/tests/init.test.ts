@@ -425,3 +425,14 @@ it("tags malformed project manifests as operational failures", async () => {
   expect(failure).toBeInstanceOf(InitOperationError);
   expect(failure).toMatchObject({ operation: "parse package.json" });
 });
+
+it("tags an invalid package-manager field as an operational failure", async () => {
+  const root = await fixture();
+  const manifest = '{"packageManager":1}\n';
+  await writeFile(path.join(root, "package.json"), manifest);
+  const failure = await initProject({ cwd: root, install: false, git: false }).catch((cause: unknown) => cause);
+  expect(failure).toBeInstanceOf(InitOperationError);
+  expect(failure).toMatchObject({ operation: "detect package manager" });
+  expect(await readFile(path.join(root, "package.json"), "utf8")).toBe(manifest);
+  await expect(access(path.join(root, "svartz.config.ts"))).rejects.toMatchObject({ code: "ENOENT" });
+});

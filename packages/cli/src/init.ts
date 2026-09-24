@@ -362,7 +362,9 @@ const initProjectEffect = (
             "parse package.json",
             () => JSON.parse(manifestSource) as Manifest,
           );
-    const manager = packageManager(root, existingManifest);
+    const manager = yield* inspect("detect package manager", () =>
+      packageManager(root, existingManifest),
+    );
 
     if (location.hostApp) {
       const tailwindVersion = existingManifest?.dependencies?.tailwindcss
