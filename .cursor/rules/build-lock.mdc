@@ -1,8 +1,6 @@
 ---
 description: Cross-process vault build locking and crash recovery
-globs:
-  - packages/cli/src/build-lock.ts
-  - packages/cli/tests/build-lock.test.ts
+globs: packages/cli/src/build-lock.ts, packages/cli/tests/build-lock.test.ts
 alwaysApply: false
 ---
 
