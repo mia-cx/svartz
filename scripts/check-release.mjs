@@ -17,6 +17,7 @@ const packages = [
   ['@svartz/config', 'packages/config', ['dist/index.js', 'dist/index.d.ts']],
   ['@svartz/ui', 'packages/ui', ['dist/index.js', 'dist/runtime/index.js', 'dist/stores.d.ts']],
   ['@svartz/theme-minimal', 'themes/minimal', ['dist/index.js', 'dist/runtime.js']],
+  ['@svartz/theme-wiki', 'themes/wiki', ['dist/index.js', 'dist/runtime.js']],
   ['@svartz/vite', 'packages/vite', ['dist/index.js', 'dist/host.js', 'dist/discovery.js', 'types/virtual-modules.d.ts']],
   ['svartz', 'packages/cli', ['dist/index.js', 'template/vault/index.md', 'template/gitignore']],
 ];

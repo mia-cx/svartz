@@ -26,13 +26,17 @@
     "svartz:build:showcase": "svartz build --vault showcase",
     "svartz:dev:showcase": "svartz dev --vault showcase",
     "svartz:preview:showcase": "svartz preview --vault showcase",
-    "svartz:dev": "turbo run svartz:dev:docs svartz:dev:showcase",
-    "svartz:preview": "turbo run svartz:preview:docs svartz:preview:showcase"
+    "svartz:build:showcase-wiki": "svartz build --vault showcase-wiki",
+    "svartz:dev:showcase-wiki": "svartz dev --vault showcase-wiki",
+    "svartz:preview:showcase-wiki": "svartz preview --vault showcase-wiki",
+    "svartz:dev": "turbo run svartz:dev:docs svartz:dev:showcase svartz:dev:showcase-wiki",
+    "svartz:preview": "turbo run svartz:preview:docs svartz:preview:showcase svartz:preview:showcase-wiki"
   },
   "devDependencies": {
     "@svartz/config": "workspace:^",
     "@svartz/core": "workspace:^",
     "@svartz/theme-minimal": "workspace:^",
+    "@svartz/theme-wiki": "workspace:^",
     "svartz": "workspace:^",
     "turbo": "^2.3.0"
   },

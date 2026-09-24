@@ -29,5 +29,16 @@ export default defineConfig({
         description: "A Svartz showcase vault that uses every Obsidian Markdown feature.",
       },
     },
+    {
+      // Showcase for @svartz/theme-wiki: a fictional game wiki.
+      id: "showcase-wiki",
+      path: "vaults/showcase-wiki",
+      target: { type: "static" },
+      theme: { base: "@svartz/theme-wiki" },
+      site: {
+        title: "Lanternfall Wiki",
+        description: "A Svartz showcase for the wiki theme.",
+      },
+    },
   ],
 });
