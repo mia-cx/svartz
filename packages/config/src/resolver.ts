@@ -63,8 +63,9 @@ const mergeThemes = (
   };
   return {
     ...theme,
-    base: theme.base.startsWith("./") || theme.base.startsWith("../")
-      ? resolve(configDir, theme.base)
+    base: theme.base.startsWith("./") || theme.base.startsWith("../") ||
+      theme.base.startsWith(".\\") || theme.base.startsWith("..\\")
+      ? resolve(configDir, theme.base.replaceAll("\\", "/"))
       : theme.base,
   };
 };

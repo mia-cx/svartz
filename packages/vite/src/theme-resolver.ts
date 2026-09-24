@@ -1,4 +1,4 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -21,9 +21,42 @@ function createRequireFromDirectory(resolveFromDirectory: string) {
   return createRequire(path.join(resolveFromDirectory, "__svartz_theme_resolver__.js"));
 }
 
+function importExportTarget(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(importExportTarget).find((target) => target !== undefined);
+  if (!value || typeof value !== "object") return;
+
+  const entries = Object.entries(value);
+  const root = entries.find(([key]) => key === ".");
+  if (root) return importExportTarget(root[1]);
+  if (entries.some(([key]) => key.startsWith("."))) return;
+
+  for (const [condition, target] of entries) {
+    if (condition === "import" || condition === "node" || condition === "default") {
+      const entry = importExportTarget(target);
+      if (entry) return entry;
+    }
+  }
+}
+
+function directoryThemeEntry(moduleId: string): string | undefined {
+  if (!path.isAbsolute(moduleId) || !existsSync(moduleId) || !statSync(moduleId).isDirectory()) return;
+  const manifestPath = path.join(moduleId, "package.json");
+  if (!existsSync(manifestPath)) return;
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { exports?: unknown };
+  const target = importExportTarget(manifest.exports);
+  if (!target?.startsWith("./")) return;
+  return path.resolve(moduleId, target);
+}
+
 function resolveThemeEntry(moduleId: string, resolveFromDirectory: string): string {
   try {
-    return createRequireFromDirectory(resolveFromDirectory).resolve(moduleId);
+    const directoryEntry = directoryThemeEntry(moduleId);
+    if (directoryEntry) return directoryEntry;
+    const resolver = moduleId === BUILTIN_THEME_MODULE_ID || moduleId.startsWith(`${BUILTIN_THEME_MODULE_ID}/`)
+      ? createRequire(import.meta.url)
+      : createRequireFromDirectory(resolveFromDirectory);
+    return resolver.resolve(moduleId);
   } catch (cause) {
     throw new Error(
       `Could not resolve theme "${moduleId}" from "${resolveFromDirectory}". Check its path or install it in the host app.`,
@@ -88,7 +121,7 @@ function resolveThemePackageRoot(
   resolveFromDirectory = process.cwd(),
 ): string | undefined {
   try {
-    return resolvePackageRootFromEntry(createRequireFromDirectory(resolveFromDirectory).resolve(moduleId));
+    return resolvePackageRootFromEntry(resolveThemeEntry(moduleId, resolveFromDirectory));
   } catch {
     return undefined;
   }

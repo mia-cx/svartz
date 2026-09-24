@@ -98,6 +98,15 @@ describe("@svartz/vite theme bridge", () => {
     expect(runtimeImportId.endsWith("/dist/runtime.js")).toBe(true);
   });
 
+  it("resolves the built-in theme from Svartz when a host has no theme dependency", async () => {
+    const hostRoot = await mkdtemp(path.join(os.tmpdir(), "svartz-host-theme-"));
+    tempDirs.push(hostRoot);
+
+    expect(resolveThemePackageRoot(BUILTIN_THEME_MODULE_ID, hostRoot)).toContain("theme");
+    expect(resolveThemeRuntimeImportId(createConfig(BUILTIN_THEME_MODULE_ID), hostRoot))
+      .toMatch(/\/dist\/runtime\.js$/);
+  });
+
   it("loads an unbuilt local source manifest for the artifact pipeline", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "svartz-theme-source-"));
     tempDirs.push(tempDir);
@@ -135,6 +144,25 @@ describe("@svartz/vite theme bridge", () => {
 
     expect(resolveThemePackageRoot(themeRoot, appRoot)).toBe(themeRoot);
     expect((await loadThemeModule((id) => import(id), createConfig(themeRoot), appRoot)).id).toBe(themeName);
+  });
+
+  it("loads an explicit directory theme with only package exports", async () => {
+    const themeRoot = await mkdtemp(path.join(os.tmpdir(), "svartz-exports-theme-"));
+    tempDirs.push(themeRoot);
+    await mkdir(path.join(themeRoot, "dist"));
+    await writeFile(path.join(themeRoot, "package.json"), JSON.stringify({
+      name: "@acme/exports-theme", type: "module",
+      exports: { ".": { import: "./dist/index.js" } },
+    }));
+    await writeFile(path.join(themeRoot, "dist/index.js"), `export default {
+      id: "exports-theme", version: "1.0.0", contractVersion: "1.0.0",
+      layouts: { defaultPage: { default: {} }, notePage: { default: {} } },
+      routes: [{ id: "note", pattern: "/:slug", layoutSlot: "notePage", priority: 1 }],
+    };`);
+
+    expect(resolveThemePackageRoot(themeRoot, os.tmpdir())).toBe(themeRoot);
+    expect((await loadThemeModule((id) => import(id), createConfig(themeRoot), os.tmpdir())).id)
+      .toBe("exports-theme");
   });
 
   it("fails on a missing configured theme instead of falling back", async () => {
