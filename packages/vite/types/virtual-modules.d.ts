@@ -20,6 +20,7 @@ declare module "virtual:svartz/theme" {
 }
 
 declare module "virtual:svartz/artifacts" {
+  import type { ProtectedGroupPayload } from "@svartz/core";
   import type { Graph, Index, VaultView } from "@svartz/core";
 
   export interface RuntimeArtifactRecord {
@@ -48,6 +49,12 @@ declare module "virtual:svartz/artifacts" {
   export const assets: Index["assets"];
   export const searchDocuments: Index["search"];
   export const searchIndex: unknown;
+  export function createUnlockedVault(groups: readonly ProtectedGroupPayload[]): {
+    index: Index;
+    vault: VaultView;
+    searchDocuments: Index["search"];
+    searchIndex: unknown;
+  };
   export const themeConfig: Readonly<Record<string, unknown>>;
   export const siteConfig: Readonly<{
     title: string;

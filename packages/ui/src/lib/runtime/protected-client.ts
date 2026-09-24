@@ -15,6 +15,7 @@ export interface ProtectedNoteReference {
 
 export interface UnlockedNote {
 	readonly component: Component;
+	readonly payload: ProtectedGroupPayload;
 	readonly css: string;
 	readonly assets: ReadonlyMap<string, string>;
 }
@@ -85,9 +86,11 @@ export async function unlockProtectedNote(
 	try {
 		const group = await importGroup(reference.payloadId, payload, loadBridgeUrls);
 		const component = group[note.exportName];
-		if (typeof component !== 'function') throw new Error(`Protected note "${reference.slug}" has no component`);
+		if (typeof component !== 'function')
+			throw new Error(`Protected note "${reference.slug}" has no component`);
 		return {
 			component: component as Component,
+			payload,
 			css: payload.css,
 			assets: createAssetUrls(reference.payloadId, payload)
 		};
@@ -106,7 +109,10 @@ export function lockProtectedGroup(id: string): void {
 }
 
 /** Point rendered private attachments at their decrypted in-memory blob URLs. */
-export function protectedAssets(node: HTMLElement, assets: ReadonlyMap<string, string>): { destroy(): void } {
+export function protectedAssets(
+	node: HTMLElement,
+	assets: ReadonlyMap<string, string>
+): { destroy(): void } {
 	const attributes = ['src', 'href', 'poster'] as const;
 	const resolveAsset = (raw: string): string | undefined => {
 		if (/^(?:[a-z]+:|\/\/|#)/i.test(raw)) return;
@@ -119,7 +125,9 @@ export function protectedAssets(node: HTMLElement, assets: ReadonlyMap<string, s
 		const exact = [...assets].find(([asset]) => path.endsWith(`/${asset}`));
 		if (exact) return exact[1];
 		const basename = path.slice(path.lastIndexOf('/') + 1);
-		const byName = [...assets].filter(([asset]) => asset.slice(asset.lastIndexOf('/') + 1) === basename);
+		const byName = [...assets].filter(
+			([asset]) => asset.slice(asset.lastIndexOf('/') + 1) === basename
+		);
 		return byName.length === 1 ? byName[0]?.[1] : undefined;
 	};
 	const rewrite = (element: Element): void => {
@@ -137,7 +145,12 @@ export function protectedAssets(node: HTMLElement, assets: ReadonlyMap<string, s
 			else for (const added of change.addedNodes) if (added instanceof Element) rewrite(added);
 		}
 	});
-	observer.observe(node, { subtree: true, childList: true, attributes: true, attributeFilter: [...attributes] });
+	observer.observe(node, {
+		subtree: true,
+		childList: true,
+		attributes: true,
+		attributeFilter: [...attributes]
+	});
 	rewrite(node);
 	return { destroy: () => observer.disconnect() };
 }

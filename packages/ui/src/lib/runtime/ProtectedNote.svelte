@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import { onMount } from 'svelte';
+	import type { ProtectedGroupPayload } from '@svartz/core';
 	import {
 		isProtectedGroupUnlocked,
 		lockProtectedGroup,
@@ -13,10 +14,14 @@
 	let {
 		protection,
 		loadBridgeUrls,
+		onUnlocked,
+		onLocked,
 		...noteProps
 	}: {
 		protection: ProtectedNoteReference;
 		loadBridgeUrls: (ids: readonly string[]) => Promise<Readonly<Record<string, string>>>;
+		onUnlocked: (id: string, payload: ProtectedGroupPayload) => void;
+		onLocked: (id: string) => void;
 		[key: string]: unknown;
 	} = $props();
 	let password = $state('');
@@ -31,9 +36,13 @@
 		error = '';
 		try {
 			unlocked = await unlockProtectedNote(reference, secret, loadBridgeUrls);
+			onUnlocked(protection.payloadId, unlocked.payload);
 			password = '';
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Could not unlock this note.';
+			error =
+				cause instanceof Error && cause.message
+					? cause.message
+					: 'Incorrect password or damaged note.';
 		} finally {
 			busy = false;
 		}
@@ -54,11 +63,29 @@
 
 {#if NoteComponent}
 	<div use:protectedAssets={unlocked!.assets}><NoteComponent {...noteProps} /></div>
-	<button type="button" onclick={() => { lockProtectedGroup(protection.payloadId); unlocked = undefined; }}>Lock note</button>
+	<button
+		type="button"
+		onclick={() => {
+			lockProtectedGroup(protection.payloadId);
+			onLocked(protection.payloadId);
+			unlocked = undefined;
+		}}>Lock note</button
+	>
 {:else}
-	<form onsubmit={(event) => { event.preventDefault(); void unlock(password); }}>
+	<form
+		onsubmit={(event) => {
+			event.preventDefault();
+			void unlock(password);
+		}}
+	>
 		<label for="svartz-protected-password">Password</label>
-		<input id="svartz-protected-password" type="password" autocomplete="current-password" bind:value={password} required />
+		<input
+			id="svartz-protected-password"
+			type="password"
+			autocomplete="current-password"
+			bind:value={password}
+			required
+		/>
 		<button type="submit" disabled={busy}>{busy ? 'Unlocking…' : 'Unlock note'}</button>
 		{#if error}<p role="alert">{error}</p>{/if}
 	</form>

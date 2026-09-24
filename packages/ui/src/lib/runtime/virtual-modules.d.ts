@@ -44,6 +44,7 @@ declare module 'virtual:svartz/theme' {
 
 declare module 'virtual:svartz/artifacts' {
 	import type { Component } from 'svelte';
+	import type { ProtectedGroupPayload } from '@svartz/core';
 
 	export interface RuntimeArtifactRecord {
 		readonly key: string;
@@ -164,6 +165,12 @@ declare module 'virtual:svartz/artifacts' {
 	export const assets: typeof index.assets;
 	export const searchDocuments: readonly RuntimeSearchDocument[];
 	export const searchIndex: unknown;
+	export function createUnlockedVault(groups: readonly ProtectedGroupPayload[]): {
+		index: typeof index;
+		vault: typeof vault;
+		searchDocuments: readonly RuntimeSearchDocument[];
+		searchIndex: unknown;
+	};
 	/** Vault-level theme config (everything under `theme:` in svartz.config, minus `base`). */
 	export const themeConfig: Readonly<Record<string, unknown>>;
 	export const siteConfig: Readonly<{

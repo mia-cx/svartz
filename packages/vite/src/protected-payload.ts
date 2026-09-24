@@ -8,6 +8,7 @@ import {
   type Artifact,
   type IndexEntry,
   type PluginContext,
+  type SearchDocument,
 } from "@svartz/core";
 import { lookup } from "mrmime";
 import { compileProtectedGraph } from "./protected-compile";
@@ -23,10 +24,33 @@ export async function createProtectedGroupArtifact(
   if (!password) throw new Error(`Password group "${group}" has no configured password`);
   const entries = (ctx.meta.get("svartz:protectedEntries") as Map<string, IndexEntry[]> | undefined)?.get(group);
   if (!entries?.length) throw new Error(`Password group "${group}" has no protected index`);
+  const visible = new Set(ctx.files
+    .filter((file) => file.protection?.group === group && !file.protection.hidden)
+    .map((file) => file.slug));
+  const search: SearchDocument[] = entries.filter((entry) => visible.has(entry.slug)).map((entry) => ({
+    id: entry.slug,
+    slug: entry.slug,
+    href: entry.href,
+    title: entry.title,
+    description: entry.description,
+    content: entry.content,
+    tags: entry.tags,
+    aliases: entry.aliases,
+  }));
+  const visiblePublic = new Set(ctx.files
+    .filter((file) => [".md", ".mdx", ".svx"].includes(file.extension ?? "") && !file.protection)
+    .map((file) => file.slug));
+  const permitted = new Set([...visible, ...visiblePublic]);
+  const graph: Record<string, string[]> = {};
+  for (const file of ctx.files) {
+    if (!visible.has(file.slug) && !visiblePublic.has(file.slug)) continue;
+    const targets = [...new Set((file.links ?? []).filter((slug) => permitted.has(slug)))].sort();
+    if (visible.has(file.slug) || targets.some((slug) => visible.has(slug))) graph[file.slug] = targets;
+  }
 
-  const graph = await compileProtectedGraph(ctx, group, root);
+  const compiled = await compileProtectedGraph(ctx, group, root);
   const bridgeImports = (ctx.meta.get("svartz:protectedBridgeImports") as Set<string> | undefined) ?? new Set<string>();
-  for (const id of graph.bridgeImports) bridgeImports.add(id);
+  for (const id of compiled.bridgeImports) bridgeImports.add(id);
   ctx.meta.set("svartz:protectedBridgeImports", bridgeImports);
   const paths = (ctx.meta.get("svartz:protectedAssetPaths") as Map<string, Set<string>> | undefined)?.get(group);
   const assets = await Promise.all([...paths ?? []].sort().map(async (path) => {
@@ -44,7 +68,10 @@ export async function createProtectedGroupArtifact(
   const id = `vault:${ctx.config.id}:group:${token}`;
   const salt = createProtectionSalt();
   const key = await deriveProtectionKey(password, salt);
-  const payload = { version: 1, notes: graph.notes, entries, js: graph.js, css: graph.css, assets, bridgeImports: graph.bridgeImports };
+  const payload = {
+    version: 1, notes: compiled.notes, entries, search, graph,
+    js: compiled.js, css: compiled.css, assets, bridgeImports: compiled.bridgeImports,
+  };
   const envelope = await sealProtectedPayload(key, salt, id, new TextEncoder().encode(JSON.stringify(payload)));
   const artifactKey = `assets/__svartz/protected/${token}.json`;
   return {

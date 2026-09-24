@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
+	import type { ProtectedGroupPayload } from '@svartz/core';
 	import { base } from '$app/paths';
 	import { browser } from '$app/environment';
 	import ProtectedNote from './ProtectedNote.svelte';
@@ -21,6 +22,16 @@
 		artifacts: ArtifactsModule;
 		contentComponents?: ContentComponentOverrides;
 	} = $props();
+	let unlockedGroups = $state<ReadonlyMap<string, ProtectedGroupPayload>>(new Map());
+	const discovery = $derived(runtimeArtifacts.createUnlockedVault([...unlockedGroups.values()]));
+	function revealGroup(id: string, payload: ProtectedGroupPayload): void {
+		unlockedGroups = new Map([...unlockedGroups, [id, payload]]);
+	}
+	function hideGroup(id: string): void {
+		const next = new Map(unlockedGroups);
+		next.delete(id);
+		unlockedGroups = next;
+	}
 	const theme = $derived(runtimeTheme.theme);
 	const contentComponents = $derived(
 		resolveContentComponents(
@@ -30,21 +41,21 @@
 	);
 	const resolveRuntimeRoute = $derived(runtimeTheme.resolveRuntimeRoute);
 	const assets = $derived(runtimeArtifacts.assets);
-	const backlinks = $derived(runtimeArtifacts.backlinks);
+	const backlinks = $derived(discovery.index.backlinks);
 	const folders = $derived(runtimeArtifacts.folders);
 	const getNoteArtifact = $derived(runtimeArtifacts.getNoteArtifact);
-	const graph = $derived(runtimeArtifacts.graph);
+	const graph = $derived(discovery.index.graph);
 	const hasNoteArtifact = $derived(runtimeArtifacts.hasNoteArtifact);
-	const index = $derived(runtimeArtifacts.index);
+	const index = $derived(discovery.index);
 	const routes = $derived(runtimeArtifacts.routes);
-	const search = $derived(runtimeArtifacts.search);
-	const searchDocuments = $derived(runtimeArtifacts.searchDocuments);
-	const searchIndex = $derived(runtimeArtifacts.searchIndex);
+	const search = $derived(discovery.index.search);
+	const searchDocuments = $derived(discovery.searchDocuments);
+	const searchIndex = $derived(discovery.searchIndex);
 	const searchOptions = $derived(runtimeArtifacts.searchOptions);
 	const siteConfig = $derived(runtimeArtifacts.siteConfig);
 	const tags = $derived(runtimeArtifacts.tags);
 	const themeConfig = $derived(runtimeArtifacts.themeConfig);
-	const vault = $derived(runtimeArtifacts.vault);
+	const vault = $derived(discovery.vault);
 	$effect(() => {
 		if (!browser) return;
 		let released = false;
@@ -172,13 +183,16 @@
 			: match;
 	});
 
-	const entry = $derived(
-		artifactKeyToSlug(runtimeRoute?.artifactKey)
-			? vault.entries.find(
-					(candidate) => candidate.slug === artifactKeyToSlug(runtimeRoute?.artifactKey)
-				)
-			: undefined
-	);
+	const entry = $derived.by(() => {
+		const slug = artifactKeyToSlug(runtimeRoute?.artifactKey);
+		if (!slug) return undefined;
+		return (
+			vault.entries.find((candidate) => candidate.slug === slug) ??
+			[...unlockedGroups.values()]
+				.flatMap((group) => group.entries)
+				.find((candidate) => candidate.slug === slug)
+		);
+	});
 
 	const pageTitle = $derived(entry?.title ?? siteConfig.title);
 	const documentTitle = $derived(
@@ -257,48 +271,50 @@
 			{tags}
 		>
 			{#if protection}
-			{#key `${protection.payloadId}:${protection.slug}`}
-			<ProtectedNote
-				{protection}
-				loadBridgeUrls={runtimeArtifacts.loadProtectedBridgeUrls}
-				{contentComponents}
-				{assets}
-				{themeConfig}
-				route={runtimeRoute?.route}
-				match={runtimeRoute}
-				{entry}
-				{index}
-				{vault}
-				{graph}
-				{backlinks}
-				{folders}
-				{routes}
-				{search}
-				{searchDocuments}
-				{searchIndex}
-				{searchOptions}
-				{tags}
-			/>
-			{/key}
+				{#key `${protection.payloadId}:${protection.slug}`}
+					<ProtectedNote
+						{protection}
+						loadBridgeUrls={runtimeArtifacts.loadProtectedBridgeUrls}
+						onUnlocked={revealGroup}
+						onLocked={hideGroup}
+						{contentComponents}
+						{assets}
+						{themeConfig}
+						route={runtimeRoute?.route}
+						match={runtimeRoute}
+						{entry}
+						{index}
+						{vault}
+						{graph}
+						{backlinks}
+						{folders}
+						{routes}
+						{search}
+						{searchDocuments}
+						{searchIndex}
+						{searchOptions}
+						{tags}
+					/>
+				{/key}
 			{:else}<PageComponent
-				{contentComponents}
-				{assets}
-				{themeConfig}
-				route={runtimeRoute?.route}
-				match={runtimeRoute}
-				{entry}
-				{index}
-				{vault}
-				{graph}
-				{backlinks}
-				{folders}
-				{routes}
-				{search}
-				{searchDocuments}
-				{searchIndex}
-				{searchOptions}
-				{tags}
-			/>{/if}
+					{contentComponents}
+					{assets}
+					{themeConfig}
+					route={runtimeRoute?.route}
+					match={runtimeRoute}
+					{entry}
+					{index}
+					{vault}
+					{graph}
+					{backlinks}
+					{folders}
+					{routes}
+					{search}
+					{searchDocuments}
+					{searchIndex}
+					{searchOptions}
+					{tags}
+				/>{/if}
 		</LayoutComponent>
 	</div>
 {:else}
