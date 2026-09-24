@@ -4,7 +4,7 @@ The v1 release is seven public npm packages at version `1.0.0`: `@svartz/core`, 
 
 All seven v1 packages use MCX v1.0. Each archive includes the full repository `LICENSE`; package metadata points to that file.
 
-Use Node `20.19.x` or `22.12+`. The standalone initializer uses Vite 7. The Vite plugin accepts Vite 7 and 8, and the release check builds an existing SvelteKit host with Vite 8. The host keeps its own adapter.
+Use Node `20.19.x` or `22.12+`. The standalone initializer uses Vite 7. The CLI and Vite plugin accept Vite 7 and 8; an existing host supplies its own Vite version and adapter.
 
 Before publication, run this from a clean, merged checkout:
 
@@ -14,7 +14,7 @@ pnpm release:check
 pnpm test
 ```
 
-`release:check` builds the workspace, packs the seven packages with pnpm, checks the license, runtime files, types, and resolved dependency ranges, then installs the tarballs outside the monorepo. It initializes, builds, and serves a fresh site, then integrates, builds, and serves an existing Vite 8 SvelteKit host. The check never publishes to npm. Set `SVARTZ_RELEASE_VERBOSE=1` to show consumer command output. Set `SVARTZ_RELEASE_KEEP_TEMP=1` to retain its temporary fixtures after a failure.
+`release:check` builds the workspace, packs the seven packages with pnpm, checks the license, runtime files, types, and resolved dependency ranges, then installs the tarballs outside the monorepo. It initializes, builds, and serves a fresh site. It also checks an existing Vite 8 SvelteKit host: the CLI resolves Vite 8, Svelte type checks pass, Tailwind scans the packed theme and UI files, and both the host home and mounted note route build and serve. The check never publishes to npm. Set `SVARTZ_RELEASE_VERBOSE=1` to show consumer command output. Set `SVARTZ_RELEASE_KEEP_TEMP=1` to retain its temporary fixtures after a failure.
 
 Publish only after the release check and review of the merged commit. Confirm npm access to the `@svartz` scope, then publish in dependency order:
 
