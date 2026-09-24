@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { resolveThemePackageRoot } from "@svartz/vite";
+import { loadConfigFromFile } from "vite";
 
 type WatchDescriptor = {
   readonly path: string;
@@ -48,6 +49,18 @@ function getConfigWatchDescriptors(
       exact: true,
     })),
   );
+}
+
+/** Vite reports local imports of its config, which the CLI must watch after disabling Vite's own config watcher. */
+async function getViteConfigWatchDescriptors(configPath: string, appRoot: string): Promise<WatchDescriptor[]> {
+  const loaded = await loadConfigFromFile(
+    { command: "serve", mode: "development" }, configPath, appRoot,
+  );
+  return [configPath, ...(loaded?.dependencies ?? [])].map((filePath) => ({
+    path: path.resolve(filePath),
+    label: "SvelteKit Vite config",
+    exact: true,
+  }));
 }
 
 function isLocalWorkspacePackage(packageRoot: string, workspaceRoot: string): boolean {
@@ -140,6 +153,7 @@ export {
   createWorkspaceSourceWatchDescriptors,
   getThemeWatchDescriptors,
   getConfigWatchDescriptors,
+  getViteConfigWatchDescriptors,
   isLocalWorkspacePackage,
   matchesWatchDescriptor,
   uniqBuildFilters,

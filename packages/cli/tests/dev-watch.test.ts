@@ -7,6 +7,7 @@ import { resolveConfig } from "@svartz/config";
 import { resolveThemePackageRoot, resolveThemeRuntimeImportId } from "@svartz/vite";
 import {
   getConfigWatchDescriptors,
+  getViteConfigWatchDescriptors,
   getThemeWatchDescriptors,
   isLocalWorkspacePackage,
   matchesWatchDescriptor,
@@ -46,6 +47,17 @@ afterEach(async () => {
 });
 
 describe("CLI dev watch helpers", () => {
+  it("watches local files imported by a host Vite config", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "svartz-vite-watch-"));
+    tempDirs.push(root);
+    const configPath = path.join(root, "vite.config.ts");
+    const helperPath = path.join(root, "vite.shared.ts");
+    await writeFile(helperPath, "export const port = 4173;\n");
+    await writeFile(configPath, "import { port } from './vite.shared';\nexport default { server: { port } };\n");
+
+    const descriptors = await getViteConfigWatchDescriptors(configPath, root);
+    expect(descriptors).toContainEqual({ path: helperPath, label: "SvelteKit Vite config", exact: true });
+  });
   it("watches explicit config files exactly", () => {
     const [descriptor] = getConfigWatchDescriptors("/workspace", "/workspace/svartz.config.ts");
     expect(descriptor).toEqual(

@@ -30,6 +30,19 @@ it("detects an existing SvelteKit app without moving its files", async () => {
   expect(await readFile(path.join(root, ".svelte-kit", "keep"), "utf8")).toBe("host build state");
 });
 
+it.each(["vite.config.cjs", "vite.config.cts"])("recognizes a host using %s", async (fileName) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "svartz-host-cjs-"));
+  roots.push(root);
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+  await writeFile(path.join(root, fileName), "module.exports = {};\n");
+
+  expect(resolveAppLocation(root)).toMatchObject({
+    appRoot: root, hostApp: true, viteConfigPath: path.join(root, fileName),
+  });
+});
+
 it("keeps the repository shell at apps/web", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "svartz-repo-shell-"));
   roots.push(root);

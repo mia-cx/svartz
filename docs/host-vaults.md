@@ -25,3 +25,5 @@ The generated `virtual:svartz/host` module exposes `vaults`, combined `routes`, 
 Each vault can emit its own RSS feed and sitemap. A host can also select vaults for a combined feed or sitemap in a manual SvelteKit route. See [feeds and sitemaps](discovery.md).
 
 When the CLI builds one local workspace theme, its source manifest supplies build plugins and its source path overrides the packaged theme in both SvelteKit build phases. Published themes use their runtime package entry.
+
+An existing host can use `vite.config.ts`, `.mts`, `.cts`, `.js`, `.mjs`, or `.cjs`. During `svartz dev`, edits to local files imported by that config restart the host runner. Explicit directory themes may use package exports without a root `index.js`; the built-in theme resolves from Svartz's installation.
