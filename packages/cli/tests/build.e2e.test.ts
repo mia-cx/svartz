@@ -80,8 +80,17 @@ describe("svartz CLI", () => {
       await access(resolve(DIST_ROOT, "__svartz/favicon.svg"));
       await access(resolve(DIST_ROOT, "__svartz/favicon-32.png"));
       await access(resolve(DIST_ROOT, "__svartz/apple-touch-icon.png"));
+      await access(DIST_NOT_FOUND_PATH);
+      await access(resolve(ROOT, ".svartz/vaults/docs/artifacts/runtime-theme.ts"));
+      await access(resolve(ROOT, ".svartz/vaults/docs/artifacts/runtime-artifacts.ts"));
       const html = await readFile(resolve(DIST_ROOT, "index.html"), "utf8");
       expect(html).toContain("https://example.test/__svartz/social/index.png");
+      expect(html).toContain('<link rel="canonical" href="https://example.test/"');
+      expect(html).toContain('property="og:title"');
+      const sitemap = await readFile(DIST_SITEMAP_PATH, "utf8");
+      expect(sitemap).toContain("<loc>https://example.test/</loc>");
+      expect(sitemap).toContain("<loc>https://example.test/tags/guides/</loc>");
+      expect(sitemap).not.toContain("404.html");
     } finally {
       await rm(configPath, { force: true });
     }
