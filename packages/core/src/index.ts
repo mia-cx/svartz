@@ -40,6 +40,8 @@ export type {
   StageName,
 } from "./plugin/types";
 export { STAGE_NAMES } from "./plugin/types";
+export { getCompilerContributions } from "./plugin/compiler";
+export type { BrowserResource, CompilerContributions } from "./plugin/compiler";
 
 // Plugin contract — utilities
 export { definePlugin, type PluginFactory } from "./plugin/define-plugin";
