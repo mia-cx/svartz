@@ -144,6 +144,14 @@ describe("resolveConfigPaths", () => {
     expect(vault.discovery.dateSources).toEqual(["frontmatter", "git", "filesystem"]);
   });
 
+  it("uses the vault ID as the site title when it is omitted", async () => {
+    const config: SvartzConfig = {
+      ...minimalConfig,
+      vaults: [{ ...minimalConfig.vaults[0]!, site: { url: "https://example.com" } }],
+    };
+    expect((await resolveConfig(config, PKG_ROOT)).vaults[0]!.site.title).toBe("main");
+  });
+
   it("enables discovery when public URL exists and merges vault overrides", async () => {
     const config: SvartzConfig = {
       ...minimalConfig,
