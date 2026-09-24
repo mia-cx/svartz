@@ -124,4 +124,13 @@ describe("canonical route allocation", () => {
       '<a href="../hello/">hello</a> ![[hello]]',
     );
   });
+
+  it("leaves unresolved wikilinks inside code samples untouched", () => {
+    const ctx = context([note("links.md", "[[missing]] `[[missing]]`\n\n```md\n[[missing]]\n```")]);
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    allocateRoutesPlugin().allocateRoutes!.run(ctx);
+    resolveLinks().resolveLinks!.run(ctx);
+    expect(ctx.files[0]!.content).toContain('<span class="svartz-unresolved-link" role="link" aria-disabled="true">missing</span> `[[missing]]`');
+    expect(ctx.files[0]!.content).toContain("```md\n[[missing]]\n```");
+  });
 });

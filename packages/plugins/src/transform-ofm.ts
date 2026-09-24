@@ -9,7 +9,7 @@ import { definePlugin, getCompilerContributions } from "@svartz/core";
 import { posix } from "node:path";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
-import { visit } from "unist-util-visit";
+import { SKIP, visit } from "unist-util-visit";
 
 const HTML_COMMENT_REGEX = /<!--[\s\S]*?-->/g;
 const OBSIDIAN_COMMENT_REGEX = /%%([\s\S]*?)%%/g;
@@ -165,11 +165,15 @@ function sanitizeMarkdownForSvelte(markdown: string): string {
     .join("\n");
 }
 
-function transformInlineTags(markdown: string, sourceSlug: string, tagsRoute: string): { content: string; tags: string[] } {
+/** Link tags in parsed prose while leaving code, HTML, and authored links alone. */
+export function transformInlineTags(markdown: string, sourceSlug: string, tagsRoute: string): { content: string; tags: string[] } {
   const tags = new Set<string>();
   const replacements: { start: number; end: number; html: string }[] = [];
-  visit(markdownParser.parse(markdown), "text", (node, _index, parent) => {
-    if (parent?.type === "link" || parent?.type === "linkReference") return;
+  const htmlLinks = [...markdown.matchAll(/<a\b[^>]*>[\s\S]*?<\/a\s*>/gi)]
+    .map((match) => ({ start: match.index!, end: match.index! + match[0].length }));
+  visit(markdownParser.parse(markdown), (node) => {
+    if (node.type === "link" || node.type === "linkReference") return SKIP;
+    if (node.type !== "text") return;
     const start = node.position?.start.offset;
     const end = node.position?.end.offset;
     if (start === undefined || end === undefined) return;
@@ -181,8 +185,9 @@ function transformInlineTags(markdown: string, sourceSlug: string, tagsRoute: st
       const from = sourceSlug === "index" ? "/" : `/${sourceSlug}/`;
       const relative = posix.relative(from, target);
       const href = relative === "" ? "./" : relative.endsWith("/") ? relative : `${relative}/`;
-      tags.add(tag);
       const offset = start + match.index! + match[1]!.length;
+      if (htmlLinks.some((link) => link.start <= offset && offset < link.end)) continue;
+      tags.add(tag);
       replacements.push({ start: offset, end: offset + rawTag.length + 1,
         html: `<a class="tag-link" href="${href}">#${rawTag}</a>` });
     }

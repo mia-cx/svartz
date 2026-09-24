@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PluginContext, ProcessedFile } from "@svartz/core";
 import { transformOfm } from "../src/transform-ofm";
+import { transformEmbeds } from "../src/transform-embeds";
 
 function makeCtx(content: string): PluginContext {
   const files: ProcessedFile[] = [
@@ -48,6 +49,25 @@ describe("transformOfm", () => {
     expect(ctx.files[0]!.content).toContain('<a class="tag-link" href="../tags/topic/sub/">#Topic/sub</a>');
     expect(ctx.files[0]!.content).toContain("#123. `#code`");
     expect(ctx.files[0]!.content).toContain("#fenced");
+  });
+
+  it("does not nest tag links inside formatted Markdown links", () => {
+    const ctx = makeCtx('[**#topic**](/docs) and <a href="/docs">#other</a> and #topic');
+    transformOfm().transformOfm!.run(ctx);
+    expect(ctx.files[0]!.content).toContain("[**#topic**](/docs)");
+    expect(ctx.files[0]!.content).toContain('<a href="/docs">#other</a>');
+    expect(ctx.files[0]!.content).toContain('<a class="tag-link" href="../tags/topic/">#topic</a>');
+    expect(ctx.files[0]!.inlineTags).toEqual(["topic"]);
+  });
+
+  it("links tags introduced by published note embeds", () => {
+    const ctx = makeCtx("![[target]]");
+    ctx.files.push({ path: "target.md", slug: "target", extension: ".md", content: "Body #topic" });
+    ctx.meta.set("sourceBodies", new Map(ctx.files.map((file) => [file.path, file.content])));
+    transformOfm().transformOfm!.run(ctx);
+    transformEmbeds().transformEmbeds!.run(ctx);
+    expect(ctx.files[0]!.content).toContain('<a class="tag-link" href="../tags/topic/">#topic</a>');
+    expect(ctx.files[0]!.inlineTags).toEqual(["topic"]);
   });
 
   it("escapes bare empty angle brackets outside code fences", () => {

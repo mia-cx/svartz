@@ -113,7 +113,10 @@ export const indexContent = definePlugin(() => ({
             : "Untitled";
 
         const tags = [...new Set([
-          ...(Array.isArray(frontmatter[fm.tagsField]) ? frontmatter[fm.tagsField] as string[] : []),
+          ...(Array.isArray(frontmatter[fm.tagsField]) ? frontmatter[fm.tagsField] as unknown[] : [])
+            .filter((tag): tag is string => typeof tag === "string")
+            .map((tag) => tag.trim().replace(/^#/, "").toLowerCase())
+            .filter(Boolean),
           ...(file.inlineTags ?? []),
         ])];
 

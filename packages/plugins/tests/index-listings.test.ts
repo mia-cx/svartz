@@ -34,3 +34,19 @@ it("indexes ancestor folders and unique tags from published files", () => {
   expect(ctx.index?.routes.folders).not.toContain("/blog/folders/guides/deep/");
   expect(ctx.index?.routes.notes).toContain("/blog/guides/");
 });
+
+it("deduplicates frontmatter and inline tags without splitting case variants", () => {
+  const ctx = {
+    config: {
+      id: "blog", path: "/vault", outDir: "/out", mountPath: "/blog",
+      theme: { base: "minimal" }, site: { title: "Blog" },
+      frontmatter: { titleField: "title", descriptionField: "description", tagsField: "tags", aliasesField: "aliases", createdAtField: "created_at", updatedAtField: "updated_at", publishedField: "published_at" },
+      discovery: { dateSources: ["filesystem"] },
+    } as ResolvedConfig,
+    files: [{ path: "note.md", slug: "note", extension: ".md", content: "#Topic", frontmatter: { tags: ["Topic"] }, inlineTags: ["topic"] }],
+    meta: new Map(), artifacts: new Map(),
+  } as PluginContext;
+  indexContent().indexContent!.run(ctx);
+  expect(ctx.index?.entries[0]?.tags).toEqual(["topic"]);
+  expect(ctx.index?.tags).toContainEqual({ slug: "topic", title: "topic", noteCount: 1, href: "/blog/tags/topic/" });
+});
