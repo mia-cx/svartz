@@ -68,7 +68,7 @@ Duplicate ID replaces in-place; new ID appends; disabled removed.
 - `core:filter-unpublished` sets `enforce: "post"`
 - `createCorePlugins()` returns the canonical ordered array
 - `CORE_PLUGIN_IDS` is the readonly list of all core plugin IDs
-- Required build stages are `discoverFiles`, `parseFrontmatter`, `filterUnpublished`, `resolveLinks`, `indexContent`, and `emitArtifacts`. Validate providers by hook after loading the theme preset, not by built-in ID before theme loading. Other core transforms can be disabled or replaced.
+- Required build stages are `discoverFiles`, `parseFrontmatter`, `filterUnpublished`, `allocateRoutes`, `resolveLinks`, `indexContent`, and `emitArtifacts`. Validate providers by hook after loading the theme preset, not by built-in ID before theme loading. Other core transforms can be disabled or replaced.
 
 ## Compiler and browser resources
 

@@ -1,5 +1,5 @@
 import type { ProcessedFile } from "@svartz/core";
-import { fileToSlug } from "./slug";
+import { fileToSlug, normalizeSlugSegment } from "./slug";
 
 const NOTE_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
 
@@ -96,7 +96,7 @@ export function allocateRedirects(
     for (const value of alternateNames(file.frontmatter, aliasesField)) {
       const path = value.replace(/^\/+|\/+$/g, "");
       if (path.split("/").some((segment) => segment === "." || segment === "..") || /^[a-z]+:/i.test(path)) continue;
-      const slug = routeSlug(fileToSlug(path));
+      const slug = routeSlug(path.split("/").map(normalizeSlugSegment).join("/"));
       if (!slug) continue;
       const href = routeHref(slug, mountPath);
       if (occupied.has(href)) continue;

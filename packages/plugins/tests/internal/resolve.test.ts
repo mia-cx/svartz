@@ -40,6 +40,26 @@ describe("buildSlugMap", () => {
     expect(map["greeting"]).toBe("notes/hello");
   });
 
+  it("keeps the canonical winner for duplicate authored stems", () => {
+    const entries = [
+      { slug: "foo", path: "foo.md" },
+      { slug: "foo-2", path: "foo.svx" },
+    ];
+    for (const order of [entries, [...entries].reverse()]) {
+      const map = buildSlugMap(order);
+      expect(map.foo).toBe("foo");
+      expect(map["foo.md"]).toBe("foo");
+      expect(map["foo.svx"]).toBe("foo-2");
+    }
+    const svxWinner = buildSlugMap([
+      { slug: "foo-2", path: "foo.md" },
+      { slug: "foo", path: "foo.svx" },
+    ]);
+    expect(svxWinner.foo).toBe("foo");
+    expect(svxWinner["foo.md"]).toBe("foo-2");
+    expect(svxWinner["foo.svx"]).toBe("foo");
+  });
+
   it("excludes ambiguous aliases", () => {
     const map = buildSlugMap([
       { slug: "a/one", aliases: ["shared"] },
