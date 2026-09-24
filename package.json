@@ -15,6 +15,7 @@
     "lint": "turbo lint",
     "test": "turbo test",
     "test:coverage": "turbo test:coverage",
+    "release:check": "pnpm build && node scripts/check-release.mjs",
     "clean": "turbo clean && rm -rf node_modules",
     "add-license-headers": "node scripts/add-license-headers.mjs",
     "add-license-headers:dry": "node scripts/add-license-headers.mjs --dry-run",
@@ -34,7 +35,7 @@
   },
   "packageManager": "pnpm@9.14.2",
   "engines": {
-    "node": ">=20"
+    "node": "^20.19.0 || >=22.12.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
