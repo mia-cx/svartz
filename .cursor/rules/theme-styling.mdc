@@ -1,0 +1,18 @@
+---
+description: Apply when building or styling a first-party theme or the shared @svartz/ui layer. All themes share one Svartz design language; references shape structure only.
+globs: themes/**, packages/ui/src/lib/**, DESIGN.md
+alwaysApply: false
+---
+
+# Theme styling
+
+Five first-party themes (minimal, wiki, blog, docs, api-docs) must read as one vendor. `DESIGN.md` names every choice; `packages/ui/src/lib/styles/tokens.css` implements it.
+
+- **References inform structure, never visuals.** Quartz, Wikipedia, Ghost, TypeDoc, and Stripe decide which pages and features exist. Never copy their colours, fonts, CSS values, or icons.
+- **Themes set dials and layout only.** A theme may set `--sv-density`, `--sv-ratio`, and `--sv-measure` on `:root`, plus its own layout CSS. Derived tokens resolve at `:root`, so a dial set on an inner element does nothing. A theme that needs a new colour, radius, or font adds it to the shared tokens first. No raw hex or font names in theme CSS.
+- **Shared components look identical everywhere.** Callouts, code blocks, links, embeds, search, colour mode, link previews, tags, and badges live in `@svartz/ui`. Themes import `@svartz/ui/base.css` and `@svartz/ui/prose.css`, wrap the note body in `.sv-prose`, and mark the previewable region with `data-sv-preview`.
+- **Content slots:** spread `svartzContentComponents` into `components` in `runtime.ts` (eager), and load the same slots lazily in `index.ts`. `index.ts` also passes `svartzSyntax()` from `@svartz/ui/syntax` in `pluginPreset`. Never import `@svartz/ui/syntax` from browser code.
+- **Layout props:** type layouts and pages with `ThemePageProps` from `@svartz/ui`. Prefer `vault` (URLs include base and mount) and `vault.note(slug)` over re-deriving from raw maps.
+- **Lucide:** import icons per file (`@lucide/svelte/icons/<name>`). The barrel pulls ~1,600 icons into SSR and stalls host dev.
+- **Runtime manifest pages are eager.** A lazy page that shares modules with eager ones stalls the Vite build at "rendering chunks" (#62).
+- **Frontmatter schemas are the theme–plugin contract.** Docs, api-docs, and wiki export typed frontmatter shapes; future ingestion plugins emit exactly those shapes.
