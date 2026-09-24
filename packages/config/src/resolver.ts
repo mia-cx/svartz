@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { mergePlugins } from "@svartz/core";
 import { stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import type {
   FrontmatterFields,
   DiscoveryConfig,
@@ -19,7 +19,7 @@ import type {
   VaultConfig,
   VaultThemeConfig,
 } from "./types/index";
-import { VaultIdConflict, VaultIdNotFound, VaultMountConflict, VaultPathInvalid } from "./types/index";
+import { VaultBuildRootConflict, VaultIdConflict, VaultIdNotFound, VaultMountConflict, VaultPathInvalid } from "./types/index";
 
 // --- Hardcoded defaults ---
 
@@ -142,6 +142,11 @@ const normalizeMountPath = (value: string | undefined): string => {
   return `/${segments.join("/")}`;
 };
 
+const isWithin = (root: string, candidate: string): boolean => {
+  const path = relative(root, candidate);
+  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
+};
+
 // --- Single vault resolution ---
 
 const resolveVaultConfig = (
@@ -213,7 +218,7 @@ const resolveVaultConfig = (
 export const resolveConfig = (
   config: SvartzConfig,
   configDir: string,
-): Effect.Effect<ResolvedConfigSet, VaultPathInvalid | VaultMountConflict | VaultIdConflict> =>
+): Effect.Effect<ResolvedConfigSet, VaultPathInvalid | VaultMountConflict | VaultBuildRootConflict | VaultIdConflict> =>
   Effect.gen(function* () {
     const buildDefaults = resolveBuildDefaults(config.build);
     const vaults = yield* Effect.forEach(
@@ -239,6 +244,20 @@ export const resolveConfig = (
     }
 
     const hostVaults = vaults.filter((vault) => vault.target.type === "host");
+    for (let first = 0; first < vaults.length; first++) {
+      for (const second of vaults.slice(first + 1)) {
+        const current = vaults[first]!;
+        const currentRoot = resolve(current.outDir, "..");
+        const secondRoot = resolve(second.outDir, "..");
+        if (!isWithin(currentRoot, secondRoot) && !isWithin(secondRoot, currentRoot)) continue;
+        return yield* new VaultBuildRootConflict({
+          firstVaultId: current.id,
+          secondVaultId: second.id,
+          buildRoot: secondRoot,
+          message: `Vault build directories overlap: "${current.id}" (${currentRoot}) and "${second.id}" (${secondRoot}). Give each vault a separate outDir parent.`,
+        });
+      }
+    }
     for (let first = 0; first < hostVaults.length; first++) {
       for (const second of hostVaults.slice(first + 1)) {
         const current = hostVaults[first]!;

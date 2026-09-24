@@ -35,7 +35,7 @@ For the repository shell, the CLI syncs a managed Turbo/package surface at the c
 
 The CLI only rewrites those managed `svartz:*` / `//#svartz:*` entries, so existing non-Svartz scripts and Turbo tasks stay untouched.
 
-After initialization, `build` and `dev` leave the host's `package.json`, `turbo.json`, routes, Vite config, adapter, and `.svelte-kit` alone. Set `target: { type: "host" }` on each mounted vault. The host's adapter controls its final output, and its route files continue to take precedence. The host can import `virtual:svartz/host` to select published vault data. A custom route rendering `SvartzRuntimePage` awaits `prepareHostVault` in universal `load`, after removing SvelteKit's deployment base from the pathname. The generated catchall already does so; [`@svartz/ui`](../ui/README.md) has the loader example.
+After initialization, `build` and `dev` leave the host's `package.json`, `turbo.json`, routes, Vite config, adapter, and `.svelte-kit` alone. Set `target: { type: "host" }` on each mounted vault. Host commands compose only host-target vaults, so standalone targets in the same config stay separate. The host's adapter controls its final output, and its route files continue to take precedence. The host can import `virtual:svartz/host` to select published vault data. A custom route rendering `SvartzRuntimePage` awaits `prepareHostVault` in universal `load`, after removing SvelteKit's deployment base from the pathname. The generated catchall already does so; [`@svartz/ui`](../ui/README.md) has the loader example.
 
 ## Per-Vault Workspace Contract
 

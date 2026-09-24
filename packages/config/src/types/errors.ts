@@ -28,6 +28,13 @@ class VaultMountConflict extends Data.TaggedError("VaultMountConflict")<{
   readonly message: string;
 }> {}
 
+class VaultBuildRootConflict extends Data.TaggedError("VaultBuildRootConflict")<{
+  readonly firstVaultId: string;
+  readonly secondVaultId: string;
+  readonly buildRoot: string;
+  readonly message: string;
+}> {}
+
 class VaultIdConflict extends Data.TaggedError("VaultIdConflict")<{
   readonly vaultId: string;
   readonly message: string;
@@ -44,6 +51,7 @@ type ConfigError =
   | ConfigDecodeFailed
   | VaultPathInvalid
   | VaultMountConflict
+  | VaultBuildRootConflict
   | VaultIdConflict
   | VaultIdNotFound;
 
@@ -53,6 +61,7 @@ export {
   ConfigDecodeFailed,
   VaultPathInvalid,
   VaultMountConflict,
+  VaultBuildRootConflict,
   VaultIdConflict,
   VaultIdNotFound,
   type ConfigError,

@@ -111,6 +111,11 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
       theme: ${JSON.stringify(path.join(workspaceRoot, "themes/minimal"))},
       target: { type: "host" },
       site: { title: "Work", url: "https://example.test" },
+    }, {
+      id: "standalone",
+      path: "vault",
+      mountPath: "/standalone",
+      target: { type: "static" },
     }],
   };\n`);
 
@@ -127,6 +132,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   expect(await readFile(path.join(root, ".svelte-kit/keep"), "utf8")).toBe("host state");
   await expect(access(path.join(root, "turbo.json"))).rejects.toMatchObject({ code: "ENOENT" });
   await access(path.join(root, "build/index.js"));
+  expect(await readFile(path.join(root, ".svartz/host/runtime.ts"), "utf8")).not.toContain('id: "standalone"');
   const protectedFiles = await readdir(path.join(root, "build/client/work/__svartz/protected"));
   const envelopes = protectedFiles.filter((name) => name.endsWith(".json"));
   expect(envelopes).toHaveLength(1);
