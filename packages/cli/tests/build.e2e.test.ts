@@ -1,9 +1,10 @@
-import { access, readFile, rm, writeFile } from "node:fs/promises";
+import { access, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { beforeAll, describe, expect, it } from "vitest";
+import { deriveProtectionKey, openProtectedPayload, type ProtectedEnvelope } from "@svartz/core";
 
 const execFileAsync = promisify(execFile);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -79,6 +80,62 @@ describe("svartz CLI", () => {
       expect(html).toContain("https://example.test/__svartz/social/index.png");
     } finally {
       await rm(configPath, { force: true });
+    }
+  }, 240_000);
+
+  it("publishes protected SVX as sealed static output only", async () => {
+    const configPath = resolve(ROOT, ".svartz-protected-e2e.config.ts");
+    const dist = resolve(ROOT, ".svartz/vaults/protected-e2e/dist");
+    const packageSource = await readFile(resolve(ROOT, "package.json"), "utf8");
+    const turboSource = await readFile(resolve(ROOT, "turbo.json"), "utf8");
+    const previousPassword = process.env.SVARTZ_TEST_PROTECTED_PASSWORD;
+    const previousTestGate = process.env.SVARTZ_TEST_PROTECTION;
+    process.env.SVARTZ_TEST_PROTECTED_PASSWORD = "e2e-only-password";
+    process.env.SVARTZ_TEST_PROTECTION = "1";
+    try {
+      await writeFile(configPath, `export default {
+        version: "1.0.0",
+        passwordGroups: { friends: { env: "SVARTZ_TEST_PROTECTED_PASSWORD" } },
+        vaults: [{ id: "protected-e2e", path: "packages/cli/tests/fixtures/protected-vault",
+          target: { type: "static" }, site: { title: "Protected fixture" } }],
+      };\n`);
+      await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
+
+      const html = await readFile(resolve(dist, "locked/index.html"), "utf8");
+      expect(html).toContain("Unlock note");
+      expect(html).not.toContain("PRIVATE_BODY_MARKER");
+      await expect(access(resolve(dist, "photo.svg"))).rejects.toMatchObject({ code: "ENOENT" });
+      const payloadFiles = await readdir(resolve(dist, "__svartz/protected"));
+      expect(payloadFiles).toHaveLength(1);
+      expect(payloadFiles[0]).toMatch(/^[A-Za-z0-9_-]+\.json$/);
+      const envelope = JSON.parse(await readFile(resolve(dist, "__svartz/protected", payloadFiles[0]!), "utf8")) as ProtectedEnvelope;
+      const key = await deriveProtectionKey("e2e-only-password", envelope.salt);
+      const plaintext = await openProtectedPayload(key, envelope, envelope.id);
+      const payload = JSON.parse(new TextDecoder().decode(plaintext));
+      expect(payload.js).toContain("PRIVATE_BODY_MARKER");
+      expect(payload.search.map((item: { slug: string }) => item.slug)).toEqual(["locked"]);
+      expect(payload.graph.index).toContain("locked");
+      expect(payload.assets[0].path).toBe("photo.svg");
+
+      for (const directory of [dist, resolve(ROOT, ".svartz/vaults/protected-e2e/artifacts")]) {
+        const files = await readdir(directory, { recursive: true, withFileTypes: true });
+        for (const file of files) {
+          if (!file.isFile()) continue;
+          const contents = await readFile(resolve(file.parentPath, file.name));
+          expect(contents.toString("utf8")).not.toMatch(
+            /PRIVATE_BODY_MARKER|PRIVATE_DESCRIPTION_MARKER|PRIVATE_ASSET_MARKER|PRIVATE_HIDDEN_TITLE_MARKER|PRIVATE_HIDDEN_BODY_MARKER|e2e-only-password/,
+          );
+        }
+      }
+    } finally {
+      await rm(configPath, { force: true });
+      await rm(resolve(ROOT, ".svartz/vaults/protected-e2e"), { recursive: true, force: true });
+      await writeFile(resolve(ROOT, "package.json"), packageSource);
+      await writeFile(resolve(ROOT, "turbo.json"), turboSource);
+      if (previousPassword === undefined) delete process.env.SVARTZ_TEST_PROTECTED_PASSWORD;
+      else process.env.SVARTZ_TEST_PROTECTED_PASSWORD = previousPassword;
+      if (previousTestGate === undefined) delete process.env.SVARTZ_TEST_PROTECTION;
+      else process.env.SVARTZ_TEST_PROTECTION = previousTestGate;
     }
   }, 240_000);
 });

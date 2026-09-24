@@ -22,12 +22,29 @@ it('imports authenticated note code only after a successful browser unlock', asy
 		version: 1,
 		notes: [{ slug: 'secret', exportName: 'note0' }],
 		entries: [{ slug: 'secret', title: 'Private metadata' }],
+		search: [
+			{
+				id: 'secret',
+				slug: 'secret',
+				href: '/secret/',
+				title: 'Private metadata',
+				content: 'unlocked',
+				tags: [],
+				aliases: []
+			}
+		],
+		graph: { secret: [] },
 		js: 'export function note0() { return "unlocked"; }',
 		css: '.protected { color: red }',
 		assets: [{ path: 'photo.png', mimeType: 'image/png', data: 'AAEC' }],
 		bridgeImports: []
 	};
-	const envelope = await sealProtectedPayload(key, salt, id, new TextEncoder().encode(JSON.stringify(payload)));
+	const envelope = await sealProtectedPayload(
+		key,
+		salt,
+		id,
+		new TextEncoder().encode(JSON.stringify(payload))
+	);
 	const fetchPayload = vi.fn(async () => new Response(JSON.stringify(envelope), { status: 200 }));
 	vi.stubGlobal('fetch', fetchPayload);
 	const loadBridgeUrls = vi.fn(async () => ({}));
@@ -45,7 +62,9 @@ it('imports authenticated note code only after a successful browser unlock', asy
 	expect(wrapper.querySelector('a')?.getAttribute('href')).toBe(unlocked.assets.get('photo.png'));
 	binding.destroy();
 	expect(isProtectedGroupUnlocked(id)).toBe(true);
-	expect((await unlockProtectedNote(reference, '', loadBridgeUrls)).component).toBe(unlocked.component);
+	expect((await unlockProtectedNote(reference, '', loadBridgeUrls)).component).toBe(
+		unlocked.component
+	);
 	expect(fetchPayload).toHaveBeenCalledTimes(2);
 	expect(loadBridgeUrls).toHaveBeenCalledTimes(1);
 	lockProtectedGroup(id);

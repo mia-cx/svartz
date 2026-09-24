@@ -15,6 +15,7 @@ export const artifacts = new Map([
 
 export const browserResources: Readonly<Record<string, string>> = {};
 export async function mountBrowserResources(): Promise<() => void> { return () => {}; }
+export async function loadProtectedBridgeUrls(): Promise<Readonly<Record<string, string>>> { return {}; }
 
 export function hasNoteArtifact(_key: string) {
 	return true;
@@ -43,6 +44,9 @@ export const backlinks = index.backlinks;
 export const search = index.search;
 export const searchDocuments = index.search;
 export const searchIndex = {};
+export function createUnlockedVault() {
+	return { index, vault, searchDocuments, searchIndex };
+}
 export const tags = index.tags;
 export const folders = index.folders;
 export const routes = index.routes;

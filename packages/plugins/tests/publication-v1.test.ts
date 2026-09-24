@@ -91,6 +91,9 @@ describe("v1 publication boundary", () => {
       ctx.meta.set("svartz:protectionReady", true);
       filterUnpublished().filterUnpublished!.run(ctx);
       expect(ctx.files[0]?.protection).toEqual({ group: "friends", hidden: true });
+      const firstToken = (ctx.meta.get("svartz:protectedGroupTokens") as Map<string, string>).get("friends");
+      filterUnpublished().filterUnpublished!.run(ctx);
+      expect((ctx.meta.get("svartz:protectedGroupTokens") as Map<string, string>).get("friends")).toBe(firstToken);
       expect(JSON.stringify(ctx.files[0]?.protection)).not.toContain("not-a-public-value");
     } finally {
       vi.unstubAllEnvs();

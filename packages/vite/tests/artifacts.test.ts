@@ -146,6 +146,7 @@ describe("@svartz/vite artifact helpers", () => {
     );
     expect(source).toContain('"svelte/internal/client": () => import("/out/bridge/client.ts")');
     expect(source).toContain("export async function loadProtectedBridgeUrls(ids)");
+    expect(source).toContain("mergeProtectedIndex(index, groups)");
     expect(source).toContain("return [id, module.svartzBridgeUrl]");
   });
 });

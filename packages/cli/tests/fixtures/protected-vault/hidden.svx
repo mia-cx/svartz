@@ -1,0 +1,7 @@
+---
+title: PRIVATE_HIDDEN_TITLE_MARKER
+password_group: friends
+hide_locked: true
+---
+
+<p>PRIVATE_HIDDEN_BODY_MARKER</p>
