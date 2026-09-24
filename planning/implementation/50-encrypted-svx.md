@@ -14,6 +14,9 @@ Keep the site static. Compile protected `.svx` and its private dependencies outs
 1. [x] Define and validate password groups and protected note metadata. Missing group or password fails closed; a protected build remains blocked until the encrypted emitter is ready.
 2. [ ] Split public and protected indexes, embeds, assets, and discovery before public emission. Hidden routes stay reachable without index entries.
 3. [ ] Compile and encrypt executable SVX module graphs, CSS, and assets without writing plaintext output or source maps.
+   - [x] Share one versioned AES-GCM/PBKDF2 envelope between build and browser code, with password, tamper, and route-binding tests.
+   - [ ] Compile each protected graph in memory and classify every dependency.
+   - [ ] Encrypt note modules, CSS, assets, and group discovery before public emission.
 4. [ ] Bridge the host SvelteKit runtime and client-safe imports with live semantics. Reject transitive server-only imports.
 5. [ ] Unlock/relock the group in the browser; keep session keys in memory and merge protected search/graph only for the session.
 6. [ ] Run wrong-password, tampering, CSP, navigation, repeated-mount, host, adapter, and output-scan acceptance checks.
