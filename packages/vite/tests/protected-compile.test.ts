@@ -158,10 +158,18 @@ it("rejects server-only and cross-group imports before publication", async () =>
     await writeFile(crossGroup.sourcePath!, crossGroup.content);
     await expect(compileProtectedGraph(context(root, [crossGroup, other]), "friends", root)).rejects.toThrow(/cannot import note/);
 
+    const crossGroupRaw = note(root, "Note.svx", '<script>import source from "./Other.svx?raw";</script><p>{source}</p>', "friends");
+    await writeFile(crossGroupRaw.sourcePath!, crossGroupRaw.content);
+    await expect(compileProtectedGraph(context(root, [crossGroupRaw, other]), "friends", root)).rejects.toThrow(/cannot import note/);
+
     await writeFile(join(vault, "Unpublished.svx"), "<p>UNPUBLISHED_SECRET</p>");
     const unpublished = note(root, "Note.svx", '<script>import Hidden from "./Unpublished.svx";</script><Hidden />', "friends");
     await writeFile(unpublished.sourcePath!, unpublished.content);
     await expect(compileProtectedGraph(context(root, [unpublished]), "friends", root)).rejects.toThrow(/unpublished note/);
+
+    const unpublishedRaw = note(root, "Note.svx", '<script>import source from "./Unpublished.svx?raw";</script><p>{source}</p>', "friends");
+    await writeFile(unpublishedRaw.sourcePath!, unpublishedRaw.content);
+    await expect(compileProtectedGraph(context(root, [unpublishedRaw]), "friends", root)).rejects.toThrow(/unpublished note/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

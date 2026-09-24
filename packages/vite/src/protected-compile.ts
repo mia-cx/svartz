@@ -87,8 +87,8 @@ function protectedSourcePlugin(ctx: PluginContext, group: string, files: readonl
         ).join("\n");
       }
       assertClientModule(id);
-      if (id.includes("?")) return;
-      const path = id;
+      const [path, query] = id.split("?", 2);
+      if (!path) return;
       const file = bySource.get(resolve(path));
       if (!file) {
         if (/\.(?:md|mdx|svx)$/i.test(path)) {
@@ -98,6 +98,11 @@ function protectedSourcePlugin(ctx: PluginContext, group: string, files: readonl
       }
       if (file.protection?.group !== group) {
         throw new Error(`Protected group "${group}" cannot import note "${file.path}"`);
+      }
+      if (query) {
+        const request = new URLSearchParams(query);
+        if (request.has("svelte") && request.get("type") === "style") return;
+        throw new Error(`Protected group "${group}" cannot import note "${file.path}" with a query`);
       }
       return compileProtectedNoteSource(ctx, file);
     },

@@ -226,12 +226,18 @@ describe("PasswordGroupsSchema", () => {
     expect(Either.isRight(decode(PasswordGroupsSchema, {
       friends: { env: "SVARTZ_FRIENDS_PASSWORD" },
     }))).toBe(true);
+    expect(Either.isRight(decode(PasswordGroupsSchema, {
+      friends: { env: "PRIVATE_FRIENDS_PASSWORD" },
+    }))).toBe(true);
     expect(Either.isLeft(decode(PasswordGroupsSchema, {
       friends: { password: "plaintext" },
     }))).toBe(true);
     expect(Either.isLeft(decode(PasswordGroupsSchema, {
       friends: { env: "bad-name" },
     }))).toBe(true);
+    for (const env of ["PUBLIC_FRIENDS_PASSWORD", "VITE_FRIENDS_PASSWORD"]) {
+      expect(Either.isLeft(decode(PasswordGroupsSchema, { friends: { env } }))).toBe(true);
+    }
   });
 });
 

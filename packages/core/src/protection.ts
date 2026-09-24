@@ -6,6 +6,22 @@ const SALT_BYTES = 16;
 const IV_BYTES = 12;
 const encoder = new TextEncoder();
 
+export class ProtectionFormatError extends Error {
+  readonly _tag = "ProtectionFormatError" as const;
+  constructor(message: string) {
+    super(message);
+    this.name = "ProtectionFormatError";
+  }
+}
+
+export class ProtectionAuthenticationError extends Error {
+  readonly _tag = "ProtectionAuthenticationError" as const;
+  constructor() {
+    super("Incorrect password or damaged protected note");
+    this.name = "ProtectionAuthenticationError";
+  }
+}
+
 export interface ProtectedEnvelope {
   readonly version: typeof VERSION;
   readonly id: string;
@@ -24,7 +40,12 @@ function toBase64(bytes: Uint8Array): string {
 }
 
 function fromBase64(value: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(value);
+  let binary: string;
+  try {
+    binary = atob(value);
+  } catch {
+    throw new ProtectionFormatError("Invalid protected payload encoding");
+  }
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
   return bytes;
@@ -38,7 +59,7 @@ export function createProtectionSalt(): string {
 /** Derive a non-exportable session key from a password and the group's public salt. */
 export async function deriveProtectionKey(password: string, salt: string): Promise<CryptoKey> {
   const saltBytes = fromBase64(salt);
-  if (saltBytes.length !== SALT_BYTES) throw new Error("Invalid protected payload salt");
+  if (saltBytes.length !== SALT_BYTES) throw new ProtectionFormatError("Invalid protected payload salt");
   const material = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
     { name: "PBKDF2", hash: "SHA-256", salt: saltBytes, iterations: ITERATIONS },
@@ -78,15 +99,22 @@ export async function openProtectedPayload(
   envelope: ProtectedEnvelope,
   expectedId: string,
 ): Promise<Uint8Array> {
-  if (envelope.version !== VERSION || envelope.iterations !== ITERATIONS || envelope.id !== expectedId) {
-    throw new Error("Unsupported or mismatched protected payload");
+  if (!envelope || envelope.version !== VERSION || envelope.iterations !== ITERATIONS ||
+    envelope.id !== expectedId || typeof envelope.iv !== "string" || typeof envelope.ciphertext !== "string") {
+    throw new ProtectionFormatError("Unsupported or mismatched protected payload");
   }
   const iv = fromBase64(envelope.iv);
-  if (iv.length !== IV_BYTES) throw new Error("Invalid protected payload IV");
-  const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv, additionalData: encoder.encode(`svartz:${VERSION}:${expectedId}`) },
-    key,
-    fromBase64(envelope.ciphertext),
-  );
+  if (iv.length !== IV_BYTES) throw new ProtectionFormatError("Invalid protected payload IV");
+  const ciphertext = fromBase64(envelope.ciphertext);
+  let plaintext: ArrayBuffer;
+  try {
+    plaintext = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv, additionalData: encoder.encode(`svartz:${VERSION}:${expectedId}`) },
+      key,
+      ciphertext,
+    );
+  } catch {
+    throw new ProtectionAuthenticationError();
+  }
   return new Uint8Array(plaintext);
 }

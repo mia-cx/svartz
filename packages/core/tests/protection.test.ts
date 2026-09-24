@@ -3,6 +3,8 @@ import {
   createProtectionSalt,
   deriveProtectionKey,
   openProtectedPayload,
+  ProtectionAuthenticationError,
+  ProtectionFormatError,
   sealProtectedPayload,
 } from "../src/protection";
 
@@ -16,10 +18,13 @@ it("authenticates binary payloads, routes, passwords, and ciphertext", async () 
   expect(envelope.version).toBe(1);
   expect(envelope.iv).not.toBe(second.iv);
   expect(await openProtectedPayload(key, envelope, "note:locked")).toEqual(bytes);
-  await expect(openProtectedPayload(key, envelope, "note:other")).rejects.toThrow(/mismatched/);
+  await expect(openProtectedPayload(key, envelope, "note:other")).rejects.toBeInstanceOf(ProtectionFormatError);
 
   const wrongKey = await deriveProtectionKey("wrong password", salt);
-  await expect(openProtectedPayload(wrongKey, envelope, "note:locked")).rejects.toThrow();
+  await expect(openProtectedPayload(wrongKey, envelope, "note:locked")).rejects.toBeInstanceOf(ProtectionAuthenticationError);
   const altered = { ...envelope, ciphertext: `${envelope.ciphertext.slice(0, -4)}AAAA` };
-  await expect(openProtectedPayload(key, altered, "note:locked")).rejects.toThrow();
+  await expect(openProtectedPayload(key, altered, "note:locked")).rejects.toBeInstanceOf(ProtectionAuthenticationError);
+  await expect(deriveProtectionKey("password", "not base64!")).rejects.toBeInstanceOf(ProtectionFormatError);
+  await expect(openProtectedPayload(key, { ...envelope, iv: "bad!" }, "note:locked"))
+    .rejects.toBeInstanceOf(ProtectionFormatError);
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Index, IndexEntry } from "../src/types";
-import { createVaultView } from "../src/vault-view";
+import { createVaultEntryView, createVaultView } from "../src/vault-view";
 
 const date = new Date("2026-01-01T00:00:00.000Z");
 const entry = (slug: string): IndexEntry => ({
@@ -42,6 +42,14 @@ const index: Index = {
 };
 
 describe("vault view", () => {
+  it("base-prefixes an unlocked hidden entry that was absent from public navigation", () => {
+    const hidden = { ...entry("hidden"), socialImage: "/blog/private.png" };
+    expect(createVaultEntryView(hidden, "/site")).toMatchObject({
+      href: "/site/blog/hidden/",
+      socialImage: "/site/blog/private.png",
+      links: [],
+    });
+  });
   it("serves one published index with deployment base composed once", () => {
     const vault = createVaultView(index, "journal", "/site");
     expect(vault.id).toBe("journal");
