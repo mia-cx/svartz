@@ -152,8 +152,10 @@ describe("@svartz/vite theme bridge", () => {
     await mkdir(path.join(themeRoot, "dist"));
     await writeFile(path.join(themeRoot, "package.json"), JSON.stringify({
       name: "@acme/exports-theme", type: "module",
-      exports: { ".": { import: "./dist/index.js" } },
+      exports: { ".": { import: "./dist/index.js" }, "./runtime": "./browser/entry.js" },
     }));
+    await mkdir(path.join(themeRoot, "browser"));
+    await writeFile(path.join(themeRoot, "browser/entry.js"), "export const runtime = true;\n");
     await writeFile(path.join(themeRoot, "dist/index.js"), `export default {
       id: "exports-theme", version: "1.0.0", contractVersion: "1.0.0",
       layouts: { defaultPage: { default: {} }, notePage: { default: {} } },
@@ -161,6 +163,8 @@ describe("@svartz/vite theme bridge", () => {
     };`);
 
     expect(resolveThemePackageRoot(themeRoot, os.tmpdir())).toBe(themeRoot);
+    expect(resolveThemeRuntimeImportId(createConfig(themeRoot), os.tmpdir()))
+      .toBe(pathToFileURL(path.join(themeRoot, "browser/entry.js")).href);
     expect((await loadThemeModule((id) => import(id), createConfig(themeRoot), os.tmpdir())).id)
       .toBe("exports-theme");
   });

@@ -39,12 +39,17 @@ function importExportTarget(value: unknown): string | undefined {
   }
 }
 
-function directoryThemeEntry(moduleId: string): string | undefined {
+function directoryThemeEntry(moduleId: string, exportKey = "."): string | undefined {
   if (!path.isAbsolute(moduleId) || !existsSync(moduleId) || !statSync(moduleId).isDirectory()) return;
   const manifestPath = path.join(moduleId, "package.json");
   if (!existsSync(manifestPath)) return;
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { exports?: unknown };
-  const target = importExportTarget(manifest.exports);
+  const exported = exportKey === "."
+    ? manifest.exports
+    : manifest.exports && typeof manifest.exports === "object" && !Array.isArray(manifest.exports)
+      ? (manifest.exports as Record<string, unknown>)[exportKey]
+      : undefined;
+  const target = importExportTarget(exported);
   if (!target?.startsWith("./")) return;
   return path.resolve(moduleId, target);
 }
@@ -91,6 +96,8 @@ function resolveThemeRuntimeImportId(
   if (themeModuleId === BUILTIN_THEME_MODULE_ID) {
     return pathToFileURL(resolveThemeEntry(BUILTIN_THEME_RUNTIME_MODULE_ID, resolveFromDirectory)).href;
   }
+  const exportedRuntime = directoryThemeEntry(themeModuleId, "./runtime");
+  if (exportedRuntime) return pathToFileURL(exportedRuntime).href;
   const packageRoot = resolveThemePackageRoot(themeModuleId, resolveFromDirectory);
   if (packageRoot && (themeModuleId.startsWith("/") || themeModuleId.startsWith("."))) {
     const runtime = path.join(packageRoot, "dist/runtime.js");
