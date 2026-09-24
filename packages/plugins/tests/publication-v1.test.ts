@@ -148,7 +148,7 @@ describe("v1 publication boundary", () => {
       ["media/blocked.png"],
     );
     ctx.files[0]!.content += " ![[blocked.png]]";
-    ctx.meta.set("sourceBodies", new Map(ctx.files.filter((file) => file.extension === ".md").map((file) => [file.slug, file.content])));
+    ctx.meta.set("sourceBodies", new Map(ctx.files.filter((file) => file.extension === ".md").map((file) => [file.path, file.content])));
 
     filterUnpublished().filterUnpublished!.run(ctx);
     expect(ctx.files.map((file) => file.path)).toEqual([
@@ -158,7 +158,7 @@ describe("v1 publication boundary", () => {
       "media/song.mp3",
       "media/clip.mp3",
     ]);
-    expect([...((ctx.meta.get("sourceBodies") as Map<string, string>).keys())]).toEqual(["posts/public"]);
+    expect([...((ctx.meta.get("sourceBodies") as Map<string, string>).keys())]).toEqual(["posts/public.md"]);
 
     resolveLinks().resolveLinks!.run(ctx);
     expect(ctx.files[0]!.links).toEqual([]);

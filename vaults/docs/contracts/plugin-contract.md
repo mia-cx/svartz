@@ -6,11 +6,11 @@
 
 The build runs these hooks in order:
 
-`buildStart` → `configResolved` → `discoverFiles` → `parseFrontmatter` → `filterUnpublished` → `resolveLinks` → `transformOfm` → `transformGfm` → `transformToc` → `transformDescription` → `transformSyntax` → `transformLatex` → `transformEmbeds` → `indexContent` → `emitArtifacts` → `buildEnd`.
+`buildStart` → `configResolved` → `discoverFiles` → `parseFrontmatter` → `filterUnpublished` → `allocateRoutes` → `resolveLinks` → `transformOfm` → `transformGfm` → `transformToc` → `transformDescription` → `transformSyntax` → `transformLatex` → `transformEmbeds` → `indexContent` → `emitArtifacts` → `buildEnd`.
 
 `handleChange` receives development change events separately. A plugin may implement more than one hook. Each stage sorts its plugins by `enforce: "pre"`, default, then `enforce: "post"`. Within a tier, it preserves merged plugin order. Content transformers run serially because they share mutable files and compiler contributions. Core hooks set `fatal: true`; a fatal failure stops the build.
 
-The six required stages are `discoverFiles`, `parseFrontmatter`, `filterUnpublished`, `resolveLinks`, `indexContent`, and `emitArtifacts`. Any active plugin can provide them. Optional transformers can be disabled or replaced.
+The seven required stages are `discoverFiles`, `parseFrontmatter`, `filterUnpublished`, `allocateRoutes`, `resolveLinks`, `indexContent`, and `emitArtifacts`. Any active plugin can provide them. Optional transformers can be disabled or replaced. `allocateRoutes` gives published notes their final canonical slugs before links and artifacts use them.
 
 ```ts
 import { definePlugin } from "@svartz/core";

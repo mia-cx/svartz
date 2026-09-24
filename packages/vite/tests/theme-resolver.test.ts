@@ -62,9 +62,7 @@ describe("@svartz/vite theme bridge", () => {
     const source = createThemeVirtualModuleSource("@svartz/theme-minimal");
 
     expect(source).toContain('import * as themeModule from "@svartz/theme-minimal";');
-    expect(source).toContain(
-      'import { matchThemeRoute, resolveThemeRouteToArtifactKey } from "@svartz/core";',
-    );
+    expect(source).toMatch(/import \{ matchThemeRoute, resolveThemeRouteToArtifactKey \} from ".*\/core\/dist\/index\.js";/);
     expect(source).toContain(
       "export const theme = typeof _themeExport === 'function' ? _themeExport(_themeConfig) : _themeExport;",
     );

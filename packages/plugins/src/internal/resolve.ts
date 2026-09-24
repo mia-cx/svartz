@@ -33,6 +33,9 @@ export const resolveLink = (
   const target = link.target.trim();
   if (!target) return null;
 
+  const authored = slugMap[target.toLowerCase()];
+  if (authored !== undefined) return authored;
+
   const normalized = fileToSlug(target);
 
   if (slugMap[normalized] !== undefined) return slugMap[normalized]!;
@@ -68,17 +71,28 @@ export const resolveLink = (
  * Alias collisions are excluded from the map (ambiguous).
  */
 export const buildSlugMap = (
-  entries: ReadonlyArray<{ slug: string; aliases?: readonly string[] }>,
+  entries: ReadonlyArray<{ slug: string; path?: string; aliases?: readonly string[] }>,
 ): Record<string, string> => {
   const map: Record<string, string> = {};
   const ambiguousBasenames = new Set<string>();
   const ambiguousAliases = new Set<string>();
   const canonicalSlugs = new Set<string>();
+  const authoredNames = new Set<string>();
 
   for (const entry of entries) {
     const normalized = entry.slug.toLowerCase();
     canonicalSlugs.add(normalized);
     map[normalized] = entry.slug;
+  }
+
+  // A literal authored filename wins over a normalized slug when names collide.
+  for (const entry of entries) {
+    if (!entry.path) continue;
+    const stem = entry.path.replace(/\.(md|mdx|svx)$/i, "").toLowerCase();
+    map[stem] = entry.slug;
+    map[entry.path.toLowerCase()] = entry.slug;
+    authoredNames.add(stem);
+    authoredNames.add(entry.path.toLowerCase());
   }
 
   for (const entry of entries) {
@@ -99,6 +113,7 @@ export const buildSlugMap = (
     if (entry.aliases) {
       for (const alias of entry.aliases) {
         const normalizedAlias = alias.toLowerCase();
+        if (authoredNames.has(normalizedAlias)) continue;
         if (ambiguousAliases.has(normalizedAlias)) continue;
         const existing = map[normalizedAlias];
         if (existing !== undefined && existing !== entry.slug) {

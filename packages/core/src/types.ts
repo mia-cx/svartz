@@ -50,6 +50,7 @@ interface ResolvedVaultDefaults {
   readonly theme: ResolvedThemeConfig;
   readonly frontmatter: ResolvedFrontmatterConfig;
   readonly site: ResolvedSiteConfig;
+  readonly mountPath: string;
 }
 
 /** Canonical single-vault build config consumed by the runner and @svartz/vite. */
@@ -66,6 +67,8 @@ interface ResolvedConfig {
   readonly theme: ResolvedThemeConfig;
   readonly frontmatter: ResolvedFrontmatterConfig;
   readonly site: ResolvedSiteConfig;
+  /** Vault URL prefix within the host app, separate from SvelteKit's deployment base. */
+  readonly mountPath: string;
   readonly target: TargetConfig;
   readonly plugins: readonly unknown[];
 }
@@ -96,6 +99,7 @@ interface TocEntry {
 interface SearchDocument {
   readonly id: string;
   readonly slug: string;
+  readonly href: string;
   readonly title: string;
   readonly description?: string;
   readonly content: string;
@@ -118,7 +122,9 @@ interface FolderIndexEntry {
 }
 
 interface RouteIndex {
+  readonly mountPath: string;
   readonly notes: readonly string[];
+  readonly redirects: Readonly<Record<string, string>>;
   readonly tags: readonly string[];
   readonly folders: readonly string[];
   readonly feed: readonly string[];
@@ -147,9 +153,10 @@ interface RawLink {
  * A file passing through the plugin pipeline.
  *
  * Postconditions by stage:
- *   - after discoverFiles: `slug` is assigned (vault-relative, extensionless, case-normalized)
+ *   - after discoverFiles: `slug` is provisional (vault-relative, extensionless, case-normalized)
  *   - after parseFrontmatter: `frontmatter` is populated
  *   - after parseFrontmatter: `rawLinks` is populated
+ *   - after allocateRoutes: `slug` is the unique canonical route key
  *   - after resolveLinks: `links` contains resolved slug strings
  */
 interface ProcessedFile {
@@ -161,6 +168,7 @@ interface ProcessedFile {
   frontmatter?: Record<string, unknown>;
   rawLinks?: RawLink[];
   links?: string[];
+  linkTargets?: Record<string, string>;
   createdAt?: Date;
   modifiedAt?: Date;
   toc?: readonly TocEntry[];
@@ -184,6 +192,7 @@ interface IndexLink {
 
 interface IndexEntry {
   readonly slug: string;
+  readonly href: string;
   readonly path: string;
   readonly title: string;
   readonly tags: readonly string[];

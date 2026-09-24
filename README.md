@@ -27,6 +27,8 @@ The initializer creates a small SvelteKit shell, `svartz.config.ts`, and `vault/
 
 In an existing SvelteKit app, the same command adds Svartz dependencies, configuration, and a Vite wrapper while preserving routes, layouts, adapter, and existing scripts. It adds `svartz:dev`, `svartz:build`, and `svartz:preview` scripts. Existing vault definitions remain in their config; `init` does not replace them. Use `--no-install` or `--no-git` when you want to handle those steps yourself.
 
+Configure [vault mounts and canonical routes](docs/routes.md) when an existing app serves notes under paths such as `/journal`.
+
 The local CLI is vault-aware:
 
 ```bash

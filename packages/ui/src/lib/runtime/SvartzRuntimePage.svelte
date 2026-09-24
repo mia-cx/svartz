@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
+	import { base } from '$app/paths';
 	import { theme, resolveRuntimeRoute } from 'virtual:svartz/theme';
 	import {
 		assets,
@@ -89,13 +90,35 @@
 	}
 
 	const activePathname = $derived(pathname);
-
-	const runtimeRoute = $derived(
-		resolveRuntimeRoute({
-			pathname: activePathname,
-			slug: normalizeSlug(activePathname)
-		})
+	const appPathname = $derived(base && activePathname.startsWith(`${base}/`)
+		? activePathname.slice(base.length)
+		: activePathname === base ? '/' : activePathname);
+	const vaultPathname = $derived(
+		routes.mountPath && appPathname.startsWith(`${routes.mountPath}/`)
+			? appPathname.slice(routes.mountPath.length)
+			: appPathname === routes.mountPath
+				? '/'
+				: appPathname
 	);
+	const canonicalEntry = $derived(index.entries.find((candidate) =>
+		candidate.href === (appPathname.endsWith('/') ? appPathname : `${appPathname}/`)
+	));
+
+	const runtimeRoute = $derived.by(() => {
+		const match = resolveRuntimeRoute({
+			pathname: vaultPathname,
+			slug: normalizeSlug(vaultPathname)
+		});
+		if (!canonicalEntry || match?.route.id === 'note') return match;
+		const noteRoute = theme.routes.find((route) => route.id === 'note');
+		return noteRoute ? {
+			route: noteRoute,
+			pathname: vaultPathname,
+			params: { slug: canonicalEntry.slug },
+			layoutSlot: noteRoute.layoutSlot,
+			artifactKey: `pages/${canonicalEntry.slug}.svelte`
+		} : match;
+	});
 
 	const entry = $derived(
 		artifactKeyToSlug(runtimeRoute?.artifactKey)

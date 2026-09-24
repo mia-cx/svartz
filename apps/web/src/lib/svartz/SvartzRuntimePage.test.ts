@@ -15,4 +15,9 @@ describe('SvartzRuntimePage SSR', () => {
 		expect(head).toContain('property="og:title" content="Svartz test page"');
 		expect(head).toContain('name="twitter:card" content="summary_large_image"');
 	});
+
+	it('renders an authored note ahead of a generated tag page at the same URL', () => {
+		const { head } = render(SvartzRuntimePage, { props: { pathname: '/tags/testing/' } });
+		expect(head).toContain('<title>Authored tag landing | Svartz Test</title>');
+	});
 });

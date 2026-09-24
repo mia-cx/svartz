@@ -12,6 +12,7 @@ import { posix } from "node:path";
 import { definePlugin } from "@svartz/core";
 import { createAssetResolver } from "./internal/asset-references";
 import { resolveLink, buildSlugMap } from "./internal/resolve";
+import { alternateNames, routeHref } from "./internal/routes";
 
 const MARKDOWN_ASSET = /(!?\[[^\]]*\]\()([^\s)]+)(\))/g;
 const HTML_ASSET = /(<(?:a|audio|iframe|img|source|video)\b[^>]*\b(?:href|src)\s*=\s*["'])([^"']+)(["'][^>]*>)/gi;
@@ -71,10 +72,8 @@ export const resolveLinks = definePlugin(() => ({
       const assetFiles = ctx.files.filter((file) => !isMarkdownFile(file.extension));
 
       const slugSources = noteFiles.map((file) => {
-        const aliases = Array.isArray(file.frontmatter?.[ctx.config.frontmatter.aliasesField])
-          ? (file.frontmatter[ctx.config.frontmatter.aliasesField] as string[])
-          : [];
-        return { slug: file.slug, aliases };
+        const aliases = alternateNames(file.frontmatter, ctx.config.frontmatter.aliasesField);
+        return { slug: file.slug, path: file.path, aliases };
       });
 
       const slugMap = buildSlugMap(slugSources);
@@ -87,6 +86,7 @@ export const resolveLinks = definePlugin(() => ({
         }
 
         const resolved = new Set<string>();
+        const linkTargets: Record<string, string> = {};
         let rewrittenContent = file.content.replace(
           MARKDOWN_ASSET,
           (raw, start: string, target: string, end: string) => {
@@ -129,6 +129,7 @@ export const resolveLinks = definePlugin(() => ({
           );
           if (target !== null) {
             resolved.add(target);
+            linkTargets[rawLink.raw] = routeHref(target, ctx.config.mountPath);
             rewrittenContent = replaceLinkMarkup(
               rewrittenContent,
               rawLink.raw,
@@ -139,6 +140,7 @@ export const resolveLinks = definePlugin(() => ({
         }
 
         file.links = [...resolved];
+        file.linkTargets = linkTargets;
         file.content = rewrittenContent;
       }
     },

@@ -34,6 +34,7 @@ const HOOK_PARALLEL_DEFAULTS: Record<RunnerHookName, boolean> = {
   discoverFiles: false,
   parseFrontmatter: false,
   filterUnpublished: false,
+  allocateRoutes: false,
   resolveLinks: false,
   transformOfm: false,
   transformGfm: false,

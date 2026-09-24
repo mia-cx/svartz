@@ -57,6 +57,7 @@ const STAGE_NAMES = [
   "discoverFiles",
   "parseFrontmatter",
   "filterUnpublished",
+  "allocateRoutes",
   "resolveLinks",
   "transformOfm",
   "transformGfm",
@@ -89,6 +90,7 @@ interface SvartzPlugin {
   discoverFiles?: PluginHookInput;
   parseFrontmatter?: PluginHookInput;
   filterUnpublished?: PluginHookInput;
+  allocateRoutes?: PluginHookInput;
   resolveLinks?: PluginHookInput;
   transformOfm?: PluginHookInput;
   transformGfm?: PluginHookInput;
@@ -118,6 +120,7 @@ interface NormalizedSvartzPlugin {
   discoverFiles?: PluginHook;
   parseFrontmatter?: PluginHook;
   filterUnpublished?: PluginHook;
+  allocateRoutes?: PluginHook;
   resolveLinks?: PluginHook;
   transformOfm?: PluginHook;
   transformGfm?: PluginHook;

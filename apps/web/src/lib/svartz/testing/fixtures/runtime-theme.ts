@@ -23,18 +23,18 @@ export const theme = {
 export const routes = theme.routes;
 
 export function resolveRuntimeRoute(input: { pathname: string; slug?: string }) {
-	if (input.pathname === '/tags/testing/' || input.pathname === '/tags/testing') {
+	if (input.pathname === '/tags/other/' || input.pathname === '/tags/other') {
 		return {
-			route: routes[1],
+			route: routes[2],
 			layoutSlot: 'tagPage',
 			pathname: input.pathname,
-			params: { slug: 'testing' }
+			params: { slug: 'other' }
 		};
 	}
 
 	if (input.pathname === '/folders/guides/' || input.pathname === '/folders/guides') {
 		return {
-			route: routes[2],
+			route: routes[3],
 			layoutSlot: 'folderPage',
 			pathname: input.pathname,
 			params: { slug: 'guides' }

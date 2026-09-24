@@ -45,6 +45,18 @@ describe("SvartzConfigSchema", () => {
     expect(Either.isRight(result)).toBe(true);
   });
 
+  it("accepts static mount paths and rejects traversal or dynamic segments", () => {
+    const vault = { id: "blog", path: "vault", target: { type: "host" } };
+    expect(Either.isRight(decode(SvartzConfigSchema, {
+      version: "1.0.0", vaults: [{ ...vault, mountPath: "/blog/posts" }],
+    }))).toBe(true);
+    for (const mountPath of ["/blog/../private", "/blog/[slug]", "https://site.test/blog"]) {
+      expect(Either.isLeft(decode(SvartzConfigSchema, {
+        version: "1.0.0", vaults: [{ ...vault, mountPath }],
+      }))).toBe(true);
+    }
+  });
+
   it("rejects missing vaults field", () => {
     const result = decode(SvartzConfigSchema, { version: "1.0.0" });
     expect(Either.isLeft(result)).toBe(true);

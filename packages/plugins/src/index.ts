@@ -25,6 +25,7 @@ import {
   filterUnpublished,
   FILTER_UNPUBLISHED_ID,
 } from "./filter-unpublished";
+import { allocateRoutesPlugin, ALLOCATE_ROUTES_ID } from "./allocate-routes";
 import {
   resolveLinks,
   RESOLVE_LINKS_ID,
@@ -55,6 +56,7 @@ export const CORE_PLUGIN_IDS = [
   DISCOVER_FILES_ID,
   PARSE_FRONTMATTER_ID,
   FILTER_UNPUBLISHED_ID,
+  ALLOCATE_ROUTES_ID,
   RESOLVE_LINKS_ID,
   TRANSFORM_OFM_ID,
   TRANSFORM_GFM_ID,
@@ -121,6 +123,7 @@ function shouldHandleCoreChange(
   switch (pluginId) {
     case DISCOVER_FILES_ID:
     case RESOLVE_LINKS_ID:
+    case ALLOCATE_ROUTES_ID:
     case INDEX_CONTENT_ID:
     case EMIT_ARTIFACTS_ID:
       return true;
@@ -178,6 +181,7 @@ export function createCorePlugins(): NormalizedSvartzPlugin[] {
     discoverFiles(),
     parseFrontmatter(),
     filterUnpublished(),
+    allocateRoutesPlugin(),
     resolveLinks(),
     transformOfm(),
     transformGfm(),
@@ -196,6 +200,7 @@ export {
   discoverFiles,
   parseFrontmatter,
   filterUnpublished,
+  allocateRoutesPlugin,
   resolveLinks,
   transformOfm,
   transformGfm,
@@ -213,6 +218,7 @@ export {
   DISCOVER_FILES_ID,
   PARSE_FRONTMATTER_ID,
   FILTER_UNPUBLISHED_ID,
+  ALLOCATE_ROUTES_ID,
   RESOLVE_LINKS_ID,
   TRANSFORM_OFM_ID,
   TRANSFORM_GFM_ID,

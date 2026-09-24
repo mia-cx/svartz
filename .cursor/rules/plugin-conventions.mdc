@@ -38,7 +38,7 @@ alwaysApply: false
 ## Hook names are plugin-specific
 
 Hooks use granular names matching pipeline stages, not generic names:
-- `discoverFiles`, `parseFrontmatter`, `filterUnpublished`, `resolveLinks`
+- `discoverFiles`, `parseFrontmatter`, `filterUnpublished`, `allocateRoutes`, `resolveLinks`
 - `transformOfm`, `transformGfm`, `transformToc`, `transformDescription`, `transformSyntax`, `transformLatex`, `transformEmbeds`
 - `indexContent`, `emitArtifacts`
 - Lifecycle: `buildStart`, `configResolved`, `buildEnd`, `handleChange`
@@ -97,8 +97,10 @@ Duplicate ID replaces in-place; new ID appends; disabled removed.
 
 ## Determinism
 
-- Canonical slugs: full vault-relative path, extensionless, lowercased
-- Two files at different paths never produce the same slug
+- Discovery assigns provisional slugs; `allocateRoutes` assigns final slugs after `filterUnpublished`.
+- The allocator reserves natural URLs first. Exact authored filenames win; losers get the first free numeric suffix after all natural URLs and static host routes.
+- Keep `sourceBodies` keyed by source path until allocation. A provisional slug can collide.
+- Index entries, search documents, and routes carry final hrefs. Alias and permalink redirects only claim unoccupied routes.
 - Index entries sorted by slug; graph/backlinks keys sorted lexicographically
 - Link resolution tie-breaks: shared depth → path depth → lexicographic
 

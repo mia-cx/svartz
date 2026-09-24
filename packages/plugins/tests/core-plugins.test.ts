@@ -8,7 +8,7 @@ describe("createCorePlugins", () => {
   it("returns correct number of plugins", () => {
     const plugins = createCorePlugins();
     expect(plugins).toHaveLength(CORE_PLUGIN_IDS.length);
-    expect(plugins).toHaveLength(13);
+    expect(plugins).toHaveLength(14);
   });
 
   it("returns plugins in canonical order matching CORE_PLUGIN_IDS", () => {
@@ -98,7 +98,7 @@ describe("createCorePlugins", () => {
   });
 
   it("CORE_PLUGIN_IDS is readonly (as const)", () => {
-    expect(CORE_PLUGIN_IDS.length).toBe(13);
+    expect(CORE_PLUGIN_IDS.length).toBe(14);
     // TypeScript `as const` prevents mutation at compile-time
   });
 });
@@ -108,6 +108,7 @@ describe("CORE_PLUGIN_IDS", () => {
     expect(CORE_PLUGIN_IDS).toContain("core:discover-files");
     expect(CORE_PLUGIN_IDS).toContain("core:parse-frontmatter");
     expect(CORE_PLUGIN_IDS).toContain("core:filter-unpublished");
+    expect(CORE_PLUGIN_IDS).toContain("core:allocate-routes");
     expect(CORE_PLUGIN_IDS).toContain("core:resolve-links");
     expect(CORE_PLUGIN_IDS).toContain("core:transform-ofm");
     expect(CORE_PLUGIN_IDS).toContain("core:transform-gfm");

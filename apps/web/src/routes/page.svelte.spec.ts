@@ -18,13 +18,20 @@ describe('/+page.svelte', () => {
 
 describe('/[...slug]/+page.svelte', () => {
 	it('renders tag routes through the runtime shell', async () => {
-		render(SvartzRuntimePage, { pathname: '/tags/testing/' });
+		render(SvartzRuntimePage, { pathname: '/tags/other/' });
 
 		await expect.element(page.getByRole('heading', { level: 1 })).toHaveTextContent(
 			'Svartz test layout'
 		);
 		await expect.element(page.getByRole('heading', { level: 2 })).toHaveTextContent(
-			'Tag: testing'
+			'Tag: other'
+		);
+	});
+
+	it('renders an authored note ahead of a generated tag route', async () => {
+		render(SvartzRuntimePage, { pathname: '/tags/testing/' });
+		await expect.element(page.getByRole('heading', { level: 2 })).toHaveTextContent(
+			'Authored tag landing'
 		);
 	});
 
