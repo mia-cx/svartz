@@ -3,7 +3,7 @@ title: Mirelle Ashford
 description: The Lamplighter of Vessa, and the character most players start with.
 tags: [characters, lamplighters]
 featured: true
-hatnote: For the guild she leads, see Lamplighters' Guild.
+hatnote: "For the guild she leads, see [[Lamplighters' Guild]]."
 created_at: 2026-08-02
 updated_at: 2026-09-18
 image: mirelle.svg

@@ -1,6 +1,6 @@
 <!--
-	Wiki: a header with a wide search, a left rail with the portal and numbered
-	contents, and the article with its infobox, references, categories, and
+	Wiki: a header with a wide search and a section bar built from the vault's
+	folders, a left rail with the portal and numbered contents, and the article with its infobox, references, categories, and
 	"what links here". The home note becomes the main page, with a featured
 	article, recent changes, and category portals beneath it.
 -->
@@ -13,9 +13,11 @@
 	import X from '@lucide/svelte/icons/x';
 	import {
 		assetHref,
+		buildExplorerTree,
 		ColorModeToggle,
 		Comments,
 		count,
+		DescText,
 		formatDate,
 		isoDate,
 		LinkPreviews,
@@ -28,8 +30,9 @@
 	} from '@svartz/ui';
 	import Contents from '../components/Contents.svelte';
 	import Infobox from '../components/Infobox.svelte';
+	import SectionBar from '../components/SectionBar.svelte';
 	import { wikiRoutes } from '../manifest.js';
-	import { featuredNote, readHatnote, readInfobox } from '../wiki.js';
+	import { featuredNote, readHatnote, readInfobox, sectionMenu, type MenuLink } from '../wiki.js';
 
 	let { children, entry, vault, site, themeConfig, searchIndex, searchOptions }: ThemePageProps = $props();
 
@@ -53,6 +56,11 @@
 	const featured = $derived(featuredNote(vault.entries));
 	const recent = $derived(newestFirst(vault.entries.filter((note) => note.slug !== 'index')).slice(0, RECENT_ON_MAIN_PAGE));
 	const comments = $derived(entry?.page.comments ? settings.comments : undefined);
+	const menu = $derived(sectionMenu(buildExplorerTree(vault.entries, vault.folders), vault.folders));
+	const holds = (item: MenuLink): boolean =>
+		item.href === page.url.pathname || (item.folder?.items.some(holds) ?? false);
+	// The rail sticks under the header, whose height depends on the section bar.
+	let headerHeight = $state(0);
 
 	const portal = $derived([
 		{ label: 'Main page', href: homeHref },
@@ -73,7 +81,7 @@
 
 <a class="sv-skip-link" href="#content">Skip to content</a>
 
-<header class="wiki-header">
+<header class="wiki-header" bind:offsetHeight={headerHeight}>
 	<div class="header-inner">
 	<button
 		class="sv-icon-button menu"
@@ -88,11 +96,42 @@
 	<a class="sv-wordmark" href={homeHref}>{site.title}</a>
 	<div class="search"><SearchDialog documents={vault.search} {searchIndex} {searchOptions} /></div>
 	<ColorModeToggle />
+	{#if menu.length > 0}<div class="section-bar"><SectionBar {menu} currentPath={page.url.pathname} /></div>{/if}
 	</div>
 </header>
 
-<div class="wiki">
+{#snippet sectionTree(items: readonly MenuLink[], href: string, allHref: string, more: number)}
+	<ul>
+		<li><a href={href} aria-current={page.url.pathname === href ? 'page' : undefined}>Overview</a></li>
+		{#each items as item (item.id)}
+			<li>
+				{#if item.folder}
+					<details open={holds(item)}>
+						<summary>{item.title}</summary>
+						{@render sectionTree(item.folder.items, item.folder.href, item.folder.allHref, item.folder.more)}
+					</details>
+				{:else}
+					<a href={item.href} aria-current={page.url.pathname === item.href ? 'page' : undefined}>{item.title}</a>
+				{/if}
+			</li>
+		{/each}
+		{#if more}<li><a class="see-all" href={allHref}>See all {items.length + more}</a></li>{/if}
+	</ul>
+{/snippet}
+
+<div class="wiki" style:--wiki-head={headerHeight ? `${headerHeight}px` : undefined}>
 	<aside class="rail" id="wiki-rail" data-open={drawer ? '' : undefined} aria-label="Site">
+		{#if menu.length > 0}
+			<nav class="drawer-sections" aria-labelledby="drawer-sections-heading">
+				<h2 id="drawer-sections-heading" class="sv-section-title">Sections</h2>
+				{#each menu as folder (folder.id)}
+					<details open={folder.href === page.url.pathname || folder.items.some(holds)}>
+						<summary>{folder.title}</summary>
+						{@render sectionTree(folder.items, folder.href, folder.allHref, folder.more)}
+					</details>
+				{/each}
+			</nav>
+		{/if}
 		<nav class="portal" aria-labelledby="portal-heading">
 			<h2 id="portal-heading" class="sv-section-title">Navigation</h2>
 			<ul>
@@ -114,7 +153,7 @@
 					<h1>{entry.title}</h1>
 					<p class="tagline">From {site.title}</p>
 				</header>
-				{#if hatnote}<p class="hatnote">{hatnote}</p>{/if}
+				{#if hatnote}<p class="hatnote"><DescText value={hatnote} entries={vault.entries} /></p>{/if}
 				<article class="sv-prose wiki-prose">
 					{#if infobox}<Infobox {infobox} title={entry.title} imageSrc={infoboxImage} entries={vault.entries} />{/if}
 					{@render children?.()}
@@ -228,6 +267,16 @@
 		justify-self: end;
 	}
 
+	/* Under the search, aligned with the article. */
+	.section-bar {
+		grid-column: 2 / -1;
+		margin-block: var(--sv-space-1) calc(-1 * var(--sv-space-2));
+	}
+
+	.drawer-sections {
+		display: none;
+	}
+
 	.wiki-header .sv-wordmark {
 		font-size: var(--sv-step-1);
 		white-space: nowrap;
@@ -257,11 +306,11 @@
 
 	.rail {
 		position: sticky;
-		inset-block-start: 4rem;
+		inset-block-start: var(--wiki-head, 4rem);
 		display: grid;
 		align-content: start;
 		gap: var(--sv-space-6);
-		max-block-size: calc(100dvh - 4rem);
+		max-block-size: calc(100dvh - var(--wiki-head, 4rem));
 		padding-block: var(--sv-space-6);
 		overflow-y: auto;
 		scrollbar-width: thin;
@@ -520,6 +569,50 @@
 	@media (max-width: 56rem) {
 		.menu {
 			display: inline-grid;
+		}
+
+		.section-bar {
+			display: none;
+		}
+
+		.drawer-sections {
+			display: block;
+			font-size: var(--sv-step--1);
+		}
+
+		.drawer-sections ul {
+			display: grid;
+			gap: var(--sv-space-1);
+			margin: var(--sv-space-1) 0 var(--sv-space-2);
+			padding-inline-start: var(--sv-space-4);
+			border-inline-start: var(--sv-rule-width) solid var(--sv-rule);
+			list-style: none;
+		}
+
+		.drawer-sections summary::marker {
+			color: var(--sv-muted);
+		}
+
+		.drawer-sections summary {
+			padding-block: var(--sv-space-1);
+			color: var(--sv-ink);
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		.drawer-sections a {
+			color: var(--sv-text);
+			text-decoration: none;
+		}
+
+		.drawer-sections a[aria-current] {
+			color: var(--sv-ink);
+			font-weight: 600;
+		}
+
+		.drawer-sections .see-all {
+			color: var(--sv-accent-text);
+			font-weight: 600;
 		}
 
 		.header-inner {

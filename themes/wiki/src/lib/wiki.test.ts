@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { alphabetical, byDay, featuredNote, readHatnote, readInfobox } from './wiki.js';
+import type { ExplorerNode } from '@svartz/ui';
+import { alphabetical, byDay, featuredNote, readHatnote, readInfobox, sectionMenu } from './wiki.js';
 
 const note = (title: string, modifiedAt?: string, properties: Record<string, unknown> = {}) => ({
 	slug: title.toLowerCase(),
@@ -61,5 +62,44 @@ describe('page helpers', () => {
 
 	it('finds the featured article', () => {
 		expect(featuredNote([note('a'), note('b', undefined, { featured: true })])?.title).toBe('b');
+	});
+});
+
+describe('sectionMenu', () => {
+	const page = (slug: string): ExplorerNode => ({ id: `note:${slug}`, title: slug.split('/').at(-1)!, href: `/${slug}/`, children: [], isFolder: false });
+	const folder = (slug: string, title: string, children: ExplorerNode[]): ExplorerNode => ({
+		id: `folder:${slug}`,
+		title,
+		href: `/${slug}/`,
+		children,
+		isFolder: true
+	});
+	const tree = [
+		folder('characters', 'Characters', [
+			folder('characters/lamplighters', "Lamplighters' Guild", [
+				page('characters/lamplighters/mirelle'),
+				folder('characters/lamplighters/wardens', 'Wardens', [page('characters/lamplighters/wardens/ada')])
+			]),
+			page('characters/quill'),
+			page('characters/zed')
+		]),
+		page('about')
+	];
+	const folders = [
+		{ slug: 'characters', href: '/folders/characters/' },
+		{ slug: 'characters/lamplighters', href: '/folders/characters/lamplighters/' }
+	];
+
+	it('makes top-level folders the bar, subfolders flyouts, and deeper folders plain links', () => {
+		const [characters, ...rest] = sectionMenu(tree, folders, 2);
+		expect(rest).toEqual([]);
+		expect(characters).toMatchObject({ title: 'Characters', allHref: '/folders/characters/', more: 1 });
+		expect(characters!.items.map((item) => item.title)).toEqual(["Lamplighters' Guild", 'quill']);
+		const guild = characters!.items[0]!.folder!;
+		expect(guild.items.map((item) => [item.title, item.folder])).toEqual([
+			['mirelle', undefined],
+			['Wardens', undefined]
+		]);
+		expect(guild.allHref).toBe('/folders/characters/lamplighters/');
 	});
 });

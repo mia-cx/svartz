@@ -26,9 +26,16 @@
 		font-size: 0.86em;
 	}
 
+	/* Matches `.sv-prose a`, so frontmatter links read like body links. */
 	a {
 		color: var(--sv-ink);
+		text-decoration-line: underline;
 		text-decoration-color: var(--sv-accent);
+		text-decoration-thickness: 1.5px;
 		text-underline-offset: 0.2em;
+	}
+
+	a:hover {
+		color: var(--sv-accent-text);
 	}
 </style>

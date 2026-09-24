@@ -1,4 +1,4 @@
-import { isRecord, newestFirst, noteDate } from '@svartz/ui';
+import { isRecord, newestFirst, noteDate, type ExplorerNode } from '@svartz/ui';
 
 type Properties = Readonly<Record<string, unknown>>;
 
@@ -96,3 +96,51 @@ export function byDay<T extends Listable>(entries: readonly T[]): { date: string
 /** The note marked `featured: true`, for the main page. */
 export const featuredNote = <T extends Listable>(entries: readonly T[]) =>
 	entries.find((entry) => entry.properties.featured === true);
+
+// --- Section menu ------------------------------------------------------------
+
+/** Pages a dropdown shows before it links to the folder's full list. */
+export const MENU_LIMIT = 12;
+/** The bar, its dropdowns, and one level of flyouts, as on Fandom. */
+const MENU_DEPTH = 2;
+
+export interface MenuLink {
+	readonly id: string;
+	readonly title: string;
+	readonly href: string;
+	/** Set on a subfolder that opens as a flyout. */
+	readonly folder?: MenuFolder;
+}
+
+export interface MenuFolder extends MenuLink {
+	/** The folder's generated list page, where every page is listed. */
+	readonly allHref: string;
+	readonly items: readonly MenuLink[];
+	/** Children past the limit, reachable through `allHref`. */
+	readonly more: number;
+}
+
+/**
+ * The header's section menu, from the vault's folders: each top-level folder is a
+ * bar item, its notes and subfolders fill the dropdown, and a subfolder opens as a
+ * flyout. Deeper folders are plain links. Notes at the vault root stay out.
+ */
+export function sectionMenu(
+	tree: readonly ExplorerNode[],
+	folders: readonly { readonly slug: string; readonly href: string }[],
+	limit = MENU_LIMIT
+): MenuFolder[] {
+	const toFolder = (node: ExplorerNode, depth: number): MenuFolder => ({
+		id: node.id,
+		title: node.title,
+		href: node.href,
+		allHref: folders.find((folder) => `folder:${folder.slug}` === node.id)?.href ?? node.href,
+		items: node.children.slice(0, limit).map((child): MenuLink =>
+			child.isFolder && child.children.length > 0 && depth < MENU_DEPTH
+				? { id: child.id, title: child.title, href: child.href, folder: toFolder(child, depth + 1) }
+				: { id: child.id, title: child.title, href: child.href }
+		),
+		more: Math.max(0, node.children.length - limit)
+	});
+	return tree.filter((node) => node.isFolder).map((node) => toFolder(node, 1));
+}
