@@ -72,6 +72,7 @@ function getThemeWatchDescriptors(
   themeBase: string,
   appRoot: string,
   workspaceRoot: string,
+  buildWorkspaceTheme = true,
 ): WatchDescriptor[] {
   const themeRoot = resolveThemePackageRoot(themeBase, appRoot);
   if (!themeRoot) return [];
@@ -84,7 +85,7 @@ function getThemeWatchDescriptors(
 
   const packageJsonPath = path.join(themeRoot, "package.json");
   const manifest = JSON.parse(readFileSync(packageJsonPath, "utf8")) as { name?: unknown };
-  const buildFilters = typeof manifest.name === "string" ? [manifest.name] : [];
+  const buildFilters = buildWorkspaceTheme && typeof manifest.name === "string" ? [manifest.name] : [];
   const sourcePath = path.join(themeRoot, "src");
   return [
     {

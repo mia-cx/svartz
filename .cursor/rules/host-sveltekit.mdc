@@ -1,0 +1,15 @@
+---
+description: Preserve existing SvelteKit hosts when running the Svartz CLI
+globs:
+  - packages/cli/**
+  - packages/config/**
+alwaysApply: false
+---
+
+# SvelteKit host ownership
+
+- Detect an existing SvelteKit app at the Svartz config root before falling back to the repository's `apps/web` shell.
+- A host app owns its routes, layouts, adapter, scripts, Vite config, and `.svelte-kit` directory. The CLI injects `@svartz/vite` for its own commands but must not rewrite those host files.
+- `target: { type: "host" }` leaves adapter selection to the host. The CLI keeps repository-only adapter and Turbo behavior for the standalone `apps/web` shell.
+- Svartz-generated artifacts stay under `.svartz/vaults/<id>`; the host's build output stays where its adapter puts it.
+- Local workspace theme package builds use the package name, not a theme path. Ordinary host apps restart on local theme edits without running a pnpm workspace filter.

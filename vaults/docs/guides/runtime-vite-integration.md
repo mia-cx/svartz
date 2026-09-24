@@ -4,15 +4,17 @@ How Svartz bridges a single resolved vault build into SvelteKit with `@svartz/vi
 
 ## Overview
 
-`@svartz/vite` is not a route generator for `apps/web`. Instead, it:
+`@svartz/vite` integrates with the repository shell or an existing SvelteKit host. It:
 
 - accepts one CLI-resolved `ResolvedConfig`
 - runs the Svartz pipeline for that vault
 - materializes vault-scoped runtime artifacts
 - exposes those artifacts through virtual modules
-- lets static SvelteKit routes continue to live in `apps/web`
+- lets the SvelteKit app keep ownership of its routes and adapter
 
 This keeps multi-vault builds isolated while preserving normal SvelteKit route precedence.
+
+For an existing app, put `svartz.config.ts` beside its `package.json` and `vite.config.ts`. Set the vault target to `{ type: "host" }` and run `svartz build --vault <id>` or `svartz dev --vault <id>`. The CLI injects its Vite plugin for these commands. It keeps the host's scripts, routes, adapter, and `.svelte-kit` files. Svartz artifacts stay under `.svartz/vaults/<id>`; the host adapter decides the final output location. The host can import `virtual:svartz/artifacts` to use published content in its own pages.
 
 ## Config Handoff
 

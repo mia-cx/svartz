@@ -1,6 +1,6 @@
 # `svartz`
 
-`svartz` is the orchestration CLI for building and serving one resolved vault at a time through `apps/web`.
+`svartz` builds and serves configured vaults through SvelteKit. It uses an existing SvelteKit app at the config root, or the repository's `apps/web` shell.
 
 It loads `svartz.config.ts`, resolves the selected vault, injects `@svartz/vite` into the app build, and prepares a vault-scoped workspace under `.svartz/vaults/<vaultId>/`.
 
@@ -19,12 +19,14 @@ Use `svartz build --vault <id>` when you want to target a single vault.
 
 ## Turbo task sync
 
-After the CLI resolves `svartz.config.ts`, it syncs a managed Turbo/package surface at the config root:
+For the repository shell, the CLI syncs a managed Turbo/package surface at the config root:
 
 - `package.json` scripts: `svartz:build`, `svartz:build:<vault-id>`, `svartz:dev:<vault-id>`, `svartz:preview:<vault-id>`, plus `svartz:dev`/`svartz:preview` fan-out scripts.
 - `turbo.json` tasks: `//#svartz:build`, `//#svartz:build:<vault-id>`, `//#svartz:dev:<vault-id>`, and `//#svartz:preview:<vault-id>`.
 
 The CLI only rewrites those managed `svartz:*` / `//#svartz:*` entries, so existing non-Svartz scripts and Turbo tasks stay untouched.
+
+In an existing SvelteKit app, it leaves `package.json`, `turbo.json`, routes, Vite config, adapter, and `.svelte-kit` alone. Run `svartz build --vault <id>` or `svartz dev --vault <id>` with `target: { type: "host" }` for each vault. The host's adapter controls its final output. Host route files continue to take precedence. The host can import `virtual:svartz/artifacts` for published metadata and note components.
 
 ## Per-Vault Workspace Contract
 
@@ -38,7 +40,7 @@ For a vault like `docs`, the CLI now prepares:
 └── node_modules   # symlink to apps/web/node_modules for isolated prerender output
 ```
 
-This keeps parallel or repeated vault builds from sharing a single `apps/web/.svelte-kit` directory while still letting SvelteKit's prerender server resolve package dependencies.
+The repository shell keeps parallel vault builds from sharing `apps/web/.svelte-kit`. Existing hosts keep their own `.svelte-kit` and adapter output; Svartz only creates the vault-scoped artifacts and dependency bridge.
 
 ## Build Env Passed To `apps/web`
 
