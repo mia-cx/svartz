@@ -30,7 +30,7 @@ The hook shorthand is a function receiving `ctx`. The full form is `{ run, optio
 
 ## Compiler and browser resources
 
-Transformers can register remark or rehype plugins with `getCompilerContributions(ctx)`. They can also declare browser CSS, scripts, and assets in `browserResources` by stable ID. The artifact virtual module imports only resources contributed by active hooks in this build. Asset entries also appear as URLs in its `browserResources` export. The next build starts with a fresh contribution set, so removing a note or disabling a feature removes its unused resources.
+Transformers can register remark or rehype plugins with `getCompilerContributions(ctx)`. They can also declare browser CSS, scripts, and assets in `browserResources` by stable ID. The artifact virtual module imports only resources contributed by active hooks in this build. Scripts load only in the browser. Asset entries also appear as URLs in its `browserResources` export. The next build starts with a fresh contribution set, so removing a note or disabling a feature removes its unused resources.
 
 `transformGfm()` registers remark-gfm. `transformSyntax(options?)` registers rehype-pretty-code when published notes contain code. `transformLatex(options?)` renders math with KaTeX and contributes its stylesheet only when published notes use math. The emitter does not install these features itself. A replacement with the same plugin ID owns the entire hook and its resources.
 

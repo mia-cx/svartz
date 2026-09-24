@@ -74,6 +74,8 @@ function createArtifactsVirtualModuleSource(
   const resourceImports = browserResources.map((resource, index) =>
     resource.kind === "asset"
       ? `import browserAsset${index} from ${JSON.stringify(resource.importId)};`
+      : resource.kind === "script"
+      ? `if (!import.meta.env.SSR) void import(${JSON.stringify(resource.importId)});`
       : `import ${JSON.stringify(resource.importId)};`,
   ).join("\n");
   const resourceUrls = browserResources.flatMap((resource, index) =>

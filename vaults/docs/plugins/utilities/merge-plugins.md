@@ -4,7 +4,7 @@ Merges plugins from multiple layers with specificity-based conflict resolution.
 
 **Source:** `@svartz/core` — `packages/core/src/plugin/merge.ts`
 
-See [[contracts/plugin-contract#Utility Functions]] for contract details.
+See [[contracts/plugin-contract]] for contract details.
 
 ## Signature
 

@@ -85,7 +85,7 @@ Plugins from 4 layers merge with conflict resolution (by-id replacement):
 3. Config defaults plugins
 4. Config vault plugins (most specific)
 
-See [[contracts/plugin-contract#Utility Functions]] for merge logic.
+See [[contracts/plugin-contract]] for merge logic.
 
 ### Contract Versioning
 
@@ -94,7 +94,7 @@ Both plugins and themes declare `contractVersion` (semver):
 - Validation error on mismatch
 - Ensures compatibility across updates
 
-See [[contracts/plugin-contract#Contract Versioning]] for details.
+See [[contracts/plugin-contract]] for the plugin contract.
 
 ---
 
@@ -116,7 +116,7 @@ See [[contracts/plugin-contract#Contract Versioning]] for details.
 
 **Find code examples** → [[reference/quick-reference]]
 
-**Debug configuration issues** → [[contracts/config-contract#Troubleshooting]]
+**Debug configuration issues** → [[contracts/config-contract]]
 
 ---
 
@@ -150,20 +150,6 @@ See [[contracts/config-contract]]
 
 ---
 
-## JSDoc Alignment
-
-**Status:** ✅ All public functions include comprehensive JSDoc
-
-### Coverage
-
-- ✅ `@svartz/core` — Plugin/theme contracts, utilities
-- ✅ `@svartz/plugins` — All core plugins and utilities
-- ✅ `@svartz/config` — Public API and errors
-
-See [[reference/IMPLEMENTATION-SUMMARY#JSDoc Alignment]] for full details.
-
----
-
 ## Best Practices
 
 ### Plugin Authoring
@@ -174,7 +160,7 @@ See [[reference/IMPLEMENTATION-SUMMARY#JSDoc Alignment]] for full details.
 - Test in isolation before integrating
 - Mutate files in-place for efficiency
 
-See [[guides/create-plugin#Best Practices]]
+See [[guides/create-plugin]].
 
 ### Theme Authoring
 
@@ -193,7 +179,7 @@ See [[guides/create-theme#Best Practices]]
 - Override per-vault when needed
 - Validate your config
 
-See [[guides/setup-config#Troubleshooting]]
+See [[guides/setup-config]].
 
 ---
 

@@ -12,7 +12,7 @@ Active plugins alone control compiler steps and browser resources. Optional tran
 - [x] Compile `.md` as inert Markdown and `.svx` as executable Svelte, with a behavioral test.
 - [x] Capture Knowledge: update plugin conventions with the compiler/resource lifecycle and stage requirements.
 - [x] Documentation: update authoring and pipeline docs for plugin options and note formats.
-- [ ] Review & Close: run focused and workspace checks, inspect build output, and file a stacked PR.
+- [x] Review & Close: run focused and workspace checks, inspect build output, and file a stacked PR.
 
 ## Constraints
 
@@ -25,3 +25,4 @@ The accepted contract is in #29. Keep fixed stage names, same-ID replacement, pr
 - Step 3: 91 core and 19 Vite tests pass. A static docs build emitted KaTeX CSS/fonts for a math note; the next build removed them with the note.
 - Step 4: 73 plugin tests and the docs static build pass. Svelte compiler AST confirms authored scripts execute only in `.svx`.
 - Step 5: docs now describe dedicated stages, active compiler resources, and inert Markdown. A same-ID replacement test confirms old KaTeX resources do not survive.
+- Final review: workspace build and all 16 test tasks passed. The docs static build passed without broken anchors. Browser scripts now import only in the client; focused Vite tests pass.

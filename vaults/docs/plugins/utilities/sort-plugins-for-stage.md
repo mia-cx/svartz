@@ -4,7 +4,7 @@ Sorts plugins for a given stage based on `enforce` level.
 
 **Source:** `@svartz/core` — `packages/core/src/plugin/utils.ts`
 
-See [[contracts/plugin-contract#Utility Functions]] for contract details.
+See [[contracts/plugin-contract]] for contract details.
 
 ## Signature
 
