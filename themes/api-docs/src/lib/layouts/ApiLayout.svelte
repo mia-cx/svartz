@@ -152,7 +152,8 @@
 		align-items: center;
 		gap: var(--sv-space-3);
 		block-size: 3.5rem;
-		padding-inline: var(--sv-space-5);
+		/* Edges line up with the centred page below on wide screens. */
+		padding-inline: max(var(--sv-space-5), (100% - 100rem) / 2 + var(--sv-space-5));
 		border-block-end: var(--sv-rule-width) solid var(--sv-rule);
 		background: var(--sv-paper);
 	}
@@ -216,7 +217,8 @@
 
 	.split {
 		display: grid;
-		grid-template-columns: minmax(0, var(--sv-measure)) minmax(20rem, 1fr);
+		/* The examples yield first: a share of the width, clamped, and the reference takes the rest. */
+		grid-template-columns: minmax(0, var(--sv-measure)) clamp(20rem, 35%, 34rem);
 		gap: var(--sv-space-7);
 		align-items: start;
 	}
@@ -328,10 +330,10 @@
 		color: var(--sv-text);
 	}
 
-	/* Examples drop below the reference before the sidebar goes. */
-	@media (max-width: 80rem) {
+	/* Examples drop below the reference before the sidebar goes; both keep the reading width. */
+	@media (max-width: 72rem) {
 		.split {
-			grid-template-columns: minmax(0, 1fr);
+			grid-template-columns: minmax(0, var(--sv-measure));
 		}
 
 		.examples {
