@@ -10,16 +10,13 @@
 import GithubSlugger from "github-slugger";
 import { posix } from "node:path";
 import { definePlugin } from "@svartz/core";
-import remarkParse from "remark-parse";
-import { unified } from "unified";
-import { visit } from "unist-util-visit";
 import { createAssetResolver } from "./internal/asset-references";
+import { findRawLinkSpans } from "./internal/parse";
 import { resolveLink, buildSlugMap } from "./internal/resolve";
 import { alternateNames, routeHref } from "./internal/routes";
 
 const MARKDOWN_ASSET = /(!?\[[^\]]*\]\()([^\s)]+)(\))/g;
 const HTML_ASSET = /(<(?:a|audio|iframe|img|source|video)\b[^>]*\b(?:href|src)\s*=\s*["'])([^"']+)(["'][^>]*>)/gi;
-const markdownParser = unified().use(remarkParse);
 
 function isMarkdownFile(extension: string | undefined): boolean {
   return extension !== undefined && [".md", ".mdx", ".svx"].includes(extension);
@@ -63,26 +60,12 @@ function replaceLinkMarkup(
   label: string,
   type: "wikilink" | "markdown",
 ): string {
-  if (type === "wikilink") return replaceWikilinkMarkup(markdown, raw, `<a href="${href}">${escapeHtml(label)}</a>`);
-  const pattern = new RegExp(`(?<!!)${raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "g");
-  return markdown.replace(pattern, () => `<a href="${href}">${escapeHtml(label)}</a>`);
+  return replaceAuthoredLinkMarkup(markdown, raw, type, `<a href="${href}">${escapeHtml(label)}</a>`);
 }
 
-function replaceWikilinkMarkup(markdown: string, raw: string, html: string): string {
-  const pattern = new RegExp(raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
-  const replacements: { start: number; end: number }[] = [];
-  visit(markdownParser.parse(markdown), "text", (node) => {
-    const start = node.position?.start.offset;
-    const end = node.position?.end.offset;
-    if (start === undefined || end === undefined) return;
-    for (const match of markdown.slice(start, end).matchAll(pattern)) {
-      const offset = start + match.index!;
-      if (markdown[offset - 1] === "!") continue;
-      replacements.push({ start: offset, end: offset + raw.length });
-    }
-  });
+function replaceAuthoredLinkMarkup(markdown: string, raw: string, type: "wikilink" | "markdown", html: string): string {
   let content = markdown;
-  for (const replacement of replacements.reverse()) {
+  for (const replacement of findRawLinkSpans(markdown, raw, type).reverse()) {
     content = content.slice(0, replacement.start) + html + content.slice(replacement.end);
   }
   return content;
@@ -95,7 +78,7 @@ function escapeHtml(value: string): string {
 }
 
 function replaceMissingWikilink(markdown: string, raw: string, label: string): string {
-  return replaceWikilinkMarkup(markdown, raw,
+  return replaceAuthoredLinkMarkup(markdown, raw, "wikilink",
     `<span class="svartz-unresolved-link" role="link" aria-disabled="true">${escapeHtml(label)}</span>`);
 }
 

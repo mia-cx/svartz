@@ -6,9 +6,29 @@
 import matter from "gray-matter";
 import GithubSlugger from "github-slugger";
 import type { RawLink, TocEntry } from "@svartz/core";
+import { toString } from "mdast-util-to-string";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
+import { SKIP, visit } from "unist-util-visit";
 
 const FRONTMATTER_BLOCK_REGEX = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/;
 const TEMPLATER_TAG_REGEX = /<%[\s\S]*?%>/g;
+const markdownParser = unified().use(remarkParse);
+
+function isEscaped(source: string, offset: number): boolean {
+  let slashes = 0;
+  for (let index = offset - 1; source[index] === "\\"; index -= 1) slashes += 1;
+  return slashes % 2 === 1;
+}
+
+function htmlElementRanges(markdown: string): { start: number; end: number }[] {
+  return [...markdown.matchAll(/<([a-z][\w-]*)\b[^>]*>[\s\S]*?<\/\1\s*>/gi)]
+    .map((match) => ({ start: match.index!, end: match.index! + match[0].length }));
+}
+
+function inRange(offset: number, ranges: { start: number; end: number }[]): boolean {
+  return ranges.some(({ start, end }) => start <= offset && offset < end);
+}
 
 function sanitizeFrontmatterSource(frontmatterSource: string): string {
   return frontmatterSource.replace(TEMPLATER_TAG_REGEX, "svartz-templater");
@@ -42,57 +62,55 @@ export const extractFrontmatter = (
   }
 };
 
-export const extractRawLinks = (markdown: string): RawLink[] => {
-  const links: RawLink[] = [];
+type PositionedLink = RawLink & { start: number; end: number };
 
+function collectLinkSpans(markdown: string): PositionedLink[] {
+  const links: PositionedLink[] = [];
+  const htmlRanges = htmlElementRanges(markdown);
   const wikilinkRegex = /(?<!!)\[\[([^\]]+)\]\]/g;
-  let match;
-  while ((match = wikilinkRegex.exec(markdown)) !== null) {
-    const inner = match[1]!;
-    const [targetWithSection, ...labelParts] = inner.split("|");
-    const label = labelParts.length > 0 ? labelParts.join("|") : undefined;
-    const [target, section] = targetWithSection!.split("#");
+  visit(markdownParser.parse(markdown), (node) => {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (start === undefined || end === undefined || inRange(start, htmlRanges)) return;
 
-    if (
-      target &&
-      (target.startsWith("http://") || target.startsWith("https://"))
-    ) {
-      continue;
+    if (node.type === "text") {
+      for (const match of markdown.slice(start, end).matchAll(wikilinkRegex)) {
+        const offset = start + match.index!;
+        if (markdown[offset - 1] === "!" || isEscaped(markdown, offset)) continue;
+        const [targetWithSection, ...labelParts] = match[1]!.split("|");
+        const [target, section] = targetWithSection!.split("#");
+        if (target?.startsWith("http://") || target?.startsWith("https://")) continue;
+        links.push({
+          raw: match[0], target: target ?? "", section: section || undefined,
+          label: labelParts.length ? labelParts.join("|") : undefined, type: "wikilink",
+          start: offset, end: offset + match[0].length,
+        });
+      }
+      return;
     }
 
+    if (node.type === "linkReference") return SKIP;
+    if (node.type !== "link") return;
+    if (/^[a-z][\w+.-]*:/i.test(node.url) || node.url.startsWith("//")) return SKIP;
+    const [target, section] = node.url.split("#");
     links.push({
-      raw: match[0],
-      target: target ?? "",
-      section: section ?? undefined,
-      label,
-      type: "wikilink",
+      raw: markdown.slice(start, end), target: target ?? "", section: section || undefined,
+      label: toString(node), type: "markdown", start, end,
     });
-  }
-
-  const mdLinkRegex = /(?<!!)\[([^\]]*)\]\(([^)]+)\)/g;
-  while ((match = mdLinkRegex.exec(markdown)) !== null) {
-    const href = match[2]!;
-
-    if (
-      href.startsWith("http://") ||
-      href.startsWith("https://") ||
-      href.startsWith("mailto:")
-    ) {
-      continue;
-    }
-
-    const [target, section] = href.split("#");
-    links.push({
-      raw: match[0],
-      target: target ?? "",
-      section: section ?? undefined,
-      label: match[1] ?? undefined,
-      type: "markdown",
-    });
-  }
-
+    return SKIP;
+  });
   return links;
-};
+}
+
+export const extractRawLinks = (markdown: string): RawLink[] =>
+  collectLinkSpans(markdown).map(({ start: _start, end: _end, ...link }) => link);
+
+/** Source spans for authored links; excludes code, embeds, escaped text, and raw HTML. */
+export function findRawLinkSpans(markdown: string, raw: string, type: RawLink["type"]): { start: number; end: number }[] {
+  return collectLinkSpans(markdown)
+    .filter((link) => link.raw === raw && link.type === type)
+    .map(({ start, end }) => ({ start, end }));
+}
 
 export const stripMarkdownToText = (markdown: string): string =>
   markdown
@@ -128,86 +146,30 @@ export const countWords = (markdown: string): number => {
 };
 
 export const extractHeadings = (markdown: string): TocEntry[] => {
-  const slugger = new GithubSlugger();
-  const toc: TocEntry[] = [];
-  const lines = markdown.split("\n");
-  let inCodeFence = false;
-
-  for (const line of lines) {
-    if (/^```/.test(line.trim())) {
-      inCodeFence = !inCodeFence;
-      continue;
-    }
-
-    if (inCodeFence) continue;
-
-    const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
-    if (!match) continue;
-
-    const text = match[2]!
-      .replace(/!?\[\[([^\]|]*?)(?:\|([^\]]*))?\]\]/g, (_m, target, label) => label ?? target)
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .replace(/[*_`~]/g, "")
-      .trim();
-    if (text.length === 0) continue;
-
-    toc.push({
-      depth: match[1]!.length,
-      text,
-      slug: slugger.slug(text),
-    });
-  }
-
-  return toc;
+  return headingEntries(markdown).map(({ depth, text, slug }) => ({ depth, text, slug }));
 };
+
+function headingEntries(markdown: string): (TocEntry & { line: number })[] {
+  const slugger = new GithubSlugger();
+  const headings: (TocEntry & { line: number })[] = [];
+  visit(markdownParser.parse(markdown), "heading", (node) => {
+    const text = toString(node)
+      .replace(/!?\[\[([^\]|]*?)(?:\|([^\]]*))?\]\]/g, (_m, target, label) => label ?? target)
+      .trim();
+    if (!text || !node.position) return;
+    headings.push({ depth: node.depth, text, slug: slugger.slug(text), line: node.position.start.line - 1 });
+  });
+  return headings;
+}
 
 export const extractSectionMarkdown = (
   markdown: string,
   headingSlug: string,
 ): string | undefined => {
   const lines = markdown.split("\n");
-  const slugger = new GithubSlugger();
-  let inCodeFence = false;
-  let startIndex = -1;
-  let startDepth = 0;
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index]!;
-    if (/^```/.test(line.trim())) {
-      inCodeFence = !inCodeFence;
-      continue;
-    }
-
-    if (inCodeFence) continue;
-
-    const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
-    if (!match) continue;
-
-    if (slugger.slug(match[2]!.trim()) !== headingSlug) continue;
-    startIndex = index;
-    startDepth = match[1]!.length;
-    break;
-  }
-
-  if (startIndex === -1) return undefined;
-
-  inCodeFence = false;
-  let endIndex = lines.length;
-  for (let index = startIndex + 1; index < lines.length; index += 1) {
-    const line = lines[index]!;
-    if (/^```/.test(line.trim())) {
-      inCodeFence = !inCodeFence;
-      continue;
-    }
-
-    if (inCodeFence) continue;
-
-    const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
-    if (match && match[1]!.length <= startDepth) {
-      endIndex = index;
-      break;
-    }
-  }
-
-  return lines.slice(startIndex, endIndex).join("\n").trim();
+  const headings = headingEntries(markdown);
+  const start = headings.findIndex(({ slug }) => slug === headingSlug);
+  if (start < 0) return undefined;
+  const end = headings.slice(start + 1).find(({ depth }) => depth <= headings[start]!.depth)?.line ?? lines.length;
+  return lines.slice(headings[start]!.line, end).join("\n").trim();
 };

@@ -133,4 +133,20 @@ describe("canonical route allocation", () => {
     expect(ctx.files[0]!.content).toContain('<span class="svartz-unresolved-link" role="link" aria-disabled="true">missing</span> `[[missing]]`');
     expect(ctx.files[0]!.content).toContain("```md\n[[missing]]\n```");
   });
+
+  it("rewrites only authored Markdown links and keeps code out of the graph", () => {
+    const ctx = context([
+      note("target.md", "Target"),
+      note("links.md", "[target](target.md) `[target](target.md)`\n\n```md\n[private](private.md)\n```"),
+      note("private.md", "---\nprivate: true\n---\nSecret"),
+    ]);
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    filterUnpublished().filterUnpublished!.run(ctx);
+    allocateRoutesPlugin().allocateRoutes!.run(ctx);
+    resolveLinks().resolveLinks!.run(ctx);
+    const links = ctx.files.find((file) => file.path === "links.md")!;
+    expect(links.content).toContain('<a href="../target/">target</a> `[target](target.md)`');
+    expect(links.content).toContain("[private](private.md)");
+    expect(links.links).toEqual(["target"]);
+  });
 });
