@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ancestorFolderIdsForSlug, buildBreadcrumbs, buildExplorerTree } from './navigation';
+import { ancestorFolderIdsForSlug, buildBreadcrumbs, buildExplorerTree } from './navigation.js';
 
 describe('explorer tree', () => {
 	const entry = (slug: string, title: string) => ({ slug, title, href: `/${slug}/` });

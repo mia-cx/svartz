@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { resolveCallout } from './callouts';
-import { classifyLink } from './links';
+import { resolveCallout } from './callouts.js';
+import { classifyLink } from './links.js';
 import { formatDate, readingTime } from '../format';
 import { excerpt, highlight, parseSearchQuery } from '../search';
 

@@ -7,7 +7,7 @@ export { default as NoteHeader } from './NoteHeader.svelte';
 export { default as RecentNotes } from './RecentNotes.svelte';
 export { default as SearchBox } from './SearchBox.svelte';
 export { default as TableOfContents } from './TableOfContents.svelte';
-export { SVARTZ_MARK_SVG, svartzSocialImage } from './brand';
+export { SVARTZ_MARK_SVG, svartzSocialImage } from './brand.js';
 export type { ThemePageProps, ThemeRouteMatch } from './runtime/theme-props.js';
 export type { ContentComponentProps } from './runtime/content-components.js';
 export { default as ColorModeToggle } from './ColorModeToggle.svelte';
@@ -40,7 +40,7 @@ export {
 	type SearchOptions,
 	type TextSegment
 } from './search.js';
-export { explorerOpenIds } from './stores';
+export { explorerOpenIds } from './stores.js';
 export {
 	ancestorFolderIdsForSlug,
 	buildBreadcrumbs,
@@ -52,4 +52,4 @@ export {
 	type UiFolderEntry,
 	type UiIndexEntry,
 	type UiTagEntry
-} from './navigation';
+} from './navigation.js';

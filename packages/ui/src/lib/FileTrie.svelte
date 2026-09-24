@@ -5,8 +5,8 @@
 		type ExplorerNode,
 		type UiIndexEntry,
 		type UiFolderEntry
-	} from './navigation';
-	import { explorerOpenIds } from './stores';
+	} from './navigation.js';
+	import { explorerOpenIds } from './stores.js';
 
 	let {
 		entries = [],
