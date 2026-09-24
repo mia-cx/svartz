@@ -172,6 +172,43 @@ it("keeps a host-owned catchall route", async () => {
     .rejects.toMatchObject({ code: "ENOENT" });
 });
 
+it("upgrades only the previous Svartz catchall loader", async () => {
+  const root = await fixture();
+  await mkdir(path.join(root, "src/routes"), { recursive: true });
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    name: "host-app",
+    dependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+  await initProject({ cwd: root, install: false, git: false });
+
+  const catchall = path.join(root, "src/routes/[...slug]/+page.ts");
+  const legacy = `import type { EntryGenerator } from './$types';
+import { error, redirect } from '@sveltejs/kit';
+import { base } from '$app/paths';
+import { routes } from 'virtual:svartz/host';
+
+export const load = ({ url }) => {
+  const appPath = base ? url.pathname.slice(base.length) || '/' : url.pathname;
+  const pathname = appPath.endsWith('/') ? appPath : \`\${appPath}/\`;
+  const destination = routes.redirects[pathname];
+  if (destination) redirect(308, \`\${base}\${destination}\`);
+  if (!routes.all.includes(pathname)) error(404);
+};
+
+export const entries: EntryGenerator = async () => routes.all
+  .map((pathname) => ({ slug: pathname.replace(/^\\/+|\\/+$/g, '') }));
+`;
+  await writeFile(catchall, legacy);
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
+  expect(await readFile(catchall, "utf8")).toContain("await prepareHostVault(pathname)");
+
+  const custom = "export const load = () => ({ custom: true });\n";
+  await writeFile(catchall, custom);
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("already-configured");
+  expect(await readFile(catchall, "utf8")).toBe(custom);
+});
+
 it("reports an existing config without a Kit app instead of replacing it", async () => {
   const root = await fixture();
   await writeFile(path.join(root, "svartz.config.mjs"), "export default {};\n");

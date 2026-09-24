@@ -219,8 +219,16 @@ export async function initProject(
 
   if (location.hostApp) {
     const catchallRoot = path.join(root, "src", "routes", "[...slug]");
+    const catchallLoadPath = path.join(catchallRoot, "+page.ts");
     const installCatchall = !existsSync(path.join(catchallRoot, "+page.svelte")) &&
-      !existsSync(path.join(catchallRoot, "+page.ts"));
+      !existsSync(catchallLoadPath);
+    const catchallLoadTemplate = await readFile(path.join(templateRoot, "src", "routes", "[...slug]", "+page.ts"), "utf8");
+    const previousCatchallLoad = catchallLoadTemplate
+      .replace("import { prepareHostVault, routes }", "import { routes }")
+      .replace("export const load = async", "export const load =")
+      .replace("  await prepareHostVault(pathname);\n", "");
+    const migrateCatchall = existsSync(catchallLoadPath) &&
+      await readFile(catchallLoadPath, "utf8") === previousCatchallLoad;
     const viteSource = await readFile(location.viteConfigPath, "utf8");
     const integratedViteSource = integrateViteConfig(viteSource);
     const integratedManifest = integrateManifest(existingManifest ?? {});
@@ -230,7 +238,8 @@ export async function initProject(
       existingConfig &&
       integratedViteSource === viteSource &&
       !manifestChanged &&
-      !installCatchall
+      !installCatchall &&
+      !migrateCatchall
     ) {
       return { kind: "already-configured", packageManager: manager };
     }
@@ -264,6 +273,7 @@ export async function initProject(
         );
       }
     }
+    if (migrateCatchall) await writeFile(catchallLoadPath, catchallLoadTemplate);
     if (manifestChanged)
       await writeFile(
         existingManifestPath,
