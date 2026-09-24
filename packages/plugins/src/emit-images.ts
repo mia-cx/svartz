@@ -48,7 +48,7 @@ async function emitSocialImages(ctx: PluginContext, theme: SvartzTheme): Promise
   }
   const enabled = ctx.config.discovery.socialImages.enabled && Boolean(theme.socialImage);
   const renderEntry = async (entry: IndexEntry) => {
-    if (entry.properties.encrypted === true || entry.properties.hidden === true) {
+    if (entry.locked === true || entry.properties.encrypted === true || entry.properties.hidden === true) {
       return { ...entry, socialImage: ctx.config.site.image };
     }
 

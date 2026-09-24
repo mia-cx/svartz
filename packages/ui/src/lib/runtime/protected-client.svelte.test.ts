@@ -80,3 +80,14 @@ it('imports authenticated note code only after a successful browser unlock', asy
 	lockProtectedGroup(id);
 	expect(isProtectedGroupUnlocked(id)).toBe(false);
 });
+
+it('matches nested protected attachment paths before shorter suffixes', () => {
+	const wrapper = document.createElement('div');
+	wrapper.innerHTML = '<img src="/vault/z/photo.png">';
+	const binding = protectedAssets(wrapper, new Map([
+		['photo.png', 'blob:root'],
+		['z/photo.png', 'blob:nested']
+	]));
+	expect(wrapper.querySelector('img')?.getAttribute('src')).toBe('blob:nested');
+	binding.destroy();
+});

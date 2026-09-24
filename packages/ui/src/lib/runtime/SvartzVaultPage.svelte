@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
-	import type { ProtectedGroupPayload } from '@svartz/core';
+	import { createVaultEntryView, type ProtectedGroupPayload } from '@svartz/core';
 	import { base } from '$app/paths';
 	import { browser } from '$app/environment';
 	import ProtectedNote from './ProtectedNote.svelte';
@@ -186,12 +186,12 @@
 	const entry = $derived.by(() => {
 		const slug = artifactKeyToSlug(runtimeRoute?.artifactKey);
 		if (!slug) return undefined;
-		return (
-			vault.entries.find((candidate) => candidate.slug === slug) ??
-			[...unlockedGroups.values()]
-				.flatMap((group) => group.entries)
-				.find((candidate) => candidate.slug === slug)
-		);
+		const listed = vault.entries.find((candidate) => candidate.slug === slug);
+		if (listed) return listed;
+		const hidden = [...unlockedGroups.values()]
+			.flatMap((group) => group.entries)
+			.find((candidate) => candidate.slug === slug);
+		return hidden ? createVaultEntryView(hidden, base) : undefined;
 	});
 
 	const pageTitle = $derived(entry?.title ?? siteConfig.title);

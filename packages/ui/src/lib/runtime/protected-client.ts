@@ -122,7 +122,9 @@ export function protectedAssets(
 		} catch {
 			return;
 		}
-		const exact = [...assets].find(([asset]) => path.endsWith(`/${asset}`));
+		const exact = [...assets]
+			.filter(([asset]) => path.endsWith(`/${asset}`))
+			.sort(([left], [right]) => right.length - left.length)[0];
 		if (exact) return exact[1];
 		const basename = path.slice(path.lastIndexOf('/') + 1);
 		const byName = [...assets].filter(

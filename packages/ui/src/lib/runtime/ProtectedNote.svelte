@@ -65,6 +65,8 @@
 	<div use:protectedAssets={unlocked!.assets}><NoteComponent {...noteProps} /></div>
 	<button
 		type="button"
+		tabindex="0"
+		aria-label="Lock note"
 		onclick={() => {
 			lockProtectedGroup(protection.payloadId);
 			onLocked(protection.payloadId);
@@ -78,15 +80,17 @@
 			void unlock(password);
 		}}
 	>
-		<label for="svartz-protected-password">Password</label>
-		<input
-			id="svartz-protected-password"
-			type="password"
-			autocomplete="current-password"
-			bind:value={password}
-			required
-		/>
-		<button type="submit" disabled={busy}>{busy ? 'Unlocking…' : 'Unlock note'}</button>
+		<label>Password
+			<input
+				type="password"
+				tabindex="0"
+				aria-label="Password"
+				autocomplete="current-password"
+				bind:value={password}
+				required
+			/>
+		</label>
+		<button type="submit" tabindex="0" aria-label={busy ? 'Unlocking note' : 'Unlock note'} disabled={busy}>{busy ? 'Unlocking…' : 'Unlock note'}</button>
 		{#if error}<p role="alert">{error}</p>{/if}
 	</form>
 {/if}
