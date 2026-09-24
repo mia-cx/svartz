@@ -79,7 +79,10 @@ async function compileNoteComponent(
     return `${header}\n\n<script lang="ts">\nimport type { ContentComponents } from "@svartz/ui/runtime";\nlet { contentComponents }: { contentComponents: ContentComponents } = $props();\n</script>\n\n${markup}`;
   }
 
-  const source = `${header}\n\n${file.content}`;
+  const transformed = getCompilerContributions(ctx).svxSourceTransforms.reduce(
+    (source, transform) => transform(source), file.content,
+  );
+  const source = `${header}\n\n${transformed}`;
 
   const result = await compile(source, {
     extension: ".svx",

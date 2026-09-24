@@ -1,12 +1,14 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { compile as compileSvelte } from "svelte/compiler";
+import { describe, expect, it, vi } from "vitest";
 import { getCompilerContributions, type Index, type PluginContext, type ResolvedConfig } from "@svartz/core";
 import { emitArtifacts } from "../src/emit-artifacts";
 import { transformGfm } from "../src/transform-gfm";
 import { transformLatex } from "../src/transform-latex";
 import { transformSyntax } from "../src/transform-syntax";
+import { transformEmbeds } from "../src/transform-embeds";
 import { analytics } from "../src/analytics";
 
 const content = [
@@ -81,6 +83,57 @@ describe("compiler contributions", () => {
     next.meta = first.meta;
     transformLatex().transformLatex!.run(next);
     expect(getCompilerContributions(next).browserResources.size).toBe(0);
+  });
+
+  it("renders math introduced by a published note embed in Markdown and SVX", async () => {
+    const root = await mkdtemp(join(tmpdir(), "svartz-embedded-math-"));
+    try {
+      for (const extension of [".md", ".svx"] as const) {
+        const ctx = context(join(root, extension, "dist"), "![[source]]", {
+          linkResolution: "closest",
+          frontmatter: { titleField: "title", aliasesField: "aliases" } as ResolvedConfig["frontmatter"],
+          theme: { base: "minimal" },
+        });
+        ctx.files[0]!.extension = extension;
+        ctx.files.push({ path: "source.md", slug: "source", extension: ".md", content: "$x^2$" });
+        ctx.meta.set("sourceBodies", new Map(ctx.files.map((file) => [file.path, file.content])));
+        transformLatex().transformLatex!.run(ctx);
+        expect(ctx.files[1]!.content).toBe("$x^2$");
+        transformEmbeds().transformEmbeds!.run(ctx);
+        await emitArtifacts().emitArtifacts!.run(ctx);
+        const page = String(ctx.artifacts.get("pages/note.svelte")?.contents);
+        expect(page).toContain("katex");
+        expect(() => compileSvelte(page, { filename: "note.svelte", generate: false })).not.toThrow();
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("renders math in executable SVX with the same compiler contribution", async () => {
+    const root = await mkdtemp(join(tmpdir(), "svartz-svx-math-"));
+    try {
+      const ctx = context(join(root, "dist"), "$x^2$");
+      ctx.files[0]!.extension = ".svx";
+      transformLatex().transformLatex!.run(ctx);
+      await emitArtifacts().emitArtifacts!.run(ctx);
+      const page = String(ctx.artifacts.get("pages/note.svelte")?.contents);
+      expect(page).toContain("katex");
+      expect(() => compileSvelte(page, { filename: "note.svelte", generate: false })).not.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves the disabled factory option on configured transformers", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(transformGfm({ disabled: true }).disabled).toBe(true);
+      expect(transformSyntax({ disabled: true }).disabled).toBe(true);
+      expect(transformLatex({ disabled: true }).disabled).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("ships analytics only for a configured vault and passes public settings", () => {

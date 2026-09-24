@@ -22,19 +22,22 @@ function usesCode(content: string): boolean {
 }
 
 /** Add syntax highlighting for public notes with code. */
-export const transformSyntax = (options: SyntaxOptions = {}) => definePlugin(() => ({
-  id: "core:transform-syntax",
+export const transformSyntax = (options: SyntaxOptions & { disabled?: boolean } = {}) => {
+  const { disabled, ...syntaxOptions } = options;
+  return definePlugin(() => ({
+    id: "core:transform-syntax",
 
-  transformSyntax: {
-    run(ctx) {
-      if (!ctx.files.some((file) => usesCode(file.content))) return;
-      getCompilerContributions(ctx).rehypePlugins.push([
-        rehypePrettyCode,
-        { theme: "github-dark-default", keepBackground: false, ...options },
-      ]);
+    transformSyntax: {
+      run(ctx) {
+        if (!ctx.files.some((file) => usesCode(file.content))) return;
+        getCompilerContributions(ctx).rehypePlugins.push([
+          rehypePrettyCode,
+          { theme: "github-dark-default", keepBackground: false, ...syntaxOptions },
+        ]);
+      },
+      options: { fatal: true },
     },
-    options: { fatal: true },
-  },
-}))();
+  }))({ disabled });
+};
 
 export const TRANSFORM_SYNTAX_ID = "core:transform-syntax" as const;

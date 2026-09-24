@@ -16,6 +16,8 @@ export interface BrowserResource {
 export interface CompilerContributions {
   remarkPlugins: Pluggable[];
   rehypePlugins: Pluggable[];
+  /** Late source transforms for mdsvex's separate, older SVX parser. */
+  svxSourceTransforms: Array<(source: string) => string>;
   browserResources: Map<string, BrowserResource>;
 }
 
@@ -23,6 +25,7 @@ export function getCompilerContributions(ctx: PluginContext): CompilerContributi
   return ctx.compiler ??= {
     remarkPlugins: [],
     rehypePlugins: [],
+    svxSourceTransforms: [],
     browserResources: new Map(),
   };
 }

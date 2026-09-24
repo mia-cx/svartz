@@ -27,6 +27,13 @@ describe("definePlugin", () => {
     warnSpy.mockRestore();
   });
 
+  it("applies the disabled option to factory plugins too", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const factory = definePlugin(() => ({ id: "factory-plugin", buildStart() {} }));
+    expect(factory({ disabled: true }).disabled).toBe(true);
+    warnSpy.mockRestore();
+  });
+
   it("wraps a factory and returns normalized plugin", () => {
     const factory = definePlugin(() => ({
       id: "test-plugin",

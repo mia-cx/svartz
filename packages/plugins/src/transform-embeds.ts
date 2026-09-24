@@ -207,7 +207,9 @@ export const transformEmbeds = definePlugin(() => ({
         return [
           `<div class="svartz-embed" data-embed="${targetSlug}">`,
           `<p class="svartz-embed-source"><a href="${relativeNoteHref(sourceSlug, targetSlug, section)}">${alias ?? noteBySlug.get(targetSlug)?.frontmatter?.[ctx.config.frontmatter.titleField] ?? targetSlug}</a></p>`,
+          "",
           tagged.content,
+          "",
           "</div>",
         ].join("\n");
       };

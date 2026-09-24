@@ -6,12 +6,12 @@ import { renderMarkdownTree } from "../src/internal/render-markdown";
 import { transformOfm } from "../src/transform-ofm";
 import type { PluginContext } from "@svartz/core";
 
-const ctx = { compiler: { remarkPlugins: [], rehypePlugins: [], browserResources: new Map() } } as unknown as PluginContext;
+const ctx = { compiler: { remarkPlugins: [], rehypePlugins: [], svxSourceTransforms: [], browserResources: new Map() } } as unknown as PluginContext;
 
 describe("inert Markdown content compilation", () => {
   it("passes the highlighted language to the code-block slot", async () => {
     const context = {
-      compiler: { remarkPlugins: [], rehypePlugins: [[rehypePrettyCode, { theme: "github-dark-default" }]], browserResources: new Map() },
+      compiler: { remarkPlugins: [], rehypePlugins: [[rehypePrettyCode, { theme: "github-dark-default" }]], svxSourceTransforms: [], browserResources: new Map() },
     } as unknown as PluginContext;
     const content = compileContent(await renderMarkdownTree(context, "```typescript\nconst x = 1\n```"));
     expect(content).toContain('"language":"typescript"');

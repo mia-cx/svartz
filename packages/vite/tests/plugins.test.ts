@@ -26,6 +26,13 @@ describe("runtime plugin requirements", () => {
       { id: "custom:visibility", filterUnpublished() {} },
     ]));
     expect(plugins.some((plugin) => plugin.id === "custom:visibility")).toBe(true);
+
+    const theme = {
+      id: "theme",
+      pluginPreset: { plugins: [{ id: "theme:visibility", filterUnpublished() {} }] },
+    } as SvartzTheme;
+    const themed = resolveRuntimePlugins(config([{ id: "core:filter-unpublished", disabled: true }]), theme);
+    expect(themed.some((plugin) => plugin.id === "theme:visibility")).toBe(true);
   });
 
   it("keeps a same-ID replacement in its built-in stage position", () => {
