@@ -86,7 +86,8 @@ function protectedSourcePlugin(ctx: PluginContext, group: string, files: readonl
         ).join("\n");
       }
       assertClientModule(id);
-      const path = id.split("?", 1)[0]!;
+      if (id.includes("?")) return;
+      const path = id;
       const file = bySource.get(resolve(path));
       if (!file) {
         if (/\.(?:md|mdx|svx)$/i.test(path)) {

@@ -48,6 +48,7 @@ it("bundles transformed SVX and nested Svelte imports only in memory", async () 
     expect(result.js).not.toContain("RAW_SECRET");
     expect(result.js).toContain("Nested counter");
     expect(result.css).toContain("color:red");
+    expect(result.css).not.toContain("<script");
     expect(result.bridgeImports).toContain("svelte/internal/client");
     expect(result.js).toContain("svartz:bridge/");
     expect(result.modules.some((id) => id.endsWith("Note.svx"))).toBe(true);
