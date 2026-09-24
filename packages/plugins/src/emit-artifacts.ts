@@ -14,7 +14,7 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSlug from "rehype-slug";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { definePlugin, getCompilerContributions, SEARCH_INDEX_OPTIONS, type Artifact, type Index } from "@svartz/core";
+import { definePlugin, getCompilerContributions, SEARCH_INDEX_OPTIONS, type Artifact, type Index, type PluginContext, type ProcessedFile } from "@svartz/core";
 import { renderMarkdownTree } from "./internal/render-markdown";
 import { compileContent } from "./internal/compile-content";
 
@@ -59,14 +59,8 @@ function serializeValue(value: unknown): string {
 }
 
 async function compileNoteComponent(
-  ctx: Parameters<typeof renderMarkdownTree>[0],
-  file: {
-    readonly path: string;
-    readonly slug: string;
-    readonly extension?: string;
-    readonly content: string;
-    readonly frontmatter?: Record<string, unknown>;
-  },
+  ctx: PluginContext,
+  file: ProcessedFile,
   remarkPlugins: MdsvexOptions["remarkPlugins"],
   rehypePlugins: MdsvexOptions["rehypePlugins"],
 ): Promise<string> {
@@ -94,6 +88,18 @@ async function compileNoteComponent(
     rehypePlugins,
   });
   return result?.code ?? source;
+}
+
+/** Compile a protected note in memory for the separate encrypted bundle. */
+export async function compileProtectedNoteSource(ctx: PluginContext, file: ProcessedFile): Promise<string> {
+  if (!file.protection) throw new Error(`Note "${file.path}" is not protected`);
+  const compiler = getCompilerContributions(ctx);
+  return compileNoteComponent(
+    ctx,
+    file,
+    compiler.remarkPlugins as MdsvexOptions["remarkPlugins"],
+    [...(BASE_REHYPE_PLUGINS ?? []), ...compiler.rehypePlugins] as MdsvexOptions["rehypePlugins"],
+  );
 }
 
 function buildSearchModuleSource(index: Index): string {
