@@ -1,0 +1,107 @@
+/** Optional Roam syntax, based on the supported subset in Quartz 4.5.2. */
+import { definePlugin, getCompilerContributions } from "@svartz/core";
+import { findAndReplace, type FindAndReplaceList } from "mdast-util-find-and-replace";
+import type { Root } from "mdast";
+import { toString } from "mdast-util-to-string";
+import { visit } from "unist-util-visit";
+
+export interface RoamOptions {
+  orComponent: boolean;
+  TODOComponent: boolean;
+  DONEComponent: boolean;
+  videoComponent: boolean;
+  audioComponent: boolean;
+  pdfComponent: boolean;
+  blockquoteComponent: boolean;
+}
+
+const defaults: RoamOptions = {
+  orComponent: true, TODOComponent: true, DONEComponent: true,
+  videoComponent: true, audioComponent: true, pdfComponent: true, blockquoteComponent: true,
+};
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character]!);
+}
+
+function safeMediaUrl(value: string): string | undefined {
+  const url = value.trim();
+  if (!url || /[\u0000-\u001f]/.test(url)) return;
+  try {
+    const parsed = new URL(url, "https://svartz.invalid");
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? url : undefined;
+  } catch {
+    return;
+  }
+}
+
+function mediaHtml(type: "video" | "audio" | "pdf", rawUrl: string): string | undefined {
+  const url = safeMediaUrl(rawUrl);
+  if (!url) return;
+  if (type === "pdf") return `<iframe src="${escapeHtml(url)}" title="Embedded PDF"></iframe>`;
+  if (type === "audio") return `<audio controls src="${escapeHtml(url)}"></audio>`;
+
+  const parsed = new URL(url, "https://svartz.invalid");
+  const host = parsed.hostname.toLowerCase();
+  if (["youtube.com", "www.youtube.com", "youtu.be"].includes(host)) {
+    const id = host === "youtu.be" ? parsed.pathname.slice(1) : parsed.searchParams.get("v");
+    if (id && /^[\w-]+$/.test(id)) {
+      return `<iframe src="https://www.youtube.com/embed/${id}" title="Embedded video" allow="fullscreen"></iframe>`;
+    }
+  }
+  return `<video controls src="${escapeHtml(url)}"></video>`;
+}
+
+function remarkRoam(options: RoamOptions) {
+  return (tree: Root, file: { value: unknown }) => {
+    const markdown = String(file.value);
+    visit(tree, "strong", (node, index, parent) => {
+      const offset = node.position?.start.offset;
+      if (offset === undefined || index === undefined || !parent) return;
+      // Roam treats underscore pairs as italics; asterisk pairs retain Markdown bold.
+      if (markdown.slice(offset, offset + 2) === "__") {
+        parent.children[index] = { type: "emphasis", children: node.children };
+      }
+    });
+
+    visit(tree, "paragraph", (node, index, parent) => {
+      if (index === undefined || !parent) return;
+      const source = toString(node).trim();
+      const quote = options.blockquoteComponent && /^\[\[>\]\]\s*(.+)$/.exec(source);
+      if (quote) {
+        parent.children[index] = { type: "blockquote", children: [{ type: "paragraph", children: [{ type: "text", value: quote[1]! }] }] };
+        return;
+      }
+      const media = /^\{\{\[\[(audio|video|pdf)\]\]:\s*(.+)\}\}$/i.exec(source);
+      if (!media) return;
+      const type = media[1]!.toLowerCase() as "audio" | "video" | "pdf";
+      if (!options[`${type}Component`]) return;
+      const html = mediaHtml(type, media[2]!);
+      if (html) parent.children[index] = { type: "html", value: html };
+    });
+
+    const replacements: FindAndReplaceList = [
+      [/\^\^(.+?)\^\^/g, (_match, value: string) => ({ type: "html", value: `<span class="text-highlight">${escapeHtml(value)}</span>` })],
+    ];
+    if (options.orComponent) replacements.push([/\{\{or:([^{}]+)\}\}/g, (_match: string, choices: string) => ({
+      type: "html", value: `<select>${choices.split("|").map((choice) => `<option value="${escapeHtml(choice)}">${escapeHtml(choice)}</option>`).join("")}</select>`,
+    })]);
+    if (options.TODOComponent) replacements.push([/\{\{(?:\[\[)?TODO(?:\]\])?\}\}/g, () => ({ type: "html", value: "<input type=\"checkbox\" disabled>" })]);
+    if (options.DONEComponent) replacements.push([/\{\{(?:\[\[)?DONE(?:\]\])?\}\}/g, () => ({ type: "html", value: "<input type=\"checkbox\" checked disabled>" })]);
+    findAndReplace(tree, replacements, { ignore: ["link", "linkReference", "html"] });
+  };
+}
+
+/** Add Roam prose syntax after the normal GFM parser. */
+export const roamFlavoredMarkdown = (userOptions: Partial<RoamOptions> = {}) => definePlugin(() => ({
+  id: "core:roam-flavored-markdown",
+  transformGfm: {
+    run(ctx) {
+      const options = { ...defaults, ...userOptions };
+      getCompilerContributions(ctx).remarkPlugins.push(() => remarkRoam(options));
+    },
+    options: { fatal: true, enforce: "post" },
+  },
+}))();

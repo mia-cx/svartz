@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { PluginContext, ResolvedConfig } from "@svartz/core";
 import { hardLineBreaks } from "../src/hard-line-breaks";
+import { roamFlavoredMarkdown } from "../src/roam-flavored-markdown";
 import { renderMarkdown } from "../src/internal/render-markdown";
 
 const roots: string[] = [];
@@ -27,5 +28,40 @@ describe("optional content formats", () => {
     hardLineBreaks().transformGfm!.run(enabled);
     expect(await renderMarkdown(disabled, disabled.files[0]!.content)).not.toContain("<br>");
     expect(await renderMarkdown(enabled, enabled.files[0]!.content)).toContain("<br>");
+  });
+
+  it("renders Roam controls, media, quotes, highlights, and underscore italics", async () => {
+    const markdown = [
+      "__italic__ **bold** ^^highlight^^ {{[[TODO]]}} {{[[DONE]]}} {{or:yes|no}}",
+      "",
+      "[[>]] A quote",
+      "",
+      "{{[[video]]: https://youtu.be/abc123}}",
+      "",
+      "`{{[[TODO]]}}`",
+    ].join("\n");
+    const ctx = context("/vault", markdown);
+    roamFlavoredMarkdown().transformGfm!.run(ctx);
+    const html = await renderMarkdown(ctx, markdown);
+    expect(html).toContain("<em>italic</em>");
+    expect(html).toContain("<strong>bold</strong>");
+    expect(html).toContain('<span class="text-highlight">highlight</span>');
+    expect(html).toContain('<input type="checkbox" disabled>');
+    expect(html).toContain('<input type="checkbox" checked disabled>');
+    expect(html).toContain('<select><option value="yes">yes</option><option value="no">no</option></select>');
+    expect(html).toContain("<blockquote>");
+    expect(html).toContain("https://www.youtube.com/embed/abc123");
+    expect(html).toContain("<code>{{[[TODO]]}}</code>");
+  });
+
+  it("lets Roam options disable controls and rejects executable media URLs", async () => {
+    const markdown = '{{or:a" onclick="alert(1)|safe}} {{[[TODO]]}}\n\n{{[[video]]: javascript:alert(1)}}';
+    const ctx = context("/vault", markdown);
+    roamFlavoredMarkdown({ TODOComponent: false }).transformGfm!.run(ctx);
+    const html = await renderMarkdown(ctx, markdown);
+    expect(html).toContain('value="a&#x22; onclick=&#x22;alert(1)"');
+    expect(html).toContain("{{[[TODO]]}}");
+    expect(html).not.toContain("<iframe");
+    expect(html).not.toContain("<video");
   });
 });

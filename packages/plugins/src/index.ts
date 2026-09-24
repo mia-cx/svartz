@@ -56,6 +56,7 @@ import { emitDiscovery, EMIT_DISCOVERY_ID } from "./emit-discovery";
 import { emitImages, EMIT_IMAGES_ID } from "./emit-images";
 import { analytics, ANALYTICS_ID } from "./analytics";
 import { hardLineBreaks } from "./hard-line-breaks";
+import { roamFlavoredMarkdown } from "./roam-flavored-markdown";
 
 export const CORE_PLUGIN_IDS = [
   DISCOVER_FILES_ID,
@@ -230,6 +231,7 @@ export {
   analytics,
   emitArtifacts,
   hardLineBreaks,
+  roamFlavoredMarkdown,
 };
 
 // Re-export IDs
