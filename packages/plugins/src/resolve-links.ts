@@ -65,7 +65,7 @@ function replaceLinkMarkup(
   type: "wikilink" | "markdown",
   roamReserved: boolean,
 ): string {
-  return replaceAuthoredLinkMarkup(markdown, raw, type, `<a href="${href}">${escapeHtml(label)}</a>`, roamReserved);
+  return replaceAuthoredLinkMarkup(markdown, raw, type, `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`, roamReserved);
 }
 
 function replaceAuthoredLinkMarkup(markdown: string, raw: string, type: "wikilink" | "markdown", html: string, roamReserved: boolean): string {

@@ -41,3 +41,11 @@ it("uses configured date precedence and keeps published_at independent", () => {
   expect(frontmatterFirst.index?.entries[0]?.createdAt.toISOString()).toBe("2020-01-01T00:00:00.000Z");
   expect(frontmatterFirst.index?.entries[0]?.modifiedAt.toISOString()).toBe("2020-02-01T00:00:00.000Z");
 });
+
+it("indexes the custom publication date when published_at is blank", () => {
+  const ctx = context(["frontmatter"]);
+  Object.assign(ctx.config.frontmatter, { publishedField: "go_live" });
+  Object.assign(ctx.files[0]!.frontmatter!, { published_at: "", go_live: "2031-03-04T00:00:00Z" });
+  indexContent().indexContent!.run(ctx);
+  expect(ctx.index?.entries[0]?.publishedAt?.toISOString()).toBe("2031-03-04T00:00:00.000Z");
+});

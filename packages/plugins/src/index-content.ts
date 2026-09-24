@@ -20,7 +20,7 @@ import type {
   TagIndexEntry,
 } from "@svartz/core";
 import { countWords, extractDescription, stripMarkdownToText } from "./internal/parse";
-import { normalizeDateTime } from "./internal/datetime";
+import { normalizeDateTime, publicationOverride } from "./internal/datetime";
 import { allocateRedirects, alternateNames, routeHref } from "./internal/routes";
 import { normalizeSlugSegment } from "./internal/slug";
 
@@ -135,7 +135,7 @@ export const indexContent = definePlugin(() => ({
 
         let publishedAt: Date | undefined;
         if (fm.publishedField) {
-          const pubVal = frontmatter.published_at ?? frontmatter[fm.publishedField];
+          const pubVal = publicationOverride(frontmatter, fm.publishedField);
           if (pubVal === true) {
             publishedAt = createdAt;
           } else if (pubVal && pubVal !== false && pubVal !== "") {

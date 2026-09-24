@@ -4,6 +4,13 @@
 
 import moment from "moment";
 
+/** Pick the first nonblank publication override, with false meaning absent. */
+export function publicationOverride(frontmatter: Record<string, unknown> | undefined, field: string): unknown {
+  return [frontmatter?.published_at, frontmatter?.[field]].find((value) =>
+    value !== undefined && value !== null && value !== false &&
+    (typeof value !== "string" || value.trim().length > 0));
+}
+
 export const normalizeDateTime = (
   value: unknown,
   dateFormat?: string,

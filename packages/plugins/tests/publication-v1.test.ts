@@ -219,8 +219,26 @@ describe("v1 publication boundary", () => {
 
   it("does not publish assets mentioned only in hidden comments", () => {
     const ctx = context([
-      note("public.md", "%% ![[secret.pdf]] %%\n<!-- <img src=\"media/hidden.png\"> -->\n![Shown](media/visible.png)"),
-      asset("secret.pdf"), asset("media/hidden.png"), asset("media/visible.png"),
+      note("public.md", "%% ![[secret.pdf]] %%\n<!-- <img src=\"media/hidden.png\"> -->\n<div><!-- <img src=\"media/nested.png\"> --></div>\n\n![Shown](media/visible.png)"),
+      asset("secret.pdf"), asset("media/hidden.png"), asset("media/nested.png"), asset("media/visible.png"),
+    ]);
+    filterUnpublished().filterUnpublished!.run(ctx);
+    expect(ctx.files.map((file) => file.path)).toEqual(["public.md", "media/visible.png"]);
+  });
+
+  it("keeps visible assets between comment markers in code spans", () => {
+    const ctx = context([
+      note("public.md", '`<!--` ![Shown](media/x.png) `-->` and `%%` ![Other](media/y.png) `%%`'),
+      asset("media/x.png"), asset("media/y.png"),
+    ]);
+    filterUnpublished().filterUnpublished!.run(ctx);
+    expect(ctx.files.map((file) => file.path)).toEqual(["public.md", "media/x.png", "media/y.png"]);
+  });
+
+  it("does not let a code span close an Obsidian comment early", () => {
+    const ctx = context([
+      note("public.md", "%% hidden `%%` ![[secret.pdf]] %%\n![Shown](media/visible.png)"),
+      asset("secret.pdf"), asset("media/visible.png"),
     ]);
     filterUnpublished().filterUnpublished!.run(ctx);
     expect(ctx.files.map((file) => file.path)).toEqual(["public.md", "media/visible.png"]);
@@ -237,6 +255,14 @@ describe("v1 publication boundary", () => {
     expect(ctx.files[0]!.content).toContain("[hero]: ../media/photo.png#view");
   });
 
+  it("retains a reference asset whose destination starts on the next line", () => {
+    const ctx = context([note("note.md", "![Photo][hero]\n\n[hero]:\n  media/photo.png"), asset("media/photo.png")]);
+    filterUnpublished().filterUnpublished!.run(ctx);
+    expect(ctx.files.map((file) => file.path)).toEqual(["note.md", "media/photo.png"]);
+    resolveLinks().resolveLinks!.run(ctx);
+    expect(ctx.files[0]!.content).toContain("[hero]:\n  ../media/photo.png");
+  });
+
   it("keeps query strings and fragments when rewriting asset URLs", () => {
     const ctx = context([
       note("note.md", '![Image](media/photo.png?width=2#crop) <iframe src="media/manual.pdf#page=3"></iframe>'),
@@ -246,6 +272,14 @@ describe("v1 publication boundary", () => {
     resolveLinks().resolveLinks!.run(ctx);
     expect(ctx.files[0]!.content).toContain("![Image](../media/photo.png?width=2#crop)");
     expect(ctx.files[0]!.content).toContain('src="../media/manual.pdf#page=3"');
+  });
+
+  it("escapes authored asset fragments in generated link attributes", () => {
+    const ctx = context([note("note.md", '[[manual.pdf#x" autofocus="true]]'), asset("manual.pdf")]);
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    filterUnpublished().filterUnpublished!.run(ctx);
+    resolveLinks().resolveLinks!.run(ctx);
+    expect(ctx.files[0]!.content).toContain('href="../manual.pdf#x&quot; autofocus=&quot;true"');
   });
 
   it("includes attachment URLs in responsive images and media tags", () => {
@@ -320,6 +354,13 @@ describe("v1 publication boundary", () => {
     Object.assign(ctx.config.frontmatter, { publishedField: "go_live" });
     filterUnpublished().filterUnpublished!.run(ctx);
     expect(ctx.files.map((file) => file.path)).toEqual(["note.md"]);
+  });
+
+  it("does not publish a draft whose custom publication field is false", () => {
+    const ctx = context([note("draft.md", "Hidden", { draft: true, published_at: "", go_live: false })], "inclusion");
+    Object.assign(ctx.config.frontmatter, { publishedField: "go_live" });
+    filterUnpublished().filterUnpublished!.run(ctx);
+    expect(ctx.files).toEqual([]);
   });
 
   it("chooses a note-relative attachment before a vault-root namesake", () => {

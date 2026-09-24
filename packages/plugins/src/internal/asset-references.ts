@@ -12,8 +12,31 @@ const markdown = unified().use(remarkParse);
 
 /** Hide non-rendered comments without changing source offsets. */
 export function maskHiddenComments(source: string): string {
-  return source.replace(/%%[\s\S]*?%%|<!--[\s\S]*?(?:-->|$)/g,
-    (comment) => comment.replace(/[^\r\n]/g, " "));
+  if (!source.includes("%%") && !source.includes("<!--")) return source;
+  const obsidianDelimiters: number[] = [];
+  const hidden: { start: number; end: number }[] = [];
+  visit(markdown.parse(source), (node) => {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (start === undefined || end === undefined) return;
+    const raw = source.slice(start, end);
+    if (node.type === "text") {
+      for (const marker of raw.matchAll(/%%/g)) obsidianDelimiters.push(start + marker.index!);
+    } else if (node.type === "html") {
+      for (const comment of raw.matchAll(/<!--[\s\S]*?(?:-->|$)/g)) {
+        hidden.push({ start: start + comment.index!, end: start + comment.index! + comment[0].length });
+      }
+    }
+  });
+  obsidianDelimiters.sort((left, right) => left - right);
+  for (let index = 0; index + 1 < obsidianDelimiters.length; index += 2) {
+    hidden.push({ start: obsidianDelimiters[index]!, end: obsidianDelimiters[index + 1]! + 2 });
+  }
+  let masked = source;
+  for (const { start, end } of hidden.sort((left, right) => right.start - left.start)) {
+    masked = masked.slice(0, start) + masked.slice(start, end).replace(/[^\r\n]/g, " ") + masked.slice(end);
+  }
+  return masked;
 }
 
 /** Source spans for local Roam media outside code and HTML. */
@@ -48,7 +71,7 @@ export function referenceDefinitionSpans(source: string): { start: number; end: 
     const end = node.position?.end.offset;
     if (offset === undefined || end === undefined) return;
     const raw = source.slice(offset, end);
-    const match = /^ {0,3}\[[^\]]+\]:[ \t]*(?:<([^>]+)>|(\S+))/.exec(raw);
+    const match = /^ {0,3}\[[^\]]+\]:[ \t]*(?:\r?\n[ \t]*)?(?:<([^>]+)>|(\S+))/.exec(raw);
     if (!match) return;
     const target = match[1] ?? match[2];
     if (!target) return;
