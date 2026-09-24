@@ -80,7 +80,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   await writeFile(path.join(root, "work-vault/index.md"), "# Work landing\n\nWork content. ![](shared.png)\n");
   await writeFile(path.join(root, "work-vault/shared.png"), "work asset");
   await writeFile(path.join(root, "work-vault/private.md"), "---\nprivate: true\n---\n# Secret project\n");
-  await writeFile(path.join(root, "vault/about.md"), "---\naliases: [about-alt]\n---\n# Vault about\n\nVault about body.\n");
+  await writeFile(path.join(root, "vault/about.md"), "---\naliases: [about-alt]\nsocialImage: shared.png\n---\n# Vault about\n\nVault about body.\n");
   await writeFile(path.join(root, "vault/guides/index.md"), "---\ntitle: Guides landing\ntags: [guides]\n---\n# Guides landing\n");
   await writeFile(path.join(root, "vault/guides/deep/one.md"), "---\ntitle: Deep guide\ntags: [guides]\n---\n# Deep guide\n");
   await writeFile(path.join(root, "vault/guides/deep/private.md"), "---\nprivate: true\ntags: [guides]\n---\n# Hidden guide\n");
@@ -118,6 +118,14 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   await access(path.join(root, "build/index.js"));
   expect(await readFile(path.join(root, "build/client/blog/shared.png"), "utf8")).toBe("blog asset");
   expect(await readFile(path.join(root, "build/client/work/shared.png"), "utf8")).toBe("work asset");
+  await access(path.join(root, "build/client/blog/__svartz/social/index.png"));
+  await access(path.join(root, "build/client/work/__svartz/social/index.png"));
+  await expect(access(path.join(root, "build/client/blog/__svartz/social/about-2.png")))
+    .rejects.toMatchObject({ code: "ENOENT" });
+  await expect(access(path.join(root, "build/client/work/__svartz/social/private.png")))
+    .rejects.toMatchObject({ code: "ENOENT" });
+  await expect(access(path.join(root, "build/client/blog/__svartz/favicon-32.png")))
+    .rejects.toMatchObject({ code: "ENOENT" });
   expect(await readFile(path.join(root, "build/client/blog/rss.xml"), "utf8"))
     .toContain("https://example.test/blog/about-2/");
   expect(await readFile(path.join(root, "build/client/work/sitemap.xml"), "utf8"))
@@ -182,10 +190,13 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
     const vaultBody = await vault.text();
     expect(vault.status, `${stderr}\n${vaultBody}`).toBe(200);
     expect(vaultBody).toContain("Vault about body");
+    expect(vaultBody).toContain('property="og:image" content="https://example.test/blog/shared.png"');
     const blogHome = await fetch(`http://127.0.0.1:${port}/blog/`);
     const blogBody = await blogHome.text();
     expect(blogBody).toContain("Vault content");
     expect(blogBody).toContain("Index | Notes");
+    expect(blogBody).toContain('property="og:image" content="https://example.test/blog/__svartz/social/index.png"');
+    expect((await fetch(`http://127.0.0.1:${port}/blog/__svartz/social/index.png`)).status).toBe(200);
     const workHome = await fetch(`http://127.0.0.1:${port}/work/`);
     const workBody = await workHome.text();
     expect(workHome.status, `${stderr}\n${workBody}`).toBe(200);
@@ -213,12 +224,15 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   const configSource = await readFile(configPath, "utf8");
   await rm(path.join(root, "vault/guides/deep/one.md"));
   await writeFile(configPath, configSource.replace('id: "notes",',
-    'id: "notes", discovery: { feed: { enabled: false }, sitemap: { enabled: false } },'));
+    'id: "notes", discovery: { feed: { enabled: false }, sitemap: { enabled: false }, socialImages: { enabled: false }, favicon: { enabled: true } },'));
   await execFileAsync(process.execPath, [
     path.join(workspaceRoot, "packages/cli/dist/index.js"), "build", "--config", configPath,
   ], { cwd: root, maxBuffer: 4_000_000 });
   await expect(access(path.join(root, "build/client/blog/rss.xml"))).rejects.toMatchObject({ code: "ENOENT" });
   await expect(access(path.join(root, "build/client/blog/sitemap.xml"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(access(path.join(root, "build/client/blog/__svartz/social/index.png")))
+    .rejects.toMatchObject({ code: "ENOENT" });
+  await access(path.join(root, "build/client/blog/__svartz/favicon-32.png"));
   await access(path.join(root, "build/client/work/rss.xml"));
   await expect(access(path.join(root, ".svartz/vaults/notes/artifacts/pages/guides/deep/one.svelte")))
     .rejects.toMatchObject({ code: "ENOENT" });

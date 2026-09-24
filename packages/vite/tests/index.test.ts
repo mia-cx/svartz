@@ -80,6 +80,14 @@ const testConfig: ResolvedConfig = {
     publishedField: "published",
   },
   target: { type: "static" },
+  site: { title: "Docs", favicon: "/tmp/svartz-tests/icon.svg" },
+  discovery: {
+    feed: { enabled: false, limit: 10, content: "summary", sort: "published" },
+    sitemap: { enabled: false },
+    socialImages: { enabled: false },
+    favicon: { enabled: true },
+    dateSources: ["frontmatter", "git", "filesystem"],
+  },
   plugins: [],
 };
 
@@ -203,6 +211,7 @@ describe("@svartz/vite plugin", () => {
 
     const dispose = plugin.configureServer?.(server as never);
     expect(watcher.add).toHaveBeenCalledWith(testConfig.path);
+    expect(watcher.add).toHaveBeenCalledWith(testConfig.site.favicon);
 
     await vi.advanceTimersByTimeAsync(300);
     watcher.emit("change", "/tmp/svartz-tests/vaults/docs/note.md");
@@ -224,6 +233,10 @@ describe("@svartz/vite plugin", () => {
       expect(server.ws.send).toHaveBeenCalledWith({ type: "full-reload" });
     });
     expect(server.moduleGraph.invalidateModule).toHaveBeenCalled();
+
+    watcher.emit("change", testConfig.site.favicon);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(runStagesMock).toHaveBeenCalledTimes(3);
 
     dispose?.();
   });
