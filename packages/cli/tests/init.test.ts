@@ -13,7 +13,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
 import { loadConfigFromFile } from "vite";
-import { commandExecutable, initProject } from "../src/init";
+import { commandExecutable, InitConflictError, InitLayoutError, InitOperationError, initProject } from "../src/init";
 
 const execFileAsync = promisify(execFile);
 const cli = path.resolve(import.meta.dirname, "../dist/index.js");
@@ -330,9 +330,9 @@ export const entries: EntryGenerator = async () => routes.all
 it("reports an existing config without a Kit app instead of replacing it", async () => {
   const root = await fixture();
   await writeFile(path.join(root, "svartz.config.mjs"), "export default {};\n");
-  await expect(
-    initProject({ cwd: root, install: false, git: false }),
-  ).rejects.toThrow("no SvelteKit app was found");
+  const failure = await initProject({ cwd: root, install: false, git: false }).catch((cause: unknown) => cause);
+  expect(failure).toBeInstanceOf(InitLayoutError);
+  expect(failure).toMatchObject({ reason: "missing-kit", message: expect.stringContaining("no SvelteKit app was found") });
   await expect(access(path.join(root, "package.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
@@ -342,9 +342,9 @@ it("reports every new-project conflict before writing anything", async () => {
   const root = await fixture();
   await writeFile(path.join(root, "package.json"), "{}\n");
   await writeFile(path.join(root, ".gitignore"), "keep\n");
-  await expect(
-    initProject({ cwd: root, install: false, git: false }),
-  ).rejects.toThrow("package.json");
+  const failure = await initProject({ cwd: root, install: false, git: false }).catch((cause: unknown) => cause);
+  expect(failure).toBeInstanceOf(InitConflictError);
+  expect(failure).toMatchObject({ paths: expect.arrayContaining(["package.json", ".gitignore"]) });
   expect(await readFile(path.join(root, ".gitignore"), "utf8")).toBe("keep\n");
   await expect(
     access(path.join(root, "svartz.config.ts")),
@@ -370,9 +370,9 @@ it("leaves an unsupported host Vite config untouched", async () => {
   await writeFile(path.join(root, "vite.config.js"), viteConfig);
   await writeFile(path.join(root, "package.json"), manifest);
 
-  await expect(
-    initProject({ cwd: root, install: false, git: false }),
-  ).rejects.toThrow("Vite config has no default export");
+  const failure = await initProject({ cwd: root, install: false, git: false }).catch((cause: unknown) => cause);
+  expect(failure).toBeInstanceOf(InitLayoutError);
+  expect(failure).toMatchObject({ reason: "unsupported-vite", message: expect.stringContaining("no default export") });
   expect(await readFile(path.join(root, "vite.config.js"), "utf8")).toBe(
     viteConfig,
   );
@@ -382,4 +382,12 @@ it("leaves an unsupported host Vite config untouched", async () => {
   await expect(
     access(path.join(root, "svartz.config.ts")),
   ).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("tags malformed project manifests as operational failures", async () => {
+  const root = await fixture();
+  await writeFile(path.join(root, "package.json"), "{invalid\n");
+  const failure = await initProject({ cwd: root, install: false, git: false }).catch((cause: unknown) => cause);
+  expect(failure).toBeInstanceOf(InitOperationError);
+  expect(failure).toMatchObject({ operation: "parse package.json" });
 });
