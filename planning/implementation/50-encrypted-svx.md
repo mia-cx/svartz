@@ -20,4 +20,6 @@ Keep the site static. Compile protected `.svx` and its private dependencies outs
 
 ## Notes
 
-The two prototype branches prove static encryption and shared-runtime feasibility, but use fixed imports and a throwaway global registry. Production must classify imports and own the bridge internally. `emit-artifacts` currently eagerly compiles all notes, so simply wrapping its emitted modules would leak plaintext into the public build.
+The two prototype branches prove static encryption and shared-runtime feasibility, but use fixed imports and a throwaway global registry. Production must classify imports and own the bridge internally. The public Vite graph eagerly imports note artifacts, so protected notes must enter it only as locked shells.
+
+The public index and eager artifact graph now use redacted locked entries and shell components. Protected-only attachments stay out of public assets; full note metadata and protected asset membership remain build-local. The encrypted emitter and browser unlock path must consume that build-local data before the fail-closed publication guard can be lifted.
