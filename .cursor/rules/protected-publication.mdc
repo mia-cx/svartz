@@ -19,6 +19,7 @@ alwaysApply: false
 - A protected `.svx` loader handles the plain note ID only. Leave query-suffixed Svelte style requests to the Svelte plugin, or note source will be emitted as invalid CSS.
 - Give each group a fresh opaque token per build. Put the token, never the group name or password, in public shell URLs and authenticated payload IDs.
 - Bridge Svelte and client-safe Kit modules through host-generated facade chunks. A protected blob import must use the host's Svelte instance. Reject server-only imports before sealing.
+- Bridge client-safe `$lib` modules as host-owned imports too. A shared context key needs the same module instance on both sides; keep protected-only code in the vault.
 - Keep keys, decrypted code, and private attachment object URLs in browser memory. Revoke attachment URLs on lock. The browser needs `script-src blob:` to execute decrypted modules.
 - The standalone shell allows blob scripts and styles in its SvelteKit CSP. Host apps must set those directives themselves; prerendered pages carry CSP in a meta tag.
 - Discover static attachment references in Markdown and HTML `src`, `href`, `poster`, and `srcset`. Rewrite the same attributes to object URLs after unlock. Scan SvelteKit's generated output as well as public files for plaintext.

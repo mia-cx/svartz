@@ -37,6 +37,7 @@ async function assertSharedSvelteInstallation(root: string): Promise<void> {
 
 function sharedRuntimeImport(id: string): boolean {
   if (CLIENT_APP_MODULES.has(id)) return true;
+  if (id === "$lib" || id.startsWith("$lib/")) return true;
   return (id === "svelte" || id.startsWith("svelte/")) &&
     id !== "svelte/compiler" && id !== "svelte/server" && !id.startsWith("svelte/internal/server");
 }

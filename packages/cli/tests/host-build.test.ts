@@ -44,6 +44,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   await mkdir(path.join(root, "vault"));
   await mkdir(path.join(root, "vault/guides/deep"), { recursive: true });
   await mkdir(path.join(root, "work-vault"));
+  await mkdir(path.join(root, "src/lib"));
   await mkdir(path.join(root, ".svelte-kit"));
 
   const packageJson = JSON.stringify({
@@ -66,7 +67,8 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   await writeFile(path.join(root, "src/app.html"), "<!doctype html><html lang=\"en\"><head>%sveltekit.head%</head><body data-sveltekit-preload-data=\"hover\"><div style=\"display: contents\">%sveltekit.body%</div></body></html>\n");
   await writeFile(path.join(root, ".svelte-kit/keep"), "host state");
   await writeFile(path.join(root, "src/routes/+page.svelte"), "<h1>Host home</h1>\n");
-  await writeFile(path.join(root, "src/routes/+layout.svelte"), '<script>import { setContext } from "svelte"; import { goto } from "$app/navigation"; setContext("host-context", "shared host");</script><button onclick={() => goto("/work/")}>Host navigate</button><slot />\n');
+  await writeFile(path.join(root, "src/lib/context-key.ts"), 'export const hostKey = Symbol("host-context");\n');
+  await writeFile(path.join(root, "src/routes/+layout.svelte"), '<script>import { setContext } from "svelte"; import { goto } from "$app/navigation"; import { hostKey } from "$lib/context-key"; setContext(hostKey, "shared host");</script><button onclick={() => goto("/work/")}>Host navigate</button><slot />\n');
   await writeFile(path.join(root, "src/routes/other/+page.svelte"), "<h1>Other route</h1>\n");
   await writeFile(path.join(root, "src/routes/blog/about/+page.svelte"), "<h1>Manual about</h1>\n");
   await writeFile(path.join(root, "src/routes/blog/folders/guides/deep/+page.svelte"), "<h1>Manual deep listing</h1>\n");
@@ -87,7 +89,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   await writeFile(path.join(root, "work-vault/private.md"), "---\nprivate: true\n---\n# Secret project\n");
   await writeFile(path.join(root, "work-vault/Counter.svelte"), '<script>let count = $state(0);</script><button onclick={() => count++}>Count: {count}</button>\n');
   await writeFile(path.join(root, "work-vault/private.svg"), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><title>HOST_ASSET_MARKER</title><circle cx="5" cy="5" r="4" /></svg>');
-  await writeFile(path.join(root, "work-vault/secret.svx"), "---\ntitle: Locked work\npassword_group: friends\n---\n<script>import { getContext } from 'svelte'; import { page } from '$app/state'; import Counter from './Counter.svelte';</script><h1>HOST_PROTECTED_MARKER</h1><p class='protected-tone'>sapphire</p><p>Context: {getContext('host-context')}</p><p>Route: {page.url.pathname}</p><Counter /><img src='./private.svg' alt='Secret diagram' /><style>.protected-tone { color: rgb(1, 2, 3); }</style>\n");
+  await writeFile(path.join(root, "work-vault/secret.svx"), "---\ntitle: Locked work\npassword_group: friends\n---\n<script>import { getContext } from 'svelte'; import { page } from '$app/state'; import { hostKey } from '$lib/context-key'; import Counter from './Counter.svelte';</script><h1>HOST_PROTECTED_MARKER</h1><p class='protected-tone'>sapphire</p><p>Context: {getContext(hostKey)}</p><p>Route: {page.url.pathname}</p><Counter /><img src='./private.svg' alt='Secret diagram' /><style>.protected-tone { color: rgb(1, 2, 3); }</style>\n");
   await writeFile(path.join(root, "vault/about.md"), "---\naliases: [about-alt]\nsocialImage: shared.png\n---\n# Vault about\n\nVault about body.\n");
   await writeFile(path.join(root, "vault/guides/index.md"), "---\ntitle: Guides landing\ntags: [guides]\n---\n# Guides landing\n");
   await writeFile(path.join(root, "vault/guides/deep/one.md"), "---\ntitle: Deep guide\ntags: [guides]\n---\n# Deep guide\n");

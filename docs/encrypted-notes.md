@@ -28,7 +28,7 @@ Notes in the same group share one password and unlock together for the current b
 
 Set `hide_locked: true` to omit a protected note from public navigation, search, feeds, sitemaps, and graphs. Its URL remains reachable by someone who knows it. Listed protected notes expose their title and URL before unlock. Search and graph details for listed notes appear only after unlock and disappear on lock. `draft: true` and `private: true` still prevent publication; `published_at` publishes immediately, without scheduling a future build.
 
-Attachments used only by protected notes enter the encrypted payload. An attachment also referenced by a public note is public. Use normal Markdown links and images, or static `src`, `href`, `poster`, and `srcset` attributes in `.svx`. Client-side imports must be safe for browsers. Svartz rejects server-only imports and unpublished or cross-group note imports. Unsupported compiler-emitted assets fail the build.
+Attachments used only by protected notes enter the encrypted payload. An attachment also referenced by a public note is public. Use normal Markdown links and images, or static `src`, `href`, `poster`, and `srcset` attributes in `.svx`. Client-side imports must be safe for browsers. Host-owned `$lib` imports use the host's module instance, so a context key imported by both a layout and a protected note keeps its identity. Keep protected-only code inside the vault. Svartz rejects server-only imports and unpublished or cross-group note imports. Unsupported compiler-emitted assets fail the build.
 
 For a SvelteKit host, allow decrypted module imports and styles in its CSP:
 
