@@ -162,6 +162,20 @@ async function checkHost(project, launcher, archives) {
     '  void [properties, comments];',
     '}',
   ].join('\n'));
+  await write(project, 'check-ui-types.ts', [
+    '/// <reference types="@svartz/ui/virtual-modules" />',
+    "import { vault, deploymentBasePath } from 'virtual:svartz/artifacts';",
+    "import { vaults } from 'virtual:svartz/host';",
+    'const base: string = deploymentBasePath;',
+    'const hostBase: string = vaults[0].basePath;',
+    "const note = vault.note('/notes/');",
+    'if (note) {',
+    '  const properties: Readonly<Record<string, unknown>> = note.entry.properties;',
+    '  const comments: boolean = note.entry.page.comments;',
+    '  void [properties, comments];',
+    '}',
+    'void [base, hostBase];',
+  ].join('\n'));
   await write(project, 'src/routes/rss.xml/+server.ts', [
     "import { vaults } from 'virtual:svartz/host';",
     "import { renderHostRss } from '@svartz/vite/discovery';",
@@ -177,6 +191,8 @@ async function checkHost(project, launcher, archives) {
   ].join('\n')], project);
   await command(path.join(project, 'node_modules/.bin/tsc'),
     ['--noEmit', '--skipLibCheck', '--module', 'esnext', '--moduleResolution', 'bundler', '--target', 'es2022', 'vite.config.ts', 'svartz.config.ts', 'check-types.ts'], project);
+  await command(path.join(project, 'node_modules/.bin/tsc'),
+    ['--noEmit', '--skipLibCheck', '--module', 'esnext', '--moduleResolution', 'bundler', '--target', 'es2022', 'check-ui-types.ts'], project);
   await command('npm', ['run', 'svartz:build'], project);
   await command(path.join(project, 'node_modules/.bin/svelte-check'), ['--tsconfig', './tsconfig.json'], project);
   const sourcesPath = path.join(project, '.svartz/vaults/notes/tailwind-sources.css');
@@ -198,6 +214,11 @@ async function checkHost(project, launcher, archives) {
   assert.match(await readFile(path.join(project, 'build/rss.xml'), 'utf8'), /https:\/\/example\.test\//);
   await checkDev(project, '/', 'Portfolio home');
   await checkDev(project, '/notes/', 'Welcome');
+  await write(project, 'svelte.config.js', "import adapter from '@sveltejs/adapter-static';\nexport default { kit: { adapter: adapter(), paths: { base: '/site' } } };\n");
+  await writeFile(configPath, config.replace("target: { type: 'host' },", "target: { type: 'host' },\n    mountPath: 'notes',"));
+  await rm(path.join(project, 'src/routes/rss.xml'), { recursive: true });
+  await command('npm', ['run', 'svartz:build'], project);
+  await checkDev(project, '/site/notes/', 'Welcome');
   console.log('Packed Vite 8 host: integration, types, static build, and dev passed.');
 }
 

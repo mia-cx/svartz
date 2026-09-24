@@ -18,6 +18,7 @@ import {
   getGeneratedRuntimeThemeModulePath,
   createHostRegistrySource,
   getGeneratedHostRegistryPath,
+  svelteKitBasePath,
   getVaultBuildRoot,
   resolveThemePackageRoot,
   svartz,
@@ -532,7 +533,17 @@ const createAppConfig = (
       mode,
       // Workspace packages resolve compatible Vite runtimes at runtime, but their
       // published type graphs can diverge slightly inside the monorepo.
-      plugins: vaults.map((item) => svartz({ config: item, mode, exposeVirtualModules: vaults.length === 1 }) as never),
+      plugins: [
+        ...vaults.map((item) => svartz({ config: item, mode, exposeVirtualModules: vaults.length === 1 }) as never),
+        {
+          name: "svartz:host-registry-base",
+          async configResolved(resolved) {
+            if (!hostApp) return;
+            const kitBasePath = svelteKitBasePath(resolved.define) ?? "";
+            await writeFile(hostRegistryPath, createHostRegistrySource(vaults, kitBasePath));
+          },
+        },
+      ],
       resolve: { alias: { "virtual:svartz/host": hostRegistryPath } },
       server: {
         fs: {
