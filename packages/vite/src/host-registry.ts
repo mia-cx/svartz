@@ -21,13 +21,13 @@ export function deploymentBasePath(config: ResolvedConfig, kitBasePath?: string)
 }
 
 /** The host eagerly reads route metadata and loads runtime code only for the selected mount. */
-export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitBasePath = ""): string {
+export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitBasePath?: string): string {
   const imports = vaults.map((vault, index) =>
     `import * as index${index} from ${JSON.stringify(getGeneratedIndexModulePath(vault))};`
   );
   const records = vaults.map((vault, index) => {
     const { favicon: _favicon, ...siteConfig } = vault.site;
-    return `  { id: ${JSON.stringify(vault.id)}, mountPath: ${JSON.stringify(vault.mountPath)}, basePath: ${JSON.stringify(kitBasePath)}, artifacts: { index: index${index}.index, siteConfig: ${JSON.stringify(siteConfig)} }, theme: undefined },`;
+    return `  { id: ${JSON.stringify(vault.id)}, mountPath: ${JSON.stringify(vault.mountPath)}, basePath: ${JSON.stringify(deploymentBasePath(vault, kitBasePath))}, artifacts: { index: index${index}.index, siteConfig: ${JSON.stringify(siteConfig)} }, theme: undefined },`;
   });
   const loaders = vaults.map((vault) => `  () => Promise.all([import(${JSON.stringify(getGeneratedRuntimeArtifactsModulePath(vault))}), import(${JSON.stringify(getGeneratedRuntimeThemeModulePath(vault))})]),`);
   return [

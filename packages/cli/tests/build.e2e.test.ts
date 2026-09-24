@@ -104,6 +104,25 @@ describe("svartz CLI", () => {
     }
   }, 240_000);
 
+  it("renders a mounted static vault below a standalone deployment base", async () => {
+    const configPath = resolve(ROOT, ".svartz-mounted-base-e2e.config.ts");
+    try {
+      await writeFile(configPath, `export default {
+        version: "1.0.0",
+        vaults: [{ id: "docs", path: "vaults/docs", mountPath: "/blog",
+          target: { type: "static", basePath: "/site" }, site: { title: "Docs", url: "https://example.test/site" } }],
+      };\n`);
+      await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
+      const html = await readFile(resolve(DIST_ROOT, "blog/index.html"), "utf8");
+      expect(html).toContain("Svartz Documentation Vault");
+      expect(html).toContain('href="https://example.test/site/blog/"');
+      const registry = await readFile(resolve(ROOT, ".svartz/host/runtime.ts"), "utf8");
+      expect(registry).toContain('basePath: "/site"');
+    } finally {
+      await rm(configPath, { force: true });
+    }
+  }, 240_000);
+
   it("publishes protected SVX as sealed static output only", async () => {
     const configPath = resolve(ROOT, ".svartz-protected-e2e.config.ts");
     const dist = resolve(ROOT, ".svartz/vaults/protected-e2e/dist");
