@@ -1,7 +1,6 @@
 ---
 description: Current-directory Svartz initializer and packed template ownership
-globs:
-  - packages/cli/**
+globs: packages/cli/**
 alwaysApply: false
 ---
 
@@ -9,5 +8,5 @@ alwaysApply: false
 
 - `svartz init` writes into the invocation directory. A directory is a project root, not an implicit vault; only `vaults[].path` selects content.
 - New projects copy `packages/cli/template` from the CLI package. Keep `template` in `packages/cli/package.json` files and in Turbo build/test inputs. Store the template's `.gitignore` as `gitignore` so npm packing includes it, then rename it on copy.
-- Preflight conflicts before writing. Existing SvelteKit apps keep routes, layouts, adapters, and build scripts. Existing Svartz configs and vault definitions stay intact.
+- Preflight complete destinations and file-valued ancestors before writing. Existing SvelteKit apps keep routes, layouts, adapters, and build scripts, including catchalls inside route groups. Existing Svartz configs and vault definitions stay intact.
 - SvelteKit reloads Vite config for its client build. Host configs need `withSvartzHost` from `@svartz/vite/host`; the first CLI-injected plugin alone cannot provide those aliases to the second build.
