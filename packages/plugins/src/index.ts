@@ -55,6 +55,7 @@ export { compileProtectedNoteSource } from "./emit-artifacts";
 import { emitDiscovery, EMIT_DISCOVERY_ID } from "./emit-discovery";
 import { emitImages, EMIT_IMAGES_ID } from "./emit-images";
 import { analytics, ANALYTICS_ID } from "./analytics";
+import { hardLineBreaks } from "./hard-line-breaks";
 
 export const CORE_PLUGIN_IDS = [
   DISCOVER_FILES_ID,
@@ -228,6 +229,7 @@ export {
   emitImages,
   analytics,
   emitArtifacts,
+  hardLineBreaks,
 };
 
 // Re-export IDs
