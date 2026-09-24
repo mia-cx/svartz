@@ -46,14 +46,6 @@ describe("analytics browser resource", () => {
     ]);
   });
 
-  it("routes each host vault's Google pageviews to its own tag", async () => {
-    const { mount } = await import("../src/browser-analytics");
-    mount("/blog/", { provider: "google", tagId: "G-BLOG" });
-    mount("/work/", { provider: "google", tagId: "G-WORK" });
-    const events = (window as { dataLayer: unknown[][] }).dataLayer.filter((entry) => entry[0] === "event");
-    expect(events.map((entry) => (entry[2] as { send_to: string }).send_to)).toEqual(["G-BLOG", "G-WORK"]);
-  });
-
   it("counts a return to the same route after its mount has ended", async () => {
     vi.useFakeTimers();
     try {
@@ -76,6 +68,7 @@ describe("analytics browser resource", () => {
     const track = vi.fn();
     const config = { provider: "umami", websiteId: "public-id" };
     mount("/blog/one/", config);
+    document.title = "Second title";
     mount("/blog/two/", config);
     expect(scripts).toHaveLength(1);
     expect(scripts[0]?.attributes).toMatchObject({
@@ -86,8 +79,29 @@ describe("analytics browser resource", () => {
     (window as { umami?: { track: typeof track } }).umami = { track };
     scripts[0]?.listeners.load?.();
     expect(track).toHaveBeenCalledTimes(2);
-    expect(track.mock.calls.map(([transform]) => transform({ website: "public-id", title: "Public title" }).url))
-      .toEqual(["/blog/one/", "/blog/two/"]);
+    expect(track.mock.calls.map(([transform]) => transform({ website: "other-site", title: "Later title" })))
+      .toEqual([
+        { website: "public-id", title: "Public title", url: "/blog/one/" },
+        { website: "public-id", title: "Second title", url: "/blog/two/" },
+      ]);
+  });
+
+  it("keeps each Umami vault bound to its own script after another vault loads", async () => {
+    const { mount } = await import("../src/browser-analytics");
+    const blogTrack = vi.fn();
+    const workTrack = vi.fn();
+    const blog = { provider: "umami", websiteId: "blog-id" };
+    const work = { provider: "umami", websiteId: "work-id" };
+    mount("/blog/one/", blog);
+    (window as { umami?: { track: typeof blogTrack } }).umami = { track: blogTrack };
+    scripts[0]?.listeners.load?.();
+    mount("/work/one/", work);
+    (window as { umami?: { track: typeof workTrack } }).umami = { track: workTrack };
+    scripts[1]?.listeners.load?.();
+    mount("/blog/two/", blog);
+    expect(blogTrack).toHaveBeenCalledTimes(2);
+    expect(workTrack).toHaveBeenCalledOnce();
+    expect(blogTrack.mock.calls[1]?.[0]({ website: "work-id" }).website).toBe("blog-id");
   });
 
   it("sends only public Rybbit page metadata once per route", async () => {

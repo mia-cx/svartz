@@ -20,7 +20,7 @@ const content = [
 ].join("\n");
 
 function context(outDir: string, noteContent = content, overrides: Partial<ResolvedConfig> = {}): PluginContext {
-  const config = { outDir, ...overrides } as ResolvedConfig;
+  const config = { outDir, target: { type: "static" }, ...overrides } as ResolvedConfig;
   const index = {
     version: "1.0.0",
     entries: [],
@@ -98,19 +98,21 @@ describe("compiler contributions", () => {
     });
   });
 
-  it("rejects Clarity in a host vault because recording outlives its route", () => {
-    const host = context("/out", content, {
-      target: { type: "host" },
-      analytics: { provider: "clarity", projectId: "public-id" },
-    });
-    expect(() => analytics().emitArtifacts!.run(host)).toThrow(/Clarity.*host vault/i);
-    expect(getCompilerContributions(host).browserResources.size).toBe(0);
+  it("rejects providers that keep tracking after a host vault route ends", () => {
+    const providers = [
+      { provider: "clarity", projectId: "public-id" },
+      { provider: "google", tagId: "G-123" },
+      { provider: "vercel" },
+      { provider: "tinylytics", siteId: "public-id" },
+    ] as const;
+    for (const provider of providers) {
+      const host = context("/out", content, { target: { type: "host" }, analytics: provider });
+      expect(() => analytics().emitArtifacts!.run(host)).toThrow(/host vault/i);
+      expect(getCompilerContributions(host).browserResources.size).toBe(0);
 
-    const standalone = context("/out", content, {
-      target: { type: "static" },
-      analytics: { provider: "clarity", projectId: "public-id" },
-    });
-    analytics().emitArtifacts!.run(standalone);
-    expect(getCompilerContributions(standalone).browserResources.has("core:analytics")).toBe(true);
+      const standalone = context("/out", content, { target: { type: "static" }, analytics: provider });
+      analytics().emitArtifacts!.run(standalone);
+      expect(getCompilerContributions(standalone).browserResources.has("core:analytics")).toBe(true);
+    }
   });
 });
