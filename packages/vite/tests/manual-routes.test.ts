@@ -8,14 +8,15 @@ describe("static host routes", () => {
   it("reserves only authored paths beneath the vault mount", async () => {
     const root = await mkdtemp(join(tmpdir(), "svartz-routes-"));
     try {
-      for (const path of ["src/routes/+page.svelte", "src/routes/blog/about/+page.svelte", "src/routes/blog/(pages)/contact/+server.ts", "src/routes/blog/[...slug]/+page.svelte"]) {
+      for (const path of ["src/routes/+page.svelte", "src/routes/blog/about/+page.svelte", "src/routes/blog/(pages)/contact/+server.ts", "src/routes/blog/manual/+page@.svelte", "src/routes/blog/(pages)/nested/+page@(pages).svelte", "src/routes/blog/[...slug]/+page.svelte"]) {
         const file = join(root, path);
         await mkdir(join(file, ".."), { recursive: true });
         await writeFile(file, "");
       }
-      expect([...await staticHostRoutes(root, "/blog")].sort()).toEqual(["about", "contact"]);
-      expect([...await staticHostRoutes(root, "")].sort()).toEqual(["", "blog/about", "blog/contact"]);
+      expect([...await staticHostRoutes(root, "/blog")].sort()).toEqual(["about", "contact", "manual", "nested"]);
+      expect([...await staticHostRoutes(root, "")].sort()).toEqual(["", "blog/about", "blog/contact", "blog/manual", "blog/nested"]);
       expect(isHostRouteFile(root, join(root, "src/routes/blog/about/+page.svelte"))).toBe(true);
+      expect(isHostRouteFile(root, join(root, "src/routes/blog/manual/+page@.svelte"))).toBe(true);
       expect(isHostRouteFile(root, join(root, "vault/about.md"))).toBe(false);
     } finally {
       await rm(root, { recursive: true, force: true });

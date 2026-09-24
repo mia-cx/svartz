@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 
-const PAGE_FILE = /^\+(?:page|server)(?:\.[^.]+)?\.(?:js|ts|svelte)$/;
+const PAGE_FILE = /^\+(?:page(?:@[^.]*)?|server)(?:\.[^.]+)?\.(?:js|ts|svelte)$/;
 
 export function isHostRouteFile(root: string, file: string): boolean {
   const path = relative(join(root, "src/routes"), file);
