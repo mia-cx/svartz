@@ -28,9 +28,11 @@ export const filterUnpublished = definePlugin(() => ({
           !matches(file.path, exclude);
         if (file.frontmatter?.draft === true) published = false;
 
-        const publishedAt =
-          file.frontmatter?.published_at ?? file.frontmatter?.[frontmatter.publishedField];
-        if (publishedAt !== undefined && publishedAt !== null && publishedAt !== "") {
+        const publicationValues = [
+          file.frontmatter?.published_at,
+          file.frontmatter?.[frontmatter.publishedField],
+        ];
+        if (publicationValues.some((value) => value !== undefined && value !== null && value !== "")) {
           published = true;
         }
         if (file.frontmatter?.private === true) published = false;

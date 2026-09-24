@@ -200,6 +200,54 @@ describe("v1 publication boundary", () => {
     expect(ctx.files.map((file) => file.path)).toEqual(["public.md", "media/cover.png"]);
   });
 
+  it("retains only the effective public frontmatter image", () => {
+    vi.stubEnv("SVARTZ_TEST_PROTECTED_PASSWORD", "secret-password");
+    try {
+      const ctx = context([
+        note("public.md", "", { socialImage: "media/hero.png", image: "media/unused.png" }),
+        note("locked.md", "", { password_group: "friends", socialImage: "media/locked.png" }),
+        asset("media/hero.png"), asset("media/unused.png"), asset("media/locked.png"),
+      ]);
+      Object.assign(ctx.config.passwordGroups, { friends: { env: "SVARTZ_TEST_PROTECTED_PASSWORD" } });
+      ctx.meta.set("svartz:protectionReady", true);
+      filterUnpublished().filterUnpublished!.run(ctx);
+      expect(ctx.files.map((file) => file.path)).toEqual(["public.md", "locked.md", "media/hero.png"]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("does not publish assets mentioned only in hidden comments", () => {
+    const ctx = context([
+      note("public.md", "%% ![[secret.pdf]] %%\n<!-- <img src=\"media/hidden.png\"> -->\n![Shown](media/visible.png)"),
+      asset("secret.pdf"), asset("media/hidden.png"), asset("media/visible.png"),
+    ]);
+    filterUnpublished().filterUnpublished!.run(ctx);
+    expect(ctx.files.map((file) => file.path)).toEqual(["public.md", "media/visible.png"]);
+  });
+
+  it("retains reference-style assets and rewrites their definitions", () => {
+    const ctx = context([
+      note("note.md", "![Photo][hero]\n\n[hero]: media/photo.png#view"),
+      asset("media/photo.png"),
+    ]);
+    filterUnpublished().filterUnpublished!.run(ctx);
+    expect(ctx.files.map((file) => file.path)).toEqual(["note.md", "media/photo.png"]);
+    resolveLinks().resolveLinks!.run(ctx);
+    expect(ctx.files[0]!.content).toContain("[hero]: ../media/photo.png#view");
+  });
+
+  it("keeps query strings and fragments when rewriting asset URLs", () => {
+    const ctx = context([
+      note("note.md", '![Image](media/photo.png?width=2#crop) <iframe src="media/manual.pdf#page=3"></iframe>'),
+      asset("media/photo.png"), asset("media/manual.pdf"),
+    ]);
+    filterUnpublished().filterUnpublished!.run(ctx);
+    resolveLinks().resolveLinks!.run(ctx);
+    expect(ctx.files[0]!.content).toContain("![Image](../media/photo.png?width=2#crop)");
+    expect(ctx.files[0]!.content).toContain('src="../media/manual.pdf#page=3"');
+  });
+
   it("includes attachment URLs in responsive images and media tags", () => {
     const ctx = context([
       note("locked.md", '<picture><source srcset="media/small.webp 1x, media/large.webp 2x"><img src="media/fallback.png"></picture><video poster="media/poster.jpg" src="media/clip.mp4"></video><a href="media/file.pdf">Download</a>', { password_group: "friends" }),
@@ -265,6 +313,13 @@ describe("v1 publication boundary", () => {
       "posts/yes.md",
       "notes/override.md",
     ]);
+  });
+
+  it("uses a custom publication field when published_at is blank", () => {
+    const ctx = context([note("note.md", "Published", { published_at: "", go_live: "2026-01-01" })], "inclusion");
+    Object.assign(ctx.config.frontmatter, { publishedField: "go_live" });
+    filterUnpublished().filterUnpublished!.run(ctx);
+    expect(ctx.files.map((file) => file.path)).toEqual(["note.md"]);
   });
 
   it("chooses a note-relative attachment before a vault-root namesake", () => {

@@ -10,10 +10,16 @@ const HTML_ASSET = /\b(?:href|src|poster|srcset)\s*=\s*(["'])(.*?)\1/gi;
 const ROAM_MEDIA = /\{\{\[\[(?:audio|video|pdf)\]\]:\s*([^}\r\n]+)\}\}/gi;
 const markdown = unified().use(remarkParse);
 
+/** Hide non-rendered comments without changing source offsets. */
+export function maskHiddenComments(source: string): string {
+  return source.replace(/%%[\s\S]*?%%|<!--[\s\S]*?(?:-->|$)/g,
+    (comment) => comment.replace(/[^\r\n]/g, " "));
+}
+
 /** Source spans for local Roam media outside code and HTML. */
 export function roamMediaReferences(source: string): { start: number; end: number; target: string }[] {
   const references: { start: number; end: number; target: string }[] = [];
-  visit(markdown.parse(source), "text", (node) => {
+  visit(markdown.parse(maskHiddenComments(source)), "text", (node) => {
     const offset = node.position?.start.offset;
     if (offset === undefined) return;
     for (const match of node.value.matchAll(ROAM_MEDIA)) {
@@ -22,6 +28,32 @@ export function roamMediaReferences(source: string): { start: number; end: numbe
       if (source.slice(start, start + target.length) !== target) continue;
       references.push({ start, end: start + target.length, target: target.trim() });
     }
+  });
+  return references;
+}
+
+/** URLs in definitions actually used by Markdown reference links or images. */
+export function referenceDefinitionSpans(source: string): { start: number; end: number; target: string }[] {
+  const tree = markdown.parse(maskHiddenComments(source));
+  const used = new Set<string>();
+  visit(tree, (node) => {
+    if (node.type === "linkReference" || node.type === "imageReference") {
+      used.add(node.identifier.toLowerCase());
+    }
+  });
+  const references: { start: number; end: number; target: string }[] = [];
+  visit(tree, "definition", (node) => {
+    if (!used.has(node.identifier.toLowerCase())) return;
+    const offset = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (offset === undefined || end === undefined) return;
+    const raw = source.slice(offset, end);
+    const match = /^ {0,3}\[[^\]]+\]:[ \t]*(?:<([^>]+)>|(\S+))/.exec(raw);
+    if (!match) return;
+    const target = match[1] ?? match[2];
+    if (!target) return;
+    const start = offset + match[0].lastIndexOf(target);
+    references.push({ start, end: start + target.length, target });
   });
   return references;
 }
@@ -78,16 +110,20 @@ export function referencedAssets(
       if (path) selected.add(path);
     };
 
-    for (const field of ["socialImage", "image", "cover"] as const) {
-      const value = note.frontmatter?.[field];
-      if (typeof value === "string") resolve(value);
+    if (!note.protection) {
+      const image = ["socialImage", "image", "cover"]
+        .map((field) => note.frontmatter?.[field])
+        .find((value): value is string => typeof value === "string" && value.trim().length > 0);
+      if (image) resolve(image.trim());
     }
 
     if (roamMedia) {
       for (const reference of roamMediaReferences(note.content)) resolve(reference.target);
     }
 
-    visit(markdown.parse(note.content), (node) => {
+    for (const reference of referenceDefinitionSpans(note.content)) resolve(reference.target);
+
+    visit(markdown.parse(maskHiddenComments(note.content)), (node) => {
       if (node.type === "link" || node.type === "image") {
         resolve(node.url);
       } else if (node.type === "text") {
