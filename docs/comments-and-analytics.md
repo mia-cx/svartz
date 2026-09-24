@@ -46,19 +46,21 @@ vaults: [
 | Provider | Required settings | Optional settings |
 | --- | --- | --- |
 | Plausible | none | `scriptSrc`, `host` |
-| Google Analytics | `tagId` | none |
+| Google Analytics | `tagId` | standalone builds only |
 | Umami | `websiteId` | `host` |
 | GoatCounter | `websiteId` | `host`, `scriptSrc` |
 | PostHog | `apiKey` | `host` |
-| Tinylytics | `siteId` | none |
+| Tinylytics | `siteId` | standalone builds only |
 | Cabin | none | `host` |
 | Clarity | `projectId` | standalone builds only |
 | Matomo | `host`, `siteId` | none |
-| Vercel Web Analytics | none | none |
+| Vercel Web Analytics | none | standalone builds only |
 | Rybbit | `siteId` | `host` |
 
 Plausible's current dashboard supplies the script URL. Set it as `scriptSrc`; the fallback uses Quartz's older manual script. Vercel requires Web Analytics enabled on the hosting project and its `/_vercel/insights/` endpoint. A custom `host` is an absolute HTTP(S) URL except GoatCounter's bare domain. For Matomo, include the protocol in `host`.
 
-Svartz sends manual pageviews only after a route mounts. Google events target the vault's tag, and Umami sends the route path even if its script loads after navigation. Umami's automatic tracking is disabled so it does not collect visits outside the vault. The browser module shares one provider installation across repeated mounts with the same settings. Rybbit uses its HTTP pageview API so remote session-replay settings cannot read note content. No note body or decrypted text is passed to a tracker by Svartz. The runtime marks the entire vault view with `data-clarity-mask`. Clarity cannot stop recording when a host navigates to an unrelated route, so a host vault cannot configure it per vault. A host can install Clarity at app level if it intends to record the whole app. Consumers who add other tracking code in the host app own that code's behavior.
+Svartz sends manual pageviews only after a route mounts. Umami snapshots each route's path and title, and sends them to that vault's website even if its script loads after navigation. Umami's automatic tracking is disabled so it does not collect visits outside the vault. The browser module shares one provider installation across repeated mounts with the same settings. Rybbit uses its HTTP pageview API so remote session-replay settings cannot read note content. No note body or decrypted text is passed to a tracker by Svartz. The runtime marks the entire vault view with `data-clarity-mask`.
+
+Clarity, Google Analytics, Tinylytics, and Vercel Web Analytics can track routes outside a host vault after their scripts load. Svartz rejects these providers for host vaults. Configure them at the host app level if you intend to track the whole app. For standalone Google Analytics, disable Enhanced Measurement's browser-history page changes in the Google data stream to avoid duplicate pageviews. Consumers who add other tracking code in the host app own that code's behavior.
 
 Provider setup references: [Plausible](https://plausible.io/docs/script-extensions), [Google](https://developers.google.com/analytics/devguides/collection/ga4/views), [Umami](https://docs.umami.is/docs/tracker-functions), [GoatCounter](https://www.goatcounter.com/help/js), [PostHog](https://posthog.com/docs/libraries/js), [Tinylytics](https://tinylytics.app/docs/getting-started/embed), [Cabin](https://docs.withcabin.com/install), [Clarity](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-masking), [Matomo](https://developer.matomo.org/guides/spa-tracking), [Vercel](https://vercel.com/docs/analytics/quickstart), [Rybbit](https://rybbit.com/docs/script).
