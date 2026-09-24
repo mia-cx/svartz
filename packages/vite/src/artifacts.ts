@@ -54,6 +54,7 @@ function createArtifactsVirtualModuleSource(
   browserResources: readonly BrowserResource[] = [],
   vaultId = "default",
   protectedBridgeModules: readonly ProtectedBridgeModule[] = [],
+  deploymentBasePath = "",
 ): string {
   const coreModuleId = typeof import.meta.resolve === "function"
     ? fileURLToPath(import.meta.resolve("@svartz/core"))
@@ -141,6 +142,7 @@ function createArtifactsVirtualModuleSource(
     "",
     `export const themeConfig = ${JSON.stringify(themeConfig)};`,
     `export const siteConfig = ${JSON.stringify(publicSiteConfig)};`,
+    `export const deploymentBasePath = ${JSON.stringify(deploymentBasePath)};`,
     `export const vault = createVaultView(index, ${JSON.stringify(vaultId)}, base);`,
     `export function createUnlockedVault(groups) {`,
     `  const unlockedIndex = mergeProtectedIndex(index, groups);`,

@@ -12,5 +12,9 @@ describe('published vault navigation', () => {
 		expect(tree[0]?.children[0]?.href).toBe('/site/blog/guides/hello-3/');
 		expect(buildBreadcrumbs('guides/hello', entries, '/site/blog/').at(-1)?.href)
 			.toBe('/site/blog/guides/hello-3/');
+		expect(buildBreadcrumbs('guides/hello', entries, '/site/blog/', folders)[1]?.href)
+			.toBe('/site/blog/folders/guides/');
+		expect(buildBreadcrumbs('guides/hello', entries, '/site/blog/')[1]?.href)
+			.toBe('/site/blog/guides/');
 	});
 });

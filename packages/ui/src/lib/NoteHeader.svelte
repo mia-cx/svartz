@@ -8,7 +8,13 @@
 		wordCount?: number;
 	};
 
-	let { entry }: { entry?: Entry } = $props();
+	let {
+		entry,
+		tags = []
+	}: {
+		entry?: Entry;
+		tags?: readonly { slug: string; href: string }[];
+	} = $props();
 
 	function formatDate(value: Date | string | undefined): string | undefined {
 		if (!value) return undefined;
@@ -66,7 +72,7 @@
 				{#each entry.tags as tag (tag)}
 					<li>
 						<a
-							href={'/tags/' + tag + '/'}
+							href={tags.find((item) => item.slug === tag)?.href ?? '/tags/' + tag + '/'}
 							class="inline-flex rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:bg-zinc-700"
 						>
 							#{tag}
