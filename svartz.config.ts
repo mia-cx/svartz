@@ -17,5 +17,17 @@ export default defineConfig({
         description: "Documentation for the Svartz static publishing toolkit.",
       },
     },
+    {
+      // Kitchen-sink vault: every OFM feature a theme must render.
+      id: "showcase",
+      path: "vaults/showcase",
+      target: {
+        type: "static",
+      },
+      site: {
+        title: "Backyard Weather Station",
+        description: "A Svartz showcase vault that uses every Obsidian Markdown feature.",
+      },
+    },
   ],
 });

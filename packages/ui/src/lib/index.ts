@@ -8,6 +8,23 @@ export { default as RecentNotes } from './RecentNotes.svelte';
 export { default as SearchBox } from './SearchBox.svelte';
 export { default as TableOfContents } from './TableOfContents.svelte';
 export { SVARTZ_MARK_SVG } from './brand';
+export { default as ColorModeToggle } from './ColorModeToggle.svelte';
+export { default as LinkPreviews } from './LinkPreviews.svelte';
+export { default as SearchDialog } from './SearchDialog.svelte';
+export * from './content/index.js';
+export { COLOR_MODE_KEY, COLOR_MODE_SCRIPT, currentColorMode, setColorMode, type ColorMode } from './color-mode.js';
+export { formatDate, isoDate, readingTime } from './format.js';
+export { PREVIEW_ATTRIBUTE, fetchPreview } from './preview.js';
+export {
+	createSearch,
+	excerpt,
+	highlight,
+	parseSearchQuery,
+	type SearchDocument,
+	type SearchHit,
+	type SearchOptions,
+	type TextSegment
+} from './search.js';
 export {
 	buildBreadcrumbs,
 	buildExplorerTree,

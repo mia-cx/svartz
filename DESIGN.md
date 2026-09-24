@@ -85,6 +85,8 @@ A theme may change only these:
 | Measure (content width) | `--sv-measure` | `42rem` |
 | Layout and chrome | the theme's own CSS | |
 
+Set dials on `:root`. The derived tokens (`--sv-step-*`, `--sv-space-*`) resolve where they are declared, so a dial set on an inner element does not rescale them.
+
 How much accent a theme uses is a layout choice, not a new colour. A theme that needs a colour, radius or font the tokens don't have adds it here first.
 
 | Theme | Density | Ratio | Measure | Character |
