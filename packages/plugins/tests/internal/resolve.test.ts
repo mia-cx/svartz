@@ -60,6 +60,23 @@ describe("buildSlugMap", () => {
     expect(svxWinner["foo.svx"]).toBe("foo");
   });
 
+  it("keeps an authored-stem winner when another filename owns its natural route", () => {
+    const entries = [
+      { slug: "foo-bar", path: "foo-bar.md" },
+      { slug: "foo-bar-2", path: "foo bar.md" },
+      { slug: "foo-bar-3", path: "foo bar.svx" },
+    ];
+    for (const order of [entries, [...entries].reverse()]) {
+      const map = buildSlugMap(order);
+      expect(map["foo bar"]).toBe("foo-bar-2");
+      expect(map["foo bar.md"]).toBe("foo-bar-2");
+      expect(map["foo bar.svx"]).toBe("foo-bar-3");
+      expect(map["foo-bar"]).toBe("foo-bar");
+      expect(resolveLink(makeLink("foo bar"), map, entries.map((entry) => entry.slug), "absolute", "links"))
+        .toBe("foo-bar-2");
+    }
+  });
+
   it("excludes ambiguous aliases", () => {
     const map = buildSlugMap([
       { slug: "a/one", aliases: ["shared"] },

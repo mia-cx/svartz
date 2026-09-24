@@ -69,7 +69,8 @@ export const resolveLink = (
 
 /**
  * Build a slug resolution map from all files' slugs and aliases.
- * Alias collisions are excluded, and duplicate authored stems keep their canonical winner.
+ * Alias collisions are excluded. Duplicate authored stems prefer their canonical winner,
+ * then the first authored path when another filename owns the natural route.
  */
 export const buildSlugMap = (
   entries: ReadonlyArray<{ slug: string; path?: string; aliases?: readonly string[] }>,
@@ -100,10 +101,9 @@ export const buildSlugMap = (
   }
 
   for (const [stem, sameStem] of authoredStems) {
-    const winner = sameStem.length === 1
-      ? sameStem[0]
-      : sameStem.find((entry) => routeSlug(fileToSlug(entry.path!)) === entry.slug);
-    if (winner) map[stem] = winner.slug;
+    const winner = sameStem.find((entry) => routeSlug(fileToSlug(entry.path!)) === entry.slug)
+      ?? [...sameStem].sort((a, b) => a.path!.localeCompare(b.path!) || a.slug.localeCompare(b.slug))[0]!;
+    map[stem] = winner.slug;
   }
 
   for (const entry of entries) {
