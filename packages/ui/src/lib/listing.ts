@@ -28,7 +28,7 @@ export function newestFirst<T extends Listable>(entries: readonly T[]): T[] {
 
 /**
  * Every note under a folder, nested ones included, plus its direct subfolders.
- * The folder's own index note is its page, not an item.
+ * The folder's own note (`log/index.md`, published as `log`) is its page, not an item.
  */
 export function folderContents<T extends Listable, F extends Folder>(
 	slug: string,
@@ -39,7 +39,7 @@ export function folderContents<T extends Listable, F extends Folder>(
 	const isDirect = (candidate: string) =>
 		candidate.startsWith(prefix) && !candidate.slice(prefix.length).includes('/');
 	return {
-		notes: newestFirst(entries.filter((entry) => entry.slug.startsWith(prefix) && entry.slug !== `${slug}/index`)),
+		notes: newestFirst(entries.filter((entry) => entry.slug.startsWith(prefix))),
 		folders: folders.filter((folder) => isDirect(folder.slug))
 	};
 }

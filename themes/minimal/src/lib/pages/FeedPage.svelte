@@ -6,9 +6,8 @@
 
 	let { vault }: ThemePageProps = $props();
 
-	const FEED_SLUGS = ['feed', 'feed/index'];
-	const intro = $derived(vault.entries.find((entry) => FEED_SLUGS.includes(entry.slug)));
-	const notes = $derived(newestFirst(vault.entries.filter((entry) => !FEED_SLUGS.includes(entry.slug))));
+	const intro = $derived(vault.entries.find((entry) => entry.slug === 'feed'));
+	const notes = $derived(newestFirst(vault.entries.filter((entry) => entry !== intro)));
 </script>
 
 <ListHeader title={intro?.title ?? 'Recent notes'} summary={intro?.description} />

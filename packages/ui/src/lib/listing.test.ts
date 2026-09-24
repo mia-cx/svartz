@@ -15,8 +15,8 @@ describe('listing helpers', () => {
 		expect(sorted.map((entry) => entry.slug)).toEqual(['c', 'a', 'a2', 'b']);
 	});
 
-	it('lists every note under a folder and its direct subfolders, without its index note', () => {
-		const entries = [note('log/index'), note('log/day-1'), note('log/2026/day-2'), note('other/x')];
+	it('lists every note under a folder and its direct subfolders, without its folder note', () => {
+		const entries = [note('log'), note('log/day-1'), note('log/2026/day-2'), note('other/x')];
 		const folders = [
 			{ slug: 'log', title: 'Log', noteCount: 3, href: '/folders/log/' },
 			{ slug: 'log/2026', title: '2026', noteCount: 1, href: '/folders/log/2026/' },

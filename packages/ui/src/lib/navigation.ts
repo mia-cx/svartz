@@ -44,7 +44,6 @@ export function titleFromSlugSegment(segment: string): string {
 export function ancestorFolderIdsForSlug(slug: string | undefined): string[] {
 	if (!slug || slug === 'index') return [];
 	const segments = slug.split('/').filter(Boolean);
-	if (segments[segments.length - 1] === 'index') segments.pop();
 	const ids: string[] = [];
 	let path = '';
 	for (let i = 0; i < segments.length - 1; i += 1) {
@@ -55,8 +54,8 @@ export function ancestorFolderIdsForSlug(slug: string | undefined): string[] {
 }
 
 /**
- * Home, each ancestor folder, then the note. A folder crumb uses its `index` note
- * when one exists, then its generated folder page.
+ * Home, each ancestor folder, then the note. A folder crumb uses its folder note
+ * (`guides/index.md`, published as `guides`) when one exists, then its folder page.
  */
 export function buildBreadcrumbs(
 	slug: string | undefined,
@@ -68,17 +67,13 @@ export function buildBreadcrumbs(
 	if (!slug || slug === 'index') return breadcrumbs;
 
 	const segments = slug.split('/');
-	if (segments.at(-1) === 'index') segments.pop();
 	const bySlug = new Map(entries.map((entry) => [entry.slug, entry]));
 	const rootHref = homeHref.endsWith('/') ? homeHref : `${homeHref}/`;
 	let current = '';
 
-	segments.forEach((segment, position) => {
+	segments.forEach((segment) => {
 		current = current ? `${current}/${segment}` : segment;
-		const isLast = position === segments.length - 1;
-		const note = bySlug.get(current) ?? bySlug.get(`${current}/index`);
-		const folder = folders.find((candidate) => candidate.slug === current);
-		const target = isLast ? (note ?? folder) : (bySlug.get(`${current}/index`) ?? folder ?? note);
+		const target = bySlug.get(current) ?? folders.find((candidate) => candidate.slug === current);
 		breadcrumbs.push({
 			title: target?.title ?? titleFromSlugSegment(segment),
 			href: target?.href ?? `${rootHref}${current}/`
@@ -112,7 +107,8 @@ function sortExplorerNodes(nodes: ExplorerNode[]): ExplorerNode[] {
 /**
  * The vault as a tree: folders first, then notes, each in natural order. The home
  * note is left out (the site title links home). A folder takes its title and link
- * from its `index` note when one exists, otherwise from its generated folder page.
+ * from its folder note (`guides/index.md`, published as `guides`) when one exists,
+ * otherwise from its generated folder page.
  */
 export function buildExplorerTree(
 	entries: readonly UiIndexEntry[],
@@ -120,14 +116,18 @@ export function buildExplorerTree(
 ): readonly ExplorerNode[] {
 	const roots: ExplorerNode[] = [];
 	const folderMap = new Map<string, ExplorerNode>();
-	const folderIndexes = new Map(
-		entries.filter((entry) => entry.slug.endsWith('/index')).map((entry) => [entry.slug.slice(0, -'/index'.length), entry])
+	const bySlug = new Map(entries.map((entry) => [entry.slug, entry]));
+	const parentSlugs = new Set(
+		entries.flatMap((entry) => {
+			const segments = entry.slug.split('/');
+			return segments.slice(1).map((_, depth) => segments.slice(0, depth + 1).join('/'));
+		})
 	);
 
 	const folderFor = (slug: string, segment: string): ExplorerNode => {
 		const existing = folderMap.get(slug);
 		if (existing) return existing;
-		const landing = folderIndexes.get(slug);
+		const landing = bySlug.get(slug);
 		const generated = folders.find((folder) => folder.slug === slug);
 		const node = createFolderNode(
 			`folder:${slug}`,
@@ -139,9 +139,9 @@ export function buildExplorerTree(
 	};
 
 	for (const entry of entries) {
-		if (entry.slug === 'index') continue;
+		// The home note and folder notes don't list as notes.
+		if (entry.slug === 'index' || parentSlugs.has(entry.slug)) continue;
 		const segments = entry.slug.split('/');
-		const isFolderIndex = segments.at(-1) === 'index';
 
 		let siblings = roots;
 		let parentSlug = '';
@@ -153,7 +153,6 @@ export function buildExplorerTree(
 			siblings = folder.children as ExplorerNode[];
 		}
 
-		if (isFolderIndex) continue;
 		siblings.push({
 			id: `note:${entry.slug}`,
 			title: entry.title,
