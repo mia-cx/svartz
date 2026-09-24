@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { mkdtemp, mkdir, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { basename, parse, resolve } from "node:path";
 import {
   resolveConfig,
   getVault,
@@ -154,6 +154,41 @@ describe("resolveConfigPaths", () => {
         vaults: [config.vaults[0]!, { ...config.vaults[1]!, outDir: "future/blog/dist" }],
       };
       await expect(resolveConfig(distinctConfig, root)).resolves.toBeDefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it.skipIf(process.platform !== "win32")("keeps the drive of a root-relative symlink target", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "svartz-drive-build-roots-"));
+    try {
+      const targetName = `${basename(root)}-future`;
+      await symlink(`\\${targetName}`, resolve(root, "linked"), "dir");
+      const config: SvartzConfig = {
+        version: "1.0.0",
+        vaults: [
+          { id: "blog", path: VALID_VAULT, outDir: "linked/blog/dist", target: { type: "host" }, mountPath: "/blog" },
+          { id: "work", path: VALID_VAULT, outDir: resolve(parse(root).root, targetName, "blog/dist"), target: { type: "host" }, mountPath: "/work" },
+        ],
+      };
+      await expect(resolveConfig(config, root)).rejects.toThrow(VaultBuildRootConflict);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("uses on-disk casing for existing build-root ancestors", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "svartz-case-build-roots-"));
+    try {
+      await mkdir(resolve(root, "Shared"));
+      const caseInsensitive = await stat(resolve(root, "shared")).then(() => true, () => false);
+      const config: SvartzConfig = {
+        version: "1.0.0",
+        vaults: [
+          { id: "blog", path: VALID_VAULT, outDir: "Shared/blog/dist", target: { type: "host" }, mountPath: "/blog" },
+          { id: "work", path: VALID_VAULT, outDir: "shared/blog/dist", target: { type: "host" }, mountPath: "/work" },
+        ],
+      };
+      if (caseInsensitive) await expect(resolveConfig(config, root)).rejects.toThrow(VaultBuildRootConflict);
+      else await expect(resolveConfig(config, root)).resolves.toBeDefined();
     } finally {
       await rm(root, { recursive: true, force: true });
     }

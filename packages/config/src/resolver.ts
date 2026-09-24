@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { mergePlugins } from "@svartz/core";
-import { lstat, readlink, stat } from "node:fs/promises";
+import { lstat, readdir, readlink, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import type {
   FrontmatterFields,
@@ -148,11 +148,12 @@ const isWithin = (root: string, candidate: string): boolean => {
 };
 
 const MAX_BUILD_ROOT_SYMLINKS = 40;
+const BUILD_ROOT_SEPARATORS = sep === "\\" ? /[\\/]/ : /\//;
 
 /** Follow symlink targets in filesystem order, including `..` after another symlink. */
 const canonicalBuildRoot = async (path: string): Promise<string> => {
   let current = parse(path).root;
-  let remaining = path.slice(current.length).split(sep);
+  let remaining = path.slice(current.length).split(BUILD_ROOT_SEPARATORS);
   let linksFollowed = 0;
 
   while (remaining.length > 0) {
@@ -173,7 +174,21 @@ const canonicalBuildRoot = async (path: string): Promise<string> => {
       continue;
     }
     if (!entry.isSymbolicLink()) {
-      current = candidate;
+      const names = await readdir(current);
+      const folded = segment.normalize("NFC").toLowerCase();
+      let actual = names.find((name) => name === segment) ??
+        names.find((name) => name.normalize("NFC").toLowerCase() === folded);
+      if (!actual) {
+        for (const name of names) {
+          const sibling = await lstat(join(current, name));
+          if (sibling.dev === entry.dev && sibling.ino === entry.ino) {
+            actual = name;
+            break;
+          }
+        }
+      }
+      if (!actual) throw new Error(`Build-root component disappeared at ${candidate}`);
+      current = await realpath(join(current, actual));
       continue;
     }
 
@@ -182,8 +197,9 @@ const canonicalBuildRoot = async (path: string): Promise<string> => {
     }
     const target = await readlink(candidate);
     const absoluteTarget = isAbsolute(target);
-    if (absoluteTarget) current = parse(target).root;
-    remaining = [...target.slice(absoluteTarget ? current.length : 0).split(sep), ...remaining];
+    const targetRoot = parse(target).root;
+    if (absoluteTarget) current = sep === "\\" && targetRoot.length === 1 ? parse(current).root : targetRoot;
+    remaining = [...target.slice(absoluteTarget ? targetRoot.length : 0).split(BUILD_ROOT_SEPARATORS), ...remaining];
   }
 
   return current;
