@@ -1,8 +1,6 @@
 ---
 description: Reload editable Svartz config modules
-globs:
-  - packages/config/src/loader.ts
-  - packages/config/tests/loader.test.ts
+globs: packages/config/src/loader.ts, packages/config/tests/loader.test.ts
 alwaysApply: false
 ---
 
