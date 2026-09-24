@@ -1,6 +1,6 @@
 # Published vault view
 
-`virtual:svartz/artifacts` exports `vault`, a typed view of the current published vault in a single-vault build. In a host with multiple mounts, select `resolveHostVault(appPathname)?.artifacts.vault` from `virtual:svartz/host`, after removing SvelteKit's deployment base from the pathname. The view is available to SvelteKit server loaders and themes. `vault.id` identifies the vault. `vault.entries`, `vault.search`, `vault.tags`, `vault.folders`, and `vault.routes` carry final URLs. Those URLs already include the SvelteKit deployment base and the vault's `mountPath`.
+`virtual:svartz/artifacts` exports `vault`, a typed view of the current published vault in a single-vault build. In a host with multiple mounts, await `prepareHostVault(appPathname)` before selecting `resolveHostVault(appPathname)?.artifacts.vault` from `virtual:svartz/host`. Remove SvelteKit's deployment base from the pathname first. The view is available to SvelteKit server loaders and themes. `vault.id` identifies the vault. `vault.entries`, `vault.search`, `vault.tags`, `vault.folders`, and `vault.routes` carry final URLs. Those URLs already include the SvelteKit deployment base and the vault's `mountPath`.
 
 ```ts
 // src/routes/[...slug]/+page.server.ts in a Svartz-enabled SvelteKit app

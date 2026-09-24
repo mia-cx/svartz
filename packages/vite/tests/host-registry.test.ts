@@ -12,6 +12,7 @@ const vault = (id: string, mountPath: string): ResolvedConfig => ({
   exclude: [],
   linkResolution: "closest",
   theme: { base: "@svartz/theme-minimal" },
+  site: { title: id, url: "https://example.test" },
   frontmatter: {
     titleField: "title", descriptionField: "description", tagsField: "tags",
     aliasesField: "aliases", createdAtField: "created_at", updatedAtField: "updated_at",
@@ -22,14 +23,17 @@ const vault = (id: string, mountPath: string): ResolvedConfig => ({
 });
 
 describe("host registry", () => {
-  it("keeps theme and artifact imports separate for each mount", () => {
+  it("imports route metadata eagerly and loads runtime code for only the prepared mount", () => {
     const source = createHostRegistrySource([vault("blog", "/blog"), vault("work", "/work")]);
-    expect(source).toContain('import * as artifacts0 from "/workspace/.svartz/vaults/blog/artifacts/runtime-artifacts.ts"');
-    expect(source).toContain('import * as artifacts1 from "/workspace/.svartz/vaults/work/artifacts/runtime-artifacts.ts"');
-    expect(source).toContain('import * as theme1 from "/workspace/.svartz/vaults/work/artifacts/runtime-theme.ts"');
+    expect(source).toContain('import * as index0 from "/workspace/.svartz/vaults/blog/artifacts/index.ts"');
+    expect(source).toContain('import * as index1 from "/workspace/.svartz/vaults/work/artifacts/index.ts"');
+    expect(source).toContain('import("/workspace/.svartz/vaults/blog/artifacts/runtime-artifacts.ts")');
+    expect(source).toContain('import("/workspace/.svartz/vaults/work/artifacts/runtime-theme.ts")');
+    expect(source).not.toMatch(/import \* as (?:artifacts|theme)/);
     expect(source).toContain('mountPath: "/blog"');
     expect(source).toContain('mountPath: "/work"');
-    expect(source).toContain("await selected?.theme.ready;");
+    expect(source).toContain("await theme.ready;");
+    expect(source).toContain("await preparing.get(selected.id);");
     expect(getGeneratedHostRegistryPath("/workspace")).toBe("/workspace/.svartz/host/runtime.ts");
   });
 });

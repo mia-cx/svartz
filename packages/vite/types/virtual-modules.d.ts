@@ -67,16 +67,20 @@ declare module "virtual:svartz/artifacts" {
 }
 
 declare module "virtual:svartz/host" {
-  export const vaults: readonly {
+  interface HostVaultMetadata {
     readonly id: string;
     readonly mountPath: string;
+    readonly artifacts: Pick<typeof import("virtual:svartz/artifacts"), "index" | "siteConfig">;
+  }
+  interface PreparedHostVault extends HostVaultMetadata {
     readonly artifacts: typeof import("virtual:svartz/artifacts");
     readonly theme: typeof import("virtual:svartz/theme");
-  }[];
+  }
+  export const vaults: readonly HostVaultMetadata[];
   export const routes: {
     readonly all: readonly string[];
     readonly redirects: Readonly<Record<string, string>>;
   };
-  export function resolveHostVault(pathname: string): typeof vaults[number] | undefined;
-  export function prepareHostVault(pathname: string): Promise<typeof vaults[number] | undefined>;
+  export function resolveHostVault(pathname: string): PreparedHostVault | undefined;
+  export function prepareHostVault(pathname: string): Promise<PreparedHostVault | undefined>;
 }
