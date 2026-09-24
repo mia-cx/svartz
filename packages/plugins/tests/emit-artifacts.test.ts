@@ -119,7 +119,7 @@ describe("core:emit-artifacts", () => {
     expect(pageModule).toContain("Welcome to Svartz.");
     expect(pageModule).toContain("<del>Outdated guidance.</del>");
     expect(pageModule).toContain("<blockquote>");
-    expect(pageModule).toContain('data-callout="note"');
+    expect(pageModule).toContain('data-callout=\\"note\\"');
     expect(indexModule).toContain("export const index =");
     expect(indexModule).toContain("export const graph = index.graph;");
   });
