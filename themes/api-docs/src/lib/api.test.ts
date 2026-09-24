@@ -145,6 +145,25 @@ describe('requestSnippets', () => {
 		expect(snippets.python).toContain('requests.post(');
 	});
 
+	it('keeps header examples literal; only the auth token is a variable', () => {
+		const operation = readOperation({
+			operation: {
+				protocol: 'rest',
+				method: 'get',
+				path: '/pets',
+				auth: 'bearer',
+				parameters: [{ name: 'If-None-Match', in: 'header', type: 'string', example: '"$v1"' }]
+			}
+		});
+		if (operation?.protocol !== 'rest') throw new Error('expected a REST operation');
+		const snippets = requestSnippets(operation, 'https://api.example.com', {});
+		expect(snippets.curl).toContain(`-H 'If-None-Match: "$v1"'`);
+		expect(snippets.javascript).toContain(`'If-None-Match': '"$v1"'`);
+		expect(snippets.javascript).toContain("'Authorization': `Bearer ${TOKEN}`");
+		expect(snippets.python).toContain(`"If-None-Match": "\\"$v1\\""`);
+		expect(snippets.python).toContain('"Authorization": f"Bearer {TOKEN}"');
+	});
+
 	it('leaves placeholders for parameters without examples readable', () => {
 		const operation = readOperation({
 			operation: {

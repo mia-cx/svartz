@@ -115,7 +115,7 @@
 					<section class="resources" aria-labelledby="resources-heading">
 						<h2 id="resources-heading" class="sv-section-title">Resources</h2>
 						<ul>
-							{#each sections.filter((section) => section.reference) as section (section.title)}
+							{#each sections.filter((section) => section.reference) as section (section.slug)}
 								<li>
 									{#if section.href}<a href={section.href}>{section.title}</a>{:else}<span>{section.title}</span>{/if}
 									<span class="sv-label">{count(section.entries.length, 'page')}</span>

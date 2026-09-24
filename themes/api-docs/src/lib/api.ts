@@ -338,6 +338,13 @@ export function modelSchemas(entries: readonly NavEntry[]): Record<string, Schem
 // --- Examples ----------------------------------------------------------------
 
 export type SnippetLanguage = 'curl' | 'javascript' | 'python';
+
+/** A request header; `variable` names the credential the reader supplies (`$TOKEN`). */
+interface SnippetHeader {
+	readonly name: string;
+	readonly value: string;
+	readonly variable?: string;
+}
 export const SNIPPET_LANGUAGES: readonly { readonly id: SnippetLanguage; readonly label: string }[] = [
 	{ id: 'curl', label: 'cURL' },
 	{ id: 'javascript', label: 'JavaScript' },
@@ -369,23 +376,31 @@ export function requestSnippets(
 		.map((parameter) => `${encodeURIComponent(parameter.name)}=${urlValue(parameter)}`)
 		.join('&');
 	const url = `${baseUrl.replace(/\/$/, '')}${path}${query ? `?${query}` : ''}`;
-	const headers: [string, string][] = [
-		...(operation.auth && operation.auth !== 'none' ? [['Authorization', operation.auth === 'basic' ? 'Basic $CREDENTIALS' : 'Bearer $TOKEN'] as [string, string]] : []),
-		...operation.parameters.filter((parameter) => parameter.in === 'header').map((parameter): [string, string] => [parameter.name, valueOf(parameter)])
+	// Only the credential is a shell or language variable; every other value is literal.
+	const headers: SnippetHeader[] = [
+		...(operation.auth && operation.auth !== 'none'
+			? [operation.auth === 'basic' ? { name: 'Authorization', value: 'Basic ', variable: 'CREDENTIALS' } : { name: 'Authorization', value: 'Bearer ', variable: 'TOKEN' }]
+			: []),
+		...operation.parameters.filter((parameter) => parameter.in === 'header').map((parameter) => ({ name: parameter.name, value: valueOf(parameter) }))
 	];
 	const body = requestBodyExample(operation, models);
-	if (body !== undefined) headers.push(['Content-Type', operation.requestBody!.contentType]);
+	if (body !== undefined) headers.push({ name: 'Content-Type', value: operation.requestBody!.contentType });
 	const json = body === undefined ? undefined : JSON.stringify(body, null, 2);
 	const method = operation.method;
 
 	const curl = [
 		`curl -X ${method} '${url}'`,
-		// Double quotes, so the shell expands $TOKEN.
-		...headers.map(([name, value]) => `  -H "${name}: ${value}"`),
+		// Double quotes only where the shell must expand $TOKEN.
+		...headers.map(({ name, value, variable }) =>
+			variable ? `  -H "${name}: ${value}$${variable}"` : `  -H '${name}: ${value.replaceAll("'", "'\\''")}'`
+		),
 		...(json ? [`  -d '${json.replace(/\n/g, '\n  ')}'`] : [])
 	].join(' \\\n');
 
-	const jsHeaders = headers.map(([name, value]) => `    '${name}': ${value.includes('$') ? `\`${value.replace('$', '${')}}\`` : `'${value}'`}`);
+	const jsString = (value: string) => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`;
+	const jsHeaders = headers.map(
+		({ name, value, variable }) => `    ${jsString(name)}: ${variable ? `\`${value}\${${variable}}\`` : jsString(value)}`
+	);
 	const javascript = [
 		`const response = await fetch('${url}', {`,
 		`  method: '${method}',`,
@@ -395,7 +410,10 @@ export function requestSnippets(
 		'const data = await response.json();'
 	].join('\n');
 
-	const pyHeaders = headers.map(([name, value]) => `    "${name}": ${value.includes('$') ? `f"${value.replace(/\$(\w+)/, '{$1}')}"` : `"${value}"`}`);
+	const pyHeaders = headers.map(
+		({ name, value, variable }) =>
+			`    ${JSON.stringify(name)}: ${variable ? `f"${value}{${variable}}"` : JSON.stringify(value)}`
+	);
 	const python = [
 		'import requests',
 		'',

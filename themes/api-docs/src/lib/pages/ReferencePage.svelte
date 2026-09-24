@@ -11,9 +11,9 @@
 </script>
 
 <PageTitle title="API reference" summary="Every resource, its objects, and its operations." />
-{#each sections as section (section.title)}
-	<section aria-labelledby="resource-{section.title}">
-		<h2 id="resource-{section.title}">
+{#each sections as section (section.slug)}
+	<section aria-labelledby="resource-{section.slug || 'overview'}">
+		<h2 id="resource-{section.slug || 'overview'}">
 			{#if section.href}<a href={section.href}>{section.title}</a>{:else}{section.title}{/if}
 		</h2>
 		<EndpointList entries={section.entries} />

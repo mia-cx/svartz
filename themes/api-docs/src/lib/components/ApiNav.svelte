@@ -15,7 +15,7 @@
 </script>
 
 <nav class="api-nav" aria-label="API reference">
-	{#each sections as section (section.title)}
+	{#each sections as section (section.slug)}
 		<section>
 			<h2 class="sv-section-title">
 				{#if section.href}<a href={section.href} aria-current={current(section.href)}>{section.title}</a>{:else}{section.title}{/if}
