@@ -7,6 +7,7 @@ It loads `svartz.config.ts`, resolves the selected vault, injects `@svartz/vite`
 ## Commands
 
 ```sh
+svartz init
 svartz build
 svartz build --vault docs
 svartz build:all
@@ -14,6 +15,10 @@ svartz dev --vault docs
 ```
 
 `svartz build` now builds every configured vault sequentially.
+
+`npx svartz@latest init` initializes the directory where it runs. A new project gets an editable SvelteKit shell, a `vault/index.md` starter note, the minimal theme dependency, and `svartz.config.ts`. It installs with npm unless an existing package manager is declared. It initializes Git for a new standalone project unless already inside a Git worktree. `--no-install` and `--no-git` skip those steps.
+
+In an existing SvelteKit app, `init` keeps routes, layouts, adapter, and existing scripts. It adds Svartz dependencies and scripts, wraps the existing Vite export with `withSvartzHost`, and preserves any existing Svartz config and vault definitions. This wrapper supplies virtual-module aliases during SvelteKit's client build. If a file cannot be safely integrated, `init` reports the conflict before writing.
 
 Use `svartz build --vault <id>` when you want to target a single vault.
 
@@ -26,7 +31,7 @@ For the repository shell, the CLI syncs a managed Turbo/package surface at the c
 
 The CLI only rewrites those managed `svartz:*` / `//#svartz:*` entries, so existing non-Svartz scripts and Turbo tasks stay untouched.
 
-In an existing SvelteKit app, it leaves `package.json`, `turbo.json`, routes, Vite config, adapter, and `.svelte-kit` alone. Run `svartz build --vault <id>` or `svartz dev --vault <id>` with `target: { type: "host" }` for each vault. The host's adapter controls its final output. Host route files continue to take precedence. The host can import `virtual:svartz/artifacts` for published metadata and note components.
+After initialization, `build` and `dev` leave the host's `package.json`, `turbo.json`, routes, Vite config, adapter, and `.svelte-kit` alone. Run `svartz build --vault <id>` or `svartz dev --vault <id>` with `target: { type: "host" }` for each vault. The host's adapter controls its final output. Host route files continue to take precedence. The host can import `virtual:svartz/artifacts` for published metadata and note components.
 
 ## Per-Vault Workspace Contract
 

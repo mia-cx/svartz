@@ -32,7 +32,17 @@ export function createSvartzVitePlugin(config: ResolvedConfig) {
 }
 ```
 
-`@svartz/vite` is intended to be injected by the Svartz CLI orchestration layer, not hard-coded into `apps/web/vite.config.ts`.
+The CLI injects this pipeline plugin during build and dev. A SvelteKit host that imports Svartz virtual modules also wraps its Vite export so SvelteKit's secondary client build retains their aliases:
+
+```ts
+import { withSvartzHost } from '@svartz/vite/host';
+import { sveltekit } from '@sveltejs/kit/vite';
+import { defineConfig } from 'vite';
+
+export default withSvartzHost(defineConfig({ plugins: [sveltekit()] }));
+```
+
+`svartz init` adds this wrapper to an existing Kit config while preserving its original config expression. It does not change routes or the adapter.
 
 ## Generated Output
 
