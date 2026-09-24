@@ -5,8 +5,33 @@ import { compileContent } from "../src/internal/compile-content";
 import { renderMarkdownTree } from "../src/internal/render-markdown";
 import { transformOfm } from "../src/transform-ofm";
 import type { PluginContext } from "@svartz/core";
+import rehypePrettyCode from "rehype-pretty-code";
 
 const ctx = { compiler: { remarkPlugins: [], rehypePlugins: [], svxSourceTransforms: [], browserResources: new Map() } } as unknown as PluginContext;
+
+describe("code blocks", () => {
+  const withSyntax = () => {
+    const syntaxCtx = { compiler: { remarkPlugins: [], rehypePlugins: [], browserResources: new Map() } } as unknown as PluginContext;
+    syntaxCtx.compiler.rehypePlugins.push([rehypePrettyCode, { theme: "github-dark", keepBackground: false }]);
+    return syntaxCtx;
+  };
+
+  it("keeps fence metadata through raw HTML parsing, so titles and line highlights render", async () => {
+    const markdown = '```ts title="src/a.ts" {2}\nconst a = 1;\nconst b = 2;\n```';
+    const content = compileContent(await renderMarkdownTree(withSyntax(), markdown));
+    expect(content).toContain("src/a.ts");
+    expect(content).toContain("data-highlighted-line");
+  });
+
+  it("wraps the highlighted figure in the slot and leaves a literal <pre> for whitespace", async () => {
+    const content = compileContent(await renderMarkdownTree(withSyntax(), "```ts\nif (a) {\n  b();\n}\n```"));
+    expect(content).toMatch(/^<contentComponents\.codeBlock [^>]*"tag":"figure"/);
+    expect(content).toContain("<pre");
+
+    const plain = compileContent(await renderMarkdownTree(ctx, "```\n  indented\n```"));
+    expect(plain).toMatch(/<contentComponents\.codeBlock [^>]*"tag":"pre"[^>]*><pre/);
+  });
+});
 
 describe("inert Markdown content compilation", () => {
   it("passes the highlighted language to the code-block slot", async () => {

@@ -183,7 +183,14 @@ function remarkMermaid() {
   };
 }
 
-function transformMarkdown(markdown: string, sourceSlug: string, tagsRoute: string, executable: boolean): { content: string; tags: string[] } {
+/** Apply `rewrite` to the Markdown outside code spans and fences. */
+export function transformOutsideCode(markdown: string, rewrite: (text: string) => string): string {
+  const store = createSegmentStore(markdown);
+  return restoreSegments(rewrite(protectCode(markdown, store, false)), store);
+}
+
+/** Comments, highlights, callout markers, inline tags, and Svelte-safe escaping for one Markdown body. */
+export function transformMarkdown(markdown: string, sourceSlug: string, tagsRoute: string, executable: boolean): { content: string; tags: string[] } {
   const store = createSegmentStore(markdown);
   const protectedCode = protectCode(markdown, store, executable);
   const normalizedComments = normalizeComments(protectedCode);

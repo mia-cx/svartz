@@ -5,9 +5,10 @@ import { buildSlugMap, resolveLink } from "./internal/resolve";
 import { createAssetResolver } from "./internal/asset-references";
 import { alternateNames } from "./internal/routes";
 import { extractSectionMarkdown } from "./internal/parse";
-import { transformInlineTags } from "./transform-ofm";
+import { transformMarkdown, transformOutsideCode } from "./transform-ofm";
 
 const EMBED_REGEX = /!\[\[([^\]]+)\]\]/g;
+const WIKILINK_REGEX = /(?<!!)\[\[([^\]]+)\]\]/g;
 const IMAGE_EXTENSIONS = new Set([
   ".png",
   ".jpg",
@@ -201,7 +202,22 @@ export const transformEmbeds = definePlugin(() => ({
           );
         });
 
-        const tagged = transformInlineTags(expanded, sourceSlug, tagsRoute);
+        // The target's raw source skipped link resolution and the OFM transforms; apply both here.
+        const linked = transformOutsideCode(expanded, (text) =>
+          text.replace(WIKILINK_REGEX, (_raw: string, inner: string) => {
+            const parsed = splitEmbedInner(inner);
+            const label = escapeHtml(parsed.alias ?? parsed.target);
+            const resolved = resolveLink(
+              { raw: inner, target: parsed.target, section: parsed.section, label: parsed.alias, type: "wikilink" } satisfies RawLink,
+              slugMap,
+              allSlugs,
+              ctx.config.linkResolution,
+              targetSlug,
+            );
+            return resolved ? `<a href="${relativeNoteHref(sourceSlug, resolved, parsed.section)}">${label}</a>` : label;
+          }),
+        );
+        const tagged = transformMarkdown(linked, sourceSlug, tagsRoute, false);
         for (const tag of tagged.tags) hostTags.add(tag);
 
         return [
