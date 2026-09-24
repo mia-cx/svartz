@@ -31,6 +31,13 @@ export type {
 } from "./types";
 export { createVaultView, type VaultNoteView, type VaultView } from "./vault-view";
 export { SEARCH_INDEX_OPTIONS } from "./search-options";
+export {
+  createProtectionSalt,
+  deriveProtectionKey,
+  sealProtectedPayload,
+  openProtectedPayload,
+  type ProtectedEnvelope,
+} from "./protection";
 
 // Plugin contract — types
 export type {
