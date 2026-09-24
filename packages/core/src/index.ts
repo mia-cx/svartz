@@ -2,6 +2,7 @@
 export type {
   Artifact,
   AssetRecord,
+  AnalyticsConfig,
   ArtifactBag,
   MaybePromise,
   LinkResolutionStrategy,

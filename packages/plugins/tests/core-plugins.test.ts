@@ -8,7 +8,7 @@ describe("createCorePlugins", () => {
   it("returns correct number of plugins", () => {
     const plugins = createCorePlugins();
     expect(plugins).toHaveLength(CORE_PLUGIN_IDS.length);
-    expect(plugins).toHaveLength(16);
+    expect(plugins).toHaveLength(17);
   });
 
   it("returns plugins in canonical order matching CORE_PLUGIN_IDS", () => {
@@ -98,7 +98,7 @@ describe("createCorePlugins", () => {
   });
 
   it("CORE_PLUGIN_IDS is readonly (as const)", () => {
-    expect(CORE_PLUGIN_IDS.length).toBe(16);
+    expect(CORE_PLUGIN_IDS.length).toBe(17);
     // TypeScript `as const` prevents mutation at compile-time
   });
 });

@@ -84,7 +84,7 @@ function createArtifactsVirtualModuleSource(
       : `import ${JSON.stringify(resource.importId)};`,
   ).join("\n");
   const scriptLoaders = browserResources.filter((resource) => resource.kind === "script")
-    .map((resource) => `  { id: ${JSON.stringify(resource.id)}, load: () => import(${JSON.stringify(resource.importId)}) },`)
+    .map((resource) => `  { id: ${JSON.stringify(resource.id)}, load: () => import(${JSON.stringify(resource.importId)}), options: ${JSON.stringify(resource.options ?? null)} },`)
     .join("\n");
   const resourceUrls = browserResources.flatMap((resource, index) =>
     resource.kind === "asset" ? [`  ${JSON.stringify(resource.id)}: browserAsset${index},`] : [],

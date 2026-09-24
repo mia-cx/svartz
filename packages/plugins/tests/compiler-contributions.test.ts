@@ -7,6 +7,7 @@ import { emitArtifacts } from "../src/emit-artifacts";
 import { transformGfm } from "../src/transform-gfm";
 import { transformLatex } from "../src/transform-latex";
 import { transformSyntax } from "../src/transform-syntax";
+import { analytics } from "../src/analytics";
 
 const content = [
   "# Features",
@@ -18,8 +19,8 @@ const content = [
   "```",
 ].join("\n");
 
-function context(outDir: string, noteContent = content): PluginContext {
-  const config = { outDir } as ResolvedConfig;
+function context(outDir: string, noteContent = content, overrides: Partial<ResolvedConfig> = {}): PluginContext {
+  const config = { outDir, ...overrides } as ResolvedConfig;
   const index = {
     version: "1.0.0",
     entries: [],
@@ -80,5 +81,20 @@ describe("compiler contributions", () => {
     next.meta = first.meta;
     transformLatex().transformLatex!.run(next);
     expect(getCompilerContributions(next).browserResources.size).toBe(0);
+  });
+
+  it("ships analytics only for a configured vault and passes public settings", () => {
+    const disabled = context("/out");
+    analytics().emitArtifacts!.run(disabled);
+    expect(getCompilerContributions(disabled).browserResources.size).toBe(0);
+
+    const enabled = context("/out", content, { analytics: { provider: "google", tagId: "G-123" } });
+    analytics().emitArtifacts!.run(enabled);
+    expect(getCompilerContributions(enabled).browserResources.get("core:analytics")).toEqual({
+      id: "core:analytics",
+      kind: "script",
+      importId: "@svartz/plugins/browser-analytics",
+      options: { provider: "google", tagId: "G-123" },
+    });
   });
 });

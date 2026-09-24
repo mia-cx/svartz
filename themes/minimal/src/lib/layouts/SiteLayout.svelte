@@ -19,6 +19,7 @@
 		category?: string;
 		categoryId?: string;
 		mapping?: 'url' | 'title' | 'og:title' | 'specific' | 'number' | 'pathname';
+		term?: string;
 		strict?: boolean;
 		reactionsEnabled?: boolean;
 		inputPosition?: 'top' | 'bottom';
@@ -97,7 +98,8 @@
 	const cfg = $derived(themeConfig as MinimalThemeConfig);
 
 	const commentsEnabled = $derived(
-		!!cfg.comments?.repo &&
+		!!entry &&
+			!!cfg.comments?.repo &&
 			!!cfg.comments?.repoId &&
 			!!cfg.comments?.category &&
 			!!cfg.comments?.categoryId &&
@@ -143,6 +145,7 @@
 				category={cfg.comments!.category!}
 				categoryId={cfg.comments!.categoryId!}
 				mapping={cfg.comments!.mapping}
+				term={cfg.comments!.term}
 				strict={cfg.comments!.strict}
 				reactionsEnabled={cfg.comments!.reactionsEnabled}
 				inputPosition={cfg.comments!.inputPosition}

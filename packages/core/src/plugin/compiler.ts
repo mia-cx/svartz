@@ -8,6 +8,8 @@ export interface BrowserResource {
   readonly id: string;
   readonly kind: "css" | "script" | "asset";
   readonly importId: string;
+  /** JSON-serializable settings passed to a script module's mount function. */
+  readonly options?: unknown;
 }
 
 /** Compiler steps and browser imports collected afresh for each pipeline run. */

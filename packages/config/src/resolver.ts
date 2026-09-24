@@ -197,6 +197,7 @@ const resolveVaultConfig = (
       theme: mergeThemes(defaults?.theme, vault.theme, configDir),
       frontmatter: mergeFrontmatter(defaults?.frontmatter, vault.frontmatter),
       site,
+      analytics: vault.analytics ?? defaults?.analytics,
       discovery: mergeDiscovery(defaults?.discovery, vault.discovery, site.url, vault.target.type === "host"),
       mountPath: normalizeMountPath(vault.mountPath ?? defaults?.mountPath),
       target: vault.target,
