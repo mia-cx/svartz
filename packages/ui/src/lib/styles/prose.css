@@ -106,14 +106,16 @@
 	padding-inline-start: 0.2em;
 }
 
+/* Block flow with an absolute checkbox, so nested lists sit under their item. */
 .sv-prose .task-list-item {
-	display: flex;
-	align-items: baseline;
-	gap: 0.6em;
+	position: relative;
+	padding-inline-start: 1.6em;
 }
 
-.sv-prose .task-list-item input[type='checkbox'] {
-	flex: none;
+.sv-prose .task-list-item > input[type='checkbox'] {
+	position: absolute;
+	inset-inline-start: 0.1em;
+	inset-block-start: 0.33em;
 	appearance: none;
 	inline-size: 0.95em;
 	block-size: 0.95em;
@@ -121,7 +123,6 @@
 	border: 1.5px solid var(--sv-rule-strong);
 	border-radius: var(--sv-radius-s);
 	background: var(--sv-paper);
-	translate: 0 0.12em;
 }
 
 .sv-prose .task-list-item input[type='checkbox']:checked {
@@ -218,6 +219,11 @@
 .sv-prose a:hover {
 	color: var(--sv-accent-text);
 	text-decoration-thickness: 2.5px;
+}
+
+.sv-prose a.sv-tag {
+	color: var(--sv-text);
+	text-decoration: none;
 }
 
 .sv-prose .sv-link-external-icon {
@@ -317,6 +323,11 @@
 	text-align: end;
 }
 
+/* Room for the language label above the first line, unless a title bar holds it. */
+.sv-prose .sv-code:not(:has([data-rehype-pretty-code-title])) pre[data-language]:not([data-language='plaintext']) {
+	padding-block-start: 2.1rem;
+}
+
 /* Language label, from rehype-pretty-code's data attribute. */
 .sv-prose .sv-code pre[data-language]:not([data-language='plaintext'])::before {
 	content: attr(data-language);
@@ -379,7 +390,8 @@
 	margin-block: 0 1.2em;
 	padding: var(--sv-space-3) var(--sv-space-4);
 	border-radius: var(--sv-radius-m);
-	background: var(--sv-signal-soft);
+	/* Tint over paper, so a nested callout keeps its own colour. */
+	background: linear-gradient(var(--sv-signal-soft), var(--sv-signal-soft)) var(--sv-paper);
 }
 
 .sv-prose .sv-callout[data-neutral] {
@@ -427,15 +439,17 @@
 	rotate: -90deg;
 }
 
-/* Grid gap spaces the body, so the paragraph dissolved below leaves no hole. */
+/* Sibling margins space the body, so the paragraph dissolved below leaves no hole. */
 .sv-prose .sv-callout-body {
-	display: grid;
-	gap: 0.75em;
 	margin-block-start: var(--sv-space-2);
 }
 
 .sv-prose .sv-callout-body > * {
 	margin-block: 0;
+}
+
+.sv-prose .sv-callout-body > * + * {
+	margin-block-start: 0.75em;
 }
 
 /*
@@ -462,6 +476,10 @@
 
 .sv-prose .svartz-embed > :last-child {
 	margin-block-end: 0;
+}
+
+.sv-prose .svartz-embed-source + * {
+	margin-block-start: 0;
 }
 
 .sv-prose .svartz-embed-source {

@@ -2,7 +2,8 @@
 title: Firmware
 description: The loop that reads the sensors, and how readings reach the server.
 tags: [software]
-created: 2026-08-28
+created_at: 2026-08-28
+updated_at: 2026-08-28
 ---
 
 The board wakes every five minutes, reads each sensor, sends one JSON payload, and sleeps. Everything else is detail.

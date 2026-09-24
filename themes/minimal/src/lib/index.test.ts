@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { materializeTheme } from '@svartz/core';
-import createMinimalTheme from './runtime';
+import createMinimalTheme from './runtime.js';
+import createNodeTheme from './index.js';
+
+describe('@svartz/theme-minimal manifests', () => {
+	it('registers the shared OFM content slots in both manifests', () => {
+		for (const manifest of [createMinimalTheme(), createNodeTheme()]) {
+			expect(Object.keys(manifest.components ?? {})).toEqual(
+				expect.arrayContaining(['callout', 'codeBlock', 'link', 'embed'])
+			);
+		}
+	});
+
+	it('replaces the core syntax plugin at build time only', () => {
+		expect(createNodeTheme().pluginPreset?.plugins.map((plugin) => plugin.id)).toEqual(['core:transform-syntax']);
+		expect(createMinimalTheme().pluginPreset).toBeUndefined();
+	});
+});
 
 describe('@svartz/theme-minimal runtime modules', () => {
 	it('loads eager and lazy layout, route, and shared components for SSR', async () => {

@@ -7,6 +7,7 @@
 	import type { ContentComponentProps } from '../runtime/content-components.js';
 
 	let { tag, attributes, text, children }: ContentComponentProps = $props();
+	// `attributes` belong to the figure; a bare <pre> arrives whole in `children`.
 
 	const COPIED_MS = 1600;
 	let block = $state<HTMLElement>();
@@ -32,9 +33,10 @@
 {/snippet}
 
 {#if tag === 'pre'}
+	<!-- The pipeline passes the literal <pre> as children, so whitespace survives. -->
 	<div class="sv-code" bind:this={block}>
 		{@render copyButton()}
-		<pre {...attributes}>{@render children?.()}</pre>
+		{@render children?.()}
 	</div>
 {:else}
 	<svelte:element this={tag} {...attributes} class="sv-code" bind:this={block}>

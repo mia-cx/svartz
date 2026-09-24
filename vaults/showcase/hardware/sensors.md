@@ -2,7 +2,8 @@
 title: Sensors
 description: What the station measures, and the parts that do the measuring.
 tags: [hardware, sensors]
-created: 2026-08-20
+created_at: 2026-08-20
+updated_at: 2026-08-20
 ---
 
 The station measures four things. Each sensor sits on the same I²C bus, so the wiring stays short[^bus].

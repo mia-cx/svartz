@@ -273,6 +273,7 @@
 			{assets}
 			{theme}
 			{themeConfig}
+			site={siteConfig}
 			route={runtimeRoute?.route}
 			match={runtimeRoute}
 			{entry}
@@ -298,6 +299,7 @@
 						{contentComponents}
 						{assets}
 						{themeConfig}
+						site={siteConfig}
 						route={runtimeRoute?.route}
 						match={runtimeRoute}
 						{entry}
@@ -318,6 +320,7 @@
 					{contentComponents}
 					{assets}
 					{themeConfig}
+					site={siteConfig}
 					route={runtimeRoute?.route}
 					match={runtimeRoute}
 					{entry}

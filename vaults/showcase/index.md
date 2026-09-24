@@ -8,14 +8,14 @@ This vault documents a small weather station on a fence post: what it measures, 
 
 ## Where to start
 
-- [[hardware/sensors|The sensors]] and why each one made the cut
-- [[hardware/enclosure]] covers the radiation shield and wiring
-- [[software/firmware]] reads the sensors and posts readings every five minutes
-- [[software/dew-point]] explains the one formula worth knowing
+- [[sensors|The sensors]] and why each one made the cut
+- The [[enclosure]] page covers the radiation shield and wiring
+- The [[firmware]] reads the sensors and posts readings every five minutes
+- [[dew-point|Dew point]] explains the one formula worth knowing
 - The [[log/2026-09-14|latest log entry]] has the current state of things
 
 > [!tip] New here?
-> The [[reference/callouts]] page shows every callout type in one place.
+> The [[callouts|callouts reference]] page shows every callout type in one place.
 
 ## Status
 

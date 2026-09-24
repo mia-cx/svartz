@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { currentColorMode } from './color-mode.js';
+
 	type GiscusConfig = {
 		repo: string;
 		repoId: string;
@@ -15,7 +17,7 @@
 	};
 
 	function currentTheme(cfg: GiscusConfig): string {
-		return document.documentElement.classList.contains('dark') ? cfg.darkTheme : cfg.lightTheme;
+		return currentColorMode() === 'dark' ? cfg.darkTheme : cfg.lightTheme;
 	}
 
 	function sendThemeUpdate(node: HTMLDivElement, theme: string) {

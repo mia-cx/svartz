@@ -1,13 +1,8 @@
 import { defineTheme } from '@svartz/core';
-import {
-	Backlinks,
-	Comments,
-	GraphPanel,
-	NoteHeader,
-	RecentNotes,
-	SearchBox,
-	TableOfContents
-} from '@svartz/ui';
+import { Comments, SearchDialog, svartzContentComponents } from '@svartz/ui';
+import Backlinks from './components/Backlinks.svelte';
+import Graph from './components/Graph.svelte';
+import Toc from './components/Toc.svelte';
 import SiteLayout from './layouts/SiteLayout.svelte';
 import { createMinimalTheme, type MinimalThemeConfig, type MinimalThemeModules } from './manifest.js';
 import FeedPage from './pages/FeedPage.svelte';
@@ -23,13 +18,14 @@ const modules: MinimalThemeModules = {
 	folderListPage: { default: FolderListPage },
 	folderPage: { default: FolderPage },
 	feedPage: { default: FeedPage },
-	backlinks: { default: Backlinks },
-	comments: { default: Comments },
-	graphPanel: { default: GraphPanel },
-	recentNotes: { default: RecentNotes },
-	searchBox: { default: SearchBox },
-	toc: { default: TableOfContents },
-	noteHeader: { default: NoteHeader }
+	components: {
+		...svartzContentComponents,
+		searchBox: { default: SearchDialog },
+		comments: { default: Comments },
+		backlinks: { default: Backlinks },
+		graphPanel: { default: Graph },
+		toc: { default: Toc }
+	}
 };
 
 /** Vite-bundled runtime manifest. Lazy entries load before SSR and hydration. */

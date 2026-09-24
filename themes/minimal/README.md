@@ -1,73 +1,49 @@
 # @svartz/theme-minimal
 
-Quartz-like starter theme for Svartz static vault sites.
+Publish an Obsidian vault the way Quartz does, in the Svartz design language: an explorer, search, a link graph, contents, and backlinks around the note.
 
----
-
-*Below: default Svelte library template.*
-
-# Svelte library
-
-Everything you need to build a Svelte library, powered by [`sv`](https://npmjs.com/package/sv).
-
-Read more about creating a library [in the docs](https://svelte.dev/docs/kit/packaging).
-
-## Creating a project
-
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
+```ts
+// svartz.config.ts
+export default defineConfig({
+  defaults: { theme: "@svartz/theme-minimal" },
+  vaults: [{ id: "notes", path: "vault", target: { type: "static" } }],
+});
 ```
 
-To recreate this project with the same configuration:
+## What it renders
 
-```sh
-# recreate this project
-pnpm dlx sv@0.12.5 create --template library --types ts --add prettier eslint vitest="usages:unit,component" tailwindcss="plugins:typography,forms" paraglide="languageTags:en, nl+demo:no" --install pnpm minimal
+| Area | Contents |
+| --- | --- |
+| Left | Site name, search (Ctrl/⌘ K, `#tag` filter), light/dark toggle, reader mode, explorer |
+| Centre | Breadcrumbs, title, date and reading time, tags, the note, Giscus comments when configured |
+| Right | Local graph (Ctrl/⌘ G opens the whole vault), contents with scroll tracking, backlinks |
+| Lists | `/tags/`, `/tags/:tag/`, `/folders/`, `/folders/:path/`, `/feed/`, and a 404 page |
+
+Below 1200px the right column moves under the note and the contents hide. Below 800px the left column becomes a top bar and the explorer a drawer. Internal links show a preview on hover.
+
+Callouts, code, embeds, math, footnotes, and task lists use the shared `@svartz/ui` content components, so they look the same in every first-party theme. See `DESIGN.md` at the repository root.
+
+## Settings
+
+Set these on the vault's `theme`:
+
+```ts
+theme: {
+  base: "@svartz/theme-minimal",
+  routes: { tags: "tags", folders: "folders", feed: "feed" },
+  footer: { links: { GitHub: "https://github.com/you/notes" } },
+  comments: { repo: "you/notes", repoId: "R_…", category: "Comments", categoryId: "DIC_…" },
+}
 ```
 
-## Developing
+Comments need all four Giscus ids; a note with `comments: false` hides them. See `docs/comments-and-analytics.md`.
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+## Develop
 
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-Everything inside `src/lib` is part of your library, everything inside `src/routes` can be used as a showcase or preview app.
-
-## Building
-
-To build your library:
+Preview with real content from the repository root:
 
 ```sh
-npm pack
+pnpm svartz dev --vault showcase
 ```
 
-To create a production version of your showcase app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
-
-## Publishing
-
-Go into the `package.json` and give your package the desired name through the `"name"` option. Also consider adding a `"license"` field and point it to a `LICENSE` file which you can create from a template (one popular option is the [MIT license](https://opensource.org/license/mit/)).
-
-To publish your library to [npm](https://www.npmjs.com):
-
-```sh
-npm publish
-```
+`vaults/showcase` uses every Obsidian Markdown feature the theme renders.

@@ -54,30 +54,36 @@ export function ancestorFolderIdsForSlug(slug: string | undefined): string[] {
 	return ids;
 }
 
+/**
+ * Home, each ancestor folder, then the note. A folder crumb uses its `index` note
+ * when one exists, then its generated folder page.
+ */
 export function buildBreadcrumbs(
 	slug: string | undefined,
 	entries: readonly UiIndexEntry[] = [],
 	homeHref = '/',
-	folders: readonly Pick<UiFolderEntry, 'slug' | 'href'>[] = []
+	folders: readonly (Pick<UiFolderEntry, 'slug' | 'href'> & Partial<Pick<UiFolderEntry, 'title'>>)[] = []
 ): Breadcrumb[] {
-	if (!slug || slug === 'index') {
-		return [{ title: 'Home', href: homeHref }];
-	}
+	const breadcrumbs: Breadcrumb[] = [{ title: 'Home', href: homeHref }];
+	if (!slug || slug === 'index') return breadcrumbs;
 
 	const segments = slug.split('/');
-	const breadcrumbs: Breadcrumb[] = [{ title: 'Home', href: homeHref }];
+	if (segments.at(-1) === 'index') segments.pop();
+	const bySlug = new Map(entries.map((entry) => [entry.slug, entry]));
 	const rootHref = homeHref.endsWith('/') ? homeHref : `${homeHref}/`;
 	let current = '';
 
-	for (const segment of segments) {
+	segments.forEach((segment, position) => {
 		current = current ? `${current}/${segment}` : segment;
+		const isLast = position === segments.length - 1;
+		const note = bySlug.get(current) ?? bySlug.get(`${current}/index`);
+		const folder = folders.find((candidate) => candidate.slug === current);
+		const target = isLast ? (note ?? folder) : (bySlug.get(`${current}/index`) ?? folder ?? note);
 		breadcrumbs.push({
-			title: titleFromSlugSegment(segment),
-			href: entries.find((entry) => entry.slug === current)?.href
-				?? folders.find((folder) => folder.slug === current)?.href
-				?? `${rootHref}${current}/`
+			title: target?.title ?? titleFromSlugSegment(segment),
+			href: target?.href ?? `${rootHref}${current}/`
 		});
-	}
+	});
 
 	return breadcrumbs;
 }
@@ -92,51 +98,70 @@ function createFolderNode(id: string, title: string, href: string): ExplorerNode
 	};
 }
 
+const naturalOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+function sortExplorerNodes(nodes: ExplorerNode[]): ExplorerNode[] {
+	return nodes
+		.map((node) => ({ ...node, children: sortExplorerNodes([...node.children]) }))
+		.sort(
+			(left, right) =>
+				Number(right.isFolder) - Number(left.isFolder) || naturalOrder.compare(left.title, right.title)
+		);
+}
+
+/**
+ * The vault as a tree: folders first, then notes, each in natural order. The home
+ * note is left out (the site title links home). A folder takes its title and link
+ * from its `index` note when one exists, otherwise from its generated folder page.
+ */
 export function buildExplorerTree(
 	entries: readonly UiIndexEntry[],
 	folders: readonly UiFolderEntry[] = []
 ): readonly ExplorerNode[] {
 	const roots: ExplorerNode[] = [];
 	const folderMap = new Map<string, ExplorerNode>();
+	const folderIndexes = new Map(
+		entries.filter((entry) => entry.slug.endsWith('/index')).map((entry) => [entry.slug.slice(0, -'/index'.length), entry])
+	);
 
-	for (const entry of [...entries].sort((left, right) => left.slug.localeCompare(right.slug))) {
+	const folderFor = (slug: string, segment: string): ExplorerNode => {
+		const existing = folderMap.get(slug);
+		if (existing) return existing;
+		const landing = folderIndexes.get(slug);
+		const generated = folders.find((folder) => folder.slug === slug);
+		const node = createFolderNode(
+			`folder:${slug}`,
+			landing?.title ?? generated?.title ?? titleFromSlugSegment(segment),
+			landing?.href ?? generated?.href ?? `/folders/${slug}/`
+		);
+		folderMap.set(slug, node);
+		return node;
+	};
+
+	for (const entry of entries) {
+		if (entry.slug === 'index') continue;
 		const segments = entry.slug.split('/');
-		const noteSegments =
-			segments[segments.length - 1] === 'index' ? segments.slice(0, -1) : segments;
+		const isFolderIndex = segments.at(-1) === 'index';
 
-		let parentChildren = roots;
+		let siblings = roots;
 		let parentSlug = '';
-
-		for (let index = 0; index < noteSegments.length - 1; index += 1) {
-			const segment = noteSegments[index]!;
+		for (const segment of segments.slice(0, -1)) {
 			parentSlug = parentSlug ? `${parentSlug}/${segment}` : segment;
-			let node = folderMap.get(parentSlug);
-
-			if (!node) {
-				node = createFolderNode(
-					`folder:${parentSlug}`,
-					titleFromSlugSegment(segment),
-					folders.find((folder) => folder.slug === parentSlug)?.href ?? `/folders/${parentSlug}/`
-				);
-				folderMap.set(parentSlug, node);
-				parentChildren.push(node);
-			}
-
-			parentChildren = node.children as ExplorerNode[];
+			const known = folderMap.has(parentSlug);
+			const folder = folderFor(parentSlug, segment);
+			if (!known) siblings.push(folder);
+			siblings = folder.children as ExplorerNode[];
 		}
 
-		const title =
-			entry.slug.endsWith('/index') || entry.slug === 'index'
-				? titleFromSlugSegment(noteSegments[noteSegments.length - 1] ?? 'home')
-				: entry.title;
-		parentChildren.push({
+		if (isFolderIndex) continue;
+		siblings.push({
 			id: `note:${entry.slug}`,
-			title: entry.slug === 'index' ? 'Home' : title,
+			title: entry.title,
 			href: entry.href ?? slugToHref(entry.slug),
 			children: [],
 			isFolder: false
 		});
 	}
 
-	return roots;
+	return sortExplorerNodes(roots);
 }

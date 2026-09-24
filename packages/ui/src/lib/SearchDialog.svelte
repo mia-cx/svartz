@@ -157,7 +157,7 @@
 				bind:this={input}
 				bind:value={query}
 				onkeydown={onKeydown}
-				type="search"
+				type="text"
 				role="combobox"
 				aria-expanded={hits.length > 0}
 				aria-controls="sv-search-results"
@@ -328,14 +328,13 @@
 		font: inherit;
 		font-size: var(--sv-step-1);
 		outline: none;
+		/* Host form resets (Tailwind forms) draw their own ring; the panel is the focus cue. */
+		box-shadow: none;
+		appearance: none;
 	}
 
 	.sv-search-field input::placeholder {
 		color: var(--sv-muted);
-	}
-
-	.sv-search-field input::-webkit-search-cancel-button {
-		display: none;
 	}
 
 	.sv-search-close {
@@ -413,6 +412,10 @@
 		overflow-y: auto;
 		border-inline-start: var(--sv-rule-width) solid var(--sv-rule);
 		font-size: var(--sv-step--1);
+	}
+
+	.sv-search .sv-search-preview :global(h1) {
+		font-size: var(--sv-step-3);
 	}
 
 	.sv-search-empty {

@@ -23,8 +23,11 @@
     "svartz:build:docs": "svartz build --vault docs",
     "svartz:dev:docs": "svartz dev --vault docs",
     "svartz:preview:docs": "svartz preview --vault docs",
-    "svartz:dev": "turbo run svartz:dev:docs",
-    "svartz:preview": "turbo run svartz:preview:docs"
+    "svartz:build:showcase": "svartz build --vault showcase",
+    "svartz:dev:showcase": "svartz dev --vault showcase",
+    "svartz:preview:showcase": "svartz preview --vault showcase",
+    "svartz:dev": "turbo run svartz:dev:docs svartz:dev:showcase",
+    "svartz:preview": "turbo run svartz:preview:docs svartz:preview:showcase"
   },
   "devDependencies": {
     "@svartz/config": "workspace:^",

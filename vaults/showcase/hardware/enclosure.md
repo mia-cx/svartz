@@ -2,7 +2,8 @@
 title: Enclosure
 description: A radiation shield, a dry box, and the wiring between them.
 tags: [hardware]
-created: 2026-08-24
+created_at: 2026-08-24
+updated_at: 2026-08-24
 ---
 
 The electronics live in two places: the sensors in a vented radiation shield, and the board and battery in a sealed box below it.

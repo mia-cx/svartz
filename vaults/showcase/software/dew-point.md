@@ -2,7 +2,8 @@
 title: Dew point
 description: The temperature at which air can't hold its water, and how to compute it.
 tags: [software, weather]
-created: 2026-09-02
+created_at: 2026-09-02
+updated_at: 2026-09-02
 ---
 
 Dew point says how humid the air feels better than relative humidity does. The station computes it with the Magnus formula, using $a = 17.62$ and $b = 243.12\,^{\circ}\mathrm{C}$:

@@ -1,54 +1,15 @@
 <script lang="ts">
-	import { titleFromSlugSegment } from '@svartz/ui';
+	import type { ThemePageProps } from '@svartz/ui';
+	import ListHeader from '../components/ListHeader.svelte';
+	import PageList from '../components/PageList.svelte';
+	import { notesTagged } from '../listing.js';
+	import { tagHrefFor } from '../routes.js';
 
-	type Entry = {
-		slug: string;
-		href?: string;
-		title: string;
-		tags: readonly string[];
-		description?: string;
-	};
+	let { vault, match }: ThemePageProps = $props();
 
-	let {
-		match,
-		index = { entries: [] },
-		vault
-	}: {
-		match?: { params?: { slug?: string } };
-		index?: { entries: readonly Entry[] };
-		vault?: { entries: readonly Entry[] };
-	} = $props();
-
-	const currentTag = $derived(match?.params?.slug ?? '');
-	const title = $derived(currentTag ? titleFromSlugSegment(currentTag) : 'Tag');
-	const entries = $derived(
-		(vault?.entries ?? index.entries).filter((entry) => entry.tags.includes(currentTag))
-	);
+	const tag = $derived(match?.params.slug ?? '');
+	const notes = $derived(notesTagged(vault.entries, tag));
 </script>
 
-<section class="grid gap-4">
-	<div>
-		<h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-			#{title}
-		</h1>
-		<p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-			{entries.length}
-			{entries.length === 1 ? 'note' : 'notes'} with this tag.
-		</p>
-	</div>
-	<ul class="grid gap-0">
-		{#each entries as entry (entry.slug)}
-			<li class="grid gap-1 border-b border-zinc-100 py-3 last:border-0 dark:border-zinc-800">
-				<a
-					href={entry.href ?? (entry.slug === 'index' ? '/' : '/' + entry.slug + '/')}
-					class="font-medium text-zinc-900 transition-colors hover:text-blue-600 dark:text-zinc-100 dark:hover:text-blue-400"
-				>
-					{entry.title}
-				</a>
-				{#if entry.description}
-					<span class="text-sm text-zinc-500 dark:text-zinc-400">{entry.description}</span>
-				{/if}
-			</li>
-		{/each}
-	</ul>
-</section>
+<ListHeader label="Tag" title="#{tag}" count="{notes.length} {notes.length === 1 ? 'note' : 'notes'}" />
+<PageList {notes} tagHref={tagHrefFor(vault)} />

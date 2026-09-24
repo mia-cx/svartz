@@ -12,9 +12,7 @@
         "*.config.js",
         "*.config.ts",
         "vite.config.ts",
-        "vite.theme-css.config.ts",
         "svelte.config.js",
-        "tailwind.config.js",
         "tsconfig.json",
         "package.json"
       ],
@@ -67,7 +65,8 @@
     },
     "//#svartz:build": {
       "dependsOn": [
-        "//#svartz:build:docs"
+        "//#svartz:build:docs",
+        "//#svartz:build:showcase"
       ]
     },
     "//#svartz:build:docs": {
@@ -90,6 +89,30 @@
     "//#svartz:preview:docs": {
       "dependsOn": [
         "//#svartz:build:docs"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:build:showcase": {
+      "inputs": [
+        "apps/web/**",
+        "package.json",
+        "pnpm-lock.yaml",
+        "svartz.config.*",
+        ".svartzrc.*",
+        "vaults/showcase/**"
+      ],
+      "outputs": [
+        ".svartz/vaults/showcase/dist/**"
+      ]
+    },
+    "//#svartz:dev:showcase": {
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:preview:showcase": {
+      "dependsOn": [
+        "//#svartz:build:showcase"
       ],
       "cache": false,
       "persistent": true

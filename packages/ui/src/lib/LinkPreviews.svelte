@@ -100,6 +100,11 @@
 		transition: opacity var(--sv-duration) var(--sv-ease);
 	}
 
+	/* Previews clone the page's own title; keep it proportionate to the panel. */
+	.sv-link-preview .sv-link-preview-body :global(h1) {
+		font-size: var(--sv-step-3);
+	}
+
 	.sv-link-preview-body {
 		max-block-size: 22rem;
 		overflow-y: auto;
