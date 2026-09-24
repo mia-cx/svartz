@@ -33,23 +33,20 @@ Contrast ratios are measured against `--sv-paper`. The neutrals share hue 80 wit
 
 ## Typography
 
-The type system is Mia's mCX Obsidian theme ([obsidian-theme-mcx](https://github.com/mia-cx/obsidian-theme-mcx)), so a vault reads the same in Obsidian and on the web. Reading is monospace; the interface is Archivo.
+The faces come from Mia's mCX Obsidian theme ([obsidian-theme-mcx](https://github.com/mia-cx/obsidian-theme-mcx)). mCX's monospace headings and body belong to its edit view; a published page reads in Archivo.
 
 | Token | Face | Used for |
 |---|---|---|
-| `--sv-font-interface` | Archivo (variable, width axis) | Navigation, buttons, search, lists, and the label voice |
-| `--sv-font-text` | Monaspace Xenon | Note body (mCX's reading font) |
-| `--sv-font-title` | Google Sans Code (variable) | H1, page titles, site name |
-| `--sv-font-h2` | Monaspace Argon | H2, list titles |
-| `--sv-font-h3` | Monaspace Xenon, bold | H3 |
-| `--sv-font-minor` | Fira Code (variable) | H4 to H6 |
+| `--sv-font-sans` | Archivo (variable, weight and width axes) | Everything: body, headings, titles, interface, and the label voice |
 | `--sv-font-mono` | Monaspace Argon | Code, tags, keyboard hints |
 
-All faces are self-hosted through Fontsource, so no page requests a font CDN. Monaspace ships only static weights there: Xenon 400, 400 italic, and 700; Argon 400 and 600.
+Both are self-hosted through Fontsource, so no page requests a font CDN.
+
+**Hierarchy through Archivo's axes.** Page titles and H1 are 800 at 112% width; H2 700 at 108%; H3 700 at 104%; H4 700; H5 and H6 600. The site name matches the page title.
 
 **The label voice.** mCX's overline: Archivo in capitals at 125% width (`.sv-label`, 0.7rem, 0.08em tracking, `--sv-label-stretch`). Metadata, callout titles, kind badges, method pills, dates, and counts all use it. This is the thread that ties the themes together: a Svartz page always labels things the same way.
 
-**Scale.** The body is `1rem` (monospace sets wide) at leading 1.65. Steps are `--sv-step--2` to `--sv-step-5`, computed from `--sv-ratio`.
+**Scale.** The body is `1.0625rem` at leading 1.65. Steps are `--sv-step--2` to `--sv-step-5`, computed from `--sv-ratio`.
 
 ## Space, shape, depth, motion
 

@@ -5,13 +5,9 @@
  * Colour mode: `color-scheme` drives every `light-dark()` pair. The OS decides
  * by default; the colour-mode script pins `.light` or `.dark` on <html>.
  */
-/* The mCX type system (github.com/mia-cx/obsidian-theme-mcx). */
+/* mCX's reading faces (github.com/mia-cx/obsidian-theme-mcx): Archivo, and Monaspace Argon for code. */
 @import '@fontsource-variable/archivo/wdth.css';
-@import '@fontsource-variable/google-sans-code/wght.css';
-@import '@fontsource-variable/fira-code/wght.css';
-@import '@fontsource/monaspace-xenon/400.css';
-@import '@fontsource/monaspace-xenon/400-italic.css';
-@import '@fontsource/monaspace-xenon/700.css';
+@import '@fontsource-variable/archivo/wdth-italic.css';
 @import '@fontsource/monaspace-argon/400.css';
 @import '@fontsource/monaspace-argon/600.css';
 
@@ -23,16 +19,10 @@
 	--sv-ratio: 1.2;
 	--sv-measure: 42rem;
 
-	/* Type: the mCX stack. Reading is monospace; the interface is Archivo. */
-	--sv-font-fallback-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-	--sv-font-interface: 'Archivo Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
-	--sv-font-text: 'Monaspace Xenon', var(--sv-font-fallback-mono);
-	--sv-font-title: 'Google Sans Code Variable', var(--sv-font-fallback-mono);
-	--sv-font-h2: 'Monaspace Argon', var(--sv-font-fallback-mono);
-	--sv-font-h3: 'Monaspace Xenon', var(--sv-font-fallback-mono);
-	--sv-font-minor: 'Fira Code Variable', var(--sv-font-fallback-mono);
-	--sv-font-mono: 'Monaspace Argon', var(--sv-font-fallback-mono);
-	--sv-text-base: 1rem;
+	/* Type: Archivo everywhere; weight and width carry hierarchy. Code is Monaspace Argon. */
+	--sv-font-sans: 'Archivo Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--sv-font-mono: 'Monaspace Argon', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+	--sv-text-base: 1.0625rem;
 	--sv-leading: 1.65;
 	--sv-leading-tight: 1.15;
 	--sv-step--2: calc(var(--sv-text-base) / pow(var(--sv-ratio), 2));

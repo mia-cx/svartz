@@ -7,7 +7,7 @@
 html {
 	background: var(--sv-paper);
 	color: var(--sv-text);
-	font-family: var(--sv-font-interface);
+	font-family: var(--sv-font-sans);
 	font-size: 100%;
 	line-height: var(--sv-leading);
 	-webkit-text-size-adjust: 100%;
@@ -33,7 +33,7 @@ body {
 
 /* The label voice: mCX's overline. */
 .sv-label {
-	font-family: var(--sv-font-interface);
+	font-family: var(--sv-font-sans);
 	font-size: var(--sv-label-size);
 	font-stretch: var(--sv-label-stretch);
 	font-weight: 600;
@@ -81,7 +81,7 @@ a.sv-tag:hover {
 	border-radius: var(--sv-radius-s);
 	background: var(--sv-signal-soft);
 	color: var(--sv-signal);
-	font-family: var(--sv-font-interface);
+	font-family: var(--sv-font-sans);
 	font-size: var(--sv-label-size);
 	font-stretch: var(--sv-label-stretch);
 	font-weight: 700;
@@ -168,10 +168,11 @@ a.sv-tag:hover {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.45em;
-	font-family: var(--sv-font-title);
+	font-family: var(--sv-font-sans);
 	font-size: var(--sv-step-2);
-	font-weight: 600;
-	letter-spacing: -0.03em;
+	font-stretch: 112%;
+	font-weight: 800;
+	letter-spacing: -0.02em;
 	line-height: 1;
 	color: var(--sv-ink);
 	text-decoration: none;

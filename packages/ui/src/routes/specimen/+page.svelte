@@ -72,12 +72,9 @@
 			</div>
 
 			<h2 class="sv-label">Faces</h2>
-			<p class="face" style:font-family="var(--sv-font-title)" style:font-size="var(--sv-step-3)">Google Sans Code sets the titles</p>
-			<p class="face" style:font-family="var(--sv-font-h2)" style:font-size="var(--sv-step-2)">Monaspace Argon sets second-level headings</p>
-			<p class="face" style:font-family="var(--sv-font-minor)">Fira Code sets the minor headings</p>
-			<p class="face" style:font-family="var(--sv-font-text)">Monaspace Xenon carries the note body, at leading 1.65.</p>
-			<p class="face">Archivo runs the interface: navigation, search, lists.</p>
-			<p class="face" style:font-family="var(--sv-font-mono)">const vault = await publish();</p>
+			<p class="face display" style:font-size="var(--sv-step-3)">Archivo sets every title</p>
+			<p class="face">Archivo carries the note body and the interface, at leading 1.65.</p>
+			<p class="face" style:font-family="var(--sv-font-mono)">Monaspace Argon: const vault = await publish();</p>
 
 			<h2 class="sv-label">Primitives</h2>
 			<div class="row">
@@ -117,7 +114,7 @@
 		padding: var(--sv-space-6);
 		background: var(--sv-paper);
 		color: var(--sv-text);
-		font-family: var(--sv-font-text);
+		font-family: var(--sv-font-sans);
 	}
 
 	.panel-head {
@@ -178,9 +175,9 @@
 	}
 
 	.display {
-		font-family: var(--sv-font-title);
-		font-weight: 600;
-		letter-spacing: -0.03em;
+		font-stretch: 112%;
+		font-weight: 800;
+		letter-spacing: -0.02em;
 	}
 
 	.face {

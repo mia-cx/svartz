@@ -46,7 +46,7 @@ function tokenColors(probeParent: HTMLElement) {
 		muted: read('--sv-muted'),
 		rule: read('--sv-rule-strong'),
 		accent: read('--sv-accent'),
-		font: getComputedStyle(probeParent).getPropertyValue('--sv-font-interface')
+		font: getComputedStyle(probeParent).getPropertyValue('--sv-font-sans')
 	};
 	probe.remove();
 	return colors;

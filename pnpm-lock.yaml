@@ -583,16 +583,7 @@ importers:
       '@fontsource-variable/archivo':
         specifier: ^5.3.0
         version: 5.3.0
-      '@fontsource-variable/fira-code':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource-variable/google-sans-code':
-        specifier: ^5.3.1
-        version: 5.3.1
       '@fontsource/monaspace-argon':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource/monaspace-xenon':
         specifier: ^5.3.0
         version: 5.3.0
       '@lucide/svelte':
@@ -1231,17 +1222,8 @@ packages:
   '@fontsource-variable/archivo@5.3.0':
     resolution: {integrity: sha512-HogK8FJelrD1o7TlZlkIVtHgc20bO5PZRWE7mUeUTdMN055alznQV6/00J00IBeu8FQAH4s3zW9UJNvKExXf+g==}
 
-  '@fontsource-variable/fira-code@5.3.0':
-    resolution: {integrity: sha512-ZhvHeknlicraKVSJBa1NrJnXDVByUkC407zwgELYfmnx3p9g8vwIPfQCxx8YD3K7dAeCdLuHJOHlpMfRsIcApQ==}
-
-  '@fontsource-variable/google-sans-code@5.3.1':
-    resolution: {integrity: sha512-yY7wGZK9u3DUoqSMpHUoAJfnB+DMX6SfNPQvtlVeyDfua92X42Wc84gqqQOLpiamrszbDdChp2wQOj6oPfY5Nw==}
-
   '@fontsource/monaspace-argon@5.3.0':
     resolution: {integrity: sha512-sfP9wbeL7OLt/vxHCOtssa4AadPFjQAClYg1rl+PybqfJLw8yG86f8q3qtx4dCHpsN82x8Cb2z0BmP7y93QUNQ==}
-
-  '@fontsource/monaspace-xenon@5.3.0':
-    resolution: {integrity: sha512-f65HlIRnq072ZMGJL2AMCPE1198EMog1i5vko3BrmEn06+Z+Ttvyv6lgXkKlo04oa/E1ObZit1xHHNVFg8mA/Q==}
 
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
@@ -5739,13 +5721,7 @@ snapshots:
 
   '@fontsource-variable/archivo@5.3.0': {}
 
-  '@fontsource-variable/fira-code@5.3.0': {}
-
-  '@fontsource-variable/google-sans-code@5.3.1': {}
-
   '@fontsource/monaspace-argon@5.3.0': {}
-
-  '@fontsource/monaspace-xenon@5.3.0': {}
 
   '@humanfs/core@0.19.1': {}
 
