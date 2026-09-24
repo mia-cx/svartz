@@ -77,3 +77,10 @@ it("keeps an authored home page's modification date", () => {
   expect(renderHostSitemap([authoredHome], ["work"]))
     .toContain("<loc>https://example.com/site/work/</loc><lastmod>2026-05-04T00:00:00.000Z</lastmod>");
 });
+
+it("renders a sitemap from a replacement index without theme routes", () => {
+  const blog = vaults[0]!;
+  const { theme: _theme, ...routes } = blog.artifacts.index.routes;
+  const legacy = { ...blog, artifacts: { ...blog.artifacts, index: { ...blog.artifacts.index, routes } } };
+  expect(renderHostSitemap([legacy], ["blog"])).toContain("/blog/tags/");
+});

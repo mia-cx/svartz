@@ -8,7 +8,7 @@
  * Postcondition: ctx.index is populated with the canonical Index artifact.
  */
 
-import { definePlugin } from "@svartz/core";
+import { definePlugin, matchThemeRoute } from "@svartz/core";
 import type {
   DateSource,
   FolderIndexEntry,
@@ -51,6 +51,7 @@ function staticThemeRoutes(theme: SvartzTheme | undefined, mountPath: string): s
     const dynamic = route.pattern.split("/").some((segment) =>
       segment === ":slug" || segment === "[slug]" || segment === "[...slug]");
     if (!route.component || route.prerender === false || dynamic) return [];
+    if (matchThemeRoute(theme.routes, { pathname: route.pattern })?.route !== route) return [];
     return [routeHref(route.pattern.replace(/^\/+|\/+$/g, "") || "index", mountPath)];
   }) ?? [];
 }

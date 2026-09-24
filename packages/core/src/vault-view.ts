@@ -50,7 +50,7 @@ export function createVaultView(index: Index, id: string, basePath = ""): VaultV
     tags: index.routes.tags.map(withBase),
     folders: index.routes.folders.map(withBase),
     feed: index.routes.feed.map(withBase),
-    theme: index.routes.theme.map(withBase),
+    theme: (index.routes.theme ?? []).map(withBase),
     all: index.routes.all.map(withBase),
   };
 

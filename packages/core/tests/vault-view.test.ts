@@ -66,6 +66,13 @@ describe("vault view", () => {
     expect(index.entries[0]?.href).toBe("/blog/hello/");
   });
 
+  it("accepts a replacement index built before theme routes were added", () => {
+    const { theme: _theme, ...routes } = index.routes;
+    const vault = createVaultView({ ...index, routes }, "journal", "/site");
+    expect(vault.routes.theme).toEqual([]);
+    expect(vault.routes.notes).toEqual(["/site/blog/hello/", "/site/blog/world/"]);
+  });
+
   it("finds a Unicode note through an encoded SvelteKit URL pathname", () => {
     const unicode = entry("日本");
     const vault = createVaultView({ ...index, entries: [...index.entries, unicode] }, "journal", "/site");

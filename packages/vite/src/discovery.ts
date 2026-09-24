@@ -96,7 +96,7 @@ export function renderHostSitemap(
     const home = `${index.routes.mountPath}/`;
     const homeUrl = noteUrl(vault, home);
     if (index.routes.all.includes(home) && !pages.has(homeUrl)) pages.set(homeUrl, undefined);
-    for (const href of [...index.routes.tags, ...index.routes.folders, ...index.routes.feed, ...index.routes.theme]) {
+    for (const href of [...index.routes.tags, ...index.routes.folders, ...index.routes.feed, ...(index.routes.theme ?? [])]) {
       const url = noteUrl(vault, href);
       if (!pages.has(url)) pages.set(url, undefined);
     }
