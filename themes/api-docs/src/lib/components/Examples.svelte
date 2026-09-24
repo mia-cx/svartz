@@ -6,6 +6,7 @@
 	import CodePanel from './CodePanel.svelte';
 	import {
 		exampleFromSchema,
+		graphqlQuery,
 		requestSnippets,
 		SNIPPET_LANGUAGES,
 		type ApiOperation,
@@ -32,10 +33,7 @@
 			const snippets = requestSnippets(operation, baseUrl, models);
 			return SNIPPET_LANGUAGES.map((language) => ({ id: language.id, label: language.label, code: snippets[language.id] }));
 		}
-		const query =
-			operation.example?.query ??
-			`${operation.kind} {\n  ${operation.name}${operation.args.length ? `(${operation.args.map((arg) => `${arg.name}: $${arg.name}`).join(', ')})` : ''} {\n    id\n  }\n}`;
-		const tabs = [{ id: 'graphql', label: 'Query', code: query }];
+		const tabs = [{ id: 'graphql', label: 'Query', code: graphqlQuery(operation) }];
 		if (operation.example?.variables !== undefined) tabs.push({ id: 'variables', label: 'Variables', code: json(operation.example.variables) });
 		return tabs;
 	});

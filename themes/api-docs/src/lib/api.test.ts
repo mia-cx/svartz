@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiNav, exampleFromSchema, readModel, readOperation, readSchema, requestSnippets } from './api.js';
+import { apiNav, exampleFromSchema, graphqlQuery, readModel, readOperation, readSchema, requestSnippets } from './api.js';
 
 const petSchema = {
 	type: 'object',
@@ -107,7 +107,7 @@ describe('apiNav', () => {
 		]);
 	});
 
-	it("names a section after its folder's index note and leaves that note out of the list", () => {
+	it('names and links a section with its folder note, and leaves that note out of the list', () => {
 		const nav = apiNav(
 			[
 				{ ...note('graphql'), title: 'GraphQL' },
@@ -115,7 +115,9 @@ describe('apiNav', () => {
 			],
 			[{ slug: 'graphql', title: 'Graphql', href: '/folders/graphql/' }]
 		);
-		expect(nav.map((section) => [section.slug, section.title, section.entries.length])).toEqual([['graphql', 'GraphQL', 1]]);
+		expect(nav.map((section) => [section.slug, section.title, section.href, section.entries.length])).toEqual([
+			['graphql', 'GraphQL', '/graphql/', 1]
+		]);
 	});
 });
 
@@ -137,8 +139,47 @@ describe('requestSnippets', () => {
 		if (operation?.protocol !== 'rest') throw new Error('expected a REST operation');
 		const snippets = requestSnippets(operation, 'https://api.example.com', {});
 		expect(snippets.curl).toContain("curl -X POST 'https://api.example.com/pets/p_42/photos?size=large'");
-		expect(snippets.curl).toContain("-H 'Authorization: Bearer $TOKEN'");
+		// Double quotes, so the shell expands $TOKEN.
+		expect(snippets.curl).toContain('-H "Authorization: Bearer $TOKEN"');
 		expect(snippets.javascript).toContain("method: 'POST'");
 		expect(snippets.python).toContain('requests.post(');
+	});
+
+	it('leaves placeholders for parameters without examples readable', () => {
+		const operation = readOperation({
+			operation: {
+				protocol: 'rest',
+				method: 'get',
+				path: '/pets/{petId}',
+				parameters: [
+					{ name: 'petId', in: 'path', type: 'string' },
+					{ name: 'limit', in: 'query', type: 'integer', required: true }
+				]
+			}
+		});
+		if (operation?.protocol !== 'rest') throw new Error('expected a REST operation');
+		expect(requestSnippets(operation, 'https://api.example.com', {}).curl).toContain(
+			"'https://api.example.com/pets/{petId}?limit={limit}'"
+		);
+	});
+});
+
+describe('graphqlQuery', () => {
+	it('declares every argument as a variable when the note has no example query', () => {
+		const operation = readOperation({
+			operation: {
+				protocol: 'graphql',
+				kind: 'mutation',
+				name: 'adoptPet',
+				args: [
+					{ name: 'petId', type: 'ID!', required: true },
+					{ name: 'note', type: 'String' }
+				]
+			}
+		});
+		if (operation?.protocol !== 'graphql') throw new Error('expected a GraphQL operation');
+		expect(graphqlQuery(operation)).toBe(
+			'mutation ($petId: ID!, $note: String) {\n  adoptPet(petId: $petId, note: $note) {\n    id\n  }\n}'
+		);
 	});
 });

@@ -1,4 +1,4 @@
-import { isRecord } from '@svartz/ui';
+import { isRecord, topLevelSections } from '@svartz/ui';
 
 type Properties = Readonly<Record<string, unknown>>;
 
@@ -301,40 +301,27 @@ function navRank(entry: NavEntry): [number, string, number] {
 
 /**
  * The sidebar: one section per top-level folder, guides before resources.
- * A folder note (`graphql/index.md`, slugged `graphql`) names its section:
- * `GraphQL`, not the slug's `Graphql`.
+ * A folder note (`graphql/index.md`, published as `graphql`) names and links
+ * its section: `GraphQL`, not the slug's `Graphql`.
  */
 export function apiNav<T extends NavEntry>(
 	entries: readonly T[],
 	folders: readonly { readonly slug: string; readonly title: string; readonly href: string }[]
 ): ApiNavSection<T>[] {
-	const sections = new Map<string, T[]>();
-	const folderNotes = new Map<string, string>();
-	for (const entry of entries) {
-		if (entry.slug === 'index') continue;
-		if (!entry.slug.includes('/') && folders.some((folder) => folder.slug === entry.slug)) {
-			folderNotes.set(entry.slug, entry.title);
-			continue;
-		}
-		const key = entry.slug.includes('/') ? entry.slug.split('/')[0]! : '';
-		sections.set(key, [...(sections.get(key) ?? []), entry]);
-	}
 	const compare = (left: T, right: T) => {
 		const [leftGroup, leftKey, leftOrder] = navRank(left);
 		const [rightGroup, rightKey, rightOrder] = navRank(right);
 		return leftGroup - rightGroup || collator.compare(leftKey, rightKey) || leftOrder - rightOrder;
 	};
-	return [...sections]
-		.map(([key, grouped]): ApiNavSection<T> => {
-			const folder = folders.find((candidate) => candidate.slug === key);
-			return {
-				slug: key,
-				title: key ? (folderNotes.get(key) ?? folder?.title ?? key) : 'Overview',
-				href: folder?.href,
-				reference: grouped.some((entry) => navRank(entry)[0] < 2),
-				entries: [...grouped].sort(compare)
-			};
-		})
+	return topLevelSections(entries, folders)
+		.map(
+			(section): ApiNavSection<T> => ({
+				...section,
+				title: section.slug ? section.title : 'Overview',
+				reference: section.entries.some((entry) => navRank(entry)[0] < 2),
+				entries: [...section.entries].sort(compare)
+			})
+		)
 		.sort((left, right) => Number(left.reference) - Number(right.reference) || collator.compare(left.title, right.title));
 }
 
@@ -371,12 +358,15 @@ export function requestSnippets(
 	models: Readonly<Record<string, SchemaNode>>
 ): Record<SnippetLanguage, string> {
 	const valueOf = (parameter: ApiParameter) => parameter.example ?? `{${parameter.name}}`;
+	// Placeholders stay readable (`{petId}`), so only real examples are encoded.
+	const urlValue = (parameter: ApiParameter) =>
+		parameter.example === undefined ? valueOf(parameter) : encodeURIComponent(parameter.example);
 	const path = operation.parameters
 		.filter((parameter) => parameter.in === 'path')
-		.reduce((current, parameter) => current.replace(`{${parameter.name}}`, encodeURIComponent(valueOf(parameter))), operation.path);
+		.reduce((current, parameter) => current.replace(`{${parameter.name}}`, urlValue(parameter)), operation.path);
 	const query = operation.parameters
 		.filter((parameter) => parameter.in === 'query' && (parameter.required || parameter.example))
-		.map((parameter) => `${encodeURIComponent(parameter.name)}=${encodeURIComponent(valueOf(parameter))}`)
+		.map((parameter) => `${encodeURIComponent(parameter.name)}=${urlValue(parameter)}`)
 		.join('&');
 	const url = `${baseUrl.replace(/\/$/, '')}${path}${query ? `?${query}` : ''}`;
 	const headers: [string, string][] = [
@@ -390,7 +380,8 @@ export function requestSnippets(
 
 	const curl = [
 		`curl -X ${method} '${url}'`,
-		...headers.map(([name, value]) => `  -H '${name}: ${value}'`),
+		// Double quotes, so the shell expands $TOKEN.
+		...headers.map(([name, value]) => `  -H "${name}: ${value}"`),
 		...(json ? [`  -d '${json.replace(/\n/g, '\n  ')}'`] : [])
 	].join(' \\\n');
 
@@ -417,4 +408,13 @@ export function requestSnippets(
 	].join('\n');
 
 	return { curl, javascript, python };
+}
+
+/** The note's example query, else one that declares each argument as a variable. */
+export function graphqlQuery(operation: GraphqlOperation): string {
+	if (operation.example?.query) return operation.example.query;
+	const { args } = operation;
+	const variables = args.length ? ` (${args.map((arg) => `$${arg.name}: ${arg.type}`).join(', ')})` : '';
+	const call = args.length ? `(${args.map((arg) => `${arg.name}: $${arg.name}`).join(', ')})` : '';
+	return `${operation.kind}${variables} {\n  ${operation.name}${call} {\n    id\n  }\n}`;
 }
