@@ -14,6 +14,7 @@ export const artifacts = new Map([
 ]);
 
 export const browserResources: Readonly<Record<string, string>> = {};
+export async function mountBrowserResources(): Promise<() => void> { return () => {}; }
 
 export function hasNoteArtifact(_key: string) {
 	return true;

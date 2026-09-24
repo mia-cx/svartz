@@ -39,8 +39,10 @@ it("executes Svelte only in .svx notes", async () => {
     const plain = parse(plainSource, { modern: true });
     const interactive = parse(interactiveSource, { modern: true });
 
-    expect(plain.instance).toBeUndefined();
-    expect(plain.fragment.nodes.filter((node) => node.type === "HtmlTag")).toHaveLength(1);
+    expect(plain.instance).toBeDefined();
+    expect(plainSource).toContain("let { contentComponents }");
+    expect(plainSource).not.toContain("<script>let count");
+    expect(plainSource).toContain("&#123;count + 1&#125;");
     expect(interactive.instance).toBeDefined();
     expect(interactive.fragment.nodes.some((node) => node.type === "RegularElement")).toBe(true);
     expect(() => compile(plainSource, { generate: "server" })).not.toThrow();

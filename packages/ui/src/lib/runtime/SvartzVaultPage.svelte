@@ -1,18 +1,23 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
 	import { base } from '$app/paths';
+	import { browser } from '$app/environment';
+	import { resolveContentComponents, type ContentComponentOverrides } from './content-components.js';
 	type ThemeModule = typeof import('virtual:svartz/theme');
 	type ArtifactsModule = typeof import('virtual:svartz/artifacts');
 	let {
 		pathname,
 		runtimeTheme,
-		artifacts: runtimeArtifacts
+		artifacts: runtimeArtifacts,
+		contentComponents: hostContentComponents = {}
 	}: {
 		pathname: string;
 		runtimeTheme: ThemeModule;
 		artifacts: ArtifactsModule;
+		contentComponents?: ContentComponentOverrides;
 	} = $props();
 	const theme = $derived(runtimeTheme.theme);
+	const contentComponents = $derived(resolveContentComponents(hostContentComponents, theme.components as Parameters<typeof resolveContentComponents>[1]));
 	const resolveRuntimeRoute = $derived(runtimeTheme.resolveRuntimeRoute);
 	const assets = $derived(runtimeArtifacts.assets);
 	const backlinks = $derived(runtimeArtifacts.backlinks);
@@ -30,6 +35,19 @@
 	const tags = $derived(runtimeArtifacts.tags);
 	const themeConfig = $derived(runtimeArtifacts.themeConfig);
 	const vault = $derived(runtimeArtifacts.vault);
+	$effect(() => {
+		if (!browser) return;
+		let released = false;
+		let dispose: (() => void) | undefined;
+		void runtimeArtifacts.mountBrowserResources(pathname).then((cleanup) => {
+			if (released) cleanup();
+			else dispose = cleanup;
+		}).catch((error: unknown) => console.error('[svartz:web] browser resource mount failed', error));
+		return () => {
+			released = true;
+			dispose?.();
+		};
+	});
 
 	type ComponentModule = { default: Component<any> };
 	type ThemeComponentReference =
@@ -212,6 +230,7 @@
 		{tags}
 	>
 		<PageComponent
+			{contentComponents}
 			{assets}
 			{themeConfig}
 			route={runtimeRoute?.route}

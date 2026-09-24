@@ -80,9 +80,12 @@ function createArtifactsVirtualModuleSource(
     resource.kind === "asset"
       ? `import browserAsset${index} from ${JSON.stringify(resource.importId)};`
       : resource.kind === "script"
-      ? `if (!import.meta.env.SSR) void import(${JSON.stringify(resource.importId)});`
+      ? ""
       : `import ${JSON.stringify(resource.importId)};`,
   ).join("\n");
+  const scriptLoaders = browserResources.filter((resource) => resource.kind === "script")
+    .map((resource) => `  { id: ${JSON.stringify(resource.id)}, load: () => import(${JSON.stringify(resource.importId)}) },`)
+    .join("\n");
   const resourceUrls = browserResources.flatMap((resource, index) =>
     resource.kind === "asset" ? [`  ${JSON.stringify(resource.id)}: browserAsset${index},`] : [],
   ).join("\n");
@@ -92,12 +95,17 @@ function createArtifactsVirtualModuleSource(
     resourceImports,
     `import { index, graph, backlinks, search, tags, folders, routes, assets } from ${JSON.stringify(indexModulePath)};`,
     `import { searchDocuments, searchIndex } from ${JSON.stringify(searchModulePath)};`,
-    `import { createVaultView, SEARCH_INDEX_OPTIONS } from ${JSON.stringify(coreModuleId)};`,
+    `import { createVaultView, mountBrowserScripts, SEARCH_INDEX_OPTIONS } from ${JSON.stringify(coreModuleId)};`,
     `import { base } from "$app/paths";`,
     noteImports,
     "",
     `export const artifacts = new Map(${JSON.stringify(records)}.map((record) => [record.key, record]));`,
     `export const browserResources = {\n${resourceUrls}\n};`,
+    `const browserScripts = [\n${scriptLoaders}\n];`,
+    "export async function mountBrowserResources(pathname) {",
+    "  if (import.meta.env.SSR) return () => {};",
+    "  return mountBrowserScripts(browserScripts, pathname);",
+    "}",
     "",
     "const noteArtifactModules = {",
     noteModules,

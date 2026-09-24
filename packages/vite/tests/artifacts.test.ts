@@ -127,7 +127,9 @@ describe("@svartz/vite artifact helpers", () => {
       ],
     );
     expect(source).toContain('import "/plugins/katex.min.css";');
-    expect(source).toContain('if (!import.meta.env.SSR) void import("/plugins/diagram.js");');
+    expect(source).toContain('load: () => import("/plugins/diagram.js")');
+    expect(source).toContain("export async function mountBrowserResources(pathname)");
+    expect(source).toContain("return mountBrowserScripts(browserScripts, pathname);");
     expect(source).toContain('import browserAsset2 from "/plugins/icon.svg";');
     expect(source).toContain('"icon": browserAsset2');
 

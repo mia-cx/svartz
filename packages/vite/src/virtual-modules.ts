@@ -24,6 +24,7 @@ const THEME_PLACEHOLDER_SOURCE = [
 const ARTIFACTS_PLACEHOLDER_SOURCE = [
   'export const artifacts = new Map();',
   'export const browserResources = {};',
+  'export async function mountBrowserResources() { return () => {}; }',
   'export function hasNoteArtifact() {',
   '  return false;',
   '}',

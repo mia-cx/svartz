@@ -2,8 +2,9 @@
 	import { base } from '$app/paths';
 	import { resolveHostVault } from 'virtual:svartz/host';
 	import SvartzVaultPage from './SvartzVaultPage.svelte';
+	import type { ContentComponentOverrides } from './content-components.js';
 
-	let { pathname }: { pathname: string } = $props();
+	let { pathname, contentComponents = {} }: { pathname: string; contentComponents?: ContentComponentOverrides } = $props();
 	const appPathname = $derived(
 		base && pathname.startsWith(`${base}/`)
 			? pathname.slice(base.length)
@@ -16,6 +17,6 @@
 
 {#if selected}
 	{#key selected.id}
-		<SvartzVaultPage {pathname} runtimeTheme={selected.theme} artifacts={selected.artifacts} />
+		<SvartzVaultPage {pathname} {contentComponents} runtimeTheme={selected.theme} artifacts={selected.artifacts} />
 	{/key}
 {/if}
