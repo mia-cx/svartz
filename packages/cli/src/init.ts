@@ -149,6 +149,14 @@ function integrateManifest(manifest: Manifest): Manifest {
     if (!manifest.dependencies?.[name] && !devDependencies[name])
       devDependencies[name] = "latest";
   }
+  for (const [name, version] of Object.entries({
+    "@tailwindcss/forms": "^0.5.11",
+    "@tailwindcss/typography": "^0.5.19",
+    tailwindcss: "^4.2.2",
+  })) {
+    if (!manifest.dependencies?.[name] && !devDependencies[name])
+      devDependencies[name] = version;
+  }
   return { ...manifest, scripts, devDependencies };
 }
 
@@ -274,6 +282,11 @@ export async function initProject(
   const manager = packageManager(root, existingManifest);
 
   if (location.hostApp) {
+    const rootLayoutPath = path.join(root, "src", "routes", "+layout.svelte");
+    const rootLayoutTemplate = await readFile(path.join(templateRoot, "src", "routes", "+layout.svelte"), "utf8");
+    const previousRootLayout = rootLayoutTemplate.replace("  let { children }", "  import './layout.css';\n  let { children }");
+    const migrateRootLayout = existsSync(rootLayoutPath) &&
+      await readFile(rootLayoutPath, "utf8") === previousRootLayout;
     const appTypesPath = path.join(root, "src", "app.d.ts");
     const appTypesReference = '/// <reference types="@svartz/vite/virtual-modules" />';
     const previousAppTypesReference = '/// <reference types="@svartz/ui/virtual-modules" />';
@@ -286,8 +299,13 @@ export async function initProject(
         ? appTypesSource.replace(previousAppTypesReference, appTypesReference)
       : `${appTypesReference}\n${appTypesSource ?? ""}`;
     const catchallRoot = path.join(root, "src", "routes", "[...slug]");
+    const catchallPagePath = path.join(catchallRoot, "+page.svelte");
     const catchallLoadPath = path.join(catchallRoot, "+page.ts");
     const installCatchall = !(await hasHostCatchall(root));
+    const catchallPageTemplate = await readFile(path.join(templateRoot, "src", "routes", "[...slug]", "+page.svelte"), "utf8");
+    const previousCatchallPage = catchallPageTemplate.replace("  import 'virtual:svartz/tailwind-sources.css';\n", "");
+    const migrateCatchallPage = existsSync(catchallPagePath) &&
+      await readFile(catchallPagePath, "utf8") === previousCatchallPage;
     const catchallLoadTemplate = await readFile(path.join(templateRoot, "src", "routes", "[...slug]", "+page.ts"), "utf8");
     const previousCatchallLoad = catchallLoadTemplate
       .replace("import { prepareHostVault, routes }", "import { routes }")
@@ -306,6 +324,8 @@ export async function initProject(
       integratedAppTypes === appTypesSource &&
       !manifestChanged &&
       !installCatchall &&
+      !migrateRootLayout &&
+      !migrateCatchallPage &&
       !migrateCatchall
     ) {
       return { kind: "already-configured", packageManager: manager };
@@ -345,6 +365,8 @@ export async function initProject(
       }
     }
     if (migrateCatchall) await writeFile(catchallLoadPath, catchallLoadTemplate);
+    if (migrateCatchallPage) await writeFile(catchallPagePath, catchallPageTemplate);
+    if (migrateRootLayout) await writeFile(rootLayoutPath, rootLayoutTemplate);
     if (manifestChanged)
       await writeFile(
         existingManifestPath,

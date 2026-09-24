@@ -504,7 +504,7 @@ const createAppConfig = (
 
     process.env["SVARTZ_TAILWIND_SOURCES_PATH"] = yield* Effect.tryPromise({
       try: () => vaults.length === 1
-        ? writeGeneratedTailwindSourcesFile(appRoot, vault)
+        ? writeGeneratedTailwindSourcesFile(appRoot, vault, hostApp)
         : writeGeneratedHostTailwindSourcesFile(appRoot, projectRoot, vaults),
       catch: (cause) => cause as Error,
     });

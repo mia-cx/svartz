@@ -55,11 +55,13 @@ function getTailwindSourceGlobs(appRoot: string, vault: ResolvedConfig): string[
   return dedupePaths(sourceGlobs.map((glob) => path.resolve(glob)));
 }
 
-function createTailwindSourcesCss(sourceGlobs: readonly string[], cssFilePath: string): string {
+function createTailwindSourcesCss(sourceGlobs: readonly string[], cssFilePath: string, hostApp = false): string {
   const cssDirectory = path.dirname(cssFilePath);
   const lines = [
     "/* Generated per-vault by svartz CLI. Tailwind scans the resolved theme and its component-library deps. */",
+    ...(hostApp ? ["@import 'tailwindcss';"] : []),
     ...sourceGlobs.map((sourceGlob) => `@source "${toRelativeGlob(cssDirectory, sourceGlob)}";`),
+    ...(hostApp ? ["@plugin '@tailwindcss/forms';", "@plugin '@tailwindcss/typography';"] : []),
     "",
   ];
   return lines.join("\n");
@@ -72,10 +74,11 @@ function getGeneratedTailwindSourcesPath(vault: ResolvedConfig): string {
 async function writeGeneratedTailwindSourcesFile(
   appRoot: string,
   vault: ResolvedConfig,
+  hostApp = false,
 ): Promise<string> {
   const cssFilePath = getGeneratedTailwindSourcesPath(vault);
   const sourceGlobs = getTailwindSourceGlobs(appRoot, vault);
-  const cssSource = createTailwindSourcesCss(sourceGlobs, cssFilePath);
+  const cssSource = createTailwindSourcesCss(sourceGlobs, cssFilePath, hostApp);
 
   await mkdir(path.dirname(cssFilePath), { recursive: true });
   await writeFile(cssFilePath, cssSource);
@@ -91,7 +94,7 @@ async function writeGeneratedHostTailwindSourcesFile(
   const cssFilePath = path.join(path.dirname(getGeneratedHostRegistryPath(configDir)), "tailwind-sources.css");
   const sourceGlobs = dedupePaths(vaults.flatMap((vault) => getTailwindSourceGlobs(appRoot, vault)));
   await mkdir(path.dirname(cssFilePath), { recursive: true });
-  await writeFile(cssFilePath, createTailwindSourcesCss(sourceGlobs, cssFilePath));
+  await writeFile(cssFilePath, createTailwindSourcesCss(sourceGlobs, cssFilePath, true));
   return cssFilePath;
 }
 
