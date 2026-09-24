@@ -144,10 +144,12 @@ async function checkHost(project, launcher, archives) {
   const configPath = path.join(project, 'svartz.config.ts');
   const config = await readFile(configPath, 'utf8');
   await writeFile(configPath, config
+    .replace("version: '1.0.0',", "version: '1.0.0',\n  passwordGroups: { release: { env: 'SVARTZ_RELEASE_PASSWORD' } },")
     .replace("target: { type: 'host' },", "target: { type: 'host' },\n    mountPath: 'notes',")
     .replace(/site: \{ title: ([^}]+) \}/,
       "site: { title: $1, url: 'https://example.test' }"));
   await write(project, 'src/routes/check/+page.svelte', "<script lang=\"ts\">import { index } from 'virtual:svartz/artifacts';</script><p>Published notes: {index.entries.length}</p>\n");
+  await write(project, 'vault/locked.svx', "---\ntitle: Locked host\npassword_group: release\n---\n<h1>PACKED_PROTECTED_MARKER</h1>\n");
   await write(project, 'check-types.ts', [
     '/// <reference types="@svartz/vite/virtual-modules" />',
     "import { prepareHostVault } from 'virtual:svartz/host';",
@@ -195,6 +197,7 @@ async function checkHost(project, launcher, archives) {
     ['--noEmit', '--skipLibCheck', '--module', 'esnext', '--moduleResolution', 'bundler', '--target', 'es2022', 'vite.config.ts', 'svartz.config.ts', 'check-types.ts'], project);
   await command(path.join(project, 'node_modules/.bin/tsc'),
     ['--noEmit', '--strict', '--skipLibCheck', '--module', 'esnext', '--moduleResolution', 'bundler', '--target', 'es2022', 'check-ui-types.ts'], project);
+  process.env.SVARTZ_RELEASE_PASSWORD = 'packed-host-check';
   await command('npm', ['run', 'svartz:build'], project);
   await command(path.join(project, 'node_modules/.bin/svelte-check'), ['--tsconfig', './tsconfig.json'], project);
   const sourcesPath = path.join(project, '.svartz/vaults/notes/tailwind-sources.css');
@@ -206,8 +209,9 @@ async function checkHost(project, launcher, archives) {
     await stat(path.resolve(path.dirname(sourcesPath), sourceGlob.split('/**/')[0]));
   }
   assert.match(await readFile(path.join(project, 'src/routes/+page.svelte'), 'utf8'), /Portfolio home/);
-  assert.match(await readFile(path.join(project, 'build/check.html'), 'utf8'), /Published notes: 1/);
+  assert.match(await readFile(path.join(project, 'build/check.html'), 'utf8'), /Published notes: 2/);
   assert.match(await readFile(path.join(project, 'build/notes.html'), 'utf8'), /Welcome/);
+  assert.doesNotMatch(await readFile(path.join(project, 'build/notes/locked.html'), 'utf8'), /PACKED_PROTECTED_MARKER/);
   const styleFiles = (await readdir(path.join(project, 'build/_app/immutable/assets')))
     .filter((file) => file.endsWith('.css'));
   const styles = (await Promise.all(styleFiles.map((file) =>
@@ -217,7 +221,9 @@ async function checkHost(project, launcher, archives) {
   await checkDev(project, '/', 'Portfolio home');
   await checkDev(project, '/notes/', 'Welcome');
   await write(project, 'svelte.config.js', "import adapter from '@sveltejs/adapter-static';\nexport default { kit: { adapter: adapter(), paths: { base: '/site' } } };\n");
-  await writeFile(configPath, config.replace("target: { type: 'host' },", "target: { type: 'host' },\n    mountPath: 'notes',"));
+  await writeFile(configPath, config
+    .replace("version: '1.0.0',", "version: '1.0.0',\n  passwordGroups: { release: { env: 'SVARTZ_RELEASE_PASSWORD' } },")
+    .replace("target: { type: 'host' },", "target: { type: 'host' },\n    mountPath: 'notes',"));
   await rm(path.join(project, 'src/routes/rss.xml'), { recursive: true });
   await command('npm', ['run', 'svartz:build'], project);
   await checkDev(project, '/site/notes/', 'Welcome');
