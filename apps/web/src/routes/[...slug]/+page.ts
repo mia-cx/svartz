@@ -13,7 +13,6 @@ export const load = ({ url }) => {
 
 export const entries: EntryGenerator = async () =>
 	routes.all
-		.filter((pathname) => pathname !== '/')
 		.map((pathname) => ({
 			slug: pathname.replace(/^\/+|\/+$/g, '')
 		}));

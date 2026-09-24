@@ -55,9 +55,11 @@ it("initializes the invocation directory with an editable shell and vault", asyn
   expect(await readFile(path.join(root, ".gitignore"), "utf8")).toContain(
     "node_modules",
   );
-  expect(
-    await readFile(path.join(root, "src/routes/+page.svelte"), "utf8"),
-  ).toContain("@svartz/ui/runtime");
+  await expect(access(path.join(root, "src/routes/+page.svelte"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(await readFile(path.join(root, "src/routes/[...slug]/+page.svelte"), "utf8"))
+    .toContain("@svartz/ui/runtime");
   await access(path.join(root, "src/routes/[...slug]/+page.ts"));
   await expect(access(path.join(root, ".git"))).rejects.toMatchObject({
     code: "ENOENT",
