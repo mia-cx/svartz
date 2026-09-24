@@ -1,7 +1,8 @@
 <!-- The summary box beside a wiki article, from the note's `infobox` frontmatter. -->
 <script lang="ts">
 	import type { IndexEntry } from '@svartz/core';
-	import { wikilinkSegments, type Infobox } from '../wiki.js';
+	import { wikilinkSegments } from '@svartz/ui';
+	import type { Infobox } from '../wiki.js';
 
 	let {
 		infobox,

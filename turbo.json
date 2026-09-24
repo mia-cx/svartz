@@ -68,7 +68,8 @@
         "//#svartz:build:docs",
         "//#svartz:build:showcase",
         "//#svartz:build:showcase-wiki",
-        "//#svartz:build:showcase-blog"
+        "//#svartz:build:showcase-blog",
+        "//#svartz:build:showcase-docs"
       ]
     },
     "//#svartz:build:docs": {
@@ -163,6 +164,30 @@
     "//#svartz:preview:showcase-blog": {
       "dependsOn": [
         "//#svartz:build:showcase-blog"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:build:showcase-docs": {
+      "inputs": [
+        "apps/web/**",
+        "package.json",
+        "pnpm-lock.yaml",
+        "svartz.config.*",
+        ".svartzrc.*",
+        "vaults/showcase-docs/**"
+      ],
+      "outputs": [
+        ".svartz/vaults/showcase-docs/dist/**"
+      ]
+    },
+    "//#svartz:dev:showcase-docs": {
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:preview:showcase-docs": {
+      "dependsOn": [
+        "//#svartz:build:showcase-docs"
       ],
       "cache": false,
       "persistent": true

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alphabetical, byDay, featuredNote, readHatnote, readInfobox, wikilinkSegments } from './wiki.js';
+import { alphabetical, byDay, featuredNote, readHatnote, readInfobox } from './wiki.js';
 
 const note = (title: string, modifiedAt?: string, properties: Record<string, unknown> = {}) => ({
 	slug: title.toLowerCase(),
@@ -33,24 +33,6 @@ describe('readInfobox', () => {
 		expect(readInfobox({})).toBeUndefined();
 		expect(readInfobox({ infobox: 'nope' })).toBeUndefined();
 		expect(readInfobox({ infobox: { rows: { Bad: { nested: true } } } })).toBeUndefined();
-	});
-});
-
-describe('wikilinkSegments', () => {
-	const entries = [
-		{ slug: 'places/vessa', title: 'Vessa', href: '/places/vessa/' },
-		{ slug: 'characters/mirelle-ashford', title: 'Mirelle Ashford', href: '/characters/mirelle-ashford/' }
-	];
-
-	it('turns [[links]] in infobox values into linked segments by title or file name', () => {
-		expect(wikilinkSegments('[[Vessa]], Lower Wards', entries)).toEqual([
-			{ text: 'Vessa', href: '/places/vessa/' },
-			{ text: ', Lower Wards' }
-		]);
-		expect(wikilinkSegments('[[mirelle-ashford|Mirelle]]', entries)).toEqual([
-			{ text: 'Mirelle', href: '/characters/mirelle-ashford/' }
-		]);
-		expect(wikilinkSegments('[[Nowhere]]', entries)).toEqual([{ text: 'Nowhere' }]);
 	});
 });
 

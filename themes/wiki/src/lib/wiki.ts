@@ -62,38 +62,6 @@ export function readInfobox(properties: Properties): Infobox | undefined {
 	return { image: scalar(raw.image), caption: scalar(raw.caption), sections };
 }
 
-export interface Segment {
-	readonly text: string;
-	readonly href?: string;
-}
-
-const WIKILINK = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g;
-const normalize = (value: string) => value.toLowerCase().replace(/[\s_]+/g, '-');
-
-/**
- * Frontmatter isn't run through the Markdown pipeline, so infobox values keep raw
- * `[[links]]`. Resolve them against published notes by title or file name.
- */
-export function wikilinkSegments(
-	value: string,
-	entries: readonly { readonly slug: string; readonly title: string; readonly href: string }[]
-): Segment[] {
-	const segments: Segment[] = [];
-	let last = 0;
-	for (const match of value.matchAll(WIKILINK)) {
-		if (match.index > last) segments.push({ text: value.slice(last, match.index) });
-		const target = normalize(match[1]!.trim());
-		const note = entries.find(
-			(entry) => normalize(entry.title) === target || entry.slug.split('/').at(-1) === target || entry.slug === target
-		);
-		const text = match[2]?.trim() ?? match[1]!.trim();
-		segments.push(note ? { text, href: note.href } : { text });
-		last = match.index + match[0].length;
-	}
-	if (last < value.length) segments.push({ text: value.slice(last) });
-	return segments;
-}
-
 /** A disambiguation line shown in italics above the article ("For X, see Y."). */
 export const readHatnote = (properties: Properties) =>
 	typeof properties.hatnote === 'string' ? properties.hatnote : undefined;

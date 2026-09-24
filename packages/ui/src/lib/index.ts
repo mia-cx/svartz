@@ -19,6 +19,7 @@ export { formatDate, isoDate, readingTime } from './format.js';
 export { count, folderContents, newestFirst, noteDate, notesTagged } from './listing.js';
 export { pageCrumbs, tagHrefFor } from './crumbs.js';
 export { assetHref } from './assets.js';
+export { wikilinkSegments, type LinkSegment } from './wikilinks.js';
 export {
 	isRecord,
 	readLinks,

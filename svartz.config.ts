@@ -52,5 +52,21 @@ export default defineConfig({
         url: "https://plot14.example",
       },
     },
+    {
+      // Showcase for @svartz/theme-docs: part of the @svartz/core reference.
+      id: "showcase-docs",
+      path: "vaults/showcase-docs",
+      target: { type: "static" },
+      theme: {
+        base: "@svartz/theme-docs",
+        version: "1.0.0",
+        routes: { folders: "api" },
+        nav: { GitHub: "https://github.com/mia-cx/svartz", npm: "https://www.npmjs.com/package/@svartz/core" },
+      },
+      site: {
+        title: "@svartz/core",
+        description: "A Svartz showcase for the docs theme.",
+      },
+    },
   ],
 });
