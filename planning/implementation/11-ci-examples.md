@@ -11,7 +11,7 @@ People who scaffold a Svartz site can copy a small GitHub Actions workflow witho
 - [x] Tests: both YAML examples parsed and the workspace Playwright command resolved. No product logic changed, so no build/test rerun is needed.
 - [x] Capture Knowledge: the old planning note now points to the canonical guide and records immutable cache behavior.
 - [x] Documentation: README links the guide; the guide names standalone and host output ownership.
-- [ ] Review & Close: inspect the final diff and file a PR that closes #11.
+- [x] Review & Close: inspected the full diff and filed PR #44, closing #11 on merge.
 
 ## Notes
 
