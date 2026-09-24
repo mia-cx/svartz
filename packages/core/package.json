@@ -24,7 +24,7 @@
     "url": "https://github.com/mia-cx/svartz.git",
     "directory": "packages/core"
   },
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
     "@vitest/coverage-v8": "^3.0.0",
     "tsup": "^8.0.0",

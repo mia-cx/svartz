@@ -30,7 +30,7 @@
     "obsidian",
     "schema"
   ],
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/semver": "^7.7.1",

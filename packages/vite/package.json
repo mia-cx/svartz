@@ -32,7 +32,7 @@
     "url": "https://github.com/mia-cx/svartz.git",
     "directory": "packages/vite"
   },
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@svartz/core": "workspace:^",
     "@svartz/plugins": "workspace:^",

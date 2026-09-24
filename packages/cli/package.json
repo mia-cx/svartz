@@ -34,7 +34,7 @@
     "sveltekit",
     "digital-garden"
   ],
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@svartz/config": "workspace:*",
     "@svartz/vite": "workspace:*",

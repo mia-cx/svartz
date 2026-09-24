@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
+const licenseText = await readFile(path.join(root, 'LICENSE'), 'utf8');
 const packages = [
   ['@svartz/core', 'packages/core', ['dist/index.js', 'dist/index.d.ts']],
   ['@svartz/plugins', 'packages/plugins', ['dist/index.js', 'dist/index.d.ts']],
@@ -68,6 +69,7 @@ async function checkDev(project, expected) {
     ['dev', '--vault', 'notes', '--host', '127.0.0.1', '--port', String(port)],
     { cwd: project, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
+  let lastResponse = '';
   child.stdout.on('data', (chunk) => { output += chunk; });
   child.stderr.on('data', (chunk) => { output += chunk; });
   child.on('error', (error) => { output += String(error); });
@@ -76,11 +78,13 @@ async function checkDev(project, expected) {
       if (child.exitCode !== null) throw new Error(`Dev server exited: ${output}`);
       try {
         const response = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2000) });
-        if (response.ok && (await response.text()).includes(expected)) return;
+        const body = await response.text();
+        if (response.ok && body.includes(expected)) return;
+        lastResponse = `${response.status} ${body.slice(0, 500)}`;
       } catch { /* Vite is still starting. */ }
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    throw new Error(`Dev server did not serve ${expected}: ${output}`);
+    throw new Error(`Dev server did not serve ${expected}. Last response: ${lastResponse}. Server: ${output}`);
   } finally {
     if (child.pid) {
       try {
@@ -143,11 +147,14 @@ try {
     const manifest = JSON.parse(await readFile(path.join(root, directory, 'package.json'), 'utf8'));
     assert.equal(manifest.version, '1.0.0', `${name} version`);
     assert.equal(manifest.publishConfig?.access, 'public', `${name} visibility`);
+    assert.equal(manifest.license, 'SEE LICENSE IN LICENSE', `${name} license metadata`);
+    assert.equal(await readFile(path.join(root, directory, 'LICENSE'), 'utf8'), licenseText, `${name} license text`);
     const output = await command('pnpm', ['pack', '--json', '--pack-destination', temporary], path.join(root, directory));
     // The UI and theme prepack scripts print before pnpm's JSON report.
     const reportStart = output.lastIndexOf('\n{\n  "name"');
     const packed = JSON.parse(output.slice(reportStart + 1));
     const files = new Set(packed.files.map((file) => file.path));
+    assert(files.has('LICENSE'), `${name} archive is missing LICENSE`);
     for (const file of required) assert(files.has(file), `${name} is missing ${file}`);
     for (const entry of Object.values(manifest.exports ?? {})) {
       for (const target of typeof entry === 'string' ? [entry] : Object.values(entry)) {
@@ -159,6 +166,8 @@ try {
     }
     assert([...files].every((file) => !/^(src|tests|test|\.svelte-kit)\//.test(file)), `${name} includes development files`);
     const archive = packed.filename;
+    assert.equal(await command('tar', ['-xOf', archive, 'package/LICENSE'], root), licenseText,
+      `${name} archive license text`);
     const published = JSON.parse(await command('tar', ['-xOf', archive, 'package/package.json'], root));
     for (const [dependency, range] of Object.entries(manifest.dependencies ?? {})) {
       if (!dependency.startsWith('@svartz/')) continue;

@@ -6,7 +6,7 @@ The seven public packages pack into usable archives. A project outside the monor
 
 ## TODOs
 
-- [ ] Finalize package names, versions, dependencies, engines, exports, and archive contents.
+- [x] Finalize package names, versions, dependencies, engines, exports, license, and archive contents.
 - [x] Validate the packed CLI in fresh and existing SvelteKit consumers.
 - [x] Document a repeatable release check and package publication order.
 - [x] Tests: workspace build, 16 test tasks, and packed fresh/Vite 8 host install, build, and dev checks passed.
@@ -16,6 +16,6 @@ The seven public packages pack into usable archives. A project outside the monor
 
 ## Notes
 
-- Base branch: `feat/v1-init-scaffold` (PR #43).
+- Base branch: `feat/v1-multi-vault-host` (PR #54).
 - Public npm publication is outside this issue's authorized actions.
-- License metadata still says MIT in five packages, while the repository LICENSE says MCX v1.0. Asked Mia which applies to the v1 packages before finalizing archives.
+- Mia selected MCX v1.0 for all seven v1 packages. Each package now carries the repository license in its archive and uses npm's custom-license metadata format.

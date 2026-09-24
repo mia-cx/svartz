@@ -24,7 +24,7 @@
     "url": "https://github.com/mia-cx/svartz.git",
     "directory": "packages/plugins"
   },
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@svartz/core": "workspace:*",
     "effect": "^3.19.19",
