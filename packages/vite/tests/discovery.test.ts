@@ -13,7 +13,7 @@ const vaults = [
           { href: "/blog/secret/", title: "Secret", description: "Hidden", path: "secret.md", properties: { encrypted: true }, createdAt: new Date("2028-01-01"), modifiedAt: new Date("2028-01-01") },
           { href: "/blog/hidden/", title: "Hidden", description: "Unlisted", path: "hidden.md", properties: { hidden: true }, createdAt: new Date("2028-01-01"), modifiedAt: new Date("2028-01-01") },
         ],
-        routes: { tags: ["/blog/tags/"], folders: [] },
+        routes: { mountPath: "/blog", tags: ["/blog/tags/"], folders: [], feed: ["/blog/feed/"], all: ["/blog/", "/blog/feed/"] },
       },
     },
   },
@@ -23,7 +23,7 @@ const vaults = [
       siteConfig: { title: "Work", url: "https://example.com/site" },
       index: {
         entries: [{ href: "/work/project/", title: "Project", description: "Work entry", path: "project.md", properties: {}, createdAt: new Date("2022-01-01"), modifiedAt: new Date("2025-01-01") }],
-        routes: { tags: [], folders: ["/work/folders/"] },
+        routes: { mountPath: "/work", tags: [], folders: ["/work/folders/"], feed: ["/work/feed/"], all: ["/work/", "/work/feed/"] },
       },
     },
   },
@@ -38,6 +38,8 @@ it("combines only selected published vault entries at canonical mounted URLs", (
   expect(rss).not.toContain("Unlisted");
   const sitemap = renderHostSitemap(vaults, ["work"]);
   expect(sitemap).toContain("https://example.com/site/work/folders/");
+  expect(sitemap).toContain("https://example.com/site/work/feed/");
+  expect(sitemap).toContain("https://example.com/site/work/</loc>");
   expect(sitemap).not.toContain("/blog/");
   expect(renderHostSitemap(vaults, ["blog"])).not.toContain("/blog/hidden/");
 });

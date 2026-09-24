@@ -6,6 +6,8 @@ Set `site.url` to the public origin and deployment base for each vault. For a si
 
 When `site.url` exists, each vault emits `<mountPath>/rss.xml` and `<mountPath>/sitemap.xml`. Both are disabled by default without a public URL. A manual SvelteKit route at either path wins. The generated files are ordinary static assets, so the host adapter copies them without a runtime endpoint. Svartz removes old generated files on the next build when an output is disabled.
 
+Sitemaps include published note URLs, tag and folder listings, the feed page, and the vault home page when Svartz owns it. They omit redirects, encrypted or hidden notes, and manually owned routes. Combined host sitemaps use the same rules for the selected vaults.
+
 ```ts
 {
   id: 'journal',

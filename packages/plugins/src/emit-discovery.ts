@@ -73,11 +73,14 @@ async function rss(ctx: PluginContext, base: string): Promise<string> {
 }
 
 function sitemap(ctx: PluginContext, base: string): string {
-  const entries = ctx.index?.entries ?? [];
+  const index = ctx.index;
+  const entries = index?.entries ?? [];
   const pages = new Map<string, Date | undefined>(entries
     .filter((entry) => !entry.properties.encrypted && !entry.properties.hidden)
     .map((entry) => [entry.href, entry.modifiedAt]));
-  for (const href of [...(ctx.index?.routes.tags ?? []), ...(ctx.index?.routes.folders ?? [])]) {
+  const home = `${index?.routes.mountPath ?? ""}/`;
+  if (index?.routes.all.includes(home)) pages.set(home, undefined);
+  for (const href of [...(index?.routes.tags ?? []), ...(index?.routes.folders ?? []), ...(index?.routes.feed ?? [])]) {
     if (!pages.has(href)) pages.set(href, undefined);
   }
   const urls = [...pages].sort(([left], [right]) => left.localeCompare(right)).map(([href, modified]) =>
