@@ -437,15 +437,19 @@ const initProjectEffect = (
             "utf8",
           ),
       );
-      const previousCatchallPage = catchallPageTemplate.replace(
+      const previousStyledCatchallPage = catchallPageTemplate
+        .replace("  import type { PageData } from './$types';\n", "")
+        .replace("  let { data }: { data: PageData } = $props();\n", "")
+        .replace('\n<svelte:head>\n  {#each data.svartzStylesheets as stylesheet}\n    <link rel="stylesheet" href={stylesheet} />\n  {/each}\n</svelte:head>\n', "");
+      const previousCatchallPage = previousStyledCatchallPage.replace(
         "  import 'virtual:svartz/tailwind-sources.css';\n",
         "",
       );
       const migrateCatchallPage =
         existsSync(catchallPagePath) &&
-        (yield* operation("read host catchall page", () =>
+        [previousStyledCatchallPage, previousCatchallPage].includes(yield* operation("read host catchall page", () =>
           readFile(catchallPagePath, "utf8"),
-        )) === previousCatchallPage;
+        ));
       const catchallLoadTemplate = yield* operation(
         "read catchall load template",
         () =>
@@ -454,15 +458,19 @@ const initProjectEffect = (
             "utf8",
           ),
       );
-      const previousCatchallLoad = catchallLoadTemplate
+      const previousStyledCatchallLoad = catchallLoadTemplate
+        .replace("import { assets, base }", "import { base }")
+        .replace("import { hostStylesheets, prepareHostVault, routes }", "import { prepareHostVault, routes }")
+        .replace("  return { svartzStylesheets: hostStylesheets(pathname).map((file) => `${assets}/${file}`) };\n", "");
+      const previousCatchallLoad = previousStyledCatchallLoad
         .replace("import { prepareHostVault, routes }", "import { routes }")
         .replace("export const load = async", "export const load =")
         .replace("  await prepareHostVault(pathname);\n", "");
       const migrateCatchall =
         existsSync(catchallLoadPath) &&
-        (yield* operation("read host catchall", () =>
+        [previousStyledCatchallLoad, previousCatchallLoad].includes(yield* operation("read host catchall", () =>
           readFile(catchallLoadPath, "utf8"),
-        )) === previousCatchallLoad;
+        ));
       const viteSource = yield* operation("read host Vite config", () =>
         readFile(location.viteConfigPath, "utf8"),
       );

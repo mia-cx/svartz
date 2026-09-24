@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { withSvartzHost } from '@svartz/vite/host';
 
 const SVARTZ_THEME_VIRTUAL_ID = 'virtual:svartz/theme';
 const SVARTZ_ARTIFACTS_VIRTUAL_ID = 'virtual:svartz/artifacts';
@@ -30,7 +31,7 @@ const fallbackTailwindSourcesPath = fileURLToPath(
 
 const isVitest = Boolean(process.env.VITEST);
 
-export default defineConfig({
+export default withSvartzHost(defineConfig({
 	build: {
 		emptyOutDir: true
 	},
@@ -93,4 +94,4 @@ export default defineConfig({
 			}
 		]
 	}
-});
+}));

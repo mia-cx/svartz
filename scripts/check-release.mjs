@@ -118,6 +118,21 @@ async function checkFresh(project, launcher, archives) {
   console.log('Packed fresh project: install, static build, and dev passed.');
 }
 
+async function checkStyledHostCss(project) {
+  const pagePath = path.join(project, 'build/notes/styled.html');
+  const html = await readFile(pagePath, 'utf8');
+  const stylesheets = [...html.matchAll(/<link\b[^>]*>/g)]
+    .map(([tag]) => tag.includes('rel="stylesheet"') ? tag.match(/href="([^"]+)"/)?.[1] : undefined)
+    .filter(Boolean);
+  const css = (await Promise.all(stylesheets.map((href) => {
+    const file = href.startsWith('/')
+      ? path.join(project, 'build', href.replace(/^\/site(?=\/)/, '').replace(/^\//, ''))
+      : path.resolve(path.dirname(pagePath), href);
+    return readFile(file, 'utf8');
+  }))).join('\n');
+  assert.match(css, /#11175b/, 'The rendered note must link its compiled CSS without JavaScript');
+}
+
 async function checkHost(project, launcher, archives) {
   await mkdir(project);
   await write(project, 'package.json', JSON.stringify({
@@ -150,6 +165,7 @@ async function checkHost(project, launcher, archives) {
       "site: { title: $1, url: 'https://example.test' }"));
   await write(project, 'src/routes/check/+page.svelte', "<script lang=\"ts\">import { index } from 'virtual:svartz/artifacts';</script><p>Published notes: {index.entries.length}</p>\n");
   await write(project, 'vault/locked.svx', "---\ntitle: Locked host\npassword_group: release\n---\n<h1>PACKED_PROTECTED_MARKER</h1>\n");
+  await write(project, 'vault/styled.svx', "---\ntitle: Styled host\n---\n<h1>Styled host</h1>\n<style>h1 { background: rgb(17, 23, 91); }</style>\n");
   await write(project, 'check-types.ts', [
     '/// <reference types="@svartz/vite/virtual-modules" />',
     "import { prepareHostVault } from 'virtual:svartz/host';",
@@ -209,9 +225,10 @@ async function checkHost(project, launcher, archives) {
     await stat(path.resolve(path.dirname(sourcesPath), sourceGlob.split('/**/')[0]));
   }
   assert.match(await readFile(path.join(project, 'src/routes/+page.svelte'), 'utf8'), /Portfolio home/);
-  assert.match(await readFile(path.join(project, 'build/check.html'), 'utf8'), /Published notes: 2/);
+  assert.match(await readFile(path.join(project, 'build/check.html'), 'utf8'), /Published notes: 3/);
   assert.match(await readFile(path.join(project, 'build/notes.html'), 'utf8'), /Welcome/);
   assert.doesNotMatch(await readFile(path.join(project, 'build/notes/locked.html'), 'utf8'), /PACKED_PROTECTED_MARKER/);
+  await checkStyledHostCss(project);
   const styleFiles = (await readdir(path.join(project, 'build/_app/immutable/assets')))
     .filter((file) => file.endsWith('.css'));
   const styles = (await Promise.all(styleFiles.map((file) =>
@@ -226,6 +243,7 @@ async function checkHost(project, launcher, archives) {
     .replace("target: { type: 'host' },", "target: { type: 'host' },\n    mountPath: 'notes',"));
   await rm(path.join(project, 'src/routes/rss.xml'), { recursive: true });
   await command('npm', ['run', 'svartz:build'], project);
+  await checkStyledHostCss(project);
   await checkDev(project, '/site/notes/', 'Welcome');
   console.log('Packed Vite 8 host: integration, types, static build, and dev passed.');
 }

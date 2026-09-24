@@ -19,6 +19,7 @@
 	},
 	"devDependencies": {
 		"@svartz/ui": "workspace:*",
+		"@svartz/vite": "workspace:*",
 		"@eslint/compat": "^2.0.2",
 		"@eslint/js": "^9.39.2",
 		"@inlang/paraglide-js": "^2.10.0",

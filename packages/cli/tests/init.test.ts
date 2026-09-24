@@ -415,6 +415,34 @@ export const entries: EntryGenerator = async () => routes.all
   expect(await readFile(catchall, "utf8")).toBe(custom);
 });
 
+it("upgrades generated host routes to link SSR styles without changing custom routes", async () => {
+  const root = await fixture();
+  await mkdir(path.join(root, "src/routes"), { recursive: true });
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    name: "host-app",
+    dependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+  await initProject({ cwd: root, install: false, git: false });
+
+  const pagePath = path.join(root, "src/routes/[...slug]/+page.svelte");
+  const loadPath = path.join(root, "src/routes/[...slug]/+page.ts");
+  const page = await readFile(pagePath, "utf8");
+  const load = await readFile(loadPath, "utf8");
+  await writeFile(pagePath, page
+    .replace("  import type { PageData } from './$types';\n", "")
+    .replace("  let { data }: { data: PageData } = $props();\n", "")
+    .replace(/\n<svelte:head>[\s\S]*?<\/svelte:head>\n/, ""));
+  await writeFile(loadPath, load
+    .replace("{ assets, base }", "{ base }")
+    .replace("hostStylesheets, ", "")
+    .replace(/  return \{ svartzStylesheets:.*\n/, ""));
+
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
+  expect(await readFile(pagePath, "utf8")).toBe(page);
+  expect(await readFile(loadPath, "utf8")).toBe(load);
+});
+
 it("reports an existing config without a Kit app instead of replacing it", async () => {
   const root = await fixture();
   await writeFile(path.join(root, "svartz.config.mjs"), "export default {};\n");

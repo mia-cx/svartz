@@ -11,6 +11,7 @@ it("keeps host Vite settings and supplies aliases for the secondary Kit build", 
   vi.stubEnv("SVARTZ_THEME_SOURCE_PATH", "/themes/local/src/lib/index.ts");
   vi.stubEnv("SVARTZ_ARTIFACTS_MODULE_PATH", "/generated/artifacts.ts");
   vi.stubEnv("SVARTZ_TAILWIND_SOURCES_PATH", "/generated/sources.css");
+  vi.stubEnv("SVARTZ_HOST_STYLE_MAP", "[]");
   const wrapped = withSvartzHost(({ mode }) => ({
     define: { __HOST_MODE__: JSON.stringify(mode) },
     resolve: { alias: { "host:module": "/host/module.ts" } },
@@ -26,6 +27,7 @@ it("keeps host Vite settings and supplies aliases for the secondary Kit build", 
     "virtual:svartz/tailwind-sources.css": "/generated/sources.css",
   });
   expect(config.plugins?.some((plugin) => plugin && typeof plugin === "object" && "name" in plugin && plugin.name === "@tailwindcss/vite:scan")).toBe(true);
+  expect(config.plugins?.some((plugin) => plugin && typeof plugin === "object" && "name" in plugin && plugin.name === "svartz:host-styles")).toBe(true);
 });
 
 it("keeps an existing host Tailwind plugin without adding a second copy", async () => {

@@ -183,4 +183,6 @@ declare module 'virtual:svartz/host' {
 	};
 	export function resolveHostVault(pathname: string): PreparedHostVault | undefined;
 	export function prepareHostVault(pathname: string): Promise<PreparedHostVault | undefined>;
+	/** Built CSS assets needed by a direct SSR response for the selected vault. */
+	export function hostStylesheets(pathname: string): readonly string[];
 }

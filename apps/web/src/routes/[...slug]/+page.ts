@@ -1,7 +1,7 @@
 import type { EntryGenerator } from './$types';
 import { error, redirect } from '@sveltejs/kit';
-import { base } from '$app/paths';
-import { routes, prepareHostVault } from 'virtual:svartz/host';
+import { assets, base } from '$app/paths';
+import { hostStylesheets, routes, prepareHostVault } from 'virtual:svartz/host';
 
 export const load = async ({ url }) => {
   const appPath = base ? url.pathname.slice(base.length) || '/' : url.pathname;
@@ -10,6 +10,7 @@ export const load = async ({ url }) => {
   if (destination) redirect(308, `${base}${destination}`);
   if (!routes.all.includes(pathname)) error(404);
   await prepareHostVault(pathname);
+  return { svartzStylesheets: hostStylesheets(pathname).map((file) => `${assets}/${file}`) };
 };
 
 export const entries: EntryGenerator = async () =>
