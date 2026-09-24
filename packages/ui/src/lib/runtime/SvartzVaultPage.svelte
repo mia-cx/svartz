@@ -2,6 +2,8 @@
 	import type { Component } from 'svelte';
 	import { base } from '$app/paths';
 	import { browser } from '$app/environment';
+	import ProtectedNote from './ProtectedNote.svelte';
+	import type { ProtectedNoteReference } from './protected-client.js';
 	import {
 		resolveContentComponents,
 		type ContentComponentOverrides
@@ -62,7 +64,7 @@
 		};
 	});
 
-	type ComponentModule = { default: Component<any> };
+	type ComponentModule = { default: Component<any>; svartzProtected?: ProtectedNoteReference };
 	type ThemeComponentReference =
 		| (() => Promise<ComponentModule>)
 		| { readonly default: Component<any> };
@@ -192,6 +194,7 @@
 	const pageModule = $derived(resolvePageModule(runtimeRoute));
 	const LayoutComponent = $derived(layoutModule?.default);
 	const PageComponent = $derived(pageModule?.default);
+	const protection = $derived(pageModule?.svartzProtected);
 </script>
 
 <svelte:head>
@@ -253,7 +256,11 @@
 			{searchOptions}
 			{tags}
 		>
-			<PageComponent
+			{#if protection}
+			{#key `${protection.payloadId}:${protection.slug}`}
+			<ProtectedNote
+				{protection}
+				loadBridgeUrls={runtimeArtifacts.loadProtectedBridgeUrls}
 				{contentComponents}
 				{assets}
 				{themeConfig}
@@ -272,6 +279,26 @@
 				{searchOptions}
 				{tags}
 			/>
+			{/key}
+			{:else}<PageComponent
+				{contentComponents}
+				{assets}
+				{themeConfig}
+				route={runtimeRoute?.route}
+				match={runtimeRoute}
+				{entry}
+				{index}
+				{vault}
+				{graph}
+				{backlinks}
+				{folders}
+				{routes}
+				{search}
+				{searchDocuments}
+				{searchIndex}
+				{searchOptions}
+				{tags}
+			/>{/if}
 		</LayoutComponent>
 	</div>
 {:else}

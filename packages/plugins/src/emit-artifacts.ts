@@ -158,7 +158,8 @@ export const emitArtifacts = definePlugin(() => ({
               ?.get(file.protection.group);
             if (!token) throw new Error(`Protected note "${file.path}" has no encrypted group token`);
             const payloadPath = `${ctx.config.mountPath ?? ""}/__svartz/protected/${token}.json`;
-            contents = `<script module>export const svartzProtected = ${JSON.stringify({ slug: file.slug, payloadPath })};</script>\n<div data-svartz-protected-note></div>`;
+            const payloadId = `vault:${ctx.config.id}:group:${token}`;
+            contents = `<script module>export const svartzProtected = ${JSON.stringify({ slug: file.slug, payloadId, payloadPath })};</script>\n<div data-svartz-protected-note></div>`;
           } else {
             contents = await compileNoteComponent(ctx, file, remarkPlugins, rehypePlugins);
           }

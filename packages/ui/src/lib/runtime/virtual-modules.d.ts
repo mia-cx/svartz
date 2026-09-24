@@ -107,7 +107,7 @@ declare module 'virtual:svartz/artifacts' {
 	export function hasNoteArtifact(key: string): boolean;
 	export function getNoteArtifact(
 		key: string
-	): { default: Component<any>; svartzProtected?: { slug: string; payloadPath: string } };
+	): { default: Component<any>; svartzProtected?: { slug: string; payloadId: string; payloadPath: string } };
 	export const index: {
 		readonly version: string;
 		readonly entries: readonly RuntimeIndexEntry[];

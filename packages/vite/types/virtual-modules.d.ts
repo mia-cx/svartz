@@ -35,7 +35,7 @@ declare module "virtual:svartz/artifacts" {
   export function hasNoteArtifact(key: string): boolean;
   export function getNoteArtifact(
     key: string,
-  ): { default: unknown; svartzProtected?: { slug: string; payloadPath: string } };
+  ): { default: unknown; svartzProtected?: { slug: string; payloadId: string; payloadPath: string } };
   export const index: Index;
   export const vault: VaultView;
   export const searchOptions: typeof import("@svartz/core").SEARCH_INDEX_OPTIONS;

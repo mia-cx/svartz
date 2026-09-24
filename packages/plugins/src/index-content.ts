@@ -215,8 +215,10 @@ export const indexContent = definePlugin(() => ({
           tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
         }
 
-        for (const folderSlug of folderSlugsFromPath(file.path)) {
-          folderCounts.set(folderSlug, (folderCounts.get(folderSlug) ?? 0) + 1);
+        if (!file.protection?.hidden) {
+          for (const folderSlug of folderSlugsFromPath(file.path)) {
+            folderCounts.set(folderSlug, (folderCounts.get(folderSlug) ?? 0) + 1);
+          }
         }
 
         noteRouteSet.add(routeHref(file.slug, mountPath));
