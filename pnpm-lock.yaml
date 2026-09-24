@@ -251,6 +251,9 @@ importers:
       katex:
         specifier: ^0.18.9
         version: 0.18.9
+      mdast-util-find-and-replace:
+        specifier: 3.0.2
+        version: 3.0.2
       mdast-util-to-string:
         specifier: ^4.0.0
         version: 4.0.0
@@ -275,6 +278,9 @@ importers:
       rehype-autolink-headings:
         specifier: ^7.1.0
         version: 7.1.0
+      rehype-citation:
+        specifier: 2.3.2
+        version: 2.3.2
       rehype-katex:
         specifier: ^7.0.1
         version: 7.0.1
@@ -290,6 +296,9 @@ importers:
       rehype-stringify:
         specifier: ^10.0.1
         version: 10.0.1
+      remark-breaks:
+        specifier: 4.0.0
+        version: 4.0.0
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
