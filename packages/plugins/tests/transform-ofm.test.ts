@@ -225,6 +225,22 @@ describe("transformOfm", () => {
     );
   });
 
+  it("keeps executable SVX script and template literals untouched", () => {
+    const script = [
+      '<script lang="ts">',
+      'const literal = `==highlight== %% comment %% #topic > [!note]`;',
+      '</script>',
+    ].join("\n");
+    const ctx = makeCtx(`${script}\n\nOutside ==highlight== #topic`);
+    ctx.files[0]!.extension = ".svx";
+
+    transformOfm().transformOfm!.run(ctx);
+
+    expect(ctx.files[0]!.content).toContain(script);
+    expect(ctx.files[0]!.content).toContain("Outside <mark>highlight</mark>");
+    expect(ctx.files[0]!.inlineTags).toEqual(["topic"]);
+  });
+
   it("preserves nested blockquote prefixes for nested callouts", () => {
     const ctx = makeCtx("> > [!warning]- Nested warning\n> > Nested body\n");
 

@@ -34,10 +34,10 @@ function protectSegment(store: SegmentStore, segment: string): string {
   return placeholder;
 }
 
-function protectCode(markdown: string, store: SegmentStore): string {
+function protectCode(markdown: string, store: SegmentStore, executable: boolean): string {
   const spans: { start: number; end: number }[] = [];
   visit(markdownParser.parse(markdown), (node) => {
-    if (node.type !== "code" && node.type !== "inlineCode") return;
+    if (node.type !== "code" && node.type !== "inlineCode" && !(executable && node.type === "html")) return;
     const start = node.position?.start.offset;
     const end = node.position?.end.offset;
     if (start !== undefined && end !== undefined) spans.push({ start, end });
@@ -183,9 +183,9 @@ function remarkMermaid() {
   };
 }
 
-function transformMarkdown(markdown: string, sourceSlug: string, tagsRoute: string): { content: string; tags: string[] } {
+function transformMarkdown(markdown: string, sourceSlug: string, tagsRoute: string, executable: boolean): { content: string; tags: string[] } {
   const store = createSegmentStore(markdown);
-  const protectedCode = protectCode(markdown, store);
+  const protectedCode = protectCode(markdown, store, executable);
   const normalizedComments = normalizeComments(protectedCode);
   const protectedComments = protectHtmlComments(normalizedComments, store);
   const transformed = sanitizeMarkdownForSvelte(
@@ -205,7 +205,7 @@ export const transformOfm = definePlugin(() => ({
       for (const file of ctx.files) {
         if (!file.extension || ![".md", ".mdx", ".svx"].includes(file.extension)) continue;
 
-        const transformed = transformMarkdown(file.content, file.slug, routes?.tags ?? "tags");
+        const transformed = transformMarkdown(file.content, file.slug, routes?.tags ?? "tags", file.extension === ".svx");
         file.content = transformed.content;
         file.inlineTags = transformed.tags;
         mermaid ||= hasMermaid(file.content);
