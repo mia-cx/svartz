@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { basename } from "node:path";
 import type { ResolvedConfig } from "@svartz/core";
 import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath, getGeneratedHostStylesPath, svelteKitBasePath } from "../src/host-registry";
 
@@ -42,6 +43,8 @@ describe("host registry", () => {
       .toMatch(/^\/workspace\/\.svartz\/host\/styles\/[^/]+\.json$/);
     expect(getGeneratedHostStylesPath("/workspace/.svartz/host/runtime.ts", "aaa").toLowerCase())
       .not.toBe(getGeneratedHostStylesPath("/workspace/.svartz/host/runtime.ts", "aaG").toLowerCase());
+    expect(Buffer.byteLength(basename(getGeneratedHostStylesPath("/workspace/.svartz/host/runtime.ts", "x".repeat(126)))))
+      .toBeLessThanOrEqual(255);
   });
 
   it("uses the target or canonical host URL as the deployment base", () => {
