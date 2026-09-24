@@ -13,6 +13,8 @@ export const testIndex = {
 		{
 			slug: 'index',
 			href: '/',
+			properties: {},
+			page: { toc: true, comments: true },
 			path: 'index.md',
 			title: 'Svartz test page',
 			tags: [],
@@ -29,6 +31,8 @@ export const testIndex = {
 		{
 			slug: 'tags/testing',
 			href: '/tags/testing/',
+			properties: {},
+			page: { toc: true, comments: true },
 			path: 'tags/testing.md',
 			title: 'Authored tag landing',
 			tags: [],

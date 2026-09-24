@@ -203,6 +203,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
               extractThemeConfig(context.config.theme),
               context.config.site,
               emittedBrowserResources,
+              context.config.id,
             ),
           ),
         ],
@@ -374,6 +375,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
           extractThemeConfig(context.config.theme),
           context.config.site,
           emittedBrowserResources,
+          context.config.id,
         );
       }
 

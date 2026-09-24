@@ -144,6 +144,11 @@ export const indexContent = definePlugin(() => ({
           slug: file.slug,
           href: routeHref(file.slug, mountPath),
           path: file.path,
+          properties: frontmatter,
+          page: {
+            toc: frontmatter.enableToc !== false && frontmatter.toc !== false,
+            comments: frontmatter.comments !== false,
+          },
           title,
           tags,
           aliases,

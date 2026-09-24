@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import type { VaultView } from '@svartz/core';
 	import {
 		Backlinks,
 		Breadcrumbs,
@@ -42,6 +43,9 @@
 	type TocEntry = { depth: number; text: string; slug: string };
 	type Entry = {
 		slug: string;
+		href?: string;
+		page?: { toc: boolean; comments: boolean };
+		path?: string;
 		title: string;
 		description?: string;
 		createdAt?: Date;
@@ -65,22 +69,28 @@
 		match,
 		searchDocuments = [],
 		searchIndex,
+		searchOptions = { fields: [], storeFields: [], idField: 'id' },
+		vault,
 		themeConfig = {}
 	}: {
 		children?: Snippet;
 		entry?: Entry;
 		index?: Index;
 		backlinks?: Record<string, readonly string[]>;
+		graph?: Record<string, readonly string[]>;
 		match?: { pathname?: string; params?: { slug?: string } };
 		searchDocuments?: readonly {
 			id: string;
 			slug: string;
+			href?: string;
 			title: string;
 			description?: string;
 			content?: string;
 			tags?: readonly string[];
 		}[];
 		searchIndex?: unknown;
+		searchOptions?: { fields: string[]; storeFields: string[]; idField: string };
+		vault?: VaultView;
 		themeConfig?: Record<string, unknown>;
 	} = $props();
 
@@ -88,10 +98,11 @@
 
 	const commentsEnabled = $derived(
 		!!cfg.comments?.repo &&
-		!!cfg.comments?.repoId &&
-		!!cfg.comments?.category &&
-		!!cfg.comments?.categoryId &&
-		cfg.comments?.enabled !== false
+			!!cfg.comments?.repoId &&
+			!!cfg.comments?.category &&
+			!!cfg.comments?.categoryId &&
+			cfg.comments?.enabled !== false &&
+			entry?.page?.comments !== false
 	);
 
 	const recentNotesEnabled = $derived(cfg.recentNotes?.enabled !== false);
@@ -101,18 +112,24 @@
 		return pathname.replace(/^\/+|\/+$/g, '');
 	}
 
-	const breadcrumbSlug = $derived(pathnameToSlug(match?.pathname));
+	const breadcrumbSlug = $derived(entry?.slug ?? pathnameToSlug(match?.params?.slug));
+	const visibleEntries = $derived(vault?.entries ?? index.entries);
+	const homeHref = $derived(vault?.routes.mountPath ? `${vault.routes.mountPath}/` : '/');
 </script>
 
 <a class="skip-link" href="#main-content">Skip to content</a>
 <div class="shell">
 	<aside class="left-sidebar" aria-label="Site navigation">
-		<SearchBox {searchDocuments} {searchIndex} />
-		<FileTrie entries={index.entries} currentSlug={breadcrumbSlug} />
+		<SearchBox searchDocuments={vault?.search ?? searchDocuments} {searchIndex} {searchOptions} />
+		<FileTrie
+			entries={visibleEntries}
+			folders={vault?.folders ?? []}
+			currentSlug={breadcrumbSlug}
+		/>
 	</aside>
 
 	<main class="content-column" id="main-content" tabindex="-1">
-		<Breadcrumbs slug={breadcrumbSlug} />
+		<Breadcrumbs slug={breadcrumbSlug} entries={visibleEntries} {homeHref} />
 		{#if entry}
 			<NoteHeader {entry} />
 		{/if}
@@ -137,16 +154,17 @@
 	</main>
 
 	<aside class="right-sidebar" aria-label="Related content">
-		<TableOfContents items={entry?.toc} />
+		<TableOfContents items={entry?.page?.toc === false ? [] : entry?.toc} />
 		{#if recentNotesEnabled}
 			<RecentNotes
-				entries={index.entries}
+				entries={visibleEntries}
+				tags={vault?.tags ?? []}
 				limit={cfg.recentNotes?.limit ?? 5}
 				showTags={cfg.recentNotes?.showTags ?? true}
-				linkToMore={cfg.recentNotes?.linkToMore ?? '/feed/'}
+				linkToMore={cfg.recentNotes?.linkToMore ?? vault?.routes.feed[0] ?? '/feed/'}
 			/>
 		{/if}
-		<Backlinks currentSlug={entry?.slug} entries={index.entries} {backlinks} />
+		<Backlinks currentSlug={entry?.slug} entries={visibleEntries} {backlinks} />
 	</aside>
 </div>
 

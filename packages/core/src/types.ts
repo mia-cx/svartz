@@ -194,6 +194,11 @@ interface IndexEntry {
   readonly slug: string;
   readonly href: string;
   readonly path: string;
+  readonly properties: Readonly<Record<string, unknown>>;
+  readonly page: {
+    readonly toc: boolean;
+    readonly comments: boolean;
+  };
   readonly title: string;
   readonly tags: readonly string[];
   readonly aliases: readonly string[];

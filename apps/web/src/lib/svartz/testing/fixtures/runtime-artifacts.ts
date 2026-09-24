@@ -24,6 +24,19 @@ export function getNoteArtifact(_key: string) {
 }
 
 export const index = testIndex;
+export const vault = {
+	id: 'test',
+	...index,
+	note(reference: string) {
+		const entry = index.entries.find((candidate) => candidate.slug === reference || candidate.href === reference);
+		return entry ? { entry, outgoing: [], backlinks: [] } : undefined;
+	}
+};
+export const searchOptions = {
+	fields: ['title', 'description', 'content', 'tags', 'aliases'],
+	storeFields: ['slug', 'href', 'title', 'description', 'tags'],
+	idField: 'id'
+};
 export const graph = index.graph;
 export const backlinks = index.backlinks;
 export const search = index.search;

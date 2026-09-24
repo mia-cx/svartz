@@ -32,6 +32,8 @@ const ARTIFACTS_PLACEHOLDER_SOURCE = [
   '  throw new Error(`[svartz:vite] note artifact "${key}" is not available yet`);',
   '}',
   'export const index = { version: "0.0.0", entries: [], graph: {}, backlinks: {}, search: [], tags: [], folders: [], routes: { mountPath: "", notes: [], redirects: {}, tags: [], folders: [], feed: [], all: [] }, assets: [] };',
+  'export const vault = { id: "default", ...index, note: () => undefined };',
+  'export const searchOptions = { fields: ["title", "description", "content", "tags", "aliases"], storeFields: ["slug", "href", "title", "description", "tags"], idField: "id" };',
   'export const graph = index.graph;',
   'export const backlinks = index.backlinks;',
   'export const search = index.search;',

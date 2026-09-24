@@ -1,6 +1,7 @@
 <script lang="ts">
 	type Entry = {
 		slug: string;
+		href?: string;
 		title: string;
 	};
 
@@ -15,7 +16,7 @@
 	} = $props();
 
 	const linkedEntries = $derived(
-		(currentSlug ? backlinks[currentSlug] ?? [] : [])
+		(currentSlug ? (backlinks[currentSlug] ?? []) : [])
 			.map((slug) => entries.find((entry) => entry.slug === slug))
 			.filter(Boolean) as Entry[]
 	);
@@ -23,14 +24,14 @@
 
 {#if linkedEntries.length > 0}
 	<section class="grid gap-2" aria-label="Backlinks">
-		<p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+		<p class="text-xs font-semibold tracking-wider text-zinc-500 uppercase dark:text-zinc-400">
 			Backlinks
 		</p>
 		<ul class="grid gap-1">
 			{#each linkedEntries as entry (entry.slug)}
 				<li>
 					<a
-						href={entry.slug === 'index' ? '/' : '/' + entry.slug + '/'}
+						href={entry.href ?? (entry.slug === 'index' ? '/' : '/' + entry.slug + '/')}
 						class="flex items-center gap-1.5 text-sm text-zinc-600 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
 					>
 						<svg

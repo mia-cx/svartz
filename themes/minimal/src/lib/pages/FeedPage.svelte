@@ -1,6 +1,7 @@
 <script lang="ts">
 	type Entry = {
 		slug: string;
+		href?: string;
 		title: string;
 		description?: string;
 		tags?: readonly string[];
@@ -10,9 +11,11 @@
 	};
 
 	let {
-		index = { entries: [] }
+		index = { entries: [] },
+		vault
 	}: {
 		index?: { entries: readonly Entry[] };
+		vault?: { entries: readonly Entry[]; tags: readonly { slug: string; href: string }[] };
 	} = $props();
 
 	/**
@@ -22,7 +25,7 @@
 	const META_SLUGS = ['feed', 'feed/index'];
 
 	const metaEntry = $derived(
-		index.entries.find((e) => META_SLUGS.includes(e.slug))
+		(vault?.entries ?? index.entries).find((e) => META_SLUGS.includes(e.slug))
 	);
 
 	const feedTitle = $derived(metaEntry?.title ?? 'Feed');
@@ -46,7 +49,7 @@
 	}
 
 	const notes = $derived(
-		[...index.entries]
+		[...(vault?.entries ?? index.entries)]
 			.filter((e) => !META_SLUGS.includes(e.slug))
 			.sort((a, b) => {
 				const ta = noteDate(a)?.getTime() ?? 0;
@@ -65,7 +68,8 @@
 			<p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{feedDescription}</p>
 		{:else}
 			<p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-				{notes.length} {notes.length === 1 ? 'note' : 'notes'}, newest first.
+				{notes.length}
+				{notes.length === 1 ? 'note' : 'notes'}, newest first.
 			</p>
 		{/if}
 	</div>
@@ -74,10 +78,12 @@
 		{#each notes as entry (entry.slug)}
 			{@const date = noteDate(entry)}
 			<li class="grid gap-1.5 border-b border-zinc-100 py-4 last:border-0 dark:border-zinc-800">
-				<div class="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+				<div
+					class="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
+				>
 					<a
-						href={slugToHref(entry.slug)}
-						class="min-w-0 [overflow-wrap:anywhere] font-medium leading-snug text-zinc-900 transition-colors hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 dark:text-zinc-100 dark:hover:text-blue-400"
+						href={entry.href ?? slugToHref(entry.slug)}
+						class="min-w-0 leading-snug font-medium [overflow-wrap:anywhere] text-zinc-900 transition-colors hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 dark:text-zinc-100 dark:hover:text-blue-400"
 					>
 						{entry.title}
 					</a>
@@ -103,7 +109,7 @@
 						<div class="flex flex-wrap gap-1">
 							{#each entry.tags as tag (tag)}
 								<a
-									href={'/tags/' + tag + '/'}
+									href={vault?.tags.find((item) => item.slug === tag)?.href ?? '/tags/' + tag + '/'}
 									class="rounded-full border border-zinc-200 bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
 								>
 									#{tag}

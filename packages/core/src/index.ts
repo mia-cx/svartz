@@ -26,6 +26,8 @@ export type {
   TagIndexEntry,
   TocEntry,
 } from "./types";
+export { createVaultView, type VaultNoteView, type VaultView } from "./vault-view";
+export { SEARCH_INDEX_OPTIONS } from "./search-options";
 
 // Plugin contract — types
 export type {

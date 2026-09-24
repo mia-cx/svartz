@@ -14,9 +14,11 @@
 		search,
 		searchDocuments,
 		searchIndex,
+		searchOptions,
 		siteConfig,
 		tags,
-		themeConfig
+		themeConfig,
+		vault
 	} from 'virtual:svartz/artifacts';
 
 	type ComponentModule = { default: Component<any> };
@@ -48,9 +50,7 @@
 		return reference;
 	}
 
-	function resolveLayoutReference(
-		match: RuntimeRouteMatch
-	): ThemeComponentReference | undefined {
+	function resolveLayoutReference(match: RuntimeRouteMatch): ThemeComponentReference | undefined {
 		if (match?.layoutSlot && theme.layouts[match.layoutSlot]) {
 			return theme.layouts[match.layoutSlot];
 		}
@@ -90,9 +90,13 @@
 	}
 
 	const activePathname = $derived(pathname);
-	const appPathname = $derived(base && activePathname.startsWith(`${base}/`)
-		? activePathname.slice(base.length)
-		: activePathname === base ? '/' : activePathname);
+	const appPathname = $derived(
+		base && activePathname.startsWith(`${base}/`)
+			? activePathname.slice(base.length)
+			: activePathname === base
+				? '/'
+				: activePathname
+	);
 	const vaultPathname = $derived(
 		routes.mountPath && appPathname.startsWith(`${routes.mountPath}/`)
 			? appPathname.slice(routes.mountPath.length)
@@ -100,9 +104,12 @@
 				? '/'
 				: appPathname
 	);
-	const canonicalEntry = $derived(index.entries.find((candidate) =>
-		candidate.href === (appPathname.endsWith('/') ? appPathname : `${appPathname}/`)
-	));
+	const canonicalEntry = $derived(
+		index.entries.find(
+			(candidate) =>
+				candidate.href === (appPathname.endsWith('/') ? appPathname : `${appPathname}/`)
+		)
+	);
 
 	const runtimeRoute = $derived.by(() => {
 		const match = resolveRuntimeRoute({
@@ -111,18 +118,20 @@
 		});
 		if (!canonicalEntry || match?.route.id === 'note') return match;
 		const noteRoute = theme.routes.find((route) => route.id === 'note');
-		return noteRoute ? {
-			route: noteRoute,
-			pathname: vaultPathname,
-			params: { slug: canonicalEntry.slug },
-			layoutSlot: noteRoute.layoutSlot,
-			artifactKey: `pages/${canonicalEntry.slug}.svelte`
-		} : match;
+		return noteRoute
+			? {
+					route: noteRoute,
+					pathname: vaultPathname,
+					params: { slug: canonicalEntry.slug },
+					layoutSlot: noteRoute.layoutSlot,
+					artifactKey: `pages/${canonicalEntry.slug}.svelte`
+				}
+			: match;
 	});
 
 	const entry = $derived(
 		artifactKeyToSlug(runtimeRoute?.artifactKey)
-			? index.entries.find(
+			? vault.entries.find(
 					(candidate) => candidate.slug === artifactKeyToSlug(runtimeRoute?.artifactKey)
 				)
 			: undefined
@@ -130,15 +139,15 @@
 
 	const pageTitle = $derived(entry?.title ?? siteConfig.title);
 	const documentTitle = $derived(
-		entry && entry.title !== siteConfig.title ? `${entry.title} | ${siteConfig.title}` : siteConfig.title
+		entry && entry.title !== siteConfig.title
+			? `${entry.title} | ${siteConfig.title}`
+			: siteConfig.title
 	);
 	const pageDescription = $derived(entry?.description ?? siteConfig.description);
 	const canonicalUrl = $derived(resolveAbsoluteUrl(activePathname));
 	const socialImageUrl = $derived(resolveAbsoluteUrl(siteConfig.image));
 
-	const layoutModule = $derived(
-		resolveComponentModule(resolveLayoutReference(runtimeRoute))
-	);
+	const layoutModule = $derived(resolveComponentModule(resolveLayoutReference(runtimeRoute)));
 	const pageModule = $derived(resolvePageModule(runtimeRoute));
 	const LayoutComponent = $derived(layoutModule?.default);
 	const PageComponent = $derived(pageModule?.default);
@@ -158,8 +167,14 @@
 	{#if pageDescription}<meta name="twitter:description" content={pageDescription} />{/if}
 	{#if socialImageUrl}<meta name="twitter:image" content={socialImageUrl} />{/if}
 	{#if siteConfig.author}<meta name="author" content={siteConfig.author} />{/if}
-	{#if entry?.publishedAt}<meta property="article:published_time" content={String(entry.publishedAt)} />{/if}
-	{#if entry?.modifiedAt}<meta property="article:modified_time" content={String(entry.modifiedAt)} />{/if}
+	{#if entry?.publishedAt}<meta
+			property="article:published_time"
+			content={String(entry.publishedAt)}
+		/>{/if}
+	{#if entry?.modifiedAt}<meta
+			property="article:modified_time"
+			content={String(entry.modifiedAt)}
+		/>{/if}
 </svelte:head>
 
 {#if LayoutComponent && PageComponent}
@@ -171,6 +186,7 @@
 		match={runtimeRoute}
 		{entry}
 		{index}
+		{vault}
 		{graph}
 		{backlinks}
 		{folders}
@@ -178,6 +194,7 @@
 		{search}
 		{searchDocuments}
 		{searchIndex}
+		{searchOptions}
 		{tags}
 	>
 		<PageComponent
@@ -187,6 +204,7 @@
 			match={runtimeRoute}
 			{entry}
 			{index}
+			{vault}
 			{graph}
 			{backlinks}
 			{folders}
@@ -194,6 +212,7 @@
 			{search}
 			{searchDocuments}
 			{searchIndex}
+			{searchOptions}
 			{tags}
 		/>
 	</LayoutComponent>

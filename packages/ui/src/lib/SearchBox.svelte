@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import MiniSearch from 'minisearch';
 
 	type SearchDocument = {
 		id: string;
 		slug: string;
+		href?: string;
 		title: string;
 		description?: string;
 		content?: string;
@@ -13,24 +15,24 @@
 
 	let {
 		searchDocuments = [],
-		searchIndex
+		searchIndex,
+		searchOptions = {
+			fields: ['title', 'description', 'content', 'tags', 'aliases'],
+			storeFields: ['slug', 'href', 'title', 'description', 'tags'],
+			idField: 'id'
+		}
 	}: {
 		searchDocuments?: readonly SearchDocument[];
 		searchIndex?: unknown;
+		searchOptions?: { fields: string[]; storeFields: string[]; idField: string };
 	} = $props();
-
-	const options = {
-		fields: ['title', 'description', 'content', 'tags'],
-		storeFields: ['slug', 'title', 'description', 'tags'],
-		idField: 'id'
-	};
 
 	const engine = $derived.by(() => {
 		if (searchIndex) {
-			return MiniSearch.loadJS(searchIndex as never, options);
+			return MiniSearch.loadJS(searchIndex as never, searchOptions);
 		}
 		if (searchDocuments.length > 0) {
-			const ms = new MiniSearch(options);
+			const ms = new MiniSearch(searchOptions);
 			ms.addAll(searchDocuments as never[]);
 			return ms;
 		}
@@ -47,7 +49,9 @@
 	const results = $derived(
 		query.trim().length < 2 || !engine
 			? []
-			: (engine.search(query, { prefix: true, fuzzy: 0.2 }).slice(0, 8) as unknown as SearchDocument[])
+			: (engine
+					.search(query, { prefix: true, fuzzy: 0.2 })
+					.slice(0, 8) as unknown as SearchDocument[])
 	);
 
 	function openModal() {
@@ -63,12 +67,12 @@
 		requestAnimationFrame(() => triggerEl?.focus());
 	}
 
-	function slugToHref(slug: string) {
-		return slug === 'index' ? '/' : `/${slug}/`;
-	}
-
 	function navigate(result: SearchDocument) {
-		window.location.href = slugToHref(result.slug);
+		const href =
+			searchDocuments.find((document) => document.id === result.id)?.href ??
+			result.href ??
+			(result.slug === 'index' ? '/' : `/${result.slug}/`);
+		void goto(href);
 		closeModal();
 	}
 
@@ -154,7 +158,7 @@
 	</svg>
 	<span class="flex-1">Search...</span>
 	<kbd
-		class="hidden rounded border border-zinc-200 bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 sm:block"
+		class="hidden rounded border border-zinc-200 bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 sm:block dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
 	>
 		{isMac ? '⌘K' : 'Ctrl+K'}
 	</kbd>
@@ -249,9 +253,7 @@
 			</div>
 
 			<!-- Footer hint -->
-			<div
-				class="flex items-center gap-3 border-t border-zinc-200 px-4 py-2 dark:border-zinc-700"
-			>
+			<div class="flex items-center gap-3 border-t border-zinc-200 px-4 py-2 dark:border-zinc-700">
 				<span class="text-[10px] text-zinc-400 dark:text-zinc-500"
 					>↑↓ navigate · ↵ open · esc close</span
 				>
