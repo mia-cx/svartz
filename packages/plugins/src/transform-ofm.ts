@@ -34,72 +34,29 @@ function protectSegment(store: SegmentStore, segment: string): string {
   return placeholder;
 }
 
-function stripBlockquotePrefix(line: string): string {
-  return line.replace(/^[ \t]*(?:>[ \t]?)+/, "");
-}
-
-function isIndentedCode(line: string): boolean {
-  if (/^(?: {4}|\t)/.test(line)) return true;
-  const withoutBlockquote = stripBlockquotePrefix(line);
-  return withoutBlockquote !== line && /^(?: {4}|\t)/.test(withoutBlockquote);
-}
-
-function protectCode(markdown: string, store: SegmentStore): string {
-  const lines = markdown.split("\n");
-  const protectedLines: string[] = [];
-  let fence: { readonly marker: "`" | "~"; readonly length: number } | undefined;
-  let fencedLines: string[] = [];
-
-  for (const line of lines) {
-    if (!fence) {
-      if (isIndentedCode(line)) {
-        protectedLines.push(protectSegment(store, line));
-        continue;
-      }
-
-      const openingFence = /^(`{3,}|~{3,})/.exec(stripBlockquotePrefix(line));
-      if (!openingFence) {
-        protectedLines.push(line);
-        continue;
-      }
-
-      const token = openingFence[1]!;
-      fence = {
-        marker: token[0] as "`" | "~",
-        length: token.length,
-      };
-      fencedLines = [line];
-      continue;
-    }
-
-    fencedLines.push(line);
-    const closingFence = new RegExp(
-      `^${fence.marker === "`" ? "`" : "~"}{${fence.length},}\\s*$`,
-    );
-    if (!closingFence.test(stripBlockquotePrefix(line))) continue;
-
-    protectedLines.push(protectSegment(store, fencedLines.join("\n")));
-    fence = undefined;
-    fencedLines = [];
+function protectCode(markdown: string, store: SegmentStore, executable: boolean): string {
+  const spans: { start: number; end: number }[] = [];
+  visit(markdownParser.parse(markdown), (node) => {
+    if (node.type !== "code" && node.type !== "inlineCode" && !(executable && node.type === "html")) return;
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (start !== undefined && end !== undefined) spans.push({ start, end });
+  });
+  let protectedMarkdown = markdown;
+  for (const { start, end } of spans.sort((left, right) => right.start - left.start)) {
+    protectedMarkdown = protectedMarkdown.slice(0, start) +
+      protectSegment(store, markdown.slice(start, end)) +
+      protectedMarkdown.slice(end);
   }
-
-  if (fencedLines.length > 0) {
-    protectedLines.push(protectSegment(store, fencedLines.join("\n")));
-  }
-
-  return protectedLines
-    .join("\n")
-    .replace(/(`+)(?!`)([\s\S]*?)\1(?!`)/g, (codeSpan) =>
-      protectSegment(store, codeSpan),
-    );
+  return protectedMarkdown;
 }
 
 function restoreSegments(markdown: string, store: SegmentStore): string {
-  return store.segments.reduce(
-    (restoredMarkdown, segment, index) =>
-      restoredMarkdown.replace(`${store.prefix}${index}__`, segment),
-    markdown,
-  );
+  let restored = markdown;
+  for (let index = store.segments.length - 1; index >= 0; index--) {
+    restored = restored.replaceAll(`${store.prefix}${index}__`, () => store.segments[index]!);
+  }
+  return restored;
 }
 
 function normalizeComments(markdown: string): string {
@@ -226,9 +183,9 @@ function remarkMermaid() {
   };
 }
 
-function transformMarkdown(markdown: string, sourceSlug: string, tagsRoute: string): { content: string; tags: string[] } {
+function transformMarkdown(markdown: string, sourceSlug: string, tagsRoute: string, executable: boolean): { content: string; tags: string[] } {
   const store = createSegmentStore(markdown);
-  const protectedCode = protectCode(markdown, store);
+  const protectedCode = protectCode(markdown, store, executable);
   const normalizedComments = normalizeComments(protectedCode);
   const protectedComments = protectHtmlComments(normalizedComments, store);
   const transformed = sanitizeMarkdownForSvelte(
@@ -248,7 +205,7 @@ export const transformOfm = definePlugin(() => ({
       for (const file of ctx.files) {
         if (!file.extension || ![".md", ".mdx", ".svx"].includes(file.extension)) continue;
 
-        const transformed = transformMarkdown(file.content, file.slug, routes?.tags ?? "tags");
+        const transformed = transformMarkdown(file.content, file.slug, routes?.tags ?? "tags", file.extension === ".svx");
         file.content = transformed.content;
         file.inlineTags = transformed.tags;
         mermaid ||= hasMermaid(file.content);
