@@ -30,6 +30,7 @@ declare module 'virtual:svartz/theme' {
 	};
 
 	export const routes: readonly RuntimeRouteMatch['route'][];
+	export const ready: Promise<void>;
 
 	export function resolveRuntimeRoute(input: {
 		pathname: string;
@@ -194,4 +195,5 @@ declare module 'virtual:svartz/host' {
 		readonly redirects: Readonly<Record<string, string>>;
 	};
 	export function resolveHostVault(pathname: string): (typeof vaults)[number] | undefined;
+	export function prepareHostVault(pathname: string): Promise<(typeof vaults)[number] | undefined>;
 }

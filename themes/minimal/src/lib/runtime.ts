@@ -14,13 +14,12 @@ import FeedPage from './pages/FeedPage.svelte';
 import FolderListPage from './pages/FolderListPage.svelte';
 import FolderPage from './pages/FolderPage.svelte';
 import TagListPage from './pages/TagListPage.svelte';
-import TagPage from './pages/TagPage.svelte';
 
 const modules: MinimalThemeModules = {
 	siteLayout: { default: SiteLayout },
 	notFoundPage: () => import('./pages/NotFoundPage.svelte'),
 	tagListPage: { default: TagListPage },
-	tagPage: { default: TagPage },
+	tagPage: () => import('./pages/TagPage.svelte'),
 	folderListPage: { default: FolderListPage },
 	folderPage: { default: FolderPage },
 	feedPage: { default: FeedPage },

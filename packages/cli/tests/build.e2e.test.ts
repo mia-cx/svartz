@@ -185,6 +185,11 @@ describe("svartz CLI", () => {
           const errors: string[] = [];
           page.on("pageerror", (error) => errors.push(error.message));
           page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+          await page.goto(`http://127.0.0.1:${address.port}/tags/guides/`);
+          await page.getByRole("heading", { name: "#Guides" }).waitFor();
+          await page.getByRole("button", { name: "Open search (Ctrl+K)" }).click();
+          await page.getByRole("searchbox", { name: "Search notes" }).waitFor();
+          expect(errors).toEqual([]);
           await page.goto(`http://127.0.0.1:${address.port}/`);
           await page.locator("pre.svartz-mermaid svg").waitFor({ timeout: 10_000 });
           await page.getByRole("navigation", { name: "Explorer" }).getByRole("link", { name: "Locked title", exact: true }).click();

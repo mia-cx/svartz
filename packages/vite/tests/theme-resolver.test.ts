@@ -1,4 +1,5 @@
 import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -63,9 +64,31 @@ describe("@svartz/vite theme bridge", () => {
 
     expect(source).toContain('import * as themeModule from "@svartz/theme-minimal";');
     expect(source).toMatch(/import \{ matchThemeRoute, materializeTheme, resolveThemeRouteToArtifactKey \} from ".*\/core\/dist\/index\.js";/);
-    expect(source).toContain("export const theme = await materializeTheme(_manifest);");
+    expect(source).toContain("export const ready = materializeTheme(_manifest).then");
+    expect(source).not.toContain("await materializeTheme(_manifest)");
     expect(source).toContain("return matchThemeRoute(routes, input);");
     expect(source).toContain("return resolveThemeRouteToArtifactKey(routes, input);");
+  });
+
+  it("prepares lazy components while keeping route exports live", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "svartz-lazy-theme-"));
+    tempDirs.push(tempDir);
+    const manifestPath = path.join(tempDir, "manifest.mjs");
+    const runtimePath = path.join(tempDir, "runtime.mjs");
+    await writeFile(manifestPath, `export default {
+      id: "lazy-test", version: "1.0.0", contractVersion: "1.0.0",
+      layouts: { defaultPage: { default: {} }, notePage: { default: {} } },
+      routes: [{ id: "tag", pattern: "/tags/:slug", layoutSlot: "defaultPage",
+        component: () => Promise.resolve({ default: { loaded: true } }) }],
+    };`);
+    await writeFile(runtimePath, createThemeVirtualModuleSource(pathToFileURL(manifestPath).href));
+
+    const runtime = await import(pathToFileURL(runtimePath).href);
+    await runtime.ready;
+
+    expect(runtime.theme.routes).toBe(runtime.routes);
+    expect(runtime.resolveRuntimeRoute({ pathname: "/tags/guides/" })?.route.component)
+      .toEqual({ default: { loaded: true } });
   });
 
   it("uses the built-in theme's SSR runtime entry", () => {

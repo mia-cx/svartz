@@ -7,3 +7,7 @@ export const routes = { all: artifacts.routes.all, redirects: artifacts.routes.r
 export function resolveHostVault(pathname: string) {
 	return pathname.startsWith('/') ? vaults[0] : undefined;
 }
+
+export async function prepareHostVault(pathname: string) {
+	return resolveHostVault(pathname);
+}

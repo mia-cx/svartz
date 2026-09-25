@@ -29,6 +29,7 @@ describe("host registry", () => {
     expect(source).toContain('import * as theme1 from "/workspace/.svartz/vaults/work/artifacts/runtime-theme.ts"');
     expect(source).toContain('mountPath: "/blog"');
     expect(source).toContain('mountPath: "/work"');
+    expect(source).toContain("await selected?.theme.ready;");
     expect(getGeneratedHostRegistryPath("/workspace")).toBe("/workspace/.svartz/host/runtime.ts");
   });
 });

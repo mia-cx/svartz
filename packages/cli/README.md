@@ -20,6 +20,8 @@ svartz dev --vault docs
 
 In an existing SvelteKit app, `init` keeps routes, layouts, adapter, and existing scripts. It adds Svartz dependencies and scripts, wraps the existing Vite export with `withSvartzHost`, and preserves any existing Svartz config and vault definitions. This wrapper supplies virtual-module aliases during SvelteKit's client build. If a file cannot be safely integrated, `init` reports the conflict before writing.
 
+Rerun `npx svartz@latest init` after upgrading a scaffolded host. It updates only the exact older generated catchall loader to await lazy theme pages; a custom catchall remains yours.
+
 Use `svartz build --vault <id>` when you want to target a single vault.
 
 ## Turbo task sync

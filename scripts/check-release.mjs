@@ -140,6 +140,13 @@ async function checkHost(project, launcher, archives) {
   await writeFile(configPath, config.replace(/site: \{ title: ([^}]+) \}/,
     "site: { title: $1, url: 'https://example.test' }"));
   await write(project, 'src/routes/check/+page.svelte', "<script lang=\"ts\">import { index } from 'virtual:svartz/artifacts';</script><p>Published notes: {index.entries.length}</p>\n");
+  await write(project, 'check-types.ts', [
+    '/// <reference types="@svartz/vite/virtual-modules" />',
+    "import { prepareHostVault } from 'virtual:svartz/host';",
+    "import { ready } from 'virtual:svartz/theme';",
+    'const prepared: Promise<void> = ready;',
+    "void Promise.all([prepared, prepareHostVault('/notes/')]);",
+  ].join('\n'));
   await write(project, 'src/routes/rss.xml/+server.ts', [
     "import { vaults } from 'virtual:svartz/host';",
     "import { renderHostRss } from '@svartz/vite/discovery';",
@@ -148,7 +155,7 @@ async function checkHost(project, launcher, archives) {
   ].join('\n'));
   await command('npm', ['install', '--no-audit', '--no-fund'], project);
   await command(path.join(project, 'node_modules/.bin/tsc'),
-    ['--noEmit', '--skipLibCheck', '--module', 'esnext', '--moduleResolution', 'bundler', '--target', 'es2022', 'vite.config.ts', 'svartz.config.ts'], project);
+    ['--noEmit', '--skipLibCheck', '--module', 'esnext', '--moduleResolution', 'bundler', '--target', 'es2022', 'vite.config.ts', 'svartz.config.ts', 'check-types.ts'], project);
   await command('npm', ['run', 'svartz:build'], project);
   assert.match(await readFile(path.join(project, 'src/routes/+page.svelte'), 'utf8'), /Portfolio home/);
   assert.match(await readFile(path.join(project, 'build/check.html'), 'utf8'), /Published notes: 1/);

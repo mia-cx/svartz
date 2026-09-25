@@ -24,6 +24,11 @@ export function createHostRegistrySource(vaults: readonly ResolvedConfig[]): str
     "export function resolveHostVault(pathname) {",
     "  return vaults.find(({ mountPath }) => pathname === mountPath || pathname.startsWith(`${mountPath}/`));",
     "}",
+    "export async function prepareHostVault(pathname) {",
+    "  const selected = resolveHostVault(pathname);",
+    "  await selected?.theme.ready;",
+    "  return selected;",
+    "}",
   ].join("\n");
 }
 
