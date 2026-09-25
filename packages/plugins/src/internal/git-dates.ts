@@ -60,6 +60,7 @@ export async function readGitDates(vaultPath: string): Promise<ReadonlyMap<strin
           record(source);
         } else {
           record(source);
+          if (status === "A") renamedTo.delete(source);
         }
       }
     })(), closed]);

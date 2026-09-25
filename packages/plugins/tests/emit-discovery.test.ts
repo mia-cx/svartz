@@ -74,6 +74,20 @@ describe("discovery output", () => {
     expect(ctx.artifacts.has("assets/sitemap.xml")).toBe(false);
   });
 
+  it("resolves responsive image URLs and keeps malformed authored URLs in full feeds", async () => {
+    const ctx = context({ discovery: {
+      feed: { enabled: true, limit: 1, content: "full", sort: "modified" },
+      sitemap: { enabled: false }, dateSources: ["filesystem"],
+    } });
+    ctx.files[1]!.content = '<picture><source srcset="./small.webp 1x, ./large.webp 2x"><img src="http://[" srcset="data:image/png;base64,AAAA 1x, ./large.png 2x"></picture><a href="http://[">Broken</a>';
+    await emitDiscovery().emitArtifacts!.run(ctx);
+    const feed = String(ctx.artifacts.get("assets/rss.xml")?.contents);
+    expect(feed).toContain('srcset="https://example.com/site/blog/earlier/small.webp 1x, https://example.com/site/blog/earlier/large.webp 2x"');
+    expect(feed).toContain('srcset="data:image/png;base64,AAAA 1x, https://example.com/site/blog/earlier/large.png 2x"');
+    expect(feed).toContain('href="http://["');
+    expect(feed).toContain('src="http://["');
+  });
+
   it("keeps the authored home page modification date in the sitemap", async () => {
     const ctx = context();
     const index = ctx.index!;
@@ -108,5 +122,20 @@ describe("discovery output", () => {
     await expect(emitDiscovery().emitArtifacts!.run(ctx)).rejects.toThrow(
       `Published vault asset "${name}" conflicts with a generated Svartz discovery file.`,
     );
+  });
+
+  it.each(["rss.xml", "sitemap.xml"])("ignores a protected-only %s asset", async (name) => {
+    const ctx = context();
+    ctx.files.push({ path: name, slug: name, extension: ".xml", content: "private asset" });
+    ctx.meta.set("svartz:publicAssetPaths", new Set<string>());
+    await emitDiscovery().emitArtifacts!.run(ctx);
+    expect(ctx.artifacts.has(`assets/${name}`)).toBe(true);
+  });
+
+  it.each(["rss.xml", "sitemap.xml"])("still rejects a publicly emitted %s asset", async (name) => {
+    const ctx = context();
+    ctx.files.push({ path: name, slug: name, extension: ".xml", content: "public asset" });
+    ctx.meta.set("svartz:publicAssetPaths", new Set([name]));
+    await expect(emitDiscovery().emitArtifacts!.run(ctx)).rejects.toThrow(`Published vault asset "${name}"`);
   });
 });

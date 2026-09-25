@@ -8,7 +8,7 @@ For standalone `target.basePath: '/site'`, use the same `/site` suffix in `site.
 
 When `site.url` exists, each vault emits `<mountPath>/rss.xml` and `<mountPath>/sitemap.xml`. Both are disabled by default without a public URL. A manual SvelteKit route at either path wins. The generated files are ordinary static assets, so the host adapter copies them without a runtime endpoint. Svartz removes old generated files on the next build when an output is disabled.
 
-A published vault asset named `rss.xml` or `sitemap.xml` conflicts with an enabled generated file. Rename the asset or disable that discovery output. Svartz fails the build instead of silently replacing either file.
+A publicly emitted vault asset named `rss.xml` or `sitemap.xml` conflicts with an enabled generated file. Rename the asset or disable that discovery output. Svartz fails the build instead of silently replacing either file. An attachment used only by protected notes stays encrypted and does not conflict.
 
 Sitemaps include published note URLs, tag and folder listings, the feed page, and the vault home page when Svartz owns it. They omit redirects, encrypted or hidden notes, and manually owned routes. Combined host sitemaps use the same rules for the selected vaults.
 
@@ -27,7 +27,7 @@ Sitemaps include published note URLs, tag and folder listings, the feed page, an
 }
 ```
 
-`feed.content` can be `summary` or `full`. Full content renders published Markdown with the vault's active compiler plugins and makes links and image URLs absolute against each note URL. Executable `.svx` notes and encrypted or hidden notes never enter feeds. Sitemaps include published note, tag, and folder routes, but omit encrypted and hidden notes. `published_at` publishes immediately and controls feed order when sorting by `published`; it never schedules a future build. Blank and `false` publication values do not override `draft: true`. If `published_at` is blank, the configured publication field applies to both filtering and feed dates. Date sources are tried in the configured order for creation and modification dates. Git dates retain a note's first commit across renames within the vault. New files without Git history fall through to filesystem dates.
+`feed.content` can be `summary` or `full`. Full content renders published Markdown with the vault's active compiler plugins and makes links and responsive-image candidates absolute against each note URL. Malformed authored URLs remain as written rather than failing the feed build. Executable `.svx` notes and encrypted or hidden notes never enter feeds. Sitemaps include published note, tag, and folder routes, but omit encrypted and hidden notes. `published_at` publishes immediately and controls feed order when sorting by `published`; it never schedules a future build. Blank and `false` publication values do not override `draft: true`. If `published_at` is blank, the configured publication field applies to both filtering and feed dates. Date sources are tried in the configured order for creation and modification dates. Git dates retain a note's first commit across renames within the vault, but a deleted path reused for a new note starts a new history. New files without Git history fall through to filesystem dates.
 
 An existing SvelteKit host can opt into one combined feed or sitemap by selecting vault IDs in its own route. This keeps the host route, title, and adapter under the host's control:
 
