@@ -279,9 +279,9 @@ describe("svartz CLI", () => {
           page.on("pageerror", (error) => errors.push(error.message));
           page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
           await page.goto(`http://127.0.0.1:${address.port}/tags/guides/`);
-          await page.getByRole("heading", { name: "#Guides" }).waitFor();
-          await page.getByRole("button", { name: "Open search (Ctrl+K)" }).click();
-          await page.getByRole("searchbox", { name: "Search notes" }).waitFor();
+          await page.getByRole("heading", { level: 1, name: "guides" }).waitFor();
+          await page.getByRole("button", { name: /^Search/ }).click();
+          await page.getByRole("combobox", { name: "Search notes" }).waitFor();
           expect(errors).toEqual([]);
           await page.goto(`http://127.0.0.1:${address.port}/`);
           await page.locator("pre.svartz-mermaid svg").waitFor({ timeout: 10_000 });

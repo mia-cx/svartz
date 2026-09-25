@@ -270,16 +270,16 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
         const cdp = await context.newCDPSession(page);
         await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
         await page.goto(`http://127.0.0.1:${builtPort}/blog/tags/guides`);
-        await page.getByRole("heading", { name: "#Guides" }).waitFor();
-        await page.getByRole("button", { name: "Open search (Ctrl+K)" }).click();
-        await page.getByRole("searchbox", { name: "Search notes" }).waitFor();
+        await page.getByRole("heading", { level: 1, name: "guides" }).waitFor();
+        await page.getByRole("button", { name: /^Search/ }).click();
+        await page.getByRole("combobox", { name: "Search notes" }).waitFor();
         expect(pageErrors).toEqual([]);
         await page.goto(`http://127.0.0.1:${builtPort}/work/secret`);
         await sleep(1_000);
-        await page.getByRole("button", { name: "Open search (Ctrl+K)" }).click();
-        await page.getByRole("searchbox", { name: "Search notes" }).fill("sapphire");
-        await page.getByText("No results found.").waitFor();
-        await page.getByRole("searchbox", { name: "Search notes" }).press("Escape");
+        await page.getByRole("button", { name: /^Search/ }).click();
+        await page.getByRole("combobox", { name: "Search notes" }).fill("sapphire");
+        await page.getByText(/^No notes match/).waitFor();
+        await page.getByRole("combobox", { name: "Search notes" }).press("Escape");
         await page.getByLabel("Password").fill("wrong-password");
         await page.getByRole("button", { name: "Unlock note" }).click();
         await page.getByRole("alert").waitFor({ timeout: 5_000 }).catch(async () => {
@@ -300,10 +300,10 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
             allStyles: document.querySelectorAll('style').length,
           })) })}`);
         });
-        await page.getByRole("button", { name: "Open search (Ctrl+K)" }).click();
-        await page.getByRole("searchbox", { name: "Search notes" }).fill("sapphire");
+        await page.getByRole("button", { name: /^Search/ }).click();
+        await page.getByRole("combobox", { name: "Search notes" }).fill("sapphire");
         await page.getByRole("option", { name: "Locked work" }).waitFor();
-        await page.getByRole("searchbox", { name: "Search notes" }).press("Escape");
+        await page.getByRole("combobox", { name: "Search notes" }).press("Escape");
         const privateImage = page.getByRole("img", { name: "Secret diagram" });
         await privateImage.waitFor();
         expect(await privateImage.getAttribute("src")).toMatch(/^blob:/);
@@ -322,10 +322,10 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
         await page.getByRole("button", { name: "Lock note" }).click();
         expect(await page.getByText("HOST_PROTECTED_MARKER").count()).toBe(0);
         await page.getByLabel("Password").waitFor();
-        await page.getByRole("button", { name: "Open search (Ctrl+K)" }).click();
-        await page.getByRole("searchbox", { name: "Search notes" }).fill("sapphire");
-        await page.getByText("No results found.").waitFor();
-        await page.getByRole("searchbox", { name: "Search notes" }).press("Escape");
+        await page.getByRole("button", { name: /^Search/ }).click();
+        await page.getByRole("combobox", { name: "Search notes" }).fill("sapphire");
+        await page.getByText(/^No notes match/).waitFor();
+        await page.getByRole("combobox", { name: "Search notes" }).press("Escape");
         await cdp.detach();
         await page.close();
       } finally {
@@ -340,7 +340,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
     const manual = await fetch(`http://127.0.0.1:${port}/blog/about`);
     expect(await manual.text()).toContain("Manual about");
     const folder = await fetch(`http://127.0.0.1:${port}/blog/folders/guides`);
-    expect(await folder.text()).toContain("Deep guide");
+    expect(await folder.text(), stderr).toContain("Deep guide");
     const manualFolder = await fetch(`http://127.0.0.1:${port}/blog/folders/guides/deep`);
     expect(await manualFolder.text()).toContain("Manual deep listing");
     const tag = await fetch(`http://127.0.0.1:${port}/blog/tags/guides`);

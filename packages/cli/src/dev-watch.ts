@@ -14,8 +14,18 @@ type WatchDescriptor = {
 const CONFIG_FILENAMES = ["svartz.config", ".svartzrc"] as const;
 const CONFIG_EXTENSIONS = [".ts", ".mjs", ".js"] as const;
 
+/**
+ * Build output that lands inside watched source trees. Paraglide regenerates
+ * `src/lib/paraglide` on every package build; reacting to it restarts the build
+ * that wrote it, forever.
+ */
+const GENERATED_SOURCE_SEGMENTS = [`${path.sep}paraglide${path.sep}`] as const;
+
 function matchesWatchDescriptor(changedPath: string, descriptor: WatchDescriptor): boolean {
   const normalizedChangedPath = path.resolve(changedPath);
+  if (GENERATED_SOURCE_SEGMENTS.some((segment) => normalizedChangedPath.includes(segment))) {
+    return false;
+  }
   const normalizedDescriptorPath = path.resolve(descriptor.path);
 
   if (descriptor.exact) {
