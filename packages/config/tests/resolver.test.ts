@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { mkdtemp, mkdir, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import {
   resolveConfig,
@@ -98,6 +100,23 @@ describe("resolveConfigPaths", () => {
       ],
     };
     await expect(resolveConfig(config, PKG_ROOT)).rejects.toThrow(VaultBuildRootConflict);
+  });
+  it("rejects build roots that meet through a symlink ancestor", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "svartz-build-roots-"));
+    try {
+      await mkdir(resolve(root, "real"));
+      await symlink(resolve(root, "real"), resolve(root, "linked"), "dir");
+      const config: SvartzConfig = {
+        version: "1.0.0",
+        vaults: [
+          { id: "blog", path: VALID_VAULT, outDir: "linked/blog/dist", target: { type: "host" }, mountPath: "/blog" },
+          { id: "work", path: VALID_VAULT, outDir: "real/blog/dist", target: { type: "host" }, mountPath: "/work" },
+        ],
+      };
+      await expect(resolveConfig(config, root)).rejects.toThrow(VaultBuildRootConflict);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
   it("resolves vault path to absolute", async () => {
     const resolved = await resolveConfig(minimalConfig, PKG_ROOT);

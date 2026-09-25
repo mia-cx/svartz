@@ -12,6 +12,7 @@ alwaysApply: false
 - A host app owns its routes, layouts, adapter, scripts, Vite config, and `.svelte-kit` directory. Build/dev inject `@svartz/vite` without rewriting host files. `init` may wrap the Vite default export once to keep virtual aliases in SvelteKit's secondary build; preserve the original config expression and existing scripts.
 - `target: { type: "host" }` leaves adapter selection to the host. The CLI keeps repository-only adapter and Turbo behavior for the standalone `apps/web` shell.
 - Svartz-generated artifacts stay under `.svartz/vaults/<id>`; the host's build output stays where its adapter puts it.
+- Compare vault build roots through their real filesystem ancestors before accepting multiple vaults. The leaf directories may not exist yet, and a symlink can make different configured paths share one artifact directory.
 - Local workspace theme package builds use the package name, not a theme path. Ordinary host apps restart on local theme edits without running a pnpm workspace filter.
 - A host build composes all configured host vaults in one Vite run. `virtual:svartz/host` selects mount-scoped artifact and theme modules; `virtual:svartz/artifacts` remains the single-vault contract. Keep generated asset output names under each mount to prevent filename collisions. `--vault` does not narrow a host build.
 - Read `kit.paths.base` from SvelteKit's resolved Vite definition. `site.url` is optional host metadata, and `$app/paths.base` can be relative during SSR. Pass app-relative paths to the host registry exactly once.
