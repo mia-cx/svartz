@@ -25,6 +25,8 @@ npm run dev
 
 The initializer creates a small SvelteKit shell, `svartz.config.ts`, and `vault/index.md`. It uses npm by default and an existing project's package manager when one is declared. `npm run build` creates the static site; `npm run preview` serves the built output.
 
+For build and test automation, copy the [GitHub Actions example](docs/ci.md) into the new project.
+
 In an existing SvelteKit app, the same command adds Svartz dependencies, configuration, and a Vite wrapper while preserving routes, layouts, adapter, and existing scripts. It adds `svartz:dev`, `svartz:build`, and `svartz:preview` scripts. Existing vault definitions remain in their config; `init` does not replace them. Use `--no-install` or `--no-git` when you want to handle those steps yourself.
 
 Configure [vault mounts and canonical routes](docs/routes.md) when an existing app serves notes under paths such as `/journal`.

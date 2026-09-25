@@ -15,25 +15,7 @@ So: **UI and themes are pre-buildable and cacheable.** They are still “rebuilt
 
 ## GitHub Actions cache
 
-Use **`actions/cache`** so CI restores pnpm and Turbo instead of re-downloading and re-building every time. One **monorepo-wide** `pnpm install` at root; the store is shared and each package has its own `node_modules`.
-
-**Strategy:**
-
-1. **Single install** — Run `pnpm install` once at repo root. No per-package install in the workflow.
-2. **Cache three things** — `.pnpm-store`, `**/node_modules`, `.turbo`. Two cache entries (install vs turbo) so you can key them appropriately (see below).
-   - **`.pnpm-store`** — In CI, set `store-dir` in the workflow only (e.g. `pnpm config set store-dir .pnpm-store` before install) so the store lives in the repo for that job. **Do not** set `store-dir` in repo `.npmrc`; keep default `~/` store for local dev. Add `.pnpm-store` to `.gitignore`.
-   - **`**/node_modules`** — All workspace `node_modules` (root + every package). Same key as the store so install and layout stay in sync.
-   - **`.turbo`** — Turbo's task cache. Share it across builds with **`actions/cache`** (not upload-artifact: artifacts are for passing outputs between jobs in a run; cache is for reuse across runs). Key it with a **constant** (e.g. `turbo-cache`) so every build overwrites the same cache entry; after the first run, restores always hit and you get the previous run's `.turbo`. Let Turbo handle workspace/task-level invalidation internally (it already hashes task inputs).
-
-3. **Order in workflow** — Set store-dir (CI only) → restore cache → `pnpm install` (no-op or fast when cache hits) → … build/test … → save cache.
-
-**Does cache work across builds?** Yes. `actions/cache` is available to **future** workflow runs (same repo; any branch/PR). You provide a key; if a previous run saved that key, this run restores it. So each new build can reuse caches from earlier builds.
-
-**When is it a cache miss?** Use the key to invalidate when the thing you cached would be wrong:
-- **Install cache** (store + node_modules): key on **`pnpm-lock.yaml`** only. The lockfile is the single source of truth for what gets installed; when you add/remove/update a dependency, the lockfile changes → new key → cache miss → fresh install. Hashing all `package.json` files is redundant (the lockfile already encodes the resolved tree) and would cause unnecessary misses when you change only scripts or metadata.
-- **Turbo cache** (`.turbo`): use a **constant key** (e.g. `turbo-cache`). Every build saves over that key; every build restores from it. After the first workflow run, you always get a cache hit and Turbo decides per task what to reuse (it hashes inputs internally). No need to tie the key to lockfile or turbo.json—let Turbo handle workspace caching.
-
-After restore, `pnpm install` reuses the store and node_modules; `turbo build` reuses `.turbo` when task hashes match.
+Use the copyable workflow in [docs/ci.md](../../docs/ci.md). It caches the pnpm store and saves Turbo results under a new commit-specific key with a restore prefix. Fresh installs recreate `node_modules` from the lockfile. GitHub caches are immutable, so a constant Turbo key cannot receive results from later runs.
 
 ## Turbo's capabilities
 
