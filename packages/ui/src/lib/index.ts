@@ -29,6 +29,7 @@ export {
 	type SettingsLink,
 	type ThemeSettings
 } from './theme-settings.js';
+export { themeTokenCss, type ThemeTokens, type ThemeTokenValue } from './theme-tokens.js';
 export { PREVIEW_ATTRIBUTE, fetchPreview } from './preview.js';
 export {
 	createSearch,

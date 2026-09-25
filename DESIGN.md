@@ -90,6 +90,8 @@ A theme may change only these:
 
 Set dials on `:root`. The derived tokens (`--sv-step-*`, `--sv-space-*`) resolve where they are declared, so a dial set on an inner element does not rescale them.
 
+A vault overrides any token from config (`theme.tokens`), and that wins over everything here: config, then the theme's own tokens, then minimal's, then these defaults. `-accent-text`, `-accent-soft`, and `-selection` derive from `--sv-accent`, so one accent carries its shades.
+
 How much accent a theme uses is a layout choice, not a new colour. A theme that needs a colour, radius or font the tokens don't have adds it here first.
 
 | Theme | Density | Ratio | Measure | Character |

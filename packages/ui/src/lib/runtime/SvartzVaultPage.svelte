@@ -4,6 +4,7 @@
 	import { base } from '$app/paths';
 	import { browser } from '$app/environment';
 	import ProtectedNote from './ProtectedNote.svelte';
+	import { themeTokenCss } from '../theme-tokens.js';
 	import type { ProtectedNoteReference } from './protected-client.js';
 	import {
 		resolveContentComponents,
@@ -57,6 +58,8 @@
 	const deploymentBasePath = $derived(runtimeArtifacts.deploymentBasePath);
 	const tags = $derived(vault.tags);
 	const themeConfig = $derived(runtimeArtifacts.themeConfig);
+	// The vault's `theme.tokens`, above the theme's own tokens and the Svartz defaults.
+	const tokenCss = $derived(themeTokenCss(themeConfig?.tokens));
 	$effect(() => {
 		if (!browser) return;
 		let released = false;
@@ -231,6 +234,7 @@
 
 <svelte:head>
 	<title>{documentTitle}</title>
+	{#if tokenCss}{@html `<style data-svartz-tokens>${tokenCss}</style>`}{/if}
 	{#if index.favicon}
 		<link
 			rel="icon"

@@ -1,4 +1,5 @@
 import type { SvartzPlugin, SvartzTheme, ThemeComponentLoader } from '@svartz/core';
+import type { ThemeTokens } from '@svartz/ui';
 import { SVARTZ_MARK_SVG, svartzSocialImage } from '@svartz/ui/brand';
 
 /** Route prefixes. The pipeline reads the same keys. */
@@ -13,6 +14,8 @@ export interface ApiDocsRouteConfig {
 
 /** The vault's `theme` settings for API docs. */
 export interface ApiDocsThemeConfig {
+	/** Design token overrides, above the theme's own (`accent`, `paper`, `radius-m`, …). */
+	tokens?: ThemeTokens;
 	routes?: ApiDocsRouteConfig;
 	/** Base URL for REST request examples. Default `"https://api.example.com"`. */
 	baseUrl?: string;

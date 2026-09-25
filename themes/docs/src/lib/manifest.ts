@@ -1,4 +1,5 @@
 import type { SvartzPlugin, SvartzTheme, ThemeComponentLoader } from '@svartz/core';
+import type { ThemeTokens } from '@svartz/ui';
 import { SVARTZ_MARK_SVG, svartzSocialImage } from '@svartz/ui/brand';
 
 /** Route prefixes. The pipeline reads the same keys. */
@@ -13,6 +14,8 @@ export interface DocsRouteConfig {
 
 /** The vault's `theme` settings for package docs. */
 export interface DocsThemeConfig {
+	/** Design token overrides, above the theme's own (`accent`, `paper`, `radius-m`, …). */
+	tokens?: ThemeTokens;
 	routes?: DocsRouteConfig;
 	/** Shown as a badge beside the package name. */
 	version?: string;

@@ -1,4 +1,5 @@
 import type { SvartzPlugin, SvartzTheme, ThemeComponentLoader } from '@svartz/core';
+import type { ThemeTokens } from '@svartz/ui';
 import { SVARTZ_MARK_SVG, svartzSocialImage } from '@svartz/ui/brand';
 
 /** Route prefix configuration: keys become URL path segments. */
@@ -13,6 +14,8 @@ export interface MinimalRouteConfig {
 
 /** The vault's `theme` settings for minimal. */
 export interface MinimalThemeConfig {
+	/** Design token overrides, above the theme's own (`accent`, `paper`, `radius-m`, …). */
+	tokens?: ThemeTokens;
 	routes?: MinimalRouteConfig;
 	/** Giscus comments; see docs/comments-and-analytics.md. */
 	comments?: Record<string, unknown>;

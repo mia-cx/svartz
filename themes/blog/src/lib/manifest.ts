@@ -1,4 +1,5 @@
 import type { SvartzPlugin, SvartzTheme, ThemeComponentLoader } from '@svartz/core';
+import type { ThemeTokens } from '@svartz/ui';
 import { SVARTZ_MARK_SVG, svartzSocialImage } from '@svartz/ui/brand';
 
 /** Route prefixes. The pipeline reads the same keys. */
@@ -13,6 +14,8 @@ export interface BlogRouteConfig {
 
 /** The vault's `theme` settings for the blog. */
 export interface BlogThemeConfig {
+	/** Design token overrides, above the theme's own (`accent`, `paper`, `radius-m`, …). */
+	tokens?: ThemeTokens;
 	routes?: BlogRouteConfig;
 	/** Header links, label → URL. Defaults to Archive and Tags. */
 	nav?: Record<string, string>;

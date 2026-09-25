@@ -79,11 +79,21 @@
 
 	/* Accent: editor's vermilion. `-text` is the AA-safe foreground on paper. */
 	--sv-accent: light-dark(oklch(0.6 0.2 33), oklch(0.7 0.17 36));
-	--sv-accent-text: light-dark(oklch(0.5 0.18 33), oklch(0.76 0.15 40));
-	--sv-accent-soft: light-dark(oklch(0.6 0.2 33 / 0.1), oklch(0.7 0.17 36 / 0.14));
+	/* Derived from --sv-accent, so overriding the accent (theme.tokens.accent) carries its shades. */
+	--sv-accent-text: light-dark(
+		oklch(from var(--sv-accent) calc(l - 0.1) calc(c * 0.9) h),
+		oklch(from var(--sv-accent) calc(l + 0.06) calc(c * 0.88) h)
+	);
+	--sv-accent-soft: light-dark(
+		color-mix(in oklch, var(--sv-accent) 10%, transparent),
+		color-mix(in oklch, var(--sv-accent) 14%, transparent)
+	);
 	--sv-on-accent: light-dark(oklch(0.99 0.004 80), oklch(0.155 0.005 80));
 	--sv-mark: light-dark(oklch(0.93 0.13 98 / 0.75), oklch(0.62 0.12 98 / 0.45));
-	--sv-selection: light-dark(oklch(0.6 0.2 33 / 0.2), oklch(0.7 0.17 36 / 0.3));
+	--sv-selection: light-dark(
+		color-mix(in oklch, var(--sv-accent) 20%, transparent),
+		color-mix(in oklch, var(--sv-accent) 30%, transparent)
+	);
 	--sv-scrim: light-dark(oklch(0.17 0.01 80 / 0.28), oklch(0 0 0 / 0.55));
 	--sv-shadow-color: light-dark(oklch(0.17 0.01 80 / 0.16), oklch(0 0 0 / 0.5));
 	--sv-shadow: 0 1px 2px var(--sv-shadow-color), 0 12px 32px -8px var(--sv-shadow-color);

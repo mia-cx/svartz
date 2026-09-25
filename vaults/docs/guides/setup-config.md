@@ -38,6 +38,23 @@ Set `mountPath: "/blog"` on a host vault to serve it beneath `/blog` in an exist
 
 The default is `@svartz/theme-minimal`. Set `theme` to an installed package name, a `./themes/custom` path relative to this config file, or an absolute path. Svartz resolves installed packages from the host SvelteKit app. An invalid configured theme fails the build. Local workspace theme source changes rebuild that package and restart dev; external absolute themes restart when their built files change.
 
+### Colours and other tokens
+
+Override any design token with `tokens` beside `base`. A name is the token without its `--sv-` prefix. A value applies to both colour schemes; give `light` and `dark` to set them apart.
+
+```ts
+theme: {
+  base: "@svartz/theme-wiki",
+  tokens: {
+    accent: "oklch(0.62 0.19 250)",
+    paper: { light: "oklch(0.99 0 0)", dark: "oklch(0.14 0 0)" },
+    "radius-m": "4px",
+  },
+},
+```
+
+Your tokens win over the theme's, the theme's win over `@svartz/theme-minimal`'s, and those win over the Svartz defaults. Setting `accent` also moves `accent-text`, `accent-soft`, and `selection`, which derive from it. The colour tokens are `paper`, `surface`, `sunken`, `rule`, `rule-strong`, `muted`, `text`, `ink`, `accent`, `accent-text`, `accent-soft`, `on-accent`, `mark`, `selection`, `scrim`, `shadow-color`, and the signal hues `hue-blue` to `hue-violet` (numbers, in degrees). `DESIGN.md` lists the rest.
+
 ## Frontmatter
 
 ```yaml

@@ -1,4 +1,5 @@
 import type { SvartzPlugin, SvartzTheme, ThemeComponentLoader } from '@svartz/core';
+import type { ThemeTokens } from '@svartz/ui';
 import { SVARTZ_MARK_SVG, svartzSocialImage } from '@svartz/ui/brand';
 
 /** Route prefixes. The pipeline reads the same keys, so set them here, not in the theme code. */
@@ -13,6 +14,8 @@ export interface WikiRouteConfig {
 
 /** The vault's `theme` settings for the wiki. */
 export interface WikiThemeConfig {
+	/** Design token overrides, above the theme's own (`accent`, `paper`, `radius-m`, …). */
+	tokens?: ThemeTokens;
 	routes?: WikiRouteConfig;
 	comments?: Record<string, unknown>;
 	footer?: { links?: Record<string, string> };
