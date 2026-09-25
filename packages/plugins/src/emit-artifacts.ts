@@ -18,7 +18,7 @@ import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { definePlugin, getCompilerContributions, type Artifact, type Index } from "@svartz/core";
+import { definePlugin, getCompilerContributions, SEARCH_INDEX_OPTIONS, type Artifact, type Index } from "@svartz/core";
 import { unified } from "unified";
 
 type MdsvexOptions = NonNullable<Parameters<typeof compile>[1]>;
@@ -107,11 +107,7 @@ async function compileNoteComponent(
 
 function buildSearchModuleSource(index: Index): string {
   const searchDocuments = Array.isArray(index.search) ? index.search : [];
-  const miniSearch = new MiniSearch({
-    fields: ["title", "description", "content", "tags", "aliases"],
-    storeFields: ["slug", "href", "title", "description", "tags"],
-    idField: "id",
-  });
+  const miniSearch = new MiniSearch(SEARCH_INDEX_OPTIONS);
 
   miniSearch.addAll(searchDocuments);
 

@@ -1,0 +1,22 @@
+# Published vault view
+
+`virtual:svartz/artifacts` exports `vault`, a typed view of the current published vault. It is available to SvelteKit server loaders and themes. `vault.id` identifies the vault. `vault.entries`, `vault.search`, `vault.tags`, `vault.folders`, and `vault.routes` carry final URLs. Those URLs already include the SvelteKit deployment base and the vault's `mountPath`.
+
+```ts
+// src/routes/[...slug]/+page.server.ts in a Svartz-enabled SvelteKit app
+import { error } from '@sveltejs/kit';
+import { vault } from 'virtual:svartz/artifacts';
+import type { PageServerLoad } from './$types';
+
+export const load: PageServerLoad = ({ url }) => {
+  const note = vault.note(url.pathname);
+  if (!note) error(404, 'Note not found');
+  return { entry: note.entry, outgoing: note.outgoing, backlinks: note.backlinks };
+};
+```
+
+`vault.note()` accepts a canonical slug or final URL path. It returns `undefined` for a missing or unpublished note. Its entry contains `properties` (published frontmatter), `page.toc`, `page.comments`, heading `toc`, resolved `links`, dates, and canonical `href`. Graph and backlinks contain published notes only. Unresolved links have a null `href`.
+
+Search uses one MiniSearch schema in the artifact producer and browser. `searchOptions` and `searchIndex` are also exported by the virtual module. Use `vault.search` to map result IDs to final URLs, because a stored search index contains URLs before SvelteKit's deployment base is applied.
+
+This view belongs to one vault. Multiple vaults in one host build are tracked in [#51](https://github.com/mia-cx/svartz/issues/51).

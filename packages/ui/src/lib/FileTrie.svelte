@@ -1,9 +1,23 @@
 <script lang="ts">
-	import { buildExplorerTree, ancestorFolderIdsForSlug, type ExplorerNode, type UiIndexEntry } from './navigation';
+	import {
+		buildExplorerTree,
+		ancestorFolderIdsForSlug,
+		type ExplorerNode,
+		type UiIndexEntry,
+		type UiFolderEntry
+	} from './navigation';
 	import { explorerOpenIds } from './stores';
 
-	let { entries = [], currentSlug }: { entries?: readonly UiIndexEntry[]; currentSlug?: string } = $props();
-	const tree = $derived(buildExplorerTree(entries));
+	let {
+		entries = [],
+		folders = [],
+		currentSlug
+	}: {
+		entries?: readonly UiIndexEntry[];
+		folders?: readonly UiFolderEntry[];
+		currentSlug?: string;
+	} = $props();
+	const tree = $derived(buildExplorerTree(entries, folders));
 
 	const forceOpenIds = $derived(ancestorFolderIdsForSlug(currentSlug));
 	let storedOpenIds = $state<string[]>(explorerOpenIds.get());
@@ -28,12 +42,16 @@
 </script>
 
 <nav class="grid gap-1.5" aria-label="Explorer">
-	<p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+	<p class="text-xs font-semibold tracking-wider text-zinc-500 uppercase dark:text-zinc-400">
 		Explorer
 	</p>
 
 	{#snippet renderNodes(nodes: readonly ExplorerNode[], depth: number)}
-		<ul class="grid gap-0.5 {depth > 0 ? 'ml-3 border-l border-zinc-200 pl-2 dark:border-zinc-700' : ''}">
+		<ul
+			class="grid gap-0.5 {depth > 0
+				? 'ml-3 border-l border-zinc-200 pl-2 dark:border-zinc-700'
+				: ''}"
+		>
 			{#each nodes as node (node.id)}
 				<li>
 					{#if node.isFolder}

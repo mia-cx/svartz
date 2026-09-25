@@ -1,8 +1,16 @@
 <script lang="ts">
 	import { buildBreadcrumbs } from './navigation';
 
-	let { slug }: { slug?: string } = $props();
-	const items = $derived(buildBreadcrumbs(slug));
+	let {
+		slug,
+		entries = [],
+		homeHref = '/'
+	}: {
+		slug?: string;
+		entries?: readonly { slug: string; path?: string; title: string; href?: string }[];
+		homeHref?: string;
+	} = $props();
+	const items = $derived(buildBreadcrumbs(slug, entries, homeHref));
 </script>
 
 <nav aria-label="Breadcrumbs">

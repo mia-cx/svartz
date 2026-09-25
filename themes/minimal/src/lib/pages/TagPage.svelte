@@ -3,6 +3,7 @@
 
 	type Entry = {
 		slug: string;
+		href?: string;
 		title: string;
 		tags: readonly string[];
 		description?: string;
@@ -10,15 +11,19 @@
 
 	let {
 		match,
-		index = { entries: [] }
+		index = { entries: [] },
+		vault
 	}: {
 		match?: { params?: { slug?: string } };
 		index?: { entries: readonly Entry[] };
+		vault?: { entries: readonly Entry[] };
 	} = $props();
 
 	const currentTag = $derived(match?.params?.slug ?? '');
 	const title = $derived(currentTag ? titleFromSlugSegment(currentTag) : 'Tag');
-	const entries = $derived(index.entries.filter((entry) => entry.tags.includes(currentTag)));
+	const entries = $derived(
+		(vault?.entries ?? index.entries).filter((entry) => entry.tags.includes(currentTag))
+	);
 </script>
 
 <section class="grid gap-4">
@@ -27,14 +32,15 @@
 			#{title}
 		</h1>
 		<p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-			{entries.length} {entries.length === 1 ? 'note' : 'notes'} with this tag.
+			{entries.length}
+			{entries.length === 1 ? 'note' : 'notes'} with this tag.
 		</p>
 	</div>
 	<ul class="grid gap-0">
 		{#each entries as entry (entry.slug)}
 			<li class="grid gap-1 border-b border-zinc-100 py-3 last:border-0 dark:border-zinc-800">
 				<a
-					href={entry.slug === 'index' ? '/' : '/' + entry.slug + '/'}
+					href={entry.href ?? (entry.slug === 'index' ? '/' : '/' + entry.slug + '/')}
 					class="font-medium text-zinc-900 transition-colors hover:text-blue-600 dark:text-zinc-100 dark:hover:text-blue-400"
 				>
 					{entry.title}

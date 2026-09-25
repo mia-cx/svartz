@@ -3,16 +3,19 @@
 
 	type Entry = {
 		slug: string;
+		href?: string;
 		title: string;
 		description?: string;
 	};
 
 	let {
 		match,
-		index = { entries: [] }
+		index = { entries: [] },
+		vault
 	}: {
 		match?: { params?: { slug?: string } };
 		index?: { entries: readonly Entry[] };
+		vault?: { entries: readonly Entry[] };
 	} = $props();
 
 	const currentFolder = $derived(match?.params?.slug ?? '');
@@ -22,7 +25,7 @@
 			: 'Folder'
 	);
 	const entries = $derived(
-		index.entries.filter(
+		(vault?.entries ?? index.entries).filter(
 			(entry) => entry.slug === currentFolder || entry.slug.startsWith(currentFolder + '/')
 		)
 	);
@@ -34,14 +37,15 @@
 			{title}
 		</h1>
 		<p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-			{entries.length} {entries.length === 1 ? 'note' : 'notes'} in this folder.
+			{entries.length}
+			{entries.length === 1 ? 'note' : 'notes'} in this folder.
 		</p>
 	</div>
 	<ul class="grid gap-0">
 		{#each entries as entry (entry.slug)}
 			<li class="grid gap-1 border-b border-zinc-100 py-3 last:border-0 dark:border-zinc-800">
 				<a
-					href={entry.slug === 'index' ? '/' : '/' + entry.slug + '/'}
+					href={entry.href ?? (entry.slug === 'index' ? '/' : '/' + entry.slug + '/')}
 					class="font-medium text-zinc-900 transition-colors hover:text-blue-600 dark:text-zinc-100 dark:hover:text-blue-400"
 				>
 					{entry.title}

@@ -1,4 +1,5 @@
-import { join, resolve } from "node:path";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Artifact, BrowserResource, ResolvedConfig } from "@svartz/core";
 
 const GENERATED_ARTIFACTS_DIRNAME = "artifacts" as const;
@@ -50,7 +51,11 @@ function createArtifactsVirtualModuleSource(
   themeConfig: Record<string, unknown> = {},
   siteConfig: ResolvedConfig["site"] = { title: "Svartz" },
   browserResources: readonly BrowserResource[] = [],
+  vaultId = "default",
 ): string {
+  const coreModuleId = typeof import.meta.resolve === "function"
+    ? fileURLToPath(import.meta.resolve("@svartz/core"))
+    : resolve(dirname(fileURLToPath(import.meta.url)), "../node_modules/@svartz/core/dist/index.js");
   const records = artifacts.map((artifact) => ({
     key: artifact.key,
     path: artifact.path,
@@ -86,6 +91,8 @@ function createArtifactsVirtualModuleSource(
     resourceImports,
     `import { index, graph, backlinks, search, tags, folders, routes, assets } from ${JSON.stringify(indexModulePath)};`,
     `import { searchDocuments, searchIndex } from ${JSON.stringify(searchModulePath)};`,
+    `import { createVaultView, SEARCH_INDEX_OPTIONS } from ${JSON.stringify(coreModuleId)};`,
+    `import { base } from "$app/paths";`,
     noteImports,
     "",
     `export const artifacts = new Map(${JSON.stringify(records)}.map((record) => [record.key, record]));`,
@@ -109,6 +116,8 @@ function createArtifactsVirtualModuleSource(
     "",
     `export const themeConfig = ${JSON.stringify(themeConfig)};`,
     `export const siteConfig = ${JSON.stringify(siteConfig)};`,
+    `export const vault = createVaultView(index, ${JSON.stringify(vaultId)}, base);`,
+    `export const searchOptions = SEARCH_INDEX_OPTIONS;`,
     "",
     "export { index, graph, backlinks, search, tags, folders, routes, assets, searchDocuments, searchIndex };",
   ].join("\n");

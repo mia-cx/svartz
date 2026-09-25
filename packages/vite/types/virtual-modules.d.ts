@@ -20,7 +20,7 @@ declare module "virtual:svartz/theme" {
 }
 
 declare module "virtual:svartz/artifacts" {
-  import type { Graph, Index } from "@svartz/core";
+  import type { Graph, Index, VaultView } from "@svartz/core";
 
   export interface RuntimeArtifactRecord {
     readonly key: string;
@@ -36,9 +36,17 @@ declare module "virtual:svartz/artifacts" {
     key: string,
   ): { default: unknown };
   export const index: Index;
+  export const vault: VaultView;
+  export const searchOptions: typeof import("@svartz/core").SEARCH_INDEX_OPTIONS;
   export const graph: Graph;
   export const backlinks: Index["backlinks"];
-  export const search: Index["entries"];
+  export const search: Index["search"];
+  export const tags: Index["tags"];
+  export const folders: Index["folders"];
+  export const routes: Index["routes"];
+  export const assets: Index["assets"];
+  export const searchDocuments: Index["search"];
+  export const searchIndex: unknown;
   export const themeConfig: Readonly<Record<string, unknown>>;
   export const siteConfig: Readonly<{
     title: string;

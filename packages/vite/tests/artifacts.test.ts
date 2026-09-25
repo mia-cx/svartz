@@ -94,6 +94,9 @@ describe("@svartz/vite artifact helpers", () => {
       '"pages/guides/intro.svelte": noteArtifact0',
     );
     expect(source).toContain('export const siteConfig = {"title":"Svartz"};');
+    expect(source).toContain('import { base } from "$app/paths";');
+    expect(source).toContain('export const vault = createVaultView(index, "default", base);');
+    expect(source).toContain('export const searchOptions = SEARCH_INDEX_OPTIONS;');
     expect(source).toContain("export function hasNoteArtifact(key)");
     expect(source).toContain("export function getNoteArtifact(key)");
     expect(source).not.toContain("() => import(");

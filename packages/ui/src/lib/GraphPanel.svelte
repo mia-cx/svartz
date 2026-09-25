@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+	import { goto } from '$app/navigation';
 	import {
 		forceSimulation,
 		forceLink,
@@ -11,7 +12,7 @@
 		type SimulationNodeDatum
 	} from 'd3';
 
-	type Entry = { slug: string; title: string };
+	type Entry = { slug: string; title: string; href?: string };
 
 	let {
 		currentSlug,
@@ -117,7 +118,7 @@
 			.join('g')
 			.style('cursor', 'pointer')
 			.on('click', (_, d) => {
-				window.location.href = slugToHref(d.id);
+				void goto(entries.find((entry) => entry.slug === d.id)?.href ?? slugToHref(d.id));
 			});
 
 		nodeSel
@@ -190,7 +191,7 @@
 
 {#if hasData}
 	<section class="grid gap-2" aria-label="Graph view">
-		<p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+		<p class="text-xs font-semibold tracking-wider text-zinc-500 uppercase dark:text-zinc-400">
 			Graph View
 		</p>
 		<div

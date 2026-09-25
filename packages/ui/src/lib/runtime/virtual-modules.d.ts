@@ -47,6 +47,8 @@ declare module 'virtual:svartz/artifacts' {
 	export interface RuntimeArtifactRecord {
 		readonly key: string;
 		readonly path: string;
+		readonly properties: Readonly<Record<string, unknown>>;
+		readonly page: { readonly toc: boolean; readonly comments: boolean };
 		readonly type: string;
 		readonly noteSlug?: string;
 	}
@@ -125,6 +127,24 @@ declare module 'virtual:svartz/artifacts' {
 			readonly sourcePath: string;
 			readonly mimeType?: string;
 		}[];
+	};
+	export const vault: {
+		readonly id: string;
+		readonly entries: readonly RuntimeIndexEntry[];
+		readonly search: readonly RuntimeSearchDocument[];
+		readonly tags: readonly RuntimeTagEntry[];
+		readonly folders: readonly RuntimeFolderEntry[];
+		readonly routes: typeof index.routes;
+		note(reference: string): {
+			readonly entry: RuntimeIndexEntry;
+			readonly outgoing: readonly RuntimeIndexEntry[];
+			readonly backlinks: readonly RuntimeIndexEntry[];
+		} | undefined;
+	};
+	export const searchOptions: {
+		readonly fields: readonly string[];
+		readonly storeFields: readonly string[];
+		readonly idField: string;
 	};
 	export const graph: typeof index.graph;
 	export const backlinks: typeof index.backlinks;

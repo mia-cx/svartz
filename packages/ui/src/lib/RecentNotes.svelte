@@ -1,6 +1,7 @@
 <script lang="ts">
 	type Entry = {
 		slug: string;
+		href?: string;
 		title: string;
 		description?: string;
 		createdAt?: Date;
@@ -13,12 +14,14 @@
 		limit = 3,
 		title = 'Recent Notes',
 		showTags = true,
+		tags = [],
 		linkToMore
 	}: {
 		entries?: readonly Entry[];
 		limit?: number;
 		title?: string;
 		showTags?: boolean;
+		tags?: readonly { slug: string; href: string }[];
 		linkToMore?: string;
 	} = $props();
 
@@ -45,7 +48,7 @@
 
 {#if sorted.length > 0}
 	<section class="grid gap-2" aria-label={title}>
-		<p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+		<p class="text-xs font-semibold tracking-wider text-zinc-500 uppercase dark:text-zinc-400">
 			{title}
 		</p>
 		<ul class="grid gap-3">
@@ -53,16 +56,13 @@
 				{@const date = entry.modifiedAt ?? entry.createdAt}
 				<li class="grid gap-1">
 					<a
-						href={slugToHref(entry.slug)}
-						class="text-sm font-medium leading-snug text-zinc-800 transition-colors hover:text-zinc-900 dark:text-zinc-200 dark:hover:text-zinc-50"
+						href={entry.href ?? slugToHref(entry.slug)}
+						class="text-sm leading-snug font-medium text-zinc-800 transition-colors hover:text-zinc-900 dark:text-zinc-200 dark:hover:text-zinc-50"
 					>
 						{entry.title}
 					</a>
 					{#if date}
-						<time
-							datetime={date.toISOString()}
-							class="text-xs text-zinc-400 dark:text-zinc-500"
-						>
+						<time datetime={date.toISOString()} class="text-xs text-zinc-400 dark:text-zinc-500">
 							{formatDate(date)}
 						</time>
 					{/if}
@@ -70,7 +70,7 @@
 						<div class="flex flex-wrap gap-1">
 							{#each entry.tags as tag (tag)}
 								<a
-									href={'/tags/' + tag + '/'}
+									href={tags.find((item) => item.slug === tag)?.href ?? '/tags/' + tag + '/'}
 									class="rounded-full border border-zinc-200 bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
 								>
 									#{tag}
