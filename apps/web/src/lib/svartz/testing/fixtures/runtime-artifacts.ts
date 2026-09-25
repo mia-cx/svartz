@@ -13,6 +13,8 @@ export const artifacts = new Map([
 	]
 ]);
 
+export const browserResources: Readonly<Record<string, string>> = {};
+
 export function hasNoteArtifact(_key: string) {
 	return true;
 }

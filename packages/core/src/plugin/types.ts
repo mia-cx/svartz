@@ -6,6 +6,7 @@ import type {
   ProcessedFile,
   ResolvedConfig,
 } from "../types";
+import type { CompilerContributions } from "./compiler";
 
 // --- Hook options ---
 
@@ -45,6 +46,7 @@ interface PluginContext {
   artifacts: ArtifactBag;
   index?: Index;
   meta: Map<string, unknown>;
+  compiler?: CompilerContributions;
 }
 
 // --- Pipeline stage names (canonical execution order) ---

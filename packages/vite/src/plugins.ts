@@ -1,29 +1,53 @@
 import {
   mergePlugins,
   normalizePlugin,
+  THEME_FEATURE_STAGES,
   type NormalizedSvartzPlugin,
   type ResolvedConfig,
+  type StageName,
   type SvartzPlugin,
   type SvartzTheme,
 } from "@svartz/core";
-import { CORE_PLUGIN_IDS, createCorePlugins } from "@svartz/plugins";
+import { createCorePlugins } from "@svartz/plugins";
+
+const REQUIRED_STAGES = [
+  "discoverFiles",
+  "parseFrontmatter",
+  "filterUnpublished",
+  "resolveLinks",
+  "indexContent",
+  "emitArtifacts",
+] as const satisfies readonly StageName[];
 
 function getThemePresetPlugins(theme: SvartzTheme | undefined): readonly SvartzPlugin[] {
   return theme?.pluginPreset?.plugins ?? [];
 }
 
-function assertRequiredCorePlugins(
-  plugins: readonly { readonly id: string }[],
+function assertRequiredStages(
+  plugins: readonly NormalizedSvartzPlugin[],
 ): void {
-  const activeIds = new Set(plugins.map((plugin) => plugin.id));
-  const missingCorePlugins = CORE_PLUGIN_IDS.filter((id) => !activeIds.has(id));
-
-  if (missingCorePlugins.length === 0) return;
-
-  const formatted = missingCorePlugins.map((id) => `\`${id}\``).join(", ");
-  throw new Error(
-    `core plugin(s) ${formatted} are disabled, but required for build.`,
+  const missingStages = REQUIRED_STAGES.filter((stage) =>
+    !plugins.some((plugin) => plugin[stage]),
   );
+
+  if (missingStages.length === 0) return;
+
+  const formatted = missingStages.map((stage) => `\`${stage}\``).join(", ");
+  throw new Error(
+    `Required pipeline stage(s) ${formatted} have no plugin.`,
+  );
+}
+
+function assertThemeRequirements(
+  theme: SvartzTheme | undefined,
+  plugins: readonly NormalizedSvartzPlugin[],
+): void {
+  if (!theme?.requiredFeatures) return;
+  const missing = theme.requiredFeatures.filter((feature) =>
+    !plugins.some((plugin) => plugin[THEME_FEATURE_STAGES[feature]]),
+  );
+  if (missing.length === 0) return;
+  throw new Error(`Theme "${theme.id}" requires disabled feature(s): ${missing.join(", ")}.`);
 }
 
 /**
@@ -40,9 +64,10 @@ function resolveRuntimePlugins(
     config.plugins as readonly SvartzPlugin[],
   );
 
-  assertRequiredCorePlugins(merged);
-
-  return merged.map((plugin) => normalizePlugin(plugin as SvartzPlugin));
+  const normalized = merged.map((plugin) => normalizePlugin(plugin as SvartzPlugin));
+  assertRequiredStages(normalized);
+  assertThemeRequirements(theme, normalized);
+  return normalized;
 }
 
-export { assertRequiredCorePlugins, getThemePresetPlugins, resolveRuntimePlugins };
+export { assertRequiredStages, assertThemeRequirements, getThemePresetPlugins, resolveRuntimePlugins };

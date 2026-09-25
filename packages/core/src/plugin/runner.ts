@@ -35,13 +35,13 @@ const HOOK_PARALLEL_DEFAULTS: Record<RunnerHookName, boolean> = {
   parseFrontmatter: false,
   filterUnpublished: false,
   resolveLinks: false,
-  transformOfm: true,
-  transformGfm: true,
-  transformToc: true,
-  transformDescription: true,
-  transformSyntax: true,
-  transformLatex: true,
-  transformEmbeds: true,
+  transformOfm: false,
+  transformGfm: false,
+  transformToc: false,
+  transformDescription: false,
+  transformSyntax: false,
+  transformLatex: false,
+  transformEmbeds: false,
   indexContent: false,
   emitArtifacts: false,
 };
@@ -56,6 +56,7 @@ function getHookParallelValue(
   hookName: RunnerHookName,
   hook: PluginHook | PluginChangeHook,
 ): boolean {
+  if (hookName.startsWith("transform")) return false;
   if (hook.options?.parallel !== undefined) {
     return hook.options.parallel;
   }

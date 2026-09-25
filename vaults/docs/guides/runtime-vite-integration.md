@@ -91,13 +91,14 @@ This module re-exports the validated theme package and uses core route-matcher h
 Artifact bridge surface:
 
 - `artifacts`
-- `loadNoteArtifact(key)`
+- `hasNoteArtifact(key)` and `getNoteArtifact(key)`
+- `browserResources` asset URLs for resources contributed by active hooks
 - `index`
 - `graph`
 - `backlinks`
 - `search`
 
-This keeps note pages lazy while keeping global layout data eager.
+This module imports note pages, global layout data, and active browser resources. Rebuilding after a resource is no longer used removes its import.
 
 ## Apps Web Route Shells
 

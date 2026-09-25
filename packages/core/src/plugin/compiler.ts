@@ -1,0 +1,24 @@
+import type { Pluggable } from "unified";
+import type { PluginContext } from "./types";
+
+/** Browser import contributed by an active content plugin. */
+export interface BrowserResource {
+  readonly id: string;
+  readonly kind: "css" | "script" | "asset";
+  readonly importId: string;
+}
+
+/** Compiler steps and browser imports collected afresh for each pipeline run. */
+export interface CompilerContributions {
+  remarkPlugins: Pluggable[];
+  rehypePlugins: Pluggable[];
+  browserResources: Map<string, BrowserResource>;
+}
+
+export function getCompilerContributions(ctx: PluginContext): CompilerContributions {
+  return ctx.compiler ??= {
+    remarkPlugins: [],
+    rehypePlugins: [],
+    browserResources: new Map(),
+  };
+}

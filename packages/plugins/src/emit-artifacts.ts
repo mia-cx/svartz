@@ -11,19 +11,19 @@ import { compile } from "mdsvex";
 import { Effect } from "effect";
 import MiniSearch from "minisearch";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
-import rehypeKatex from "rehype-katex";
-import rehypePrettyCode from "rehype-pretty-code";
+import rehypeRaw from "rehype-raw";
 import rehypeSlug from "rehype-slug";
-import remarkMath from "remark-math";
+import rehypeStringify from "rehype-stringify";
+import remarkParse from "remark-parse";
+import remarkRehype from "remark-rehype";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { definePlugin, type Artifact, type Index } from "@svartz/core";
-import { MDSVEX_REMARK_PLUGINS_META_KEY } from "./transform-gfm";
+import { definePlugin, getCompilerContributions, type Artifact, type Index } from "@svartz/core";
+import { unified } from "unified";
 
 type MdsvexOptions = NonNullable<Parameters<typeof compile>[1]>;
 
-const BASE_REMARK_PLUGINS = [remarkMath] as MdsvexOptions["remarkPlugins"];
-const REHYPE_PLUGINS = [
+const BASE_REHYPE_PLUGINS = [
   rehypeSlug,
   [
     rehypeAutolinkHeadings,
@@ -34,14 +34,6 @@ const REHYPE_PLUGINS = [
         tabIndex: -1,
         className: ["heading-anchor"],
       },
-    },
-  ] as unknown,
-  rehypeKatex,
-  [
-    rehypePrettyCode,
-    {
-      theme: "github-dark-default",
-      keepBackground: false,
     },
   ] as unknown,
 ] as MdsvexOptions["rehypePlugins"];
@@ -73,12 +65,14 @@ async function compileNoteComponent(
   file: {
     readonly path: string;
     readonly slug: string;
+    readonly extension?: string;
     readonly content: string;
     readonly frontmatter?: Record<string, unknown>;
   },
   remarkPlugins: MdsvexOptions["remarkPlugins"],
+  rehypePlugins: MdsvexOptions["rehypePlugins"],
 ): Promise<string> {
-  const source = [
+  const header = [
     "<script context=\"module\" lang=\"ts\">",
     `export const svartz = ${serializeValue({
       slug: file.slug,
@@ -86,14 +80,27 @@ async function compileNoteComponent(
       frontmatter: file.frontmatter ?? {},
     })};`,
     "</script>",
-    "",
-    file.content,
   ].join("\n");
+
+  if (file.extension !== ".svx") {
+    const markdown = unified()
+      .use(remarkParse)
+      .use({ plugins: remarkPlugins ?? [] })
+      .use(remarkRehype, { allowDangerousHtml: true })
+      .use(rehypeRaw)
+      .use({ plugins: rehypePlugins ?? [] })
+      .use(rehypeStringify);
+    const html = String(await markdown.process(file.content));
+    return `${header}\n\n{@html ${JSON.stringify(html)}}`;
+  }
+
+  const source = `${header}\n\n${file.content}`;
 
   const result = await compile(source, {
     extension: ".svx",
+    highlight: false,
     remarkPlugins,
-    rehypePlugins: REHYPE_PLUGINS,
+    rehypePlugins,
   });
   return result?.code ?? source;
 }
@@ -135,11 +142,12 @@ export const emitArtifacts = definePlugin(() => ({
       if (!ctx.index) return;
 
       const artifactsRoot = getArtifactsRoot(ctx.config.outDir);
-      const configuredRemarkPlugins = ctx.meta.get(MDSVEX_REMARK_PLUGINS_META_KEY);
-      const remarkPlugins = [
-        ...(Array.isArray(configuredRemarkPlugins) ? configuredRemarkPlugins : []),
-        ...(BASE_REMARK_PLUGINS ?? []),
-      ] as MdsvexOptions["remarkPlugins"];
+      const compiler = getCompilerContributions(ctx);
+      const remarkPlugins = compiler.remarkPlugins as MdsvexOptions["remarkPlugins"];
+      const rehypePlugins = [
+        ...(BASE_REHYPE_PLUGINS ?? []),
+        ...compiler.rehypePlugins,
+      ] as MdsvexOptions["rehypePlugins"];
       const noteFiles = ctx.files.filter((file) =>
         file.extension && [".md", ".mdx", ".svx"].includes(file.extension),
       );
@@ -150,7 +158,7 @@ export const emitArtifacts = definePlugin(() => ({
         noteFiles.map(async (file) => {
           const key = `pages/${file.slug}.svelte`;
           const path = join(artifactsRoot, key);
-          const contents = await compileNoteComponent(file, remarkPlugins);
+          const contents = await compileNoteComponent(file, remarkPlugins, rehypePlugins);
 
           const artifact: Artifact = {
             key,

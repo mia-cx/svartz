@@ -93,6 +93,18 @@ interface ThemeRenderCapabilities {
   readonly search?: boolean;
 }
 
+/** Explicit feature requirements are distinct from rendering capabilities. */
+const THEME_FEATURE_STAGES = {
+  gfm: "transformGfm",
+  ofm: "transformOfm",
+  syntaxHighlighting: "transformSyntax",
+  math: "transformLatex",
+  embeds: "transformEmbeds",
+  toc: "transformToc",
+} as const;
+
+type ThemeRequiredFeature = keyof typeof THEME_FEATURE_STAGES;
+
 // --- Theme Plugin Preset ---
 
 /**
@@ -121,13 +133,14 @@ interface SvartzTheme {
   // Optional functional sections
   readonly components?: ThemeComponentRegistry;
   readonly capabilities?: ThemeRenderCapabilities;
+  readonly requiredFeatures?: readonly ThemeRequiredFeature[];
   readonly artifactRequirements?: ThemeArtifactRequirements;
   readonly pluginPreset?: ThemePluginPreset;
   readonly defaults?: Record<string, unknown>;
   readonly hooks?: Record<string, unknown>;
 }
 
-export { CONTRACT_VERSION };
+export { CONTRACT_VERSION, THEME_FEATURE_STAGES };
 export type {
   ThemeComponentLoader,
   ThemeLayoutMap,
@@ -135,6 +148,7 @@ export type {
   ThemeComponentRegistry,
   ThemeArtifactRequirements,
   ThemeRenderCapabilities,
+  ThemeRequiredFeature,
   ThemePluginPreset,
   SvartzTheme,
 };

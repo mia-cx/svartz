@@ -40,6 +40,8 @@ export type {
   StageName,
 } from "./plugin/types";
 export { STAGE_NAMES } from "./plugin/types";
+export { getCompilerContributions } from "./plugin/compiler";
+export type { BrowserResource, CompilerContributions } from "./plugin/compiler";
 
 // Plugin contract — utilities
 export { definePlugin, type PluginFactory } from "./plugin/define-plugin";
@@ -90,7 +92,8 @@ export type {
   ThemePluginPreset,
   SvartzTheme,
 } from "./theme/types";
-export { CONTRACT_VERSION } from "./theme/types";
+export { CONTRACT_VERSION, THEME_FEATURE_STAGES } from "./theme/types";
+export type { ThemeRequiredFeature } from "./theme/types";
 export {
   matchThemeRoute,
   normalizePathname,

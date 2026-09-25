@@ -4,7 +4,7 @@ Validates and normalizes a plugin to standard form.
 
 **Source:** `@svartz/core` — `packages/core/src/plugin/utils.ts`
 
-See [[contracts/plugin-contract#Utility Functions]] for contract details.
+See [[contracts/plugin-contract]] for contract details.
 
 ## Signature
 

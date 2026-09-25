@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import type { Artifact, ResolvedConfig } from "@svartz/core";
+import type { Artifact, BrowserResource, ResolvedConfig } from "@svartz/core";
 
 const GENERATED_ARTIFACTS_DIRNAME = "artifacts" as const;
 const GENERATED_PAGES_DIRNAME = "pages" as const;
@@ -49,6 +49,7 @@ function createArtifactsVirtualModuleSource(
   searchModulePath: string,
   themeConfig: Record<string, unknown> = {},
   siteConfig: ResolvedConfig["site"] = { title: "Svartz" },
+  browserResources: readonly BrowserResource[] = [],
 ): string {
   const records = artifacts.map((artifact) => ({
     key: artifact.key,
@@ -70,13 +71,25 @@ function createArtifactsVirtualModuleSource(
         `  ${JSON.stringify(artifact.key)}: noteArtifact${index},`,
     )
     .join("\n");
+  const resourceImports = browserResources.map((resource, index) =>
+    resource.kind === "asset"
+      ? `import browserAsset${index} from ${JSON.stringify(resource.importId)};`
+      : resource.kind === "script"
+      ? `if (!import.meta.env.SSR) void import(${JSON.stringify(resource.importId)});`
+      : `import ${JSON.stringify(resource.importId)};`,
+  ).join("\n");
+  const resourceUrls = browserResources.flatMap((resource, index) =>
+    resource.kind === "asset" ? [`  ${JSON.stringify(resource.id)}: browserAsset${index},`] : [],
+  ).join("\n");
 
   return [
+    resourceImports,
     `import { index, graph, backlinks, search, tags, folders, routes, assets } from ${JSON.stringify(indexModulePath)};`,
     `import { searchDocuments, searchIndex } from ${JSON.stringify(searchModulePath)};`,
     noteImports,
     "",
     `export const artifacts = new Map(${JSON.stringify(records)}.map((record) => [record.key, record]));`,
+    `export const browserResources = {\n${resourceUrls}\n};`,
     "",
     "const noteArtifactModules = {",
     noteModules,

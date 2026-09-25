@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PluginContext } from "@svartz/core";
+import { getCompilerContributions, type PluginContext } from "@svartz/core";
 import remarkGfm from "remark-gfm";
 import { transformGfm } from "../src/transform-gfm";
 
@@ -38,6 +38,6 @@ describe("transformGfm", () => {
 
     transformGfm().transformGfm!.run(ctx);
 
-    expect(ctx.meta.get("svartz:mdsvex:remarkPlugins")).toEqual([remarkGfm]);
+    expect(getCompilerContributions(ctx).remarkPlugins).toEqual([remarkGfm]);
   });
 });

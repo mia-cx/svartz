@@ -71,13 +71,14 @@ This module re-exports from the real theme package rather than serializing loade
 Exports the generated artifact bridge:
 
 - `artifacts`
-- `loadNoteArtifact(key)`
+- `hasNoteArtifact(key)` and `getNoteArtifact(key)`
+- `browserResources`, a map of contributed asset IDs to bundled URLs
 - `index`
 - `graph`
 - `backlinks`
 - `search`
 
-This module eagerly imports `index.ts` and lazily imports note page artifacts by key.
+This module imports the index, note page artifacts, and browser resources contributed by active hooks. CSS and script imports participate in Vite's bundle. Removing the contributing hook or last note that uses it removes the resource on the next build.
 
 ## Route Shell Model
 

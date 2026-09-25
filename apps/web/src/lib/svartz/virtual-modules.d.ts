@@ -96,6 +96,7 @@ declare module 'virtual:svartz/artifacts' {
 	}
 
 	export const artifacts: ReadonlyMap<string, RuntimeArtifactRecord>;
+	export const browserResources: Readonly<Record<string, string>>;
 	export function hasNoteArtifact(key: string): boolean;
 	export function getNoteArtifact(
 		key: string

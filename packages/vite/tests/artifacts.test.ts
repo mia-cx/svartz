@@ -100,4 +100,27 @@ describe("@svartz/vite artifact helpers", () => {
     expect(source).not.toContain("async function getNoteArtifact");
     expect(source).toContain("export const artifacts = new Map");
   });
+
+  it("imports only resources contributed by the current build", () => {
+    const source = createArtifactsVirtualModuleSource(
+      [],
+      "/out/index.ts",
+      "/out/search.ts",
+      {},
+      { title: "Test" },
+      [
+        { id: "math-css", kind: "css", importId: "/plugins/katex.min.css" },
+        { id: "diagram-script", kind: "script", importId: "/plugins/diagram.js" },
+        { id: "icon", kind: "asset", importId: "/plugins/icon.svg" },
+      ],
+    );
+    expect(source).toContain('import "/plugins/katex.min.css";');
+    expect(source).toContain('if (!import.meta.env.SSR) void import("/plugins/diagram.js");');
+    expect(source).toContain('import browserAsset2 from "/plugins/icon.svg";');
+    expect(source).toContain('"icon": browserAsset2');
+
+    const next = createArtifactsVirtualModuleSource([], "/out/index.ts", "/out/search.ts");
+    expect(next).not.toContain("katex.min.css");
+    expect(next).not.toContain("diagram.js");
+  });
 });

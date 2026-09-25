@@ -34,6 +34,13 @@ describe("validateTheme", () => {
     expect(() => validateTheme(makeValidTheme())).not.toThrow();
   });
 
+  it("accepts declared feature requirements and rejects unknown ones", () => {
+    expect(() => validateTheme(makeValidTheme({ requiredFeatures: ["math"] }))).not.toThrow();
+    expect(() => validateTheme(makeValidTheme({ requiredFeatures: ["unknown"] as never }))).toThrow(
+      /unknown required feature/,
+    );
+  });
+
   it("throws when id is missing", () => {
     expect(() =>
       validateTheme(makeValidTheme({ id: "" })),

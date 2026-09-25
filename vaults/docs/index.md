@@ -74,16 +74,7 @@ vaults/docs/
 
 ### Stages
 
-Plugins hook into 6 sequential stages:
-
-1. **discover** — Traverse vault, parse frontmatter, generate slugs
-2. **filterUnpublished** — Remove drafts
-3. **transformContent** — Modify markdown (runs in parallel by default)
-4. **indexContent** — Build search index and metadata
-5. **resolveLinks** — Resolve wikilinks to slugs (stub)
-6. **emit** — Write artifacts to disk
-
-See [[plugins/overview#Stages Breakdown]] for details.
+Plugins use fixed hooks for discovery, frontmatter, publication, links, individual content transforms, indexing, and emission. Content transforms run serially. See [[plugins/overview]] for the ordered list.
 
 ### Plugin Merge Order
 
@@ -94,7 +85,7 @@ Plugins from 4 layers merge with conflict resolution (by-id replacement):
 3. Config defaults plugins
 4. Config vault plugins (most specific)
 
-See [[contracts/plugin-contract#Utility Functions]] for merge logic.
+See [[contracts/plugin-contract]] for merge logic.
 
 ### Contract Versioning
 
@@ -103,7 +94,7 @@ Both plugins and themes declare `contractVersion` (semver):
 - Validation error on mismatch
 - Ensures compatibility across updates
 
-See [[contracts/plugin-contract#Contract Versioning]] for details.
+See [[contracts/plugin-contract]] for the plugin contract.
 
 ---
 
@@ -125,7 +116,7 @@ See [[contracts/plugin-contract#Contract Versioning]] for details.
 
 **Find code examples** → [[reference/quick-reference]]
 
-**Debug configuration issues** → [[contracts/config-contract#Troubleshooting]]
+**Debug configuration issues** → [[contracts/config-contract]]
 
 ---
 
@@ -143,7 +134,7 @@ See [[contracts/plugin-contract]], [[contracts/theme-contract]]
 
 ### `@svartz/plugins`
 
-- 10 core plugins across all stages
+- 13 core plugins across all stages
 - Internal utilities (slug, ignore, parse, resolve)
 - All plugins use `definePlugin()` factory
 
@@ -159,20 +150,6 @@ See [[contracts/config-contract]]
 
 ---
 
-## JSDoc Alignment
-
-**Status:** ✅ All public functions include comprehensive JSDoc
-
-### Coverage
-
-- ✅ `@svartz/core` — Plugin/theme contracts, utilities
-- ✅ `@svartz/plugins` — All core plugins and utilities
-- ✅ `@svartz/config` — Public API and errors
-
-See [[reference/IMPLEMENTATION-SUMMARY#JSDoc Alignment]] for full details.
-
----
-
 ## Best Practices
 
 ### Plugin Authoring
@@ -183,7 +160,7 @@ See [[reference/IMPLEMENTATION-SUMMARY#JSDoc Alignment]] for full details.
 - Test in isolation before integrating
 - Mutate files in-place for efficiency
 
-See [[guides/create-plugin#Best Practices]]
+See [[guides/create-plugin]].
 
 ### Theme Authoring
 
@@ -202,7 +179,7 @@ See [[guides/create-theme#Best Practices]]
 - Override per-vault when needed
 - Validate your config
 
-See [[guides/setup-config#Troubleshooting]]
+See [[guides/setup-config]].
 
 ---
 
@@ -229,7 +206,7 @@ import { definePlugin } from "@svartz/core";
 
 export const myPlugin = definePlugin(() => ({
   id: "custom:my-plugin",
-  transformContent: (ctx) => {
+  transformOfm: (ctx) => {
     ctx.files.forEach(file => {
       file.content = /* transform */;
     });

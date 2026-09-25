@@ -506,5 +506,5 @@ defaults: {
 ## See Also
 
 - [[contracts/theme-contract]] — Full theme specification
-- [[reference/quick-reference#Custom Theme]] — Code examples
+- [[reference/quick-reference]] — Plugin code examples
 - [[guides/create-plugin]] — How to create plugins for themes
