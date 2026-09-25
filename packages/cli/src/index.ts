@@ -17,6 +17,7 @@ import {
   getGeneratedRuntimeArtifactsModulePath,
   getGeneratedRuntimeThemeModulePath,
   createHostRegistrySource,
+  getGeneratedHostStylesPath,
   getGeneratedHostRegistryPath,
   svelteKitBasePath,
   getVaultBuildRoot,
@@ -477,9 +478,18 @@ const createAppConfig = (
     process.env["SVARTZ_ARTIFACTS_MODULE_PATH"] = getGeneratedRuntimeArtifactsModulePath(vault);
     const hostRegistryPath = getGeneratedHostRegistryPath(projectRoot);
     process.env["SVARTZ_HOST_MODULE_PATH"] = hostRegistryPath;
+    process.env["SVARTZ_HOST_STYLE_MAP"] = JSON.stringify(vaults.map((item) => ({
+      modules: [getGeneratedRuntimeArtifactsModulePath(item), getGeneratedRuntimeThemeModulePath(item)],
+      path: getGeneratedHostStylesPath(hostRegistryPath, item.id),
+    })));
     yield* Effect.tryPromise({
       try: async () => {
         await mkdir(path.dirname(hostRegistryPath), { recursive: true });
+        await Promise.all(vaults.map(async (vault) => {
+          const stylesPath = getGeneratedHostStylesPath(hostRegistryPath, vault.id);
+          await mkdir(path.dirname(stylesPath), { recursive: true });
+          await writeFile(stylesPath, "[]\n");
+        }));
         await writeFile(hostRegistryPath, createHostRegistrySource(vaults));
       },
       catch: (cause) => cause as Error,

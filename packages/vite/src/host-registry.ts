@@ -1,10 +1,12 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { ResolvedConfig } from "@svartz/core";
 import {
   getGeneratedIndexModulePath,
   getGeneratedRuntimeArtifactsModulePath,
   getGeneratedRuntimeThemeModulePath,
 } from "./artifacts";
+
+export const HOST_STYLES_PLACEHOLDER = "__SVARTZ_HOST_STYLES__";
 
 /** Read the deployment base SvelteKit puts in Vite's resolved definitions. */
 export function svelteKitBasePath(define: Readonly<Record<string, unknown>> | undefined): string | undefined {
@@ -33,6 +35,8 @@ export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitB
   return [
     ...imports,
     `export const vaults = [\n${records.join("\n")}\n];`,
+    "// Kit evaluates the server bundle before client CSS exists; the client build fills this marker before prerendering.",
+    `const runtimeStyles = import.meta.env.SSR ? (() => { try { return JSON.parse(${JSON.stringify(HOST_STYLES_PLACEHOLDER)}); } catch { return []; } })() : [];`,
     `const loadRuntime = [\n${loaders.join("\n")}\n];`,
     "const preparing = new Map();",
     "export const routes = {",
@@ -43,6 +47,10 @@ export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitB
     "  return vaults.find(({ mountPath }) => {",
     "    return pathname === mountPath || pathname.startsWith(`${mountPath}/`);",
     "  });",
+    "}",
+    "export function hostStylesheets(pathname) {",
+    "  const selected = findHostVault(pathname);",
+    "  return selected ? runtimeStyles[vaults.indexOf(selected)] ?? [] : [];",
     "}",
     "export function resolveHostVault(pathname) {",
     "  const selected = findHostVault(pathname);",
@@ -62,6 +70,10 @@ export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitB
     "  return selected;",
     "}",
   ].join("\n");
+}
+
+export function getGeneratedHostStylesPath(hostRegistryPath: string, vaultId: string): string {
+  return join(dirname(hostRegistryPath), "styles", `${vaultId}.json`);
 }
 
 export function getGeneratedHostRegistryPath(configDir: string): string {

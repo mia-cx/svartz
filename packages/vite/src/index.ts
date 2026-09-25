@@ -55,7 +55,7 @@ import {
 } from "./plugins";
 import { createVaultChangeEvent } from "./watch";
 import { isHostRouteFile, staticHostRoutes } from "./manual-routes";
-import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath, svelteKitBasePath } from "./host-registry";
+import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath, getGeneratedHostStylesPath, svelteKitBasePath } from "./host-registry";
 import { emitProtectedGroupArtifacts } from "./protected-payload";
 import { writeProtectedBridgeModules, type ProtectedBridgeModule } from "./protected-bridge";
 
@@ -455,6 +455,7 @@ export {
   createVaultChangeEvent,
   createHostRegistrySource,
   getGeneratedHostRegistryPath,
+  getGeneratedHostStylesPath,
   svelteKitBasePath,
 };
 export type {
