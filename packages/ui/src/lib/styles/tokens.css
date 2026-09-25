@@ -13,12 +13,6 @@
 
 :root {
 	color-scheme: light dark;
-	/*
-	 * Monaspace's texture healing (its `calt` feature) nudges glyphs out of their
-	 * cells, which breaks the one-cell-per-character grid that makes it monospace.
-	 * Archivo has no `calt`, so this changes nothing else.
-	 */
-	font-variant-ligatures: no-contextual;
 
 	/* Dials: themes set these, nothing else. */
 	--sv-density: 1;
