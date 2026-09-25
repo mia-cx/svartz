@@ -724,10 +724,11 @@ const runDevSupervisor = async (options: DevOptions): Promise<void> => {
     changedPath: string,
     descriptors: readonly WatchDescriptor[],
   ): void {
-    if (watcherPaused || shuttingDown) return;
+    if (shuttingDown) return;
     const labels = descriptors.map((descriptor) => descriptor.label).join(", ");
     console.log(`[svartz:dev] restarting after ${changedPath} (${labels})`);
     pendingDescriptors.push(...descriptors);
+    if (watcherPaused) return;
     void flushRestartQueue().catch((cause) => console.error("[svartz:dev] restart failed:", cause));
   }
 
@@ -759,18 +760,20 @@ const runDevSupervisor = async (options: DevOptions): Promise<void> => {
       }
 
       const nextContext = await loadDevWatchContext(options);
+      if (shuttingDown) return;
       await stopDevRunnerChild(child);
+      if (shuttingDown) return;
       watchContext = nextContext;
       watcher = createDevWatcher(watchContext, requestRestart);
       child = startDevRunnerChild(options);
       monitorRunner(child);
     } catch (cause) {
       console.error("[svartz:dev] rebuild failed; waiting for another edit:", cause);
-      watcher = createDevWatcher(watchContext, requestRestart);
+      if (!shuttingDown) watcher = createDevWatcher(watchContext, requestRestart);
     } finally {
       watcherPaused = false;
       restarting = false;
-      if (pendingDescriptors.length > 0) {
+      if (!shuttingDown && pendingDescriptors.length > 0) {
         void flushRestartQueue().catch((cause) => console.error("[svartz:dev] restart failed:", cause));
       }
     }

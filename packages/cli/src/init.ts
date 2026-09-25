@@ -253,7 +253,8 @@ module.exports = async (env) => {
     .map((specifier) => /^withSvartzHost(?:\s+as\s+([A-Za-z_$][\w$]*))?$/.exec(specifier.trim()))
     .find((match) => match !== null);
   let binding = hostImport?.[1] ?? (hostImport ? "withSvartzHost" : "__svartz_with_host");
-  if (hostImport && new RegExp(`\\bexport\\s+default\\s+${binding}\\s*\\(`).test(source)) return source;
+  const escapedBinding = binding.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (hostImport && new RegExp(`\\bexport\\s+default\\s+\\(*\\s*${escapedBinding}\\s*\\)*\\s*\\(`).test(source)) return source;
   if (!hostImport) {
     let suffix = 2;
     while (new RegExp(`\\b${binding}\\b`).test(source)) binding = `__svartz_with_host_${suffix++}`;
@@ -370,7 +371,7 @@ const initProjectEffect = (
     if (location.hostApp) {
       const tailwindVersion = existingManifest?.dependencies?.tailwindcss
         ?? existingManifest?.devDependencies?.tailwindcss;
-      if (tailwindVersion && /(?:^|[v~^<>=@|\s])3(?:\.|x|\*|\b)/.test(tailwindVersion)) {
+      if (tailwindVersion && /(?:^|[\s|@])(?:[~^<>=]*\s*)v?3(?=\.|x|\*|\b)/.test(tailwindVersion)) {
         return yield* new InitLayoutError({
           reason: "unsupported-tailwind",
           message: "Cannot integrate: this host uses Tailwind CSS 3. Upgrade to Tailwind CSS 4 before running svartz init.",
