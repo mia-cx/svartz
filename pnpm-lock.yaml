@@ -780,13 +780,13 @@ importers:
     devDependencies:
       '@sveltejs/kit':
         specifier: ^2.50.2
-        version: 2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
+        version: 2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
       '@sveltejs/package':
         specifier: ^2.5.7
         version: 2.5.7(svelte@5.53.7)(typescript@5.9.3)
       '@sveltejs/vite-plugin-svelte':
         specifier: ^6.2.4
-        version: 6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
+        version: 6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
       '@types/node':
         specifier: ^24
         version: 24.11.0
@@ -804,10 +804,10 @@ importers:
         version: 5.9.3
       vite:
         specifier: ^7.3.1
-        version: 7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
+        version: 7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
       vitest:
         specifier: ^4.0.18
-        version: 4.0.18(@types/node@24.11.0)(@vitest/browser-playwright@4.0.18)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
+        version: 4.0.18(@types/node@24.11.0)(@vitest/browser-playwright@4.0.18)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
 
   themes/blog:
     dependencies:
@@ -823,13 +823,13 @@ importers:
     devDependencies:
       '@sveltejs/kit':
         specifier: ^2.50.2
-        version: 2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
+        version: 2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
       '@sveltejs/package':
         specifier: ^2.5.7
         version: 2.5.7(svelte@5.53.7)(typescript@5.9.3)
       '@sveltejs/vite-plugin-svelte':
         specifier: ^6.2.4
-        version: 6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
+        version: 6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
       '@types/node':
         specifier: ^24
         version: 24.11.0
@@ -847,10 +847,10 @@ importers:
         version: 5.9.3
       vite:
         specifier: ^7.3.1
-        version: 7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
+        version: 7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
       vitest:
         specifier: ^4.0.18
-        version: 4.0.18(@types/node@24.11.0)(@vitest/browser-playwright@4.0.18)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
+        version: 4.0.18(@types/node@24.11.0)(@vitest/browser-playwright@4.0.18)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
 
   themes/docs:
     dependencies:
@@ -866,13 +866,13 @@ importers:
     devDependencies:
       '@sveltejs/kit':
         specifier: ^2.50.2
-        version: 2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
+        version: 2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
       '@sveltejs/package':
         specifier: ^2.5.7
         version: 2.5.7(svelte@5.53.7)(typescript@5.9.3)
       '@sveltejs/vite-plugin-svelte':
         specifier: ^6.2.4
-        version: 6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
+        version: 6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
       '@types/node':
         specifier: ^24
         version: 24.11.0
@@ -890,10 +890,10 @@ importers:
         version: 5.9.3
       vite:
         specifier: ^7.3.1
-        version: 7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
+        version: 7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
       vitest:
         specifier: ^4.0.18
-        version: 4.0.18(@types/node@24.11.0)(@vitest/browser-playwright@4.0.18)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
+        version: 4.0.18(@types/node@24.11.0)(@vitest/browser-playwright@4.0.18)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
 
   themes/minimal:
     dependencies:
@@ -1030,13 +1030,13 @@ importers:
     devDependencies:
       '@sveltejs/kit':
         specifier: ^2.50.2
-        version: 2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
+        version: 2.53.4(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)))(svelte@5.53.7)(typescript@5.9.3)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
       '@sveltejs/package':
         specifier: ^2.5.7
         version: 2.5.7(svelte@5.53.7)(typescript@5.9.3)
       '@sveltejs/vite-plugin-svelte':
         specifier: ^6.2.4
-        version: 6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
+        version: 6.2.4(svelte@5.53.7)(vite@7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0))
       '@types/node':
         specifier: ^24
         version: 24.11.0
@@ -1054,10 +1054,10 @@ importers:
         version: 5.9.3
       vite:
         specifier: ^7.3.1
-        version: 7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
+        version: 7.3.1(@types/node@24.11.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
       vitest:
         specifier: ^4.0.18
-        version: 4.0.18(@types/node@24.11.0)(@vitest/browser-playwright@4.0.18)(jiti@2.7.0)(lightningcss@1.31.1)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
+        version: 4.0.18(@types/node@24.11.0)(@vitest/browser-playwright@4.0.18)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)
 
 packages:
 
