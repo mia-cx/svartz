@@ -45,6 +45,7 @@
 	let inputEl = $state<HTMLInputElement | undefined>();
 	let triggerEl = $state<HTMLButtonElement | undefined>();
 	let dialogEl = $state<HTMLDivElement | undefined>();
+	let returnFocusEl: HTMLElement | undefined;
 
 	const results = $derived(
 		query.trim().length < 2 || !engine
@@ -55,6 +56,7 @@
 	);
 
 	function openModal() {
+		returnFocusEl = document.activeElement instanceof HTMLElement ? document.activeElement : triggerEl;
 		open = true;
 		query = '';
 		selectedIndex = -1;
@@ -64,7 +66,7 @@
 		open = false;
 		query = '';
 		selectedIndex = -1;
-		requestAnimationFrame(() => triggerEl?.focus());
+		requestAnimationFrame(() => (returnFocusEl?.isConnected ? returnFocusEl : triggerEl)?.focus());
 	}
 
 	function navigate(result: SearchDocument) {

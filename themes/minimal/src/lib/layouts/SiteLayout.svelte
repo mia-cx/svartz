@@ -6,6 +6,7 @@
 		Breadcrumbs,
 		Comments,
 		FileTrie,
+		GraphPanel,
 		NoteHeader,
 		RecentNotes,
 		SearchBox,
@@ -168,6 +169,9 @@
 
 	<aside class="right-sidebar" aria-label="Related content">
 		<TableOfContents items={entry?.page?.toc === false ? [] : entry?.toc} />
+		{#if entry}
+			<GraphPanel currentSlug={entry.slug} entries={visibleEntries} graph={vault?.graph ?? graph} />
+		{/if}
 		{#if recentNotesEnabled}
 			<RecentNotes
 				entries={visibleEntries}
@@ -393,8 +397,8 @@
 	@media (max-width: 62rem) {
 		.shell {
 			grid-template-areas:
-				'content'
 				'left'
+				'content'
 				'right';
 			grid-template-columns: minmax(0, 1fr);
 			padding: clamp(0.75rem, 3vw, 1.25rem);
@@ -413,6 +417,10 @@
 			max-height: none;
 			border-top: 1px solid var(--page-border);
 			padding-top: 1.25rem;
+		}
+
+		.left-sidebar {
+			max-height: min(30vh, 16rem);
 		}
 	}
 </style>
