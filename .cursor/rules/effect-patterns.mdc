@@ -23,6 +23,8 @@ const runEffect = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
 
 This throws the tagged error directly (not wrapped in `FiberFailure`), so consumers can use `instanceof` checks without depending on Effect.
 
+The CLI initializer follows this boundary too. Scaffold conflicts and unsupported host layouts are tagged expected errors; filesystem, manifest, Git, and install failures have separate operational tags.
+
 ## Tagged Errors
 
 Use `Data.TaggedError` for all expected errors. Include `message: string` in every error so the Error.message is always meaningful:
