@@ -56,7 +56,7 @@ describe("@svartz/vite artifact helpers", () => {
     );
   });
 
-  it("builds an eager artifact bridge source for SSR", () => {
+  it("loads only the selected note artifact before SSR or hydration", () => {
     const artifacts: Artifact[] = [
       {
         key: "pages/guides/intro.svelte",
@@ -88,10 +88,7 @@ describe("@svartz/vite artifact helpers", () => {
       'import { searchDocuments, searchIndex } from "/workspace/.svartz/vaults/docs/artifacts/search.ts";',
     );
     expect(source).toContain(
-      'import * as noteArtifact0 from "/workspace/.svartz/vaults/docs/artifacts/pages/guides/intro.svelte";',
-    );
-    expect(source).toContain(
-      '"pages/guides/intro.svelte": noteArtifact0',
+      '"pages/guides/intro.svelte": () => import("/workspace/.svartz/vaults/docs/artifacts/pages/guides/intro.svelte")',
     );
     expect(source).toContain('export const siteConfig = {"title":"Svartz"};');
     expect(source).toContain('export const deploymentBasePath = "";');
@@ -100,7 +97,8 @@ describe("@svartz/vite artifact helpers", () => {
     expect(source).toContain('export const searchOptions = SEARCH_INDEX_OPTIONS;');
     expect(source).toContain("export function hasNoteArtifact(key)");
     expect(source).toContain("export function getNoteArtifact(key)");
-    expect(source).not.toContain("() => import(");
+    expect(source).toContain("export async function prepareNoteArtifact(key)");
+    expect(source).not.toContain('import * as noteArtifact');
     expect(source).not.toContain("async function getNoteArtifact");
     expect(source).toContain("export const artifacts = new Map");
   });

@@ -38,6 +38,8 @@ describe("host registry", () => {
     expect(source).toContain('basePath: ""');
     expect(source).toContain("await theme.ready;");
     expect(source).toContain("await preparing.get(selected.id);");
+    expect(source).toContain("const match = selected.theme.resolveRuntimeRoute({ pathname: vaultPathname, slug });");
+    expect(source).toContain("await selected.artifacts.prepareNoteArtifact(key);");
     expect(getGeneratedHostRegistryPath("/workspace")).toBe("/workspace/.svartz/host/runtime.ts");
     expect(getGeneratedHostStylesPath("/workspace/.svartz/host/runtime.ts", "../../../package"))
       .toMatch(/^\/workspace\/\.svartz\/host\/styles\/[^/]+\.json$/);

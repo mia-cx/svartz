@@ -87,6 +87,7 @@ declare module 'virtual:svartz/artifacts' {
 	export function mountBrowserResources(pathname: string): Promise<() => void>;
 	export function loadProtectedBridgeUrls(ids: readonly string[]): Promise<Readonly<Record<string, string>>>;
 	export function hasNoteArtifact(key: string): boolean;
+	export function prepareNoteArtifact(key: string): Promise<{ default: Component<any>; svartzProtected?: { slug: string; payloadId: string; payloadPath: string } }>;
 	export function getNoteArtifact(
 		key: string
 	): { default: Component<any>; svartzProtected?: { slug: string; payloadId: string; payloadPath: string } };
