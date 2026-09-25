@@ -80,6 +80,16 @@ describe("canonical route allocation", () => {
     });
   });
 
+  it("keeps dotted alias and permalink segments intact", () => {
+    const files = [note("release.md")];
+    files[0]!.frontmatter = { aliases: ["v1.2"], permalink: "versions/v1.2" };
+    allocateRoutes(files);
+    expect(allocateRedirects(files, "/blog")).toEqual({
+      "/blog/v1.2/": "/blog/release/",
+      "/blog/versions/v1.2/": "/blog/release/",
+    });
+  });
+
   it("keeps generated listing routes ahead of aliases", () => {
     const ctx = context([note("hello.md", "")]);
     ctx.files[0]!.frontmatter = { aliases: ["tags", "folders", "feed", "start"] };

@@ -5,6 +5,7 @@
 
 import type { RawLink, LinkResolutionStrategy } from "@svartz/core";
 import { fileToSlug } from "./slug";
+import { routeSlug } from "./routes";
 
 const sharedDepth = (a: string, b: string): number => {
   const aParts = a.split("/");
@@ -68,7 +69,7 @@ export const resolveLink = (
 
 /**
  * Build a slug resolution map from all files' slugs and aliases.
- * Alias collisions are excluded from the map (ambiguous).
+ * Alias collisions are excluded, and duplicate authored stems keep their canonical winner.
  */
 export const buildSlugMap = (
   entries: ReadonlyArray<{ slug: string; path?: string; aliases?: readonly string[] }>,
@@ -78,6 +79,7 @@ export const buildSlugMap = (
   const ambiguousAliases = new Set<string>();
   const canonicalSlugs = new Set<string>();
   const authoredNames = new Set<string>();
+  const authoredStems = new Map<string, typeof entries[number][]>();
 
   for (const entry of entries) {
     const normalized = entry.slug.toLowerCase();
@@ -89,10 +91,19 @@ export const buildSlugMap = (
   for (const entry of entries) {
     if (!entry.path) continue;
     const stem = entry.path.replace(/\.(md|mdx|svx)$/i, "").toLowerCase();
-    map[stem] = entry.slug;
+    const sameStem = authoredStems.get(stem) ?? [];
+    sameStem.push(entry);
+    authoredStems.set(stem, sameStem);
     map[entry.path.toLowerCase()] = entry.slug;
     authoredNames.add(stem);
     authoredNames.add(entry.path.toLowerCase());
+  }
+
+  for (const [stem, sameStem] of authoredStems) {
+    const winner = sameStem.length === 1
+      ? sameStem[0]
+      : sameStem.find((entry) => routeSlug(fileToSlug(entry.path!)) === entry.slug);
+    if (winner) map[stem] = winner.slug;
   }
 
   for (const entry of entries) {
