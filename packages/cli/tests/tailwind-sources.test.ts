@@ -88,6 +88,17 @@ describe("tailwind source generation", () => {
     );
   });
 
+  it("adds the Tailwind entry and plugins for a host app", () => {
+    const css = createTailwindSourcesCss(
+      ["/workspace/node_modules/@svartz/ui/dist/**/*.svelte"],
+      "/workspace/.svartz/host/tailwind-sources.css",
+      true,
+    );
+    expect(css).toContain("@import 'tailwindcss';");
+    expect(css).toContain('@source "../../node_modules/@svartz/ui/dist/**/*.svelte";');
+    expect(css).toContain("@plugin '@tailwindcss/typography';");
+  });
+
   it("uses the vault build root for the generated css file", () => {
     const generatedPath = getGeneratedTailwindSourcesPath(
       {

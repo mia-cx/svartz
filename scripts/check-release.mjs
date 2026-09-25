@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -183,6 +183,11 @@ async function checkHost(project, launcher, archives) {
   assert.match(await readFile(path.join(project, 'src/routes/+page.svelte'), 'utf8'), /Portfolio home/);
   assert.match(await readFile(path.join(project, 'build/check.html'), 'utf8'), /Published notes: 1/);
   assert.match(await readFile(path.join(project, 'build/notes.html'), 'utf8'), /Welcome/);
+  const styleFiles = (await readdir(path.join(project, 'build/_app/immutable/assets')))
+    .filter((file) => file.endsWith('.css'));
+  const styles = (await Promise.all(styleFiles.map((file) =>
+    readFile(path.join(project, 'build/_app/immutable/assets', file), 'utf8')))).join('\n');
+  assert.match(styles, /\.text-zinc-900\b/, 'Packed host CSS is missing theme/UI Tailwind utilities');
   assert.match(await readFile(path.join(project, 'build/rss.xml'), 'utf8'), /https:\/\/example\.test\//);
   await checkDev(project, '/', 'Portfolio home');
   await checkDev(project, '/notes/', 'Welcome');

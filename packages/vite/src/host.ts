@@ -1,4 +1,17 @@
-import { mergeConfig, type UserConfigExport } from "vite";
+import tailwindcss from "@tailwindcss/vite";
+import { mergeConfig, type PluginOption, type UserConfigExport } from "vite";
+
+async function hasTailwindPlugin(options: readonly PluginOption[] = []): Promise<boolean> {
+  for (const option of options) {
+    const plugin = await option;
+    if (Array.isArray(plugin)) {
+      if (await hasTailwindPlugin(plugin)) return true;
+    } else if (plugin && plugin.name.startsWith("@tailwindcss/vite:")) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /** Preserve virtual modules and let Svelte compile packaged components in host apps. */
 export function withSvartzHost(config: UserConfigExport): UserConfigExport {
@@ -7,6 +20,7 @@ export function withSvartzHost(config: UserConfigExport): UserConfigExport {
       ? config(env)
       : config);
     return mergeConfig(original, {
+      plugins: await hasTailwindPlugin(original.plugins) ? [] : tailwindcss(),
       optimizeDeps: {
         exclude: ["@svartz/ui", "@svartz/ui/runtime", "@svartz/theme-minimal"],
       },

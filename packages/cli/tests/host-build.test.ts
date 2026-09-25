@@ -271,7 +271,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
         await page.getByRole("button", { name: "Open search (Ctrl+K)" }).click();
         await page.getByRole("searchbox", { name: "Search notes" }).fill("sapphire");
         await page.getByText("No results found.").waitFor();
-        await page.getByRole("button", { name: "Close search" }).click();
+        await page.getByRole("searchbox", { name: "Search notes" }).press("Escape");
         await page.getByLabel("Password").fill("wrong-password");
         await page.getByRole("button", { name: "Unlock note" }).click();
         await page.getByRole("alert").waitFor({ timeout: 5_000 }).catch(async () => {
@@ -295,7 +295,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
         await page.getByRole("button", { name: "Open search (Ctrl+K)" }).click();
         await page.getByRole("searchbox", { name: "Search notes" }).fill("sapphire");
         await page.getByRole("option", { name: "Locked work" }).waitFor();
-        await page.getByRole("button", { name: "Close search" }).click();
+        await page.getByRole("searchbox", { name: "Search notes" }).press("Escape");
         const privateImage = page.getByRole("img", { name: "Secret diagram" });
         await privateImage.waitFor();
         expect(await privateImage.getAttribute("src")).toMatch(/^blob:/);
@@ -317,7 +317,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
         await page.getByRole("button", { name: "Open search (Ctrl+K)" }).click();
         await page.getByRole("searchbox", { name: "Search notes" }).fill("sapphire");
         await page.getByText("No results found.").waitFor();
-        await page.getByRole("button", { name: "Close search" }).click();
+        await page.getByRole("searchbox", { name: "Search notes" }).press("Escape");
         await cdp.detach();
         await page.close();
       } finally {

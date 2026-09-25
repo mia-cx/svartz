@@ -67,7 +67,9 @@ it("initializes the invocation directory with an editable shell and vault", asyn
     code: "ENOENT",
   });
   expect(await readFile(path.join(root, "src/routes/[...slug]/+page.svelte"), "utf8"))
-    .toContain("@svartz/ui/runtime");
+    .toContain("virtual:svartz/tailwind-sources.css");
+  expect(await readFile(path.join(root, "src/routes/+layout.svelte"), "utf8"))
+    .not.toContain("layout.css");
   await access(path.join(root, "src/routes/[...slug]/+page.ts"));
   await expect(access(path.join(root, ".git"))).rejects.toMatchObject({
     code: "ENOENT",
@@ -114,13 +116,33 @@ it("adds configuration to an existing Kit app without changing its routes or bui
     "svartz:build": "svartz build",
   });
   expect(manifest.devDependencies).toHaveProperty("svartz", "latest");
+  expect(manifest.devDependencies).toHaveProperty("tailwindcss", "^4.2.2");
   expect(await readFile(path.join(root, "svartz.config.ts"), "utf8")).toContain(
     '"host-app"',
   );
   expect(await readFile(path.join(root, "src/routes/[...slug]/+page.ts"), "utf8"))
     .toContain('virtual:svartz/host');
+  expect(await readFile(path.join(root, "src/routes/[...slug]/+page.svelte"), "utf8"))
+    .toContain("virtual:svartz/tailwind-sources.css");
   expect(await readFile(path.join(root, "src/app.d.ts"), "utf8"))
     .toContain('/// <reference types="@svartz/vite/virtual-modules" />');
+});
+
+it("upgrades only the previous generated CSS entry and root layout", async () => {
+  const root = await fixture();
+  await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
+  await writeFile(path.join(root, "src/routes/+layout.svelte"), "<script lang=\"ts\">\n  import './layout.css';\n  let { children } = $props();\n</script>\n\n{@render children()}\n");
+  await writeFile(path.join(root, "src/routes/[...slug]/+page.svelte"), "<script lang=\"ts\">\n  import { page } from '$app/state';\n  import SvartzRuntimePage from '@svartz/ui/runtime';\n</script>\n\n<SvartzRuntimePage pathname={page.url.pathname} />\n");
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
+  expect(await readFile(path.join(root, "src/routes/[...slug]/+page.svelte"), "utf8"))
+    .toContain("virtual:svartz/tailwind-sources.css");
+  expect(await readFile(path.join(root, "src/routes/+layout.svelte"), "utf8"))
+    .not.toContain("layout.css");
 });
 
 it("preserves host app types and adds virtual module declarations once", async () => {

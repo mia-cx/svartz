@@ -41,6 +41,7 @@
     "@svartz/core": "workspace:^",
     "@svartz/plugins": "workspace:^",
     "@svartz/theme-minimal": "workspace:*",
+    "@tailwindcss/vite": "^4.2.2",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "effect": "^3.19.19",
     "jiti": "^2.7.0",
