@@ -32,15 +32,20 @@
 	const feedDescription = $derived(metaEntry?.description);
 
 	function noteDate(entry: Entry): Date | undefined {
-		const value = entry.modifiedAt ?? entry.createdAt;
-		return value ? new Date(value) : undefined;
+		for (const value of [entry.modifiedAt, entry.createdAt]) {
+			if (!value) continue;
+			const date = new Date(value);
+			if (!Number.isNaN(date.getTime())) return date;
+		}
+		return undefined;
 	}
 
 	function formatDate(d: Date): string {
 		return d.toLocaleDateString(undefined, {
 			year: 'numeric',
 			month: 'short',
-			day: 'numeric'
+			day: 'numeric',
+			timeZone: 'UTC'
 		});
 	}
 

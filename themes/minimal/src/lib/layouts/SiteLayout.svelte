@@ -119,7 +119,17 @@
 	const homeHref = $derived(vault?.routes.mountPath ? `${vault.routes.mountPath}/` : '/');
 </script>
 
-<a class="skip-link" href="#main-content">Skip to content</a>
+<a
+	class="skip-link"
+	href="#main-content"
+	tabindex="0"
+	aria-label="Skip to main content"
+	onkeydown={(event) => {
+		if (event.key !== ' ') return;
+		event.preventDefault();
+		event.currentTarget.click();
+	}}
+>Skip to content</a>
 <div class="shell">
 	<aside class="left-sidebar" aria-label="Site navigation">
 		<SearchBox searchDocuments={vault?.search ?? searchDocuments} {searchIndex} {searchOptions} />
@@ -173,8 +183,30 @@
 
 <style>
 	:global(body) {
-		background: #fafafa;
-		color: #18181b;
+		--page-bg: oklch(0.985 0 0);
+		--page-fg: oklch(0.21 0.006 285);
+		--page-border: oklch(0.92 0.004 286);
+		--page-link: oklch(0.49 0.26 294);
+		--page-quote-bg: oklch(0.967 0.001 286);
+		--page-callout-border: oklch(0.87 0.07 294);
+		--page-warning: oklch(0.47 0.13 48);
+		--page-code-bg: oklch(0.21 0.006 285);
+		--page-code-fg: oklch(0.985 0 0);
+		background: var(--page-bg);
+		color: var(--page-fg);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(body) {
+			--page-bg: oklch(0.21 0.006 285);
+			--page-fg: oklch(0.985 0 0);
+			--page-border: oklch(0.37 0.013 285);
+			--page-link: oklch(0.77 0.14 294);
+			--page-quote-bg: oklch(0.274 0.006 286);
+			--page-callout-border: oklch(0.48 0.09 294);
+			--page-warning: oklch(0.8 0.1 75);
+			--page-code-bg: oklch(0.274 0.006 286);
+		}
 	}
 
 	.skip-link {
@@ -184,8 +216,8 @@
 		z-index: 50;
 		transform: translateY(-200%);
 		border-radius: 0.5rem;
-		background: #f8fafc;
-		color: #0f172a;
+		background: oklch(0.984 0.003 247);
+		color: oklch(0.208 0.042 266);
 		padding: 0.6rem 0.85rem;
 		font-weight: 600;
 	}
@@ -298,11 +330,11 @@
 	.page-body :global(hr) {
 		margin: 2.5rem 0;
 		border: 0;
-		border-top: 1px solid #e4e4e7;
+		border-top: 1px solid var(--page-border);
 	}
 
 	.page-body :global(a) {
-		color: #6d28d9;
+		color: var(--page-link);
 	}
 
 	.page-body :global(pre) {
@@ -310,36 +342,36 @@
 		overflow: auto;
 		padding: 1rem;
 		border-radius: 0.75rem;
-		background: #18181b;
-		color: #fafafa;
+		background: var(--page-code-bg);
+		color: var(--page-code-fg);
 	}
 
 	.page-body :global(blockquote) {
 		margin: 1rem 0;
 		padding: 0.85rem 1rem;
-		border-left: 3px solid #8b5cf6;
-		background: #f4f4f5;
+		border-left: 3px solid oklch(0.606 0.25 293);
+		background: var(--page-quote-bg);
 	}
 
 	.page-body :global(blockquote:has(.callout-marker)) {
-		border: 1px solid #ddd6fe;
-		border-left: 3px solid #8b5cf6;
+		border: 1px solid var(--page-callout-border);
+		border-left: 3px solid oklch(0.606 0.25 293);
 		border-radius: 0.6rem;
 	}
 
 	.page-body :global(.callout-marker + strong) {
 		display: inline-block;
 		margin-bottom: 0.35rem;
-		color: #6d28d9;
+		color: var(--page-link);
 	}
 
 	.page-body :global(.callout-marker[data-callout='warning'] + strong),
 	.page-body :global(.callout-marker[data-callout='caution'] + strong) {
-		color: #92400e;
+		color: var(--page-warning);
 	}
 
 	.page-body :global(mark) {
-		background: rgba(250, 204, 21, 0.18);
+		background: oklch(0.84 0.18 95 / 0.18);
 		color: inherit;
 	}
 
@@ -379,7 +411,7 @@
 		.right-sidebar {
 			position: static;
 			max-height: none;
-			border-top: 1px solid #e4e4e7;
+			border-top: 1px solid var(--page-border);
 			padding-top: 1.25rem;
 		}
 	}

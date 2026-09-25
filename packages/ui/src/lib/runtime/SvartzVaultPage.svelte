@@ -144,6 +144,12 @@
 		return new URL(value.replace(/^\/+/, ''), `${siteConfig.url.replace(/\/+$/, '')}/`).href;
 	}
 
+	function isoDate(value: Date | string | undefined): string | undefined {
+		if (!value) return undefined;
+		const date = value instanceof Date ? value : new Date(value);
+		return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+	}
+
 	function resolvePublishedUrl(value: string | undefined): string | undefined {
 		if (!value || !siteConfig.url) return undefined;
 		if (/^https?:\/\//i.test(value)) return value;
@@ -250,13 +256,13 @@
 	{#if pageDescription}<meta name="twitter:description" content={pageDescription} />{/if}
 	{#if socialImageUrl}<meta name="twitter:image" content={socialImageUrl} />{/if}
 	{#if siteConfig.author}<meta name="author" content={siteConfig.author} />{/if}
-	{#if entry?.publishedAt}<meta
+	{#if isoDate(entry?.publishedAt)}<meta
 			property="article:published_time"
-			content={String(entry.publishedAt)}
+			content={isoDate(entry?.publishedAt)}
 		/>{/if}
-	{#if entry?.modifiedAt}<meta
+	{#if isoDate(entry?.modifiedAt)}<meta
 			property="article:modified_time"
-			content={String(entry.modifiedAt)}
+			content={isoDate(entry?.modifiedAt)}
 		/>{/if}
 </svelte:head>
 
