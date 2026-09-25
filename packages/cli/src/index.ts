@@ -471,8 +471,10 @@ const createAppConfig = (
       existsSync(themeSourceCandidate)
     ) {
       process.env["SVARTZ_THEME_SOURCE_PATH"] = themeSourceCandidate;
+      process.env["SVARTZ_THEME_SOURCE_ID"] = vault.theme.base;
     } else {
       delete process.env["SVARTZ_THEME_SOURCE_PATH"];
+      delete process.env["SVARTZ_THEME_SOURCE_ID"];
     }
 
     process.env["SVARTZ_TAILWIND_SOURCES_PATH"] = yield* Effect.tryPromise({

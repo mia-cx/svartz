@@ -1,9 +1,6 @@
 ---
 description: Generated discovery files and host ownership
-globs:
-  - packages/plugins/src/emit-discovery.ts
-  - packages/vite/src/discovery.ts
-  - apps/web/src/routes/**
+globs: packages/plugins/src/emit-discovery.ts, packages/vite/src/discovery.ts, apps/web/src/routes/**
 alwaysApply: false
 ---
 
@@ -14,3 +11,4 @@ alwaysApply: false
 - A manual SvelteKit route owns its path. Generated discovery files are assets and must use normal artifact cleanup when disabled.
 - A host combines only explicitly selected vault IDs. Keep the host's route, adapter, and feed metadata under host control.
 - Exclude encrypted and hidden notes from feeds and sitemaps. Exclude executable `.svx` notes from feeds.
+- Sitemaps include public note URLs, indexed tag/folder/feed listings, and the Svartz-owned home route. Never copy `routes.all` wholesale because it includes redirects and protected paths.

@@ -11,7 +11,7 @@ function context(config: Partial<ResolvedConfig> = {}): PluginContext {
   ];
   const index = {
     entries,
-    routes: { tags: ["/blog/tags/"], folders: ["/blog/folders/", "/blog/earlier/"], all: [] },
+    routes: { mountPath: "/blog", tags: ["/blog/tags/"], folders: ["/blog/folders/", "/blog/earlier/"], feed: ["/blog/feed/"], all: ["/blog/", "/blog/feed/"] },
   } as unknown as Index;
   return {
     config: {
@@ -50,6 +50,8 @@ describe("discovery output", () => {
     expect(feed).not.toContain("Hidden");
     expect(feed).not.toContain("<content:encoded>");
     expect(sitemap).toContain("https://example.com/site/blog/tags/");
+    expect(sitemap).toContain("https://example.com/site/blog/feed/");
+    expect(sitemap).toContain("https://example.com/site/blog/</loc>");
     expect(sitemap.match(/example.com\/site\/blog\/earlier\//g)).toHaveLength(1);
     expect(sitemap).not.toContain("secret");
     expect(sitemap).not.toContain("hidden");
@@ -66,6 +68,18 @@ describe("discovery output", () => {
     expect(feed).not.toContain("/blog/later/");
     expect(feed).toContain("<content:encoded><![CDATA[<h1 id=\"earlier\">Earlier");
     expect(ctx.artifacts.has("assets/sitemap.xml")).toBe(false);
+  });
+
+  it("keeps the authored home page modification date in the sitemap", async () => {
+    const ctx = context();
+    const index = ctx.index!;
+    ctx.index = { ...index, entries: [...index.entries, {
+      ...index.entries[0]!, slug: "index", href: "/blog/", path: "index.md",
+      modifiedAt: new Date("2026-05-04"),
+    }] };
+    await emitDiscovery().emitArtifacts!.run(ctx);
+    expect(String(ctx.artifacts.get("assets/sitemap.xml")?.contents))
+      .toContain("<loc>https://example.com/site/blog/</loc><lastmod>2026-05-04T00:00:00.000Z</lastmod>");
   });
 
   it("requires a public URL only for enabled production output", async () => {

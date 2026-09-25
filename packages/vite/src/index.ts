@@ -13,6 +13,7 @@ import {
   type BrowserResource,
   type ChangeEvent,
   type PluginContext,
+  type ResolvedConfig,
   type StageName,
   type SvartzTheme,
 } from "@svartz/core";
@@ -82,6 +83,11 @@ function toError(cause: unknown): Error {
 function extractThemeConfig(theme: { base: string; [key: string]: unknown }): Record<string, unknown> {
   const { base: _base, ...rest } = theme;
   return rest;
+}
+
+function selectedThemeSourcePath(config: ResolvedConfig): string | undefined {
+  if (process.env["SVARTZ_THEME_SOURCE_ID"] !== config.theme.base) return;
+  return process.env["SVARTZ_THEME_SOURCE_PATH"];
 }
 
 function svartz(options: SvartzVitePluginOptions): Plugin {
@@ -173,7 +179,9 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   }
 
   async function executePipeline(changeEvent?: ChangeEvent): Promise<void> {
-    theme = await loadThemeModule((id) => import(id), context.config, context.root);
+    theme = await loadThemeModule(
+      (id) => import(id), context.config, context.root, selectedThemeSourcePath(context.config),
+    );
     plugins = resolveRuntimePlugins(context.config, theme);
     const runnerContext = createRunnerContext();
     runnerContext.meta.set("svartz:mode", context.mode);
@@ -289,7 +297,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
         "virtual:svartz/theme": getGeneratedRuntimeThemeModulePath(options.config),
         "virtual:svartz/artifacts": getGeneratedRuntimeArtifactsModulePath(options.config),
       };
-      const themeSourcePath = process.env["SVARTZ_THEME_SOURCE_PATH"];
+      const themeSourcePath = selectedThemeSourcePath(options.config);
       if (themeSourcePath && options.config.theme?.base) {
         alias[options.config.theme.base] = themeSourcePath;
       }
@@ -301,7 +309,9 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     },
     configResolved(resolved) {
       context = createSvartzViteContext(options, resolved);
-      themeModuleId = resolveThemeRuntimeImportId(context.config, context.root);
+      themeModuleId = selectedThemeSourcePath(context.config)
+        ? resolveThemeModuleId(context.config)
+        : resolveThemeRuntimeImportId(context.config, context.root);
     },
     async buildStart() {
       await executePipeline();

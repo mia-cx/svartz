@@ -12,6 +12,9 @@ export function withSvartzHost(config: UserConfigExport): UserConfigExport {
       },
       resolve: {
         alias: {
+          ...(process.env.SVARTZ_THEME_SOURCE_ID && process.env.SVARTZ_THEME_SOURCE_PATH
+            ? { [process.env.SVARTZ_THEME_SOURCE_ID]: process.env.SVARTZ_THEME_SOURCE_PATH }
+            : {}),
           ...(process.env.SVARTZ_THEME_MODULE_PATH
             ? { "virtual:svartz/theme": process.env.SVARTZ_THEME_MODULE_PATH }
             : {}),

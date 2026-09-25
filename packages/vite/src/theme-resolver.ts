@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateTheme, type ResolvedConfig, type SvartzTheme } from "@svartz/core";
+import { createJiti } from "jiti";
 
 type ThemeModule = Record<string, unknown> & {
   default?: SvartzTheme | ((config?: Record<string, unknown>) => SvartzTheme);
@@ -111,10 +112,11 @@ async function loadThemeModule(
   loader: (id: string) => Promise<unknown>,
   config: ResolvedConfig,
   resolveFromDirectory = process.cwd(),
+  sourcePath?: string,
 ): Promise<SvartzTheme> {
-  const themeModule = (await loader(
-    resolveThemeBuildImportId(config, resolveFromDirectory),
-  )) as ThemeModule;
+  const themeModule = (sourcePath
+    ? await createJiti(import.meta.url, { moduleCache: false }).import(sourcePath)
+    : await loader(resolveThemeBuildImportId(config, resolveFromDirectory))) as ThemeModule;
   const { base: _base, ...themeConfig } = config.theme;
   return resolveThemeExport(themeModule, themeConfig);
 }

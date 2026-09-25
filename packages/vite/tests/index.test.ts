@@ -169,6 +169,7 @@ describe("@svartz/vite plugin", () => {
       expect.any(Function),
       testConfig,
       process.cwd(),
+      undefined,
     );
     expect(resolveRuntimePluginsMock).toHaveBeenCalled();
     expect(runStagesMock).toHaveBeenCalled();
@@ -177,6 +178,28 @@ describe("@svartz/vite plugin", () => {
       'import { index, graph, backlinks, search, tags, folders, routes, assets } from "/tmp/svartz-tests/.svartz/vaults/docs/artifacts/index.ts";',
     );
     expect(themeSource).toBe("theme-source:@svartz/theme-docs");
+  });
+
+  it("imports the source theme through its Vite alias when configured", async () => {
+    vi.stubEnv("SVARTZ_THEME_SOURCE_PATH", "/tmp/theme/src/lib/index.ts");
+    vi.stubEnv("SVARTZ_THEME_SOURCE_ID", "@svartz/theme-docs");
+    try {
+      const plugin = svartz({ config: testConfig, env: {}, mode: "test" });
+      const viteConfig = await plugin.config?.call({} as never, { command: "serve", mode: "test" } as never);
+      plugin.configResolved?.call({} as never, { root: process.cwd(), mode: "test" } as never);
+
+      expect(viteConfig?.resolve?.alias).toMatchObject({
+        "@svartz/theme-docs": "/tmp/theme/src/lib/index.ts",
+      });
+      expect(plugin.load?.call({} as never, RESOLVED_THEME_VIRTUAL_ID))
+        .toBe("theme-source:@svartz/theme-docs");
+      await plugin.buildStart?.call({} as never);
+      expect(loadThemeModuleMock).toHaveBeenCalledWith(
+        expect.any(Function), testConfig, process.cwd(), "/tmp/theme/src/lib/index.ts",
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("rebuilds and triggers a full reload when a vault file changes", async () => {

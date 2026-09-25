@@ -61,6 +61,14 @@ describe("parseConfig", () => {
     });
   });
 
+  it("accepts a site URL without a title", async () => {
+    const result = await parseConfig({
+      version: "1.0.0",
+      vaults: [{ id: "blog", path: "blog", target: { type: "static" }, site: { url: "https://example.com" } }],
+    });
+    expect(result.vaults[0]!.site).toEqual({ url: "https://example.com" });
+  });
+
   it.each(["example.com", "ftp://example.com", "/blog", "not a url"])(
     "rejects non-HTTP site URL %s",
     async (url) => {

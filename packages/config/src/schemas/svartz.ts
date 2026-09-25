@@ -87,7 +87,7 @@ const FrontmatterFieldsSchema = Schema.Struct({
 });
 
 const SiteConfigSchema = Schema.Struct({
-  title: Schema.String,
+  title: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
   url: Schema.optional(HttpUrlSchema),
   author: Schema.optional(Schema.String),
