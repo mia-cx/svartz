@@ -146,7 +146,7 @@
 	type="button"
 	bind:this={trigger}
 	onclick={() => open()}
-	aria-label={variant === 'icon' ? 'Search' : undefined}
+	aria-label="Search"
 	aria-haspopup="dialog"
 >
 	<Search aria-hidden="true" />
