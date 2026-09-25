@@ -1,0 +1,11 @@
+---
+description: Cross-process vault build locking and crash recovery
+globs: packages/cli/src/build-lock.ts, packages/cli/tests/build-lock.test.ts
+alwaysApply: false
+---
+
+# Build lock
+
+The CLI writes owner data to a unique pending file, then hard-links it to `.svartz/.vault-build.lock`. This makes owner publication atomic. Only `link` errors with `EEXIST` mean contention; errors from the build callback propagate unchanged.
+
+Recovery holds `.vault-build.lock.recover`, rechecks the dead owner, and removes the stale lock. All acquirers check the guard before and after linking. The guard is never reclaimed automatically: a crash during recovery must fail closed with a path for manual cleanup. A builder removes the main lock only if its own token still owns it.

@@ -2,7 +2,7 @@
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { lstat, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import chokidar, { type FSWatcher } from "chokidar";
@@ -44,6 +44,7 @@ import { writeGeneratedHostTailwindSourcesFile, writeGeneratedTailwindSourcesFil
 import { syncManagedTurboFiles } from "./turbo-sync";
 import { resolveAppLocation, type AppLocation } from "./workspace";
 import { initProject } from "./init";
+import { withVaultBuildLock } from "./build-lock";
 
 class CliAppRootMissing extends Data.TaggedError("CliAppRootMissing")<{
   readonly appRoot: string;
@@ -518,76 +519,6 @@ const createAppConfig = (
     };
 
     return mergeConfig(loaded.config, inlineConfig);
-  });
-
-const VAULT_BUILD_LOCK_RETRY_MS = 1000;
-const VAULT_BUILD_LOCK_MAX_WAIT_MS = 600_000; // 10 min
-const VAULT_BUILD_LOCK_ORPHAN_GRACE_MS = 5_000;
-
-const isProcessRunning = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code !== "ESRCH";
-  }
-};
-
-const isStaleVaultBuildLock = async (lockDir: string): Promise<boolean> => {
-  try {
-    const owner = JSON.parse(
-      await readFile(path.join(lockDir, "owner.json"), "utf8"),
-    ) as { pid?: unknown };
-    return typeof owner.pid !== "number" || !isProcessRunning(owner.pid);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
-    const lockStat = await stat(lockDir);
-    return Date.now() - lockStat.mtimeMs >= VAULT_BUILD_LOCK_ORPHAN_GRACE_MS;
-  }
-};
-
-const withVaultBuildLock = (
-  projectRoot: string,
-  fn: () => Promise<void>,
-): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const lockRoot = path.join(projectRoot, ".svartz");
-    const lockDir = path.join(lockRoot, ".vault-build.lock");
-    let waited = 0;
-
-    const tryAcquire = (): void => {
-      mkdir(lockRoot, { recursive: true })
-        .then(() => mkdir(lockDir, { recursive: false }))
-        .then(async () => {
-          await writeFile(
-            path.join(lockDir, "owner.json"),
-            JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }),
-          );
-          return fn().finally(() => rm(lockDir, { recursive: true, force: true }));
-        })
-        .then(resolve, async (err: NodeJS.ErrnoException) => {
-          if (err.code !== "EEXIST") {
-            reject(err);
-            return;
-          }
-
-          if (await isStaleVaultBuildLock(lockDir).catch(() => false)) {
-            await rm(lockDir, { recursive: true, force: true });
-            tryAcquire();
-            return;
-          }
-
-          if (waited < VAULT_BUILD_LOCK_MAX_WAIT_MS) {
-            waited += VAULT_BUILD_LOCK_RETRY_MS;
-            setTimeout(tryAcquire, VAULT_BUILD_LOCK_RETRY_MS);
-          } else {
-            reject(err);
-          }
-        });
-    };
-
-    tryAcquire();
   });
 
 const buildVaults = (
