@@ -4,6 +4,7 @@ import { minimatch } from "minimatch";
 import { extname } from "node:path";
 import { definePlugin, type ProcessedFile } from "@svartz/core";
 import { referencedAssets } from "./internal/asset-references";
+import { publicationOverride } from "./internal/datetime";
 
 const NOTE_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
 
@@ -28,9 +29,7 @@ export const filterUnpublished = definePlugin(() => ({
           !matches(file.path, exclude);
         if (file.frontmatter?.draft === true) published = false;
 
-        const publishedAt =
-          file.frontmatter?.published_at ?? file.frontmatter?.[frontmatter.publishedField];
-        if (publishedAt !== undefined && publishedAt !== null && publishedAt !== "") {
+        if (publicationOverride(file.frontmatter, frontmatter.publishedField) !== undefined) {
           published = true;
         }
         if (file.frontmatter?.private === true) published = false;

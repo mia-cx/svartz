@@ -97,8 +97,8 @@ Duplicate ID replaces in-place; new ID appends; disabled removed.
 
 - Discover files and parse frontmatter before filtering. An excluded note may carry a `published_at` override.
 - `publicationMode: "exclusion"` publishes notes except `exclude`; `"inclusion"` requires `include` and no `exclude` match.
-- Apply note overrides in order: `draft === true` hides, nonempty `published_at` publishes immediately, `private === true` hides.
-- Filter before links, embeds, graph, search, and emission. Keep attachments referenced by public notes only; an explicit asset exclusion wins.
+- Apply note overrides in order: `draft === true` hides, a nonblank publication value publishes immediately, `private === true` hides. `false` and blank strings are absent; the configured field is the fallback when `published_at` is absent. Filtering and indexed dates use the same selection.
+- Filter before links, embeds, graph, search, and emission. Keep attachments referenced by visible public-note content only; exclude Obsidian and HTML comments before collecting references, but preserve comment markers inside code. Resolve used Markdown reference definitions, including line-broken destinations, as well as inline links. Preserve query/fragment suffixes and escape generated link attributes. An explicit asset exclusion wins.
 - Svartz Vite serves filtered assets in dev and places them in SvelteKit's client output after Kit's secondary build, before adapters copy it. Keep this plugin ordered after the Kit setup plugin.
 
 ## Determinism

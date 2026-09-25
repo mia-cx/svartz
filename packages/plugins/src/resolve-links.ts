@@ -10,7 +10,7 @@
 import GithubSlugger from "github-slugger";
 import { posix } from "node:path";
 import { definePlugin } from "@svartz/core";
-import { createAssetResolver, roamMediaReferences } from "./internal/asset-references";
+import { createAssetResolver, referenceDefinitionSpans, roamMediaReferences } from "./internal/asset-references";
 import { findRawLinkSpans } from "./internal/parse";
 import { resolveLink, buildSlugMap } from "./internal/resolve";
 import { alternateNames, routeHref } from "./internal/routes";
@@ -53,6 +53,10 @@ function toRelativeAssetHref(sourceSlug: string, assetPath: string): string {
     : relative.split("/").map(encodeURIComponent).join("/");
 }
 
+function preserveAssetSuffix(href: string, authoredTarget: string): string {
+  return href + (/[?#].*$/.exec(authoredTarget)?.[0] ?? "");
+}
+
 function replaceLinkMarkup(
   markdown: string,
   raw: string,
@@ -61,7 +65,7 @@ function replaceLinkMarkup(
   type: "wikilink" | "markdown",
   roamReserved: boolean,
 ): string {
-  return replaceAuthoredLinkMarkup(markdown, raw, type, `<a href="${href}">${escapeHtml(label)}</a>`, roamReserved);
+  return replaceAuthoredLinkMarkup(markdown, raw, type, `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`, roamReserved);
 }
 
 function replaceAuthoredLinkMarkup(markdown: string, raw: string, type: "wikilink" | "markdown", html: string, roamReserved: boolean): string {
@@ -116,15 +120,23 @@ export const resolveLinks = definePlugin(() => ({
             const assetPath = resolveAsset(file, reference.target);
             if (!assetPath) continue;
             rewrittenContent = rewrittenContent.slice(0, reference.start) +
-              toRelativeAssetHref(file.slug, assetPath) + rewrittenContent.slice(reference.end);
+              preserveAssetSuffix(toRelativeAssetHref(file.slug, assetPath), reference.target) +
+              rewrittenContent.slice(reference.end);
           }
+        }
+        for (const reference of referenceDefinitionSpans(rewrittenContent).reverse()) {
+          const assetPath = resolveAsset(file, reference.target);
+          if (!assetPath) continue;
+          rewrittenContent = rewrittenContent.slice(0, reference.start) +
+            preserveAssetSuffix(toRelativeAssetHref(file.slug, assetPath), reference.target) +
+            rewrittenContent.slice(reference.end);
         }
         rewrittenContent = rewrittenContent.replace(
           MARKDOWN_ASSET,
           (raw, start: string, target: string, end: string) => {
             const assetPath = resolveAsset(file, target);
             return assetPath
-              ? `${start}${toRelativeAssetHref(file.slug, assetPath)}${end}`
+              ? `${start}${preserveAssetSuffix(toRelativeAssetHref(file.slug, assetPath), target)}${end}`
               : raw;
           },
         );
@@ -133,7 +145,7 @@ export const resolveLinks = definePlugin(() => ({
           (raw, start: string, target: string, end: string) => {
             const assetPath = resolveAsset(file, target);
             return assetPath
-              ? `${start}${toRelativeAssetHref(file.slug, assetPath)}${end}`
+              ? `${start}${preserveAssetSuffix(toRelativeAssetHref(file.slug, assetPath), target)}${end}`
               : raw;
           },
         );
@@ -146,7 +158,8 @@ export const resolveLinks = definePlugin(() => ({
             rewrittenContent = replaceLinkMarkup(
               rewrittenContent,
               rawLink.raw,
-              toRelativeAssetHref(file.slug, assetPath),
+              preserveAssetSuffix(toRelativeAssetHref(file.slug, assetPath),
+                rawLink.target + (rawLink.section ? `#${rawLink.section}` : "")),
               label,
               rawLink.type,
               roamMedia,

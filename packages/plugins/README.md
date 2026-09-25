@@ -11,7 +11,7 @@
 
 The canonical order is in [`createCorePlugins()`](src/index.ts). Hooks run in the order in `@svartz/core`'s `STAGE_NAMES`; `enforce: 'pre' | 'post'` changes order within one hook. Mutating transforms run serially. The emitter compiles `.svx` as authored Svelte. `.md` and `.mdx` remain inert Markdown.
 
-Publication defaults to exclusion mode, so every note is public except configured `exclude[]` patterns. Inclusion mode publishes only `include[]` matches. A true `draft` hides a note, `published_at` publishes it immediately, and a true `private` always hides it. Unpublished note content cannot enter public embeds, search, graph, or generated listings. Protected SVX is separately encrypted; its public shell contains no note body.
+Publication defaults to exclusion mode, so every note is public except configured `exclude[]` patterns. Inclusion mode publishes only `include[]` matches. A true `draft` hides a note, `published_at` publishes it immediately, and a true `private` always hides it. A configured publication field applies when `published_at` is blank. Unpublished note content cannot enter public embeds, search, graph, or generated listings. Only attachments referenced by visible content or the effective frontmatter image enter output; comment-only attachments stay private. Inline and reference-style Markdown assets resolve from the note, and URL queries and fragments survive rewriting. Protected SVX is separately encrypted; its public shell contains no note body.
 
 Optional factories are disabled until configured: `hardLineBreaks`, `roamFlavoredMarkdown`, `oxHugoFlavoredMarkdown`, and `citations`. The citation plugin reads bibliography files relative to the vault. These are authoring-format choices, not implicit defaults.
 
