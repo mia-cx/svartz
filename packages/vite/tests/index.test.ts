@@ -146,6 +146,7 @@ describe("@svartz/vite plugin", () => {
     expect(loadThemeModuleMock).toHaveBeenCalledWith(
       expect.any(Function),
       testConfig,
+      process.cwd(),
     );
     expect(resolveRuntimePluginsMock).toHaveBeenCalled();
     expect(runStagesMock).toHaveBeenCalled();

@@ -5,7 +5,6 @@
 		Breadcrumbs,
 		Comments,
 		FileTrie,
-		GraphPanel,
 		NoteHeader,
 		RecentNotes,
 		SearchBox,
@@ -63,7 +62,6 @@
 		entry,
 		index = { entries: [], backlinks: {}, graph: {} },
 		backlinks = {},
-		graph = {},
 		match,
 		searchDocuments = [],
 		searchIndex,
@@ -73,7 +71,6 @@
 		entry?: Entry;
 		index?: Index;
 		backlinks?: Record<string, readonly string[]>;
-		graph?: Record<string, readonly string[]>;
 		match?: { pathname?: string; params?: { slug?: string } };
 		searchDocuments?: readonly {
 			id: string;
@@ -107,13 +104,14 @@
 	const breadcrumbSlug = $derived(pathnameToSlug(match?.pathname));
 </script>
 
+<a class="skip-link" href="#main-content">Skip to content</a>
 <div class="shell">
-	<aside class="left-sidebar">
+	<aside class="left-sidebar" aria-label="Site navigation">
 		<SearchBox {searchDocuments} {searchIndex} />
 		<FileTrie entries={index.entries} currentSlug={breadcrumbSlug} />
 	</aside>
 
-	<div class="content-column">
+	<main class="content-column" id="main-content" tabindex="-1">
 		<Breadcrumbs slug={breadcrumbSlug} />
 		{#if entry}
 			<NoteHeader {entry} />
@@ -136,9 +134,9 @@
 				darkTheme={cfg.comments!.darkTheme}
 			/>
 		{/if}
-	</div>
+	</main>
 
-	<aside class="right-sidebar">
+	<aside class="right-sidebar" aria-label="Related content">
 		<TableOfContents items={entry?.toc} />
 		{#if recentNotesEnabled}
 			<RecentNotes
@@ -148,15 +146,31 @@
 				linkToMore={cfg.recentNotes?.linkToMore ?? '/feed/'}
 			/>
 		{/if}
-		<GraphPanel currentSlug={entry?.slug} entries={index.entries} {graph} />
 		<Backlinks currentSlug={entry?.slug} entries={index.entries} {backlinks} />
 	</aside>
 </div>
 
 <style>
 	:global(body) {
-		background: #0f1117;
-		color: #f8fafc;
+		background: #fafafa;
+		color: #18181b;
+	}
+
+	.skip-link {
+		position: fixed;
+		top: 0.75rem;
+		left: 0.75rem;
+		z-index: 50;
+		transform: translateY(-200%);
+		border-radius: 0.5rem;
+		background: #f8fafc;
+		color: #0f172a;
+		padding: 0.6rem 0.85rem;
+		font-weight: 600;
+	}
+
+	.skip-link:focus {
+		transform: translateY(0);
 	}
 
 	.shell {
@@ -192,7 +206,9 @@
 
 	.content-column {
 		grid-area: content;
+		width: min(100%, 52rem);
 		min-width: 0;
+		justify-self: center;
 	}
 
 	.right-sidebar {
@@ -200,11 +216,8 @@
 	}
 
 	.page-body {
-		background: rgba(255, 255, 255, 0.02);
-		border: 1px solid rgba(255, 255, 255, 0.06);
-		border-radius: 1rem;
 		min-width: 0;
-		padding: clamp(1rem, 3vw, 2rem);
+		padding: clamp(0.25rem, 1vw, 0.75rem) 0;
 	}
 
 	.page-body :global(h1),
@@ -212,10 +225,63 @@
 	.page-body :global(h3),
 	.page-body :global(h4) {
 		line-height: 1.2;
+		font-weight: 700;
+		letter-spacing: -0.02em;
+		text-wrap: balance;
+	}
+
+	.page-body :global(h1) {
+		margin: 0 0 1.25rem;
+		font-size: clamp(1.8rem, 4vw, 2.35rem);
+	}
+
+	.page-body :global(h2) {
+		margin: 2.75rem 0 0.9rem;
+		font-size: clamp(1.4rem, 3vw, 1.75rem);
+	}
+
+	.page-body :global(h3) {
+		margin: 2rem 0 0.7rem;
+		font-size: 1.2rem;
+	}
+
+	.page-body :global(h4) {
+		margin: 1.5rem 0 0.5rem;
+		font-size: 1rem;
+	}
+
+	.page-body :global(p),
+	.page-body :global(ul),
+	.page-body :global(ol) {
+		margin: 0.85rem 0;
+	}
+
+	.page-body :global(ul),
+	.page-body :global(ol) {
+		padding-left: 1.4rem;
+	}
+
+	.page-body :global(ul) {
+		list-style: disc;
+	}
+
+	.page-body :global(ol) {
+		list-style: decimal;
+	}
+
+	.page-body :global(li) {
+		margin: 0.35rem 0;
+		padding-left: 0.15rem;
+	}
+
+	.page-body :global(hr) {
+		margin: 2.5rem 0;
+		border: 0;
+		border-top: 1px solid #e4e4e7;
 	}
 
 	.page-body :global(a) {
-		color: #c4b5fd;
+		color: #6d28d9;
 	}
 
 	.page-body :global(pre) {
@@ -223,14 +289,32 @@
 		overflow: auto;
 		padding: 1rem;
 		border-radius: 0.75rem;
-		background: rgba(15, 23, 42, 0.9);
+		background: #18181b;
+		color: #fafafa;
 	}
 
 	.page-body :global(blockquote) {
 		margin: 1rem 0;
 		padding: 0.85rem 1rem;
-		border-left: 3px solid rgba(196, 181, 253, 0.75);
-		background: rgba(255, 255, 255, 0.03);
+		border-left: 3px solid #8b5cf6;
+		background: #f4f4f5;
+	}
+
+	.page-body :global(blockquote:has(.callout-marker)) {
+		border: 1px solid #ddd6fe;
+		border-left: 3px solid #8b5cf6;
+		border-radius: 0.6rem;
+	}
+
+	.page-body :global(.callout-marker + strong) {
+		display: inline-block;
+		margin-bottom: 0.35rem;
+		color: #6d28d9;
+	}
+
+	.page-body :global(.callout-marker[data-callout='warning'] + strong),
+	.page-body :global(.callout-marker[data-callout='caution'] + strong) {
+		color: #92400e;
 	}
 
 	.page-body :global(mark) {
@@ -256,16 +340,26 @@
 	@media (max-width: 62rem) {
 		.shell {
 			grid-template-areas:
-				'left'
 				'content'
+				'left'
 				'right';
 			grid-template-columns: minmax(0, 1fr);
+			padding: clamp(0.75rem, 3vw, 1.25rem);
+		}
+
+		.page-body {
+			border: 0;
+			border-radius: 0;
+			background: transparent;
+			padding: 0;
 		}
 
 		.left-sidebar,
 		.right-sidebar {
 			position: static;
 			max-height: none;
+			border-top: 1px solid #e4e4e7;
+			padding-top: 1.25rem;
 		}
 	}
 </style>

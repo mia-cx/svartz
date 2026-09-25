@@ -171,6 +171,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
               getGeneratedIndexModulePath(context.config),
               getGeneratedSearchModulePath(context.config),
               extractThemeConfig(context.config.theme),
+              context.config.site,
             ),
           ),
         ],
@@ -247,7 +248,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     },
     configResolved(resolved) {
       context = createSvartzViteContext(options, resolved);
-      themeModuleId = resolveThemeModuleId(context.config);
+      themeModuleId = resolveThemeRuntimeImportId(context.config, context.root);
     },
     async buildStart() {
       await executePipeline();
@@ -306,6 +307,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
           getGeneratedIndexModulePath(context.config),
           getGeneratedSearchModulePath(context.config),
           extractThemeConfig(context.config.theme),
+          context.config.site,
         );
       }
 

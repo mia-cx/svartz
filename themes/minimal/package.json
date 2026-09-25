@@ -3,7 +3,7 @@
 	"version": "0.0.1",
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build && pnpm run prepack",
+		"build": "vite build && svelte-kit sync && svelte-package && publint",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"prepack": "svelte-kit sync && svelte-package && publint",
@@ -33,6 +33,12 @@
 			"svelte": "./dist/index.js",
 			"import": "./dist/index.js",
 			"default": "./dist/index.js"
+		},
+		"./runtime": {
+			"types": "./dist/runtime.d.ts",
+			"svelte": "./dist/runtime.js",
+			"import": "./dist/runtime.js",
+			"default": "./dist/runtime.js"
 		}
 	},
 	"peerDependencies": {

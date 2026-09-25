@@ -14,15 +14,15 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeKatex from "rehype-katex";
 import rehypePrettyCode from "rehype-pretty-code";
 import rehypeSlug from "rehype-slug";
-import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { definePlugin, type Artifact, type Index } from "@svartz/core";
+import { MDSVEX_REMARK_PLUGINS_META_KEY } from "./transform-gfm";
 
 type MdsvexOptions = NonNullable<Parameters<typeof compile>[1]>;
 
-const REMARK_PLUGINS = [remarkGfm, remarkMath] as MdsvexOptions["remarkPlugins"];
+const BASE_REMARK_PLUGINS = [remarkMath] as MdsvexOptions["remarkPlugins"];
 const REHYPE_PLUGINS = [
   rehypeSlug,
   [
@@ -69,12 +69,15 @@ function serializeValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
-async function compileNoteComponent(file: {
-  readonly path: string;
-  readonly slug: string;
-  readonly content: string;
-  readonly frontmatter?: Record<string, unknown>;
-}): Promise<string> {
+async function compileNoteComponent(
+  file: {
+    readonly path: string;
+    readonly slug: string;
+    readonly content: string;
+    readonly frontmatter?: Record<string, unknown>;
+  },
+  remarkPlugins: MdsvexOptions["remarkPlugins"],
+): Promise<string> {
   const source = [
     "<script context=\"module\" lang=\"ts\">",
     `export const svartz = ${serializeValue({
@@ -89,7 +92,7 @@ async function compileNoteComponent(file: {
 
   const result = await compile(source, {
     extension: ".svx",
-    remarkPlugins: REMARK_PLUGINS,
+    remarkPlugins,
     rehypePlugins: REHYPE_PLUGINS,
   });
   return result?.code ?? source;
@@ -132,6 +135,11 @@ export const emitArtifacts = definePlugin(() => ({
       if (!ctx.index) return;
 
       const artifactsRoot = getArtifactsRoot(ctx.config.outDir);
+      const configuredRemarkPlugins = ctx.meta.get(MDSVEX_REMARK_PLUGINS_META_KEY);
+      const remarkPlugins = [
+        ...(Array.isArray(configuredRemarkPlugins) ? configuredRemarkPlugins : []),
+        ...(BASE_REMARK_PLUGINS ?? []),
+      ] as MdsvexOptions["remarkPlugins"];
       const noteFiles = ctx.files.filter((file) =>
         file.extension && [".md", ".mdx", ".svx"].includes(file.extension),
       );
@@ -142,7 +150,7 @@ export const emitArtifacts = definePlugin(() => ({
         noteFiles.map(async (file) => {
           const key = `pages/${file.slug}.svelte`;
           const path = join(artifactsRoot, key);
-          const contents = await compileNoteComponent(file);
+          const contents = await compileNoteComponent(file, remarkPlugins);
 
           const artifact: Artifact = {
             key,

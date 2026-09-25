@@ -1,12 +1,10 @@
 /**
  * core:filter-unpublished — remove unpublished files from the pipeline.
  *
- * Published semantics (from plan):
- *   - published missing/null/undefined => published
- *   - published: true => published
- *   - published: <datetime string> => published
- *   - published: false => unpublished
- *   - published: "" => unpublished
+ * Publication modes:
+ *   - opt-out (default): missing/null => published
+ *   - explicit: only true or another truthy value => published
+ * In both modes false and an empty string are unpublished.
  *
  * Runs `post` relative to parseFrontmatter to ensure frontmatter is available.
  */
@@ -19,13 +17,15 @@ export const filterUnpublished = definePlugin(() => ({
   filterUnpublished: {
     run(ctx) {
       const publishedField = ctx.config.frontmatter.publishedField;
+      const explicitPublication = ctx.config.frontmatter.publicationMode === "explicit";
 
       ctx.files = ctx.files.filter((file) => {
-        if (!publishedField || !file.frontmatter) return true;
+        if (!publishedField) return true;
+        if (!file.frontmatter) return !explicitPublication;
 
         const value = file.frontmatter[publishedField];
 
-        if (value === undefined || value === null) return true;
+        if (value === undefined || value === null) return !explicitPublication;
         if (value === true) return true;
         if (value === false) return false;
         if (value === "") return false;

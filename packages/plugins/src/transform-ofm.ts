@@ -9,24 +9,91 @@ import { definePlugin } from "@svartz/core";
 
 const HTML_COMMENT_REGEX = /<!--[\s\S]*?-->/g;
 const OBSIDIAN_COMMENT_REGEX = /%%([\s\S]*?)%%/g;
-const COMMENT_PLACEHOLDER_PREFIX = "__SVARTZ_HTML_COMMENT_";
+const PROTECTED_SEGMENT_PREFIX = "__SVARTZ_PROTECTED_SEGMENT_";
 
-function transformCallouts(markdown: string): string {
+interface SegmentStore {
+  readonly prefix: string;
+  readonly segments: string[];
+}
+
+function createSegmentStore(markdown: string): SegmentStore {
+  let prefix = PROTECTED_SEGMENT_PREFIX;
+  while (markdown.includes(prefix)) prefix = `_${prefix}`;
+  return { prefix, segments: [] };
+}
+
+function protectSegment(store: SegmentStore, segment: string): string {
+  const placeholder = `${store.prefix}${store.segments.length}__`;
+  store.segments.push(segment);
+  return placeholder;
+}
+
+function stripBlockquotePrefix(line: string): string {
+  return line.replace(/^[ \t]*(?:>[ \t]?)+/, "");
+}
+
+function isIndentedCode(line: string): boolean {
+  if (/^(?: {4}|\t)/.test(line)) return true;
+  const withoutBlockquote = stripBlockquotePrefix(line);
+  return withoutBlockquote !== line && /^(?: {4}|\t)/.test(withoutBlockquote);
+}
+
+function protectCode(markdown: string, store: SegmentStore): string {
   const lines = markdown.split("\n");
-  return lines
-    .map((line) => {
-      const match = /^>\s*\[!([^\]\s]+)\]([+-])?\s*(.*)$/.exec(line);
-      if (!match) return line;
+  const protectedLines: string[] = [];
+  let fence: { readonly marker: "`" | "~"; readonly length: number } | undefined;
+  let fencedLines: string[] = [];
 
-      const [, rawType = "note", , title] = match;
-      const renderedTitle =
-        title && title.length > 0
-          ? title
-          : rawType.replace(/[-_]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  for (const line of lines) {
+    if (!fence) {
+      if (isIndentedCode(line)) {
+        protectedLines.push(protectSegment(store, line));
+        continue;
+      }
 
-      return `> **${renderedTitle}**`;
-    })
-    .join("\n");
+      const openingFence = /^(`{3,}|~{3,})/.exec(stripBlockquotePrefix(line));
+      if (!openingFence) {
+        protectedLines.push(line);
+        continue;
+      }
+
+      const token = openingFence[1]!;
+      fence = {
+        marker: token[0] as "`" | "~",
+        length: token.length,
+      };
+      fencedLines = [line];
+      continue;
+    }
+
+    fencedLines.push(line);
+    const closingFence = new RegExp(
+      `^${fence.marker === "`" ? "`" : "~"}{${fence.length},}\\s*$`,
+    );
+    if (!closingFence.test(stripBlockquotePrefix(line))) continue;
+
+    protectedLines.push(protectSegment(store, fencedLines.join("\n")));
+    fence = undefined;
+    fencedLines = [];
+  }
+
+  if (fencedLines.length > 0) {
+    protectedLines.push(protectSegment(store, fencedLines.join("\n")));
+  }
+
+  return protectedLines
+    .join("\n")
+    .replace(/(`+)(?!`)([\s\S]*?)\1(?!`)/g, (codeSpan) =>
+      protectSegment(store, codeSpan),
+    );
+}
+
+function restoreSegments(markdown: string, store: SegmentStore): string {
+  return store.segments.reduce(
+    (restoredMarkdown, segment, index) =>
+      restoredMarkdown.replace(`${store.prefix}${index}__`, segment),
+    markdown,
+  );
 }
 
 function normalizeComments(markdown: string): string {
@@ -36,42 +103,47 @@ function normalizeComments(markdown: string): string {
   );
 }
 
-function protectHtmlComments(markdown: string): {
-  sanitizedMarkdown: string;
-  comments: string[];
-} {
-  const comments: string[] = [];
-  const sanitizedMarkdown = markdown.replace(HTML_COMMENT_REGEX, (comment) => {
-    const placeholder = `${COMMENT_PLACEHOLDER_PREFIX}${comments.length}__`;
-    comments.push(comment);
-    return placeholder;
-  });
-
-  return { sanitizedMarkdown, comments };
+function protectHtmlComments(markdown: string, store: SegmentStore): string {
+  return markdown.replace(HTML_COMMENT_REGEX, (comment) => protectSegment(store, comment));
 }
 
-function restoreHtmlComments(markdown: string, comments: readonly string[]): string {
-  return comments.reduce(
-    (restoredMarkdown, comment, index) =>
-      restoredMarkdown.replace(`${COMMENT_PLACEHOLDER_PREFIX}${index}__`, comment),
-    markdown,
-  );
+function titleCaseCalloutType(type: string): string {
+  return type
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function normalizeCalloutType(type: string): string {
+  return type.toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+}
+
+function transformCallouts(markdown: string): string {
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const match = /^([ \t]*(?:>[ \t]*)+)\[!([^\]\s]+)\]([+-])?\s*(.*)$/.exec(line);
+      if (!match) return line;
+
+      const [, quotePrefix, rawType = "note", fold, customTitle] = match;
+      const type = normalizeCalloutType(rawType);
+      const title = customTitle || titleCaseCalloutType(rawType);
+      const foldState = fold === "+" ? "open" : fold === "-" ? "closed" : undefined;
+      const foldAttribute = foldState ? ` data-callout-fold="${foldState}"` : "";
+
+      return `${quotePrefix}<span class="callout-marker" data-callout="${type}"${foldAttribute} aria-hidden="true"></span> **${title}**`;
+    })
+    .join("\n");
+}
+
+function transformHighlights(markdown: string): string {
+  return markdown.replace(/==([^=\n]+)==/g, "<mark>$1</mark>");
 }
 
 function sanitizeMarkdownForSvelte(markdown: string): string {
-  const { sanitizedMarkdown, comments } = protectHtmlComments(markdown);
-  const lines = sanitizedMarkdown.split("\n");
-  let inCodeFence = false;
-
-  const sanitized = lines
+  return markdown
+    .split("\n")
     .map((line) => {
       const trimmed = line.trim();
-      if (/^(```|~~~)/.test(trimmed)) {
-        inCodeFence = !inCodeFence;
-        return line;
-      }
-
-      if (inCodeFence) return line;
       if (/^#{1,6}\s*$/.test(trimmed)) return "";
 
       return line
@@ -81,13 +153,22 @@ function sanitizeMarkdownForSvelte(markdown: string): string {
           match.replace(/</g, "&lt;").replace(/>/g, "&gt;"),
         )
         .replace(/<<(?=\s)/g, "&lt;&lt;")
-        .replace(/(?<=\s)>>/g, "&gt;&gt;")
         .replace(/<(?=[^A-Za-z!/])/g, "&lt;")
-        .replace(/(?<![A-Za-z0-9"'\/=])>/g, "&gt;");
+        .replace(/&lt;([^<>\n]*)>/g, "&lt;$1&gt;");
     })
     .join("\n");
+}
 
-  return restoreHtmlComments(sanitized, comments);
+function transformMarkdown(markdown: string): string {
+  const store = createSegmentStore(markdown);
+  const protectedCode = protectCode(markdown, store);
+  const normalizedComments = normalizeComments(protectedCode);
+  const protectedComments = protectHtmlComments(normalizedComments, store);
+  const transformed = sanitizeMarkdownForSvelte(
+    transformCallouts(transformHighlights(protectedComments)),
+  );
+
+  return restoreSegments(transformed, store);
 }
 
 export const transformOfm = definePlugin(() => ({
@@ -98,13 +179,7 @@ export const transformOfm = definePlugin(() => ({
       for (const file of ctx.files) {
         if (!file.extension || ![".md", ".mdx", ".svx"].includes(file.extension)) continue;
 
-        file.content = sanitizeMarkdownForSvelte(
-          transformCallouts(
-            normalizeComments(
-              file.content.replace(/==([^=]+)==/g, "<mark>$1</mark>"),
-            ),
-          ),
-        );
+        file.content = transformMarkdown(file.content);
       }
     },
     options: { fatal: true },

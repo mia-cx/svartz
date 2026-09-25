@@ -26,7 +26,7 @@ Reference for all core plugins:
 
 - **[[plugins/overview]]** — Quick lookup table, stage breakdown
 - **[[plugins/discover-files]]** — Vault discovery and slug generation
-- **[[plugins/utilities]]** — Internal utilities (slug, ignore, parse, resolve)
+- **`plugins/utilities`** — Internal utilities (slug, ignore, parse, resolve)
 
 ### 📖 Reference
 
@@ -147,7 +147,7 @@ See [[contracts/plugin-contract]], [[contracts/theme-contract]]
 - Internal utilities (slug, ignore, parse, resolve)
 - All plugins use `definePlugin()` factory
 
-See [[plugins/overview]], [[plugins/utilities]]
+See [[plugins/overview]], `plugins/utilities`
 
 ### `@svartz/config`
 

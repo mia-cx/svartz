@@ -2,6 +2,7 @@ import type {
   ResolvedBuildConfig,
   ResolvedConfig as CoreResolvedConfig,
   ResolvedFrontmatterConfig,
+  ResolvedSiteConfig,
   ResolvedThemeConfig,
   ResolvedVaultDefaults,
 } from "@svartz/core";
@@ -31,6 +32,7 @@ export {
   type ResolvedConfig,
   type ResolvedConfigSet,
   type ResolvedFrontmatterConfig,
+  type ResolvedSiteConfig,
   type ResolvedThemeConfig,
   type ResolvedVaultConfig,
   type ResolvedVaultDefaults,

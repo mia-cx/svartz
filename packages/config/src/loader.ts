@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { access, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { createJiti } from "jiti";
 import { major as semverMajor } from "semver";
 import { resolveConfig } from "./resolver";
 import { SvartzConfigSchema } from "./schemas";
@@ -121,10 +121,8 @@ const importConfig = (
 ): Effect.Effect<unknown, ConfigImportFailed> =>
   Effect.tryPromise({
     try: async () => {
-      const fileUrl = pathToFileURL(configPath);
-      const configStat = await stat(configPath);
-      fileUrl.searchParams.set("t", String(configStat.mtimeMs));
-      const mod = (await import(fileUrl.href)) as Record<string, unknown>;
+      const jiti = createJiti(import.meta.url, { moduleCache: false });
+      const mod = (await jiti.import(configPath)) as Record<string, unknown>;
       return mod["default"] ?? mod;
     },
     catch: (cause) =>

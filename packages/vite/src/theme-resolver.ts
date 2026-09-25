@@ -10,6 +10,7 @@ type ThemeModule = Record<string, unknown> & {
 };
 
 const BUILTIN_THEME_MODULE_ID = "@svartz/theme-minimal";
+const BUILTIN_THEME_RUNTIME_MODULE_ID = `${BUILTIN_THEME_MODULE_ID}/runtime`;
 
 function resolveThemeModuleId(config: ResolvedConfig): string {
   return config.theme.base;
@@ -38,6 +39,17 @@ function resolvePackageRootFromEntry(resolvedEntryPath: string): string | undefi
 }
 
 function resolveThemeRuntimeImportId(
+  config: ResolvedConfig,
+  resolveFromDirectory = process.cwd(),
+): string {
+  const themeModuleId = resolveThemeModuleId(config);
+  const runtimeModuleId =
+    themeModuleId === BUILTIN_THEME_MODULE_ID ? BUILTIN_THEME_RUNTIME_MODULE_ID : themeModuleId;
+  const requireFromDirectory = createRequireFromDirectory(resolveFromDirectory);
+  return pathToFileURL(requireFromDirectory.resolve(runtimeModuleId)).href;
+}
+
+function resolveThemeBuildImportId(
   config: ResolvedConfig,
   resolveFromDirectory = process.cwd(),
 ): string {
@@ -82,7 +94,7 @@ async function loadThemeModule(
   resolveFromDirectory = process.cwd(),
 ): Promise<SvartzTheme> {
   const themeModule = (await loader(
-    resolveThemeRuntimeImportId(config, resolveFromDirectory),
+    resolveThemeBuildImportId(config, resolveFromDirectory),
   )) as ThemeModule;
   const { base: _base, ...themeConfig } = config.theme;
   return resolveThemeExport(themeModule, themeConfig);

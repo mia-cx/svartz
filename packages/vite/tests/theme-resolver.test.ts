@@ -72,10 +72,11 @@ describe("@svartz/vite theme bridge", () => {
     expect(source).toContain("return resolveThemeRouteToArtifactKey(routes, input);");
   });
 
-  it("keeps the built-in fallback theme import rooted in @svartz/vite", () => {
-    expect(resolveThemeRuntimeImportId(createConfig(BUILTIN_THEME_MODULE_ID))).toBe(
-      BUILTIN_THEME_MODULE_ID,
-    );
+  it("uses the built-in theme's SSR runtime entry", () => {
+    const runtimeImportId = resolveThemeRuntimeImportId(createConfig(BUILTIN_THEME_MODULE_ID));
+
+    expect(runtimeImportId.startsWith("file://")).toBe(true);
+    expect(runtimeImportId.endsWith("/dist/runtime.js")).toBe(true);
   });
 
   it("resolves non-default themes from the provided app root", async () => {

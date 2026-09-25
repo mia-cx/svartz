@@ -41,6 +41,8 @@
 	let query = $state('');
 	let selectedIndex = $state(-1);
 	let inputEl = $state<HTMLInputElement | undefined>();
+	let triggerEl = $state<HTMLButtonElement | undefined>();
+	let dialogEl = $state<HTMLDivElement | undefined>();
 
 	const results = $derived(
 		query.trim().length < 2 || !engine
@@ -58,6 +60,7 @@
 		open = false;
 		query = '';
 		selectedIndex = -1;
+		requestAnimationFrame(() => triggerEl?.focus());
 	}
 
 	function slugToHref(slug: string) {
@@ -105,6 +108,21 @@
 			e.preventDefault();
 			const result = results[selectedIndex];
 			if (result) navigate(result);
+		} else if (e.key === 'Tab' && dialogEl) {
+			const focusable = [
+				...dialogEl.querySelectorAll<HTMLElement>(
+					'button, input, a[href], [tabindex]:not([tabindex="-1"])'
+				)
+			];
+			const first = focusable[0];
+			const last = focusable.at(-1);
+			if (e.shiftKey && document.activeElement === first) {
+				e.preventDefault();
+				last?.focus();
+			} else if (!e.shiftKey && document.activeElement === last) {
+				e.preventDefault();
+				first?.focus();
+			}
 		}
 	}
 
@@ -115,6 +133,7 @@
 
 <!-- Sidebar trigger -->
 <button
+	bind:this={triggerEl}
 	type="button"
 	onclick={openModal}
 	aria-label="Open search (Ctrl+K)"
@@ -143,10 +162,7 @@
 
 <!-- Modal -->
 {#if open}
-	<div
-		class="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]"
-		aria-hidden="true"
-	>
+	<div class="fixed inset-0 z-50 flex items-start justify-center px-3 pt-[15vh]">
 		<!-- Backdrop (click to close) -->
 		<button
 			type="button"
@@ -157,6 +173,7 @@
 
 		<!-- Dialog -->
 		<div
+			bind:this={dialogEl}
 			role="dialog"
 			aria-modal="true"
 			aria-label="Search"

@@ -8,6 +8,7 @@ export type {
   TargetConfig,
   ResolvedConfig,
   ResolvedFrontmatterConfig,
+  ResolvedSiteConfig,
   ResolvedThemeConfig,
   ResolvedBuildConfig,
   ResolvedVaultDefaults,

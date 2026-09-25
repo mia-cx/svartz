@@ -65,9 +65,7 @@
     },
     "//#svartz:build": {
       "dependsOn": [
-        "//#svartz:build:docs",
-        "//#svartz:build:obsidian-journal",
-        "//#svartz:build:vault"
+        "//#svartz:build:docs"
       ]
     },
     "//#svartz:build:docs": {
@@ -90,54 +88,6 @@
     "//#svartz:preview:docs": {
       "dependsOn": [
         "//#svartz:build:docs"
-      ],
-      "cache": false,
-      "persistent": true
-    },
-    "//#svartz:build:obsidian-journal": {
-      "inputs": [
-        "apps/web/**",
-        "package.json",
-        "pnpm-lock.yaml",
-        "svartz.config.*",
-        ".svartzrc.*",
-        "vaults/obsidian-journal/**"
-      ],
-      "outputs": [
-        ".svartz/vaults/obsidian-journal/dist/**"
-      ]
-    },
-    "//#svartz:dev:obsidian-journal": {
-      "cache": false,
-      "persistent": true
-    },
-    "//#svartz:preview:obsidian-journal": {
-      "dependsOn": [
-        "//#svartz:build:obsidian-journal"
-      ],
-      "cache": false,
-      "persistent": true
-    },
-    "//#svartz:build:vault": {
-      "inputs": [
-        "apps/web/**",
-        "package.json",
-        "pnpm-lock.yaml",
-        "svartz.config.*",
-        ".svartzrc.*",
-        "vaults/vault/**"
-      ],
-      "outputs": [
-        ".svartz/vaults/vault/dist/**"
-      ]
-    },
-    "//#svartz:dev:vault": {
-      "cache": false,
-      "persistent": true
-    },
-    "//#svartz:preview:vault": {
-      "dependsOn": [
-        "//#svartz:build:vault"
       ],
       "cache": false,
       "persistent": true

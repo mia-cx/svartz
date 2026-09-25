@@ -10,7 +10,6 @@
   },
   "scripts": {
     "svartz": "svartz",
-    "prebuild": "pnpm install",
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",
@@ -23,14 +22,8 @@
     "svartz:build:docs": "svartz build --vault docs",
     "svartz:dev:docs": "svartz dev --vault docs",
     "svartz:preview:docs": "svartz preview --vault docs",
-    "svartz:build:obsidian-journal": "svartz build --vault obsidian-journal",
-    "svartz:dev:obsidian-journal": "svartz dev --vault obsidian-journal",
-    "svartz:preview:obsidian-journal": "svartz preview --vault obsidian-journal",
-    "svartz:build:vault": "svartz build --vault vault",
-    "svartz:dev:vault": "svartz dev --vault vault",
-    "svartz:preview:vault": "svartz preview --vault vault",
-    "svartz:dev": "turbo run svartz:dev:docs svartz:dev:obsidian-journal svartz:dev:vault",
-    "svartz:preview": "turbo run svartz:preview:docs svartz:preview:obsidian-journal svartz:preview:vault"
+    "svartz:dev": "turbo run svartz:dev:docs",
+    "svartz:preview": "turbo run svartz:preview:docs"
   },
   "devDependencies": {
     "@svartz/config": "workspace:^",

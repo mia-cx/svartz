@@ -12,19 +12,9 @@ export default defineConfig({
       target: {
         type: "static",
       },
-    },
-    {
-      id: "obsidian-journal",
-      path: "vaults/obsidian-journal",
-      target: {
-        type: "static",
-      },
-    },
-    {
-      id: "vault",
-      path: "vaults/vault",
-      target: {
-        type: "static",
+      site: {
+        title: "Svartz Documentation",
+        description: "Documentation for the Svartz static publishing toolkit.",
       },
     },
   ],

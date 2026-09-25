@@ -99,35 +99,37 @@
 				{@const hasChildren = section.children.length > 0}
 				<li>
 					{#if hasChildren}
-						<button
-							type="button"
-							onclick={() => toggleSection(section.slug)}
-							aria-expanded={isExpanded}
-							class="flex w-full items-center gap-1.5 rounded px-0 py-0.5 text-left text-xs font-medium text-zinc-700 transition-colors hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100"
-						>
-							<svg
-								class="size-3 shrink-0 transition-transform {isExpanded ? 'rotate-90' : ''}"
-								xmlns="http://www.w3.org/2000/svg"
-								viewBox="0 0 20 20"
-								fill="currentColor"
-								aria-hidden="true"
+						<div class="flex min-h-10 items-center gap-1">
+							<button
+								type="button"
+								onclick={() => toggleSection(section.slug)}
+								aria-expanded={isExpanded}
+								aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${section.text}`}
+								class="grid size-9 shrink-0 place-items-center rounded text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
 							>
-								<path
-									fill-rule="evenodd"
-									d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z"
-									clip-rule="evenodd"
-								/>
-							</svg>
+								<svg
+									class="size-3 shrink-0 transition-transform {isExpanded ? 'rotate-90' : ''}"
+									xmlns="http://www.w3.org/2000/svg"
+									viewBox="0 0 20 20"
+									fill="currentColor"
+									aria-hidden="true"
+								>
+									<path
+										fill-rule="evenodd"
+										d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z"
+										clip-rule="evenodd"
+									/>
+								</svg>
+							</button>
 							<a
 								href="#{section.slug}"
-								class="{activeSlug === section.slug
+								class="min-w-0 flex-1 py-2 text-xs font-medium {activeSlug === section.slug
 									? 'text-zinc-900 dark:text-zinc-100'
-									: 'text-zinc-600 dark:text-zinc-400'} leading-relaxed transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
-								onclick={(e) => e.stopPropagation()}
+									: 'text-zinc-600 dark:text-zinc-400'} leading-relaxed transition-colors hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 dark:hover:text-zinc-100"
 							>
 								{section.text}
 							</a>
-						</button>
+						</div>
 						{#if isExpanded}
 							<ul class="ml-3 border-l border-zinc-200 pl-2 dark:border-zinc-700">
 								{#each section.children as child (child.slug)}

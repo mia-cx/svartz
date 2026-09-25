@@ -2,7 +2,7 @@
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, lstat, mkdir, readlink, rm, rmdir, stat, symlink } from "node:fs/promises";
+import { cp, lstat, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import chokidar, { type FSWatcher } from "chokidar";
@@ -301,6 +301,23 @@ const ensureVaultKitSymlink = (
     catch: (cause) => cause as Error,
   });
 
+const removeVaultKitSymlink = async (
+  appRoot: string,
+  vault: ResolvedConfig,
+): Promise<void> => {
+  const appKitPath = path.join(appRoot, ".svelte-kit");
+  try {
+    const existing = await lstat(appKitPath);
+    if (!existing.isSymbolicLink()) return;
+    const resolvedTarget = path.resolve(appRoot, await readlink(appKitPath));
+    if (resolvedTarget === kitOutDirForVault(vault)) {
+      await rm(appKitPath, { force: true });
+    }
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
+  }
+};
+
 const ensureDirectory = (directory: string) =>
   Effect.tryPromise({
     try: async () => {
@@ -509,6 +526,30 @@ const copyVaultAssets = (vault: ResolvedConfig): Effect.Effect<void, CliError> =
 
 const VAULT_BUILD_LOCK_RETRY_MS = 1000;
 const VAULT_BUILD_LOCK_MAX_WAIT_MS = 600_000; // 10 min
+const VAULT_BUILD_LOCK_ORPHAN_GRACE_MS = 5_000;
+
+const isProcessRunning = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+};
+
+const isStaleVaultBuildLock = async (lockDir: string): Promise<boolean> => {
+  try {
+    const owner = JSON.parse(
+      await readFile(path.join(lockDir, "owner.json"), "utf8"),
+    ) as { pid?: unknown };
+    return typeof owner.pid !== "number" || !isProcessRunning(owner.pid);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
+    const lockStat = await stat(lockDir);
+    return Date.now() - lockStat.mtimeMs >= VAULT_BUILD_LOCK_ORPHAN_GRACE_MS;
+  }
+};
 
 const withVaultBuildLock = (
   appRoot: string,
@@ -516,20 +557,33 @@ const withVaultBuildLock = (
 ): Promise<void> =>
   new Promise((resolve, reject) => {
     const workspaceRoot = path.resolve(appRoot, "../..");
-    const lockDir = path.join(workspaceRoot, ".svartz", ".vault-build.lock");
+    const lockRoot = path.join(workspaceRoot, ".svartz");
+    const lockDir = path.join(lockRoot, ".vault-build.lock");
     let waited = 0;
 
     const tryAcquire = (): void => {
-      mkdir(lockDir, { recursive: false })
-        .then(() =>
-          fn().finally(() =>
-            rmdir(lockDir).catch(() => {
-              /* ignore stale lock cleanup failure */
-            }),
-          ),
-        )
-        .then(resolve, (err: NodeJS.ErrnoException) => {
-          if (err.code === "EEXIST" && waited < VAULT_BUILD_LOCK_MAX_WAIT_MS) {
+      mkdir(lockRoot, { recursive: true })
+        .then(() => mkdir(lockDir, { recursive: false }))
+        .then(async () => {
+          await writeFile(
+            path.join(lockDir, "owner.json"),
+            JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }),
+          );
+          return fn().finally(() => rm(lockDir, { recursive: true, force: true }));
+        })
+        .then(resolve, async (err: NodeJS.ErrnoException) => {
+          if (err.code !== "EEXIST") {
+            reject(err);
+            return;
+          }
+
+          if (await isStaleVaultBuildLock(lockDir).catch(() => false)) {
+            await rm(lockDir, { recursive: true, force: true });
+            tryAcquire();
+            return;
+          }
+
+          if (waited < VAULT_BUILD_LOCK_MAX_WAIT_MS) {
             waited += VAULT_BUILD_LOCK_RETRY_MS;
             setTimeout(tryAcquire, VAULT_BUILD_LOCK_RETRY_MS);
           } else {
@@ -550,12 +604,16 @@ const buildVault = (
     yield* Effect.tryPromise({
       try: () =>
         withVaultBuildLock(appRoot, async () => {
-          const config = await runEffect(
-            createAppConfig(appRoot, supportedVault, "production", "build"),
-          );
-          await viteBuild(config);
-          if (supportedVault.target.type === "static") {
-            await runEffect(copyVaultAssets(supportedVault));
+          try {
+            const config = await runEffect(
+              createAppConfig(appRoot, supportedVault, "production", "build"),
+            );
+            await viteBuild(config);
+            if (supportedVault.target.type === "static") {
+              await runEffect(copyVaultAssets(supportedVault));
+            }
+          } finally {
+            await removeVaultKitSymlink(appRoot, supportedVault);
           }
         }),
       catch: (cause) => cause as Error,
