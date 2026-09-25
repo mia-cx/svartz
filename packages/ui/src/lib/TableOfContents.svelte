@@ -62,6 +62,7 @@
 	}
 
 	let storedCollapsed = $state<string[]>(tocCollapsedSlugs.get());
+	let manuallyCollapsedSlug = $state<string | null>(null);
 	$effect(() => {
 		const unsub = tocCollapsedSlugs.subscribe((v) => {
 			storedCollapsed = [...v];
@@ -69,7 +70,10 @@
 		return unsub;
 	});
 
-	const forceExpandedSlug = $derived(activeSlug ? sectionContainingSlug(activeSlug) : null);
+	const forceExpandedSlug = $derived.by(() => {
+		const section = activeSlug ? sectionContainingSlug(activeSlug) : null;
+		return section === manuallyCollapsedSlug ? null : section;
+	});
 	const expandedSet = $derived.by(() => {
 		const collapsed = new Set(storedCollapsed);
 		const expanded = new Set<string>();
@@ -81,8 +85,13 @@
 
 	function toggleSection(slug: string) {
 		const next = new Set(tocCollapsedSlugs.get());
-		if (next.has(slug)) next.delete(slug);
-		else next.add(slug);
+		if (expandedSet.has(slug)) {
+			next.add(slug);
+			manuallyCollapsedSlug = slug;
+		} else {
+			next.delete(slug);
+			if (manuallyCollapsedSlug === slug) manuallyCollapsedSlug = null;
+		}
 		tocCollapsedSlugs.set([...next]);
 	}
 </script>
