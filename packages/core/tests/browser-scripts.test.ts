@@ -28,6 +28,31 @@ describe("browser script lifecycle", () => {
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
+  it("continues cleanup after a disposer fails", async () => {
+    const calls: string[] = [];
+    const scripts = ["first", "broken", "last"].map((id) => ({
+      id,
+      load: async () => ({ mount: () => () => {
+        calls.push(id);
+        if (id === "broken") throw new Error("cleanup failed");
+      } }),
+    }));
+
+    const dispose = await mountBrowserScripts(scripts, "/");
+    expect(() => dispose()).toThrow(AggregateError);
+    expect(calls).toEqual(["last", "broken", "first"]);
+    expect(() => dispose()).not.toThrow();
+  });
+
+  it("reports the mount error even when cleanup fails", async () => {
+    const cleanup = vi.fn(() => { throw new Error("cleanup failed"); });
+    await expect(mountBrowserScripts([
+      { id: "first", load: async () => ({ mount: () => cleanup }) },
+      { id: "broken", load: async () => ({ mount: () => { throw new Error("mount failed"); } }) },
+    ], "/")).rejects.toMatchObject({ errors: [new Error("mount failed"), new Error("cleanup failed")] });
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
   it("passes resource settings without mixing mounts", async () => {
     const calls: unknown[][] = [];
     const scripts = [{

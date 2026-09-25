@@ -33,6 +33,7 @@ declare module "virtual:svartz/artifacts" {
 
   export const artifacts: ReadonlyMap<string, RuntimeArtifactRecord>;
   export const browserResources: Readonly<Record<string, string>>;
+  export function mountBrowserResources(pathname: string): Promise<() => void>;
   export function loadProtectedBridgeUrls(ids: readonly string[]): Promise<Readonly<Record<string, string>>>;
   export function hasNoteArtifact(key: string): boolean;
   export function getNoteArtifact(

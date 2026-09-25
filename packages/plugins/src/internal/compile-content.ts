@@ -85,7 +85,8 @@ function contentSlot(element: Element): ContentSlot | undefined {
   if (element.tagName === "pre") return "codeBlock";
   if (element.tagName === "img") return "image";
   if (element.tagName === "a") return "link";
-  if (element.tagName === "div" && String(element.properties.className).includes("svartz-embed")) return "embed";
+  const classes = element.properties.className;
+  if (element.tagName === "div" && (Array.isArray(classes) ? classes.includes("svartz-embed") : classes === "svartz-embed")) return "embed";
   if (["audio", "video", "iframe"].includes(element.tagName)) return "embed";
   return undefined;
 }
