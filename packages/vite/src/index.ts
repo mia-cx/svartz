@@ -88,7 +88,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   let context = createSvartzViteContext(options);
   let themeModuleId = resolveThemeModuleId(context.config);
   let theme: SvartzTheme | undefined;
-  let plugins = resolveRuntimePlugins(context.config);
+  let plugins: ReturnType<typeof resolveRuntimePlugins> = [];
   let emittedArtifacts: Artifact[] = [];
   let emittedAssets = new Map<string, Artifact>();
   let emittedBrowserResources: BrowserResource[] = [];

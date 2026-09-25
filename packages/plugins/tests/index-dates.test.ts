@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import type { DateSource, PluginContext, ResolvedConfig } from "@svartz/core";
 import { indexContent } from "../src/index-content";
+import { transformLatex } from "../src/transform-latex";
 
 function context(dateSources: DateSource[]): PluginContext {
   return {
@@ -48,4 +49,14 @@ it("indexes the custom publication date when published_at is blank", () => {
   Object.assign(ctx.files[0]!.frontmatter!, { published_at: "", go_live: "2031-03-04T00:00:00Z" });
   indexContent().indexContent!.run(ctx);
   expect(ctx.index?.entries[0]?.publishedAt?.toISOString()).toBe("2031-03-04T00:00:00.000Z");
+});
+
+it("indexes math source without KaTeX markup", () => {
+  const ctx = context(["frontmatter"]);
+  ctx.files[0]!.content = "Equation $x + y$ and prose.";
+  transformLatex().transformLatex!.run(ctx);
+  expect(ctx.files[0]!.content).toBe("Equation $x + y$ and prose.");
+  indexContent().indexContent!.run(ctx);
+  expect(ctx.index?.entries[0]?.content).not.toContain("katex");
+  expect(ctx.index?.entries[0]?.content).toContain("x + y");
 });

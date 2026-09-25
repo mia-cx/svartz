@@ -2,7 +2,7 @@ import type { SvartzPlugin, NormalizedSvartzPlugin } from "./types";
 import { normalizePlugin } from "./utils";
 
 type PluginFactory<
-  T extends Record<string, unknown> = Record<string, never>,
+  T extends object = object,
 > = (options?: T & { disabled?: boolean }) => SvartzPlugin;
 
 /**
@@ -13,12 +13,12 @@ function definePlugin(
   plugin: SvartzPlugin,
 ): (options?: { disabled?: boolean }) => NormalizedSvartzPlugin;
 function definePlugin<
-  T extends Record<string, unknown> = Record<string, never>,
+  T extends object = object,
 >(
   factory: PluginFactory<T>,
 ): (options?: T & { disabled?: boolean }) => NormalizedSvartzPlugin;
 function definePlugin<
-  T extends Record<string, unknown> = Record<string, never>,
+  T extends object = object,
 >(
   factoryOrPlugin: PluginFactory<T> | SvartzPlugin,
 ): (options?: T & { disabled?: boolean }) => NormalizedSvartzPlugin {
@@ -26,13 +26,11 @@ function definePlugin<
     const pluginInstance =
       typeof factoryOrPlugin === "function"
         ? factoryOrPlugin(options)
-        : ({
-            ...factoryOrPlugin,
-            ...(options?.disabled !== undefined
-              ? { disabled: options.disabled }
-              : {}),
-          } satisfies SvartzPlugin);
-    return normalizePlugin(pluginInstance);
+        : factoryOrPlugin;
+    return normalizePlugin({
+      ...pluginInstance,
+      ...(options?.disabled !== undefined ? { disabled: options.disabled } : {}),
+    });
   };
 }
 

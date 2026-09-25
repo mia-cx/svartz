@@ -152,6 +152,8 @@ describe("@svartz/vite plugin", () => {
       mode: "test",
     });
 
+    expect(resolveRuntimePluginsMock).not.toHaveBeenCalled();
+
     await plugin.buildStart?.call({} as never);
 
     const artifactsSource = plugin.load?.call(
