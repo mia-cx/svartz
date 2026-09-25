@@ -68,6 +68,13 @@ export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitB
     "    }).catch((error) => { preparing.delete(selected.id); throw error; }));",
     "  }",
     "  await preparing.get(selected.id);",
+    "  const vaultPathname = selected.mountPath ? pathname.slice(selected.mountPath.length) || '/' : pathname;",
+    "  const slug = vaultPathname === '/' ? undefined : vaultPathname.replace(/^\\/+|\\/+$/g, '');",
+    "  const match = selected.theme.resolveRuntimeRoute({ pathname: vaultPathname, slug });",
+    "  const canonicalPath = pathname.endsWith('/') ? pathname : `${pathname}/`;",
+    "  const entry = selected.artifacts.index.entries.find((candidate) => candidate.href === canonicalPath);",
+    "  const key = entry && match?.route.id !== 'note' ? `pages/${entry.slug}.svelte` : match?.artifactKey;",
+    "  if (key && selected.artifacts.hasNoteArtifact(key)) await selected.artifacts.prepareNoteArtifact(key);",
     "  return selected;",
     "}",
   ].join("\n");

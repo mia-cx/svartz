@@ -241,7 +241,11 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
       if (!builtReady) throw new Error("Built host did not become ready");
       const styledHtml = await (await fetch(`http://127.0.0.1:${builtPort}/blog/styled`)).text();
       expect(styledHtml).toContain("Styled note");
-      expect(styledHtml).toMatch(/<link[^>]+href="\/_app\/immutable\/assets\/runtime-artifacts[^\"]+\.css"/);
+      const stylesheets = [...styledHtml.matchAll(/<link[^>]+href="([^"]+\.css)"/g)]
+        .map((match) => match[1]!);
+      const styles = await Promise.all(stylesheets.map(async (href) =>
+        (await fetch(new URL(href, `http://127.0.0.1:${builtPort}`))).text()));
+      expect(styles.some((css) => css.includes("host-public-tone"))).toBe(true);
       let browser: Awaited<ReturnType<typeof chromium.connectOverCDP>> | undefined;
       for (let attempt = 0; attempt < 50; attempt++) {
         try {

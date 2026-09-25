@@ -67,16 +67,10 @@ function createArtifactsVirtualModuleSource(
   }));
 
   const svelteArtifacts = artifacts.filter((artifact) => artifact.type === "svelte");
-  const noteImports = svelteArtifacts
+  const noteLoaders = svelteArtifacts
     .map(
-      (artifact, index) =>
-        `import * as noteArtifact${index} from ${JSON.stringify(artifact.path)};`,
-    )
-    .join("\n");
-  const noteModules = svelteArtifacts
-    .map(
-      (artifact, index) =>
-        `  ${JSON.stringify(artifact.key)}: noteArtifact${index},`,
+      (artifact) =>
+        `  ${JSON.stringify(artifact.key)}: () => import(${JSON.stringify(artifact.path)}),`,
     )
     .join("\n");
   const resourceImports = browserResources.map((resource, index) =>
@@ -103,7 +97,6 @@ function createArtifactsVirtualModuleSource(
     `import { searchDocuments, searchIndex } from ${JSON.stringify(searchModulePath)};`,
     `import { createVaultView, mergeProtectedIndex, mountBrowserScripts, SEARCH_INDEX_OPTIONS } from ${JSON.stringify(coreModuleId)};`,
     `import { base } from "$app/paths";`,
-    noteImports,
     "",
     `export const artifacts = new Map(${JSON.stringify(records)}.map((record) => [record.key, record]));`,
     `export const browserResources = {\n${resourceUrls}\n};`,
@@ -124,18 +117,32 @@ function createArtifactsVirtualModuleSource(
     "  return Object.fromEntries(entries);",
     "}",
     "",
-    "const noteArtifactModules = {",
-    noteModules,
+    "const noteArtifactLoaders = {",
+    noteLoaders,
     "};",
+    "const noteArtifactModules = new Map();",
+    "const pendingNoteArtifacts = new Map();",
     "",
     "export function hasNoteArtifact(key) {",
-    "  return Object.hasOwn(noteArtifactModules, key);",
+    "  return Object.hasOwn(noteArtifactLoaders, key);",
+    "}",
+    "export async function prepareNoteArtifact(key) {",
+    "  const load = noteArtifactLoaders[key];",
+    '  if (!load) throw new Error(`[svartz:vite] note artifact "${key}" is not available`);',
+    "  if (noteArtifactModules.has(key)) return noteArtifactModules.get(key);",
+    "  let pending = pendingNoteArtifacts.get(key);",
+    "  if (!pending) {",
+    "    pending = load().then((module) => { noteArtifactModules.set(key, module); pendingNoteArtifacts.delete(key); return module; },",
+    "      (error) => { pendingNoteArtifacts.delete(key); throw error; });",
+    "    pendingNoteArtifacts.set(key, pending);",
+    "  }",
+    "  return pending;",
     "}",
     "",
     "export function getNoteArtifact(key) {",
-    "  const artifact = noteArtifactModules[key];",
+    "  const artifact = noteArtifactModules.get(key);",
     "  if (!artifact) {",
-    '    throw new Error(`[svartz:vite] note artifact "${key}" is not available`);',
+    '    throw new Error(`[svartz:vite] note artifact "${key}" was not prepared`);',
     "  }",
     "  return artifact;",
     "}",
