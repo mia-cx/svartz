@@ -14,9 +14,16 @@ import {
   VaultIdNotFound,
 } from "../src/index";
 import type { SvartzConfig, ResolvedSvartzConfig } from "../src/index";
+import { ordinaryWindowsPath } from "../src/resolver";
 
 const PKG_ROOT = resolve(__dirname, "..");
 const VALID_VAULT = resolve(__dirname, "fixtures/valid-vault");
+
+it("normalizes only ordinary Windows device roots", () => {
+  expect(ordinaryWindowsPath("\\\\?\\C:\\future\\blog")).toBe("C:\\future\\blog");
+  expect(ordinaryWindowsPath("\\\\?\\unc\\server\\share\\blog")).toBe("\\\\server\\share\\blog");
+  expect(ordinaryWindowsPath("\\\\?\\Volume{GUID}\\blog")).toBe("\\\\?\\Volume{GUID}\\blog");
+});
 
 const minimalConfig: SvartzConfig = {
   version: "1.0.0",
