@@ -253,7 +253,7 @@ module.exports = async (env) => {
     .map((specifier) => /^withSvartzHost(?:\s+as\s+([A-Za-z_$][\w$]*))?$/.exec(specifier.trim()))
     .find((match) => match !== null);
   let binding = hostImport?.[1] ?? (hostImport ? "withSvartzHost" : "__svartz_with_host");
-  if (hostImport && source.includes(`${binding}(`)) return source;
+  if (hostImport && new RegExp(`\\bexport\\s+default\\s+${binding}\\s*\\(`).test(source)) return source;
   if (!hostImport) {
     let suffix = 2;
     while (new RegExp(`\\b${binding}\\b`).test(source)) binding = `__svartz_with_host_${suffix++}`;
@@ -370,7 +370,7 @@ const initProjectEffect = (
     if (location.hostApp) {
       const tailwindVersion = existingManifest?.dependencies?.tailwindcss
         ?? existingManifest?.devDependencies?.tailwindcss;
-      if (tailwindVersion && /(?:^|[~^<>=@|\s])3(?:\.|x|\*|\b)/.test(tailwindVersion)) {
+      if (tailwindVersion && /(?:^|[v~^<>=@|\s])3(?:\.|x|\*|\b)/.test(tailwindVersion)) {
         return yield* new InitLayoutError({
           reason: "unsupported-tailwind",
           message: "Cannot integrate: this host uses Tailwind CSS 3. Upgrade to Tailwind CSS 4 before running svartz init.",
@@ -398,19 +398,26 @@ const initProjectEffect = (
       const appTypesPath = path.join(root, "src", "app.d.ts");
       const appTypesReference =
         '/// <reference types="@svartz/vite/virtual-modules" />';
-      const previousAppTypesReference =
-        '/// <reference types="@svartz/ui/virtual-modules" />';
       const appTypesSource = existsSync(appTypesPath)
         ? yield* operation("read host app types", () =>
             readFile(appTypesPath, "utf8"),
           )
         : undefined;
-      const integratedAppTypes = appTypesSource?.includes(appTypesReference)
-        ? appTypesSource
-        : appTypesSource?.includes(previousAppTypesReference)
-          ? appTypesSource.replace(previousAppTypesReference, appTypesReference)
-          : `${appTypesReference}\n${appTypesSource ?? ""}`;
+      const virtualModuleReference = /^[ \t]*\/\/\/\s*<reference\s+types\s*=\s*(['"])@svartz\/(?:vite|ui)\/virtual-modules\1\s*\/>[ \t]*(?:\r?\n|$)/gm;
+      const integratedAppTypes = `${appTypesReference}\n${appTypesSource?.replace(virtualModuleReference, "") ?? ""}`;
       const catchallRoot = path.join(root, "src", "routes", "[...slug]");
+      const catchallRootInfo = yield* operation("inspect host catchall path", async () =>
+        lstat(catchallRoot).catch((cause: NodeJS.ErrnoException) => {
+          if (cause.code === "ENOENT") return undefined;
+          throw cause;
+        }),
+      );
+      if (catchallRootInfo?.isSymbolicLink()) {
+        return yield* new InitConflictError({
+          paths: ["src/routes/[...slug]"],
+          message: "Cannot integrate: the host catchall directory is a symlink. Resolve it before running svartz init.",
+        });
+      }
       const catchallPagePath = path.join(catchallRoot, "+page.svelte");
       const catchallLoadPath = path.join(catchallRoot, "+page.ts");
       const installCatchall = !(yield* operation("inspect host catchall", () =>

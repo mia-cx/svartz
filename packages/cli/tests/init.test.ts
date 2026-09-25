@@ -162,7 +162,7 @@ it("keeps an existing layout CSS import when that stylesheet belongs to the host
     .toBe("body { background: rebeccapurple; }\n");
 });
 
-it.each(["^3.4.17", "3.x", ">=3 <4"])("rejects a Tailwind 3 host before writing for %s", async (version) => {
+it.each(["^3.4.17", "3.x", ">=3 <4", "v3.4.17"])("rejects a Tailwind 3 host before writing for %s", async (version) => {
   const root = await fixture();
   const viteConfig = "export default { plugins: [] };\n";
   const manifest = JSON.stringify({
@@ -208,6 +208,25 @@ it("upgrades the previous UI virtual-module reference in an existing host", asyn
   await initProject({ cwd: root, install: false, git: false });
   expect(await readFile(path.join(root, "src/app.d.ts"), "utf8"))
     .toBe('/// <reference types="@svartz/vite/virtual-modules" />\nexport {};\n');
+});
+
+it.each([
+  "/// <reference types='@svartz/ui/virtual-modules' />",
+  "/// <reference types='@svartz/vite/virtual-modules' />",
+])("normalizes an existing %s reference", async (reference) => {
+  const root = await fixture();
+  await mkdir(path.join(root, "src"));
+  await writeFile(path.join(root, "src/app.d.ts"), `${reference}\nexport {};\n`);
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  await initProject({ cwd: root, install: false, git: false });
+  const source = await readFile(path.join(root, "src/app.d.ts"), "utf8");
+  expect(source.match(/@svartz\/vite\/virtual-modules/g)).toHaveLength(1);
+  expect(source).not.toContain("@svartz/ui/virtual-modules");
+  expect(await initProject({ cwd: root, install: false, git: false })).toMatchObject({ kind: "already-configured" });
 });
 
 it.each(["vite.config.cjs", "vite.config.cts"])(
@@ -289,6 +308,20 @@ it("reuses an imported host helper when wrapping an existing Vite config", async
   expect(source).toContain("export default wrapHost(__svartz_host_config)");
 });
 
+it("wraps the Vite default export even if an imported helper is called elsewhere", async () => {
+  const root = await fixture();
+  await writeFile(path.join(root, "vite.config.ts"),
+    "import { withSvartzHost as wrapHost } from '@svartz/vite/host';\nconst auxiliary = wrapHost({});\nexport default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  await initProject({ cwd: root, install: false, git: false });
+  const source = await readFile(path.join(root, "vite.config.ts"), "utf8");
+  expect(source).toContain("const auxiliary = wrapHost({});");
+  expect(source).toContain("export default wrapHost(__svartz_host_config)");
+});
+
 it("keeps a host-owned catchall route", async () => {
   const root = await fixture();
   await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
@@ -304,6 +337,27 @@ it("keeps a host-owned catchall route", async () => {
     .toBe("<h1>Host catchall</h1>\n");
   await expect(access(path.join(root, "src/routes/[...slug]/+page.ts")))
     .rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("rejects a symlinked catchall before touching its host-owned target", async () => {
+  const root = await fixture();
+  const target = path.join(root, "host-route");
+  await mkdir(target);
+  await mkdir(path.join(root, "src/routes"), { recursive: true });
+  await writeFile(path.join(target, "+page.ts"), "export const load = () => ({});\n");
+  await symlink(target, path.join(root, "src/routes/[...slug]"), "dir");
+  const viteConfig = "export default { plugins: [] };\n";
+  await writeFile(path.join(root, "vite.config.ts"), viteConfig);
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  const failure = await initProject({ cwd: root, install: false, git: false }).catch((cause: unknown) => cause);
+  expect(failure).toBeInstanceOf(InitConflictError);
+  expect(failure).toMatchObject({ paths: ["src/routes/[...slug]"] });
+  expect(await readFile(path.join(root, "vite.config.ts"), "utf8")).toBe(viteConfig);
+  await expect(access(path.join(target, "+page.svelte"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(access(path.join(root, "svartz.config.ts"))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it.each([
