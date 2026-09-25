@@ -2,9 +2,10 @@ interface Listable {
 	readonly slug: string;
 	readonly title: string;
 	readonly tags: readonly string[];
-	readonly modifiedAt?: Date;
-	readonly publishedAt?: Date;
-	readonly createdAt?: Date;
+	// Artifacts carry ISO strings; tests and hosts may pass Dates.
+	readonly modifiedAt?: Date | string;
+	readonly publishedAt?: Date | string;
+	readonly createdAt?: Date | string;
 }
 
 interface Folder {
@@ -20,8 +21,14 @@ interface Linked {
 /** `1 note`, `3 notes`. */
 export const count = (n: number, word: string) => `${n} ${n === 1 ? word : `${word}s`}`;
 
-/** The date a list shows for a note: last modified, else published, else created. */
-export const noteDate = (entry: Listable) => entry.modifiedAt ?? entry.publishedAt ?? entry.createdAt;
+/**
+ * The date a list shows for a note: last modified, else published, else created.
+ * An unparseable date is skipped, so one bad value can't hide the note's date.
+ */
+export const noteDate = (entry: Listable) =>
+	[entry.modifiedAt, entry.publishedAt, entry.createdAt].find(
+		(value) => value !== undefined && !Number.isNaN(new Date(value).getTime())
+	);
 
 const time = (entry: Listable) => {
 	const date = noteDate(entry);

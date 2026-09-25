@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { folderContents, newestFirst, notesTagged, topLevelSections } from './listing.js';
+import { folderContents, newestFirst, noteDate, notesTagged, topLevelSections } from './listing.js';
 
 const note = (slug: string, date?: string, tags: string[] = []) => ({
 	slug,
@@ -25,6 +25,12 @@ describe('listing helpers', () => {
 		const contents = folderContents('log', entries, folders);
 		expect(contents.notes.map((entry) => entry.slug)).toEqual(['log/day-1', 'log/2026/day-2']);
 		expect(contents.folders.map((folder) => folder.slug)).toEqual(['log/2026']);
+	});
+
+	it('skips an unparseable date for the next valid one', () => {
+		expect(noteDate({ ...note('a'), modifiedAt: 'not-a-date', createdAt: '2026-09-25T00:30:00.000Z' })).toBe(
+			'2026-09-25T00:30:00.000Z'
+		);
 	});
 
 	it('matches a tag and its nested tags', () => {
