@@ -13,6 +13,7 @@ export default withSvartzHost(defineConfig({ plugins: [sveltekit()] }));
 ```
 
 `svartz init` adds that wrapper without replacing the host's Vite expression. A manual SvelteKit route wins over a vault URL at the same path.
+The repository's standalone `apps/web` shell loads the same CSS collector from a CLI-generated module during a Svartz build. It does not depend on `@svartz/vite` directly.
 
 ## Runtime modules
 

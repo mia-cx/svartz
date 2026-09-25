@@ -67,6 +67,24 @@ describe("svartz CLI", () => {
     240_000,
   );
 
+  it("links styled notes in the standalone shell without loading JavaScript", async () => {
+    const notePath = resolve(ROOT, "vaults/docs/standalone-style.svx");
+    try {
+      await writeFile(notePath, "<h1 class='standalone-tone'>Standalone style</h1><style>.standalone-tone { color: rgb(12, 34, 56); }</style>\n");
+      await run(process.execPath, ["packages/cli/dist/index.js", "build", "--vault", "docs"]);
+      const styles = JSON.parse(await readFile(resolve(ROOT, ".svartz/host/styles/646f6373.json"), "utf8")) as string[];
+      expect(styles.length).toBeGreaterThan(0);
+      const css = (await Promise.all(styles.map((file) =>
+        readFile(resolve(DIST_ROOT, file), "utf8")))).join("\n");
+      expect(css).toMatch(/#0c2238|rgb\(12,\s*34,\s*56\)/);
+      const html = await readFile(resolve(DIST_ROOT, "standalone-style/index.html"), "utf8");
+      expect(html).toContain("Standalone style");
+      expect(styles.some((file) => html.includes(file))).toBe(true);
+    } finally {
+      await rm(notePath, { force: true });
+    }
+  }, 240_000);
+
   it("builds social images and favicon variants for a static vault", async () => {
     const configPath = resolve(ROOT, ".svartz-images-e2e.config.ts");
     try {

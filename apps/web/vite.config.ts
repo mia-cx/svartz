@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import { sveltekit } from '@sveltejs/kit/vite';
+import type { PluginOption } from 'vite';
 
 const SVARTZ_THEME_VIRTUAL_ID = 'virtual:svartz/theme';
 const SVARTZ_ARTIFACTS_VIRTUAL_ID = 'virtual:svartz/artifacts';
@@ -29,6 +30,8 @@ const fallbackTailwindSourcesPath = fileURLToPath(
 );
 
 const isVitest = Boolean(process.env.VITEST);
+const cliPluginModule = process.env.SVARTZ_VITE_PLUGINS_MODULE_PATH;
+const cliPlugins: PluginOption[] = cliPluginModule ? [(await import(cliPluginModule)).default as PluginOption] : [];
 
 export default defineConfig({
 	build: {
@@ -59,7 +62,8 @@ export default defineConfig({
 	plugins: [
 		tailwindcss(),
 		sveltekit(),
-		paraglideVitePlugin({ project: './project.inlang', outdir: './src/lib/paraglide' })
+		paraglideVitePlugin({ project: './project.inlang', outdir: './src/lib/paraglide' }),
+		...cliPlugins
 	],
 	test: {
 		expect: { requireAssertions: true },

@@ -36,9 +36,10 @@ export async function readGitDates(vaultPath: string): Promise<ReadonlyMap<strin
   });
   const dates = new Map<string, GitDates>();
   const renamedTo = new Map<string, string>();
+  const endedLifetimes = new Set<string>();
   let commitDate: Date | undefined;
   const record = (repositoryPath: string): void => {
-    if (!commitDate) return;
+    if (!commitDate || endedLifetimes.has(repositoryPath)) return;
     const currentPath = renamedTo.get(repositoryPath) ?? repositoryPath;
     const file = relative(vaultPath, resolve(repositoryRoot, currentPath)).replaceAll("\\", "/");
     if (!file || file === ".." || file.startsWith("../")) return;
@@ -60,7 +61,10 @@ export async function readGitDates(vaultPath: string): Promise<ReadonlyMap<strin
           record(source);
         } else {
           record(source);
-          if (status === "A") renamedTo.delete(source);
+          if (status === "A") {
+            renamedTo.delete(source);
+            endedLifetimes.add(source);
+          }
         }
       }
     })(), closed]);

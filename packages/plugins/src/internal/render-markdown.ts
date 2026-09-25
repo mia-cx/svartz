@@ -18,15 +18,17 @@ function absoluteOrAuthored(value: string, baseUrl: string): string {
   }
 }
 
+const ASCII_WHITESPACE = /[\t\n\f\r ]/;
+
 /** Keep data URLs intact: their embedded comma is part of the URL, not a candidate separator. */
 function resolveSrcset(value: string, baseUrl: string): string {
   const candidates: string[] = [];
   let position = 0;
   while (position < value.length) {
-    while (/[\s,]/.test(value[position] ?? "")) position++;
+    while (ASCII_WHITESPACE.test(value[position] ?? "") || value[position] === ",") position++;
     if (position >= value.length) break;
     const start = position;
-    while (position < value.length && !/\s/.test(value[position]!)) position++;
+    while (position < value.length && !ASCII_WHITESPACE.test(value[position]!)) position++;
     const rawUrl = value.slice(start, position);
     const url = rawUrl.replace(/,+$/, "");
     const hasSeparator = url.length !== rawUrl.length;

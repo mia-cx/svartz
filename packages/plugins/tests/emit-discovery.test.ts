@@ -79,11 +79,11 @@ describe("discovery output", () => {
       feed: { enabled: true, limit: 1, content: "full", sort: "modified" },
       sitemap: { enabled: false }, dateSources: ["filesystem"],
     } });
-    ctx.files[1]!.content = '<picture><source srcset="./small.webp 1x, ./large.webp 2x"><img src="http://[" srcset="data:image/png;base64,AAAA 1x, ./large.png 2x"></picture><a href="http://[">Broken</a>';
+    ctx.files[1]!.content = '<picture><source srcset="./small.webp 1x, ./large.webp 2x"><img src="http://[" srcset="data:image/png;base64,AAAA 1x, ./photo\u00a0one.png 2x"></picture><a href="http://[">Broken</a>';
     await emitDiscovery().emitArtifacts!.run(ctx);
     const feed = String(ctx.artifacts.get("assets/rss.xml")?.contents);
     expect(feed).toContain('srcset="https://example.com/site/blog/earlier/small.webp 1x, https://example.com/site/blog/earlier/large.webp 2x"');
-    expect(feed).toContain('srcset="data:image/png;base64,AAAA 1x, https://example.com/site/blog/earlier/large.png 2x"');
+    expect(feed).toContain('srcset="data:image/png;base64,AAAA 1x, https://example.com/site/blog/earlier/photo%C2%A0one.png 2x"');
     expect(feed).toContain('href="http://["');
     expect(feed).toContain('src="http://["');
   });

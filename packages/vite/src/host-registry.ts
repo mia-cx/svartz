@@ -72,8 +72,9 @@ export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitB
   ].join("\n");
 }
 
+/** Use lowercase hex so IDs cannot escape the styles directory or collide on case-insensitive filesystems. */
 export function getGeneratedHostStylesPath(hostRegistryPath: string, vaultId: string): string {
-  return join(dirname(hostRegistryPath), "styles", `${Buffer.from(vaultId).toString("base64url") || "_"}.json`);
+  return join(dirname(hostRegistryPath), "styles", `${Buffer.from(vaultId).toString("hex") || "_"}.json`);
 }
 
 export function getGeneratedHostRegistryPath(configDir: string): string {

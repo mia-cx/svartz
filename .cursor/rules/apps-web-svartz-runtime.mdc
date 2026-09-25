@@ -13,5 +13,5 @@ alwaysApply: false
 - `@svartz/ui/runtime` owns `SvartzRuntimePage` and its `virtual:svartz/*` declarations. The app references those declarations from `src/app.d.ts`.
 - Route files remain in the app. They pass the current pathname into the package renderer, so the library does not depend on SvelteKit's page state.
 - For browser/unit tests, keep the `virtual:svartz/*` test surfaces file-backed under `apps/web/src/lib/svartz/testing/fixtures/` and alias them from `apps/web/vite.config.ts`. The host registry fixture points to the theme and artifact fixtures. Do not go back to giant inline string-literal virtual modules.
-- Do not wire the real Svartz Vite plugin into `apps/web/vite.config.ts`; production/dev injection belongs to the CLI orchestration layer.
+- Do not import `@svartz/vite` or call `svartz()` in `apps/web/vite.config.ts`; production/dev injection belongs to the CLI. The shell may load an opaque CLI-generated plugin module from `SVARTZ_VITE_PLUGINS_MODULE_PATH` so SvelteKit's secondary build retains the standalone CSS collector.
 - When the CLI moves `kit.outDir` outside `apps/web` into `.svartz/vaults/<id>/.svelte-kit`, it must also prepare that vault workspace so the generated prerender server can still resolve `apps/web` dependencies. Today that means ensuring `.svartz/vaults/<id>/node_modules` points at `apps/web/node_modules`.
