@@ -37,6 +37,19 @@ interface ResolvedSiteConfig {
   readonly image?: string;
 }
 
+type DateSource = "frontmatter" | "git" | "filesystem";
+
+interface ResolvedDiscoveryConfig {
+  readonly feed: {
+    readonly enabled: boolean;
+    readonly limit: number;
+    readonly content: "summary" | "full";
+    readonly sort: "published" | "modified";
+  };
+  readonly sitemap: { readonly enabled: boolean };
+  readonly dateSources: readonly DateSource[];
+}
+
 interface ResolvedBuildConfig {
   readonly concurrency: number;
   readonly maxRetries: number;
@@ -50,6 +63,7 @@ interface ResolvedVaultDefaults {
   readonly theme: ResolvedThemeConfig;
   readonly frontmatter: ResolvedFrontmatterConfig;
   readonly site: ResolvedSiteConfig;
+  readonly discovery: ResolvedDiscoveryConfig;
   readonly mountPath: string;
 }
 
@@ -67,6 +81,7 @@ interface ResolvedConfig {
   readonly theme: ResolvedThemeConfig;
   readonly frontmatter: ResolvedFrontmatterConfig;
   readonly site: ResolvedSiteConfig;
+  readonly discovery: ResolvedDiscoveryConfig;
   /** Vault URL prefix within the host app, separate from SvelteKit's deployment base. */
   readonly mountPath: string;
   readonly target: TargetConfig;
@@ -171,6 +186,8 @@ interface ProcessedFile {
   linkTargets?: Record<string, string>;
   createdAt?: Date;
   modifiedAt?: Date;
+  gitCreatedAt?: Date;
+  gitModifiedAt?: Date;
   toc?: readonly TocEntry[];
 }
 
@@ -240,6 +257,8 @@ type Graph = Readonly<Record<string, readonly GraphTarget[]>>;
 
 export type {
   Artifact,
+  DateSource,
+  ResolvedDiscoveryConfig,
   AssetRecord,
   ArtifactBag,
   ChangeEvent,

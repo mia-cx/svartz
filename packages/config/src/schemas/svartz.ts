@@ -36,7 +36,8 @@ const HttpUrlSchema = Schema.String.pipe(
   Schema.filter((value) => {
     try {
       const url = new URL(value);
-      return url.protocol === "http:" || url.protocol === "https:";
+      return (url.protocol === "http:" || url.protocol === "https:") &&
+        !url.username && !url.password && !url.search && !url.hash;
     } catch {
       return false;
     }
@@ -49,6 +50,21 @@ const SiteConfigSchema = Schema.Struct({
   url: Schema.optional(HttpUrlSchema),
   author: Schema.optional(Schema.String),
   image: Schema.optional(Schema.String),
+});
+
+const DiscoveryConfigSchema = Schema.Struct({
+  feed: Schema.optional(Schema.Struct({
+    enabled: Schema.optional(Schema.Boolean),
+    limit: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.positive())),
+    content: Schema.optional(Schema.Literal("summary", "full")),
+    sort: Schema.optional(Schema.Literal("published", "modified")),
+  })),
+  sitemap: Schema.optional(Schema.Struct({
+    enabled: Schema.optional(Schema.Boolean),
+  })),
+  dateSources: Schema.optional(Schema.Array(Schema.Literal("frontmatter", "git", "filesystem")).pipe(
+    Schema.filter((sources) => sources.length > 0, { message: () => "dateSources needs at least one source" }),
+  )),
 });
 
 /** Shallow plugin placeholder; plugin interface/standard TBD. */
@@ -64,6 +80,7 @@ const VaultOptionsSchema = Schema.Struct({
   theme: Schema.optional(VaultThemeConfigSchema),
   frontmatter: Schema.optional(FrontmatterFieldsSchema),
   site: Schema.optional(SiteConfigSchema),
+  discovery: Schema.optional(DiscoveryConfigSchema),
   /** Output directory for this vault's build artifact. Default: `.svartz/vaults/<vault.id>`. */
   outDir: Schema.optional(Schema.String),
   /** Plugin instances (transformers, filters, emitters). Vault- and theme-specific. Shape TBD when plugin API is defined. */
@@ -112,6 +129,7 @@ const VaultConfigSchema = Schema.Struct({
   theme: Schema.optional(VaultThemeConfigSchema),
   frontmatter: Schema.optional(FrontmatterFieldsSchema),
   site: Schema.optional(SiteConfigSchema),
+  discovery: Schema.optional(DiscoveryConfigSchema),
   outDir: Schema.optional(Schema.String),
   plugins: Schema.optional(Schema.Array(PluginEntrySchema)),
 });
@@ -133,6 +151,7 @@ export {
   VaultThemeConfigSchema,
   FrontmatterFieldsSchema,
   SiteConfigSchema,
+  DiscoveryConfigSchema,
   PluginEntrySchema,
   VaultOptionsSchema,
   TargetConfigSchema,

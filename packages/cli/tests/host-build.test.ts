@@ -34,6 +34,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "node_modules"), "dir");
   await mkdir(path.join(root, "src/routes/other"), { recursive: true });
   await mkdir(path.join(root, "src/routes/blog/about"), { recursive: true });
+  await mkdir(path.join(root, "src/routes/rss.xml"), { recursive: true });
   await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
   await mkdir(path.join(root, "vault"));
   await mkdir(path.join(root, "work-vault"));
@@ -61,6 +62,12 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   await writeFile(path.join(root, "src/routes/+page.svelte"), "<h1>Host home</h1>\n");
   await writeFile(path.join(root, "src/routes/other/+page.svelte"), "<h1>Other route</h1>\n");
   await writeFile(path.join(root, "src/routes/blog/about/+page.svelte"), "<h1>Manual about</h1>\n");
+  await writeFile(path.join(root, "src/routes/rss.xml/+server.ts"), [
+    "import { vaults } from 'virtual:svartz/host';",
+    `import { renderHostRss } from ${JSON.stringify(path.join(workspaceRoot, "packages/vite/dist/discovery.js"))};`,
+    "export const prerender = true;",
+    "export const GET = () => new Response(renderHostRss(vaults, ['notes', 'work'], { title: 'Combined', url: 'https://example.test' }), { headers: { 'content-type': 'application/rss+xml' } });",
+  ].join("\n"));
   for (const name of ["+page.svelte", "+page.ts"]) {
     await writeFile(path.join(root, "src/routes/[...slug]", name),
       await readFile(path.join(workspaceRoot, "packages/cli/template/src/routes/[...slug]", name)));
@@ -105,6 +112,10 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   await access(path.join(root, "build/index.js"));
   expect(await readFile(path.join(root, "build/client/blog/shared.png"), "utf8")).toBe("blog asset");
   expect(await readFile(path.join(root, "build/client/work/shared.png"), "utf8")).toBe("work asset");
+  expect(await readFile(path.join(root, "build/client/blog/rss.xml"), "utf8"))
+    .toContain("https://example.test/blog/about-2/");
+  expect(await readFile(path.join(root, "build/client/work/sitemap.xml"), "utf8"))
+    .toContain("https://example.test/work/");
   await access(path.join(root, ".svelte-kit/output/server/entries/pages/other/_page.svelte.js"));
   expect(await readFile(path.join(root, ".svartz/vaults/notes/artifacts/pages/index.svelte"), "utf8"))
     .toContain("Published note");
@@ -162,6 +173,10 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
     expect(workBody).not.toContain("Vault content");
     expect(await (await fetch(`http://127.0.0.1:${port}/blog/shared.png`)).text()).toBe("blog asset");
     expect(await (await fetch(`http://127.0.0.1:${port}/work/shared.png`)).text()).toBe("work asset");
+    const combinedFeed = await (await fetch(`http://127.0.0.1:${port}/rss.xml`)).text();
+    expect(combinedFeed).toContain("https://example.test/blog/");
+    expect(combinedFeed).toContain("https://example.test/work/");
+    expect(combinedFeed).not.toContain("Secret project");
     expect((await fetch(`http://127.0.0.1:${port}/work/private`)).status).toBe(404);
     const alias = await fetch(`http://127.0.0.1:${port}/blog/about-alt`, { redirect: "manual" });
     expect(alias.status).toBe(308);
@@ -172,4 +187,15 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
     dev.kill("SIGTERM");
     if (dev.exitCode === null) await once(dev, "exit");
   }
+
+  const configPath = path.join(root, "svartz.config.ts");
+  const configSource = await readFile(configPath, "utf8");
+  await writeFile(configPath, configSource.replace('id: "notes",',
+    'id: "notes", discovery: { feed: { enabled: false }, sitemap: { enabled: false } },'));
+  await execFileAsync(process.execPath, [
+    path.join(workspaceRoot, "packages/cli/dist/index.js"), "build", "--config", configPath,
+  ], { cwd: root, maxBuffer: 4_000_000 });
+  await expect(access(path.join(root, "build/client/blog/rss.xml"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(access(path.join(root, "build/client/blog/sitemap.xml"))).rejects.toMatchObject({ code: "ENOENT" });
+  await access(path.join(root, "build/client/work/rss.xml"));
 }, 20_000);

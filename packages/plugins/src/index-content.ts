@@ -10,6 +10,7 @@
 
 import { definePlugin } from "@svartz/core";
 import type {
+  DateSource,
   FolderIndexEntry,
   IndexEntry,
   IndexLink,
@@ -47,6 +48,21 @@ function folderTitle(slug: string): string {
     ?.replace(/[-_]/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase())
     ?? "Folder";
+}
+
+function chooseDate(
+  sources: readonly DateSource[],
+  frontmatter: unknown,
+  git: Date | undefined,
+  filesystem: Date | undefined,
+  format?: string,
+): Date {
+  for (const source of sources) {
+    const date = source === "frontmatter" ? normalizeDateTime(frontmatter, format)
+      : source === "git" ? git : filesystem;
+    if (date) return date;
+  }
+  return DEFAULT_INDEX_TIMESTAMP;
 }
 
 /** Route prefix config that themes may place under `theme.routes.*` in the vault config. */
@@ -111,14 +127,9 @@ export const indexContent = definePlugin(() => ({
             : extractDescription(file.content);
         const plainTextContent = stripMarkdownToText(file.content);
 
-        const createdAt =
-          normalizeDateTime(frontmatter[fm.createdAtField], fm.dateFormat) ??
-          file.createdAt ??
-          DEFAULT_INDEX_TIMESTAMP;
-        const modifiedAt =
-          normalizeDateTime(frontmatter[fm.updatedAtField], fm.dateFormat) ??
-          file.modifiedAt ??
-          DEFAULT_INDEX_TIMESTAMP;
+        const sources = ctx.config.discovery?.dateSources ?? ["frontmatter", "git", "filesystem"];
+        const createdAt = chooseDate(sources, frontmatter[fm.createdAtField], file.gitCreatedAt, file.createdAt, fm.dateFormat);
+        const modifiedAt = chooseDate(sources, frontmatter[fm.updatedAtField], file.gitModifiedAt, file.modifiedAt, fm.dateFormat);
 
         let publishedAt: Date | undefined;
         if (fm.publishedField) {

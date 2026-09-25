@@ -11,15 +11,11 @@ import { compile } from "mdsvex";
 import { Effect } from "effect";
 import MiniSearch from "minisearch";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
-import rehypeRaw from "rehype-raw";
 import rehypeSlug from "rehype-slug";
-import rehypeStringify from "rehype-stringify";
-import remarkParse from "remark-parse";
-import remarkRehype from "remark-rehype";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { definePlugin, getCompilerContributions, SEARCH_INDEX_OPTIONS, type Artifact, type Index } from "@svartz/core";
-import { unified } from "unified";
+import { renderMarkdown } from "./internal/render-markdown";
 
 type MdsvexOptions = NonNullable<Parameters<typeof compile>[1]>;
 
@@ -62,6 +58,7 @@ function serializeValue(value: unknown): string {
 }
 
 async function compileNoteComponent(
+  ctx: Parameters<typeof renderMarkdown>[0],
   file: {
     readonly path: string;
     readonly slug: string;
@@ -83,14 +80,7 @@ async function compileNoteComponent(
   ].join("\n");
 
   if (file.extension !== ".svx") {
-    const markdown = unified()
-      .use(remarkParse)
-      .use({ plugins: remarkPlugins ?? [] })
-      .use(remarkRehype, { allowDangerousHtml: true })
-      .use(rehypeRaw)
-      .use({ plugins: rehypePlugins ?? [] })
-      .use(rehypeStringify);
-    const html = String(await markdown.process(file.content));
+    const html = await renderMarkdown(ctx, file.content);
     return `${header}\n\n{@html ${JSON.stringify(html)}}`;
   }
 
@@ -154,7 +144,7 @@ export const emitArtifacts = definePlugin(() => ({
         noteFiles.map(async (file) => {
           const key = `pages/${file.slug}.svelte`;
           const path = join(artifactsRoot, key);
-          const contents = await compileNoteComponent(file, remarkPlugins, rehypePlugins);
+          const contents = await compileNoteComponent(ctx, file, remarkPlugins, rehypePlugins);
 
           const artifact: Artifact = {
             key,

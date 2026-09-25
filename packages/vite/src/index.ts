@@ -172,6 +172,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     theme = await loadThemeModule((id) => import(id), context.config, context.root);
     plugins = resolveRuntimePlugins(context.config, theme);
     const runnerContext = createRunnerContext();
+    runnerContext.meta.set("svartz:mode", context.mode);
     if (context.config.target.type === "host") {
       runnerContext.meta.set("reservedRoutes", await staticHostRoutes(context.root, context.config.mountPath));
     }

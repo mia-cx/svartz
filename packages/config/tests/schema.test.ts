@@ -57,6 +57,18 @@ describe("SvartzConfigSchema", () => {
     }
   });
 
+  it("requires a public base URL and at least one date source for discovery", () => {
+    const vault = { id: "blog", path: "vault", target: { type: "host" }, site: { title: "Blog" } };
+    for (const url of ["https://example.com/?preview=1", "https://user@example.com/", "https://example.com/#draft"]) {
+      expect(Either.isLeft(decode(SvartzConfigSchema, {
+        version: "1.0.0", vaults: [{ ...vault, site: { ...vault.site, url } }],
+      }))).toBe(true);
+    }
+    expect(Either.isLeft(decode(SvartzConfigSchema, {
+      version: "1.0.0", vaults: [{ ...vault, discovery: { dateSources: [] } }],
+    }))).toBe(true);
+  });
+
   it("rejects missing vaults field", () => {
     const result = decode(SvartzConfigSchema, { version: "1.0.0" });
     expect(Either.isLeft(result)).toBe(true);

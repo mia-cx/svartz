@@ -10,6 +10,7 @@ import { join, extname, relative } from "node:path";
 import { definePlugin } from "@svartz/core";
 import { fileToSlug } from "./internal/slug";
 import { shouldIgnore } from "./internal/ignore";
+import { readGitDates } from "./internal/git-dates";
 
 const MAX_SYMLINK_DEPTH = 4;
 const MARKDOWN_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
@@ -74,6 +75,8 @@ export const discoverFiles = definePlugin(() => ({
 
       await walk(vaultPath, 0);
       filePaths.sort((a, b) => a.localeCompare(b));
+      const gitDates = ctx.config.discovery?.dateSources.includes("git")
+        ? await readGitDates(vaultPath) : new Map();
 
       ctx.files = await Promise.all(
         filePaths.map(async (relPath) => {
@@ -91,6 +94,8 @@ export const discoverFiles = definePlugin(() => ({
             content,
             createdAt: fileStat.birthtime,
             modifiedAt: fileStat.mtime,
+            gitCreatedAt: gitDates.get(relPath)?.createdAt,
+            gitModifiedAt: gitDates.get(relPath)?.modifiedAt,
           };
         }),
       );

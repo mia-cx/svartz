@@ -4,9 +4,11 @@ import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import type {
   FrontmatterFields,
+  DiscoveryConfig,
   LinkResolutionStrategy,
   ResolvedBuildConfig,
   ResolvedConfig,
+  ResolvedDiscoveryConfig,
   ResolvedConfigSet,
   ResolvedFrontmatterConfig,
   ResolvedSiteConfig,
@@ -91,6 +93,23 @@ const mergeSite = (
   };
 };
 
+const mergeDiscovery = (
+  defaults: DiscoveryConfig | undefined,
+  vault: DiscoveryConfig | undefined,
+  publicUrl: string | undefined,
+): ResolvedDiscoveryConfig => ({
+  feed: {
+    enabled: vault?.feed?.enabled ?? defaults?.feed?.enabled ?? Boolean(publicUrl),
+    limit: vault?.feed?.limit ?? defaults?.feed?.limit ?? 10,
+    content: vault?.feed?.content ?? defaults?.feed?.content ?? "summary",
+    sort: vault?.feed?.sort ?? defaults?.feed?.sort ?? "published",
+  },
+  sitemap: {
+    enabled: vault?.sitemap?.enabled ?? defaults?.sitemap?.enabled ?? Boolean(publicUrl),
+  },
+  dateSources: vault?.dateSources ?? defaults?.dateSources ?? ["frontmatter", "git", "filesystem"],
+});
+
 // --- Build defaults ---
 
 const resolveBuildDefaults = (
@@ -152,6 +171,7 @@ const resolveVaultConfig = (
       }[],
     ) as readonly unknown[];
 
+    const site = mergeSite(defaults?.site, vault.site, vault.id);
     return {
       version: metadata.version,
       ...(metadata.$schema !== undefined && { $schema: metadata.$schema }),
@@ -167,7 +187,8 @@ const resolveVaultConfig = (
         DEFAULT_LINK_RESOLUTION,
       theme: mergeThemes(defaults?.theme, vault.theme, configDir),
       frontmatter: mergeFrontmatter(defaults?.frontmatter, vault.frontmatter),
-      site: mergeSite(defaults?.site, vault.site, vault.id),
+      site,
+      discovery: mergeDiscovery(defaults?.discovery, vault.discovery, site.url),
       mountPath: normalizeMountPath(vault.mountPath ?? defaults?.mountPath),
       target: vault.target,
       plugins,

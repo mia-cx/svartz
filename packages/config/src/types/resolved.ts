@@ -1,5 +1,6 @@
 import type {
   ResolvedBuildConfig,
+  ResolvedDiscoveryConfig,
   ResolvedConfig as CoreResolvedConfig,
   ResolvedFrontmatterConfig,
   ResolvedSiteConfig,
@@ -29,6 +30,7 @@ type ResolvedSvartzConfig = ResolvedConfigSet;
 
 export {
   type ResolvedBuildConfig,
+  type ResolvedDiscoveryConfig,
   type ResolvedConfig,
   type ResolvedConfigSet,
   type ResolvedFrontmatterConfig,

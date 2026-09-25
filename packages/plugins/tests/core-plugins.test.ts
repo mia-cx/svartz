@@ -8,7 +8,7 @@ describe("createCorePlugins", () => {
   it("returns correct number of plugins", () => {
     const plugins = createCorePlugins();
     expect(plugins).toHaveLength(CORE_PLUGIN_IDS.length);
-    expect(plugins).toHaveLength(14);
+    expect(plugins).toHaveLength(15);
   });
 
   it("returns plugins in canonical order matching CORE_PLUGIN_IDS", () => {
@@ -98,7 +98,7 @@ describe("createCorePlugins", () => {
   });
 
   it("CORE_PLUGIN_IDS is readonly (as const)", () => {
-    expect(CORE_PLUGIN_IDS.length).toBe(14);
+    expect(CORE_PLUGIN_IDS.length).toBe(15);
     // TypeScript `as const` prevents mutation at compile-time
   });
 });
@@ -119,5 +119,6 @@ describe("CORE_PLUGIN_IDS", () => {
     expect(CORE_PLUGIN_IDS).toContain("core:transform-embeds");
     expect(CORE_PLUGIN_IDS).toContain("core:index");
     expect(CORE_PLUGIN_IDS).toContain("core:emit-artifacts");
+    expect(CORE_PLUGIN_IDS).toContain("core:emit-discovery");
   });
 });

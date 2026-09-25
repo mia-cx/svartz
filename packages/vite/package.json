@@ -18,10 +18,14 @@
     "./host": {
       "import": "./dist/host.js",
       "types": "./dist/host.d.ts"
+    },
+    "./discovery": {
+      "import": "./dist/discovery.js",
+      "types": "./dist/discovery.d.ts"
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/host.ts --format esm --dts && tsup src/virtual-modules.ts --format esm",
+    "build": "tsup src/index.ts src/host.ts src/discovery.ts --format esm --dts && tsup src/virtual-modules.ts --format esm",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
