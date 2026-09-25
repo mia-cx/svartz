@@ -42,8 +42,8 @@
 	scroll-margin-block-start: var(--sv-space-6);
 }
 
-.sv-prose h1 { font-size: var(--sv-step-4); letter-spacing: -0.015em; }
-.sv-prose h2 { font-size: var(--sv-step-3); letter-spacing: -0.01em; }
+.sv-prose h1 { font-size: var(--sv-step-4); }
+.sv-prose h2 { font-size: var(--sv-step-3); }
 .sv-prose h3 { font-size: var(--sv-step-2); }
 .sv-prose h4 { font-size: var(--sv-step-1); }
 .sv-prose :is(h5, h6) { font-size: var(--sv-step-0); font-weight: 600; }
@@ -253,7 +253,6 @@
 	font-family: var(--sv-font-sans);
 	font-size: var(--sv-label-size);
 	font-weight: 600;
-	letter-spacing: var(--sv-label-tracking);
 	text-transform: uppercase;
 	white-space: nowrap;
 }
@@ -330,7 +329,6 @@
 	font-family: var(--sv-font-sans);
 	font-size: var(--sv-label-size);
 	font-weight: 600;
-	letter-spacing: var(--sv-label-tracking);
 	line-height: 1;
 	text-transform: uppercase;
 	pointer-events: none;
@@ -400,7 +398,6 @@
 	font-family: var(--sv-font-sans);
 	font-size: var(--sv-label-size);
 	font-weight: 700;
-	letter-spacing: var(--sv-label-tracking);
 	line-height: 1.6;
 	text-transform: uppercase;
 	list-style: none;
@@ -479,7 +476,6 @@
 	font-family: var(--sv-font-sans);
 	font-size: var(--sv-label-size);
 	font-weight: 600;
-	letter-spacing: var(--sv-label-tracking);
 	text-transform: uppercase;
 }
 

@@ -251,7 +251,6 @@
 		color: var(--sv-ink);
 		font-size: var(--sv-step-4);
 		font-weight: 700;
-		letter-spacing: -0.02em;
 		line-height: 1.1;
 	}
 
@@ -265,7 +264,6 @@
 	.page-head .symbol-name {
 		font-family: var(--sv-font-mono);
 		font-size: var(--sv-step-3);
-		letter-spacing: 0;
 		overflow-wrap: anywhere;
 	}
 

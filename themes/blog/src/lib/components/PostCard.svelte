@@ -70,7 +70,6 @@
 		margin: 0;
 		font-size: var(--sv-step-2);
 		font-weight: 700;
-		letter-spacing: -0.015em;
 		line-height: 1.2;
 		text-wrap: balance;
 	}

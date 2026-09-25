@@ -255,7 +255,6 @@
 		color: var(--sv-muted);
 		font-size: var(--sv-label-size);
 		font-weight: 600;
-		letter-spacing: var(--sv-label-tracking);
 		text-align: start;
 		text-transform: uppercase;
 	}
@@ -325,7 +324,6 @@
 	.source code {
 		color: var(--sv-ink);
 		font-family: var(--sv-font-mono);
-		letter-spacing: 0;
 		text-transform: none;
 	}
 </style>

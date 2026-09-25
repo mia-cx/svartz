@@ -44,7 +44,7 @@ Both are self-hosted through Fontsource, so no page requests a font CDN.
 
 **Hierarchy through size.** Headings and titles are Archivo 700 at normal width (H5 and H6 at 600), stepping down the type scale. Only the label voice uses the width axis.
 
-**The label voice.** mCX's overline: Archivo in small tracked capitals at normal width (`.sv-label`, 0.7rem, 0.08em tracking). Metadata, callout titles, kind badges, method pills, dates, and counts all use it. This is the thread that ties the themes together: a Svartz page always labels things the same way.
+**The label voice.** mCX's overline: Archivo in small capitals, set as the font ships: no added width or letter-spacing (`.sv-label`, 0.7rem). Metadata, callout titles, kind badges, method pills, dates, and counts all use it. This is the thread that ties the themes together: a Svartz page always labels things the same way.
 
 **Scale.** The body is `1.0625rem` at leading 1.65. Steps are `--sv-step--2` to `--sv-step-5`, computed from `--sv-ratio`.
 

@@ -174,6 +174,5 @@
 		color: var(--sv-ink);
 		font-size: var(--sv-step-2);
 		font-weight: 700;
-		letter-spacing: -0.01em;
 	}
 </style>

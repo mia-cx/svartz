@@ -19,7 +19,6 @@
 		font-family: var(--sv-font-sans);
 		font-size: var(--sv-step-5);
 		font-weight: 700;
-		letter-spacing: -0.02em;
 		line-height: 1.05;
 	}
 

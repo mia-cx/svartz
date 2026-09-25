@@ -46,7 +46,7 @@ export function svartzSocialImage({ title, description, siteTitle }: SocialImage
   <rect width="1200" height="630" fill="${PAPER}"/>
   <rect x="84" y="86" width="26" height="26" rx="2" fill="${ACCENT}"/>
   <rect x="78" y="80" width="26" height="26" rx="2" fill="${INK}"/>
-  <text x="128" y="101" fill="${MUTED}" font-family="monospace" font-size="24" letter-spacing="2">${escapeXml(siteTitle.toUpperCase().slice(0, 48))}</text>
+  <text x="128" y="101" fill="${MUTED}" font-family="monospace" font-size="24">${escapeXml(siteTitle.toUpperCase().slice(0, 48))}</text>
   ${titleLines
 		.map(
 			(line, index) =>

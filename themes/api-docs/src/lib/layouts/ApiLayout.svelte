@@ -247,13 +247,11 @@
 		color: var(--sv-ink);
 		font-size: var(--sv-step-4);
 		font-weight: 700;
-		letter-spacing: -0.02em;
 		line-height: 1.1;
 	}
 
 	.head h1 code {
 		font-family: var(--sv-font-mono);
-		letter-spacing: 0;
 	}
 
 	.summary {

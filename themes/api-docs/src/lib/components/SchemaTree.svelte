@@ -134,7 +134,6 @@
 		color: var(--sv-accent-text);
 		font-size: var(--sv-label-size);
 		font-weight: 700;
-		letter-spacing: var(--sv-label-tracking);
 		text-transform: uppercase;
 	}
 

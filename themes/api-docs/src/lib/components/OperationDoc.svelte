@@ -141,7 +141,6 @@
 		color: var(--sv-ink);
 		font-size: var(--sv-step-4);
 		font-weight: 700;
-		letter-spacing: -0.02em;
 		line-height: 1.1;
 	}
 
@@ -234,7 +233,6 @@
 		color: var(--sv-accent-text);
 		font-size: var(--sv-label-size);
 		font-weight: 700;
-		letter-spacing: var(--sv-label-tracking);
 		text-transform: uppercase;
 	}
 
