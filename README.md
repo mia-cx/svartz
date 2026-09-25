@@ -1,37 +1,38 @@
 # Svartz
 
-A SvelteKit rewrite of [Quartz](https://github.com/jackyzha0/quartz).
+A SvelteKit publishing toolkit for Obsidian vaults, inspired by [Quartz](https://github.com/jackyzha0/quartz).
 
 Svartz is a set of tools that helps you publish your [digital garden](https://jzhao.xyz/posts/networked-thought) and notes as a website for free.
 
 Some notable differences from Quartz are:
 
-- More robust theming, with some first-party themes for:
-  - Notes (standard quartz-like)
-  - Package docs (scanning JSdoc & linking to source on github)
-  - API docs (input & output examples, route discovery for sveltekit & hono)
-  - (TTRPG) Wikis.
-- MDSveX by default, so you *can* use svelte components in your vault. (Can use [obsidian-markdown-file-suffix](https://github.com/git-no/obsidian-markdown-file-suffix) if you want to support different markdown extensions in Obsidian).
-- Deploy multiple vaults from the same repo, by defining them in config
+- A plugin pipeline with replaceable transformers and generators.
+- Markdown notes stay inert. Use `.svx` for authored Svelte components.
+- Multiple vaults and a built-in minimal theme. Vault locations live in `svartz.config.ts`.
 
 ## Monorepo build
 
-From the repo root, `pnpm build` runs `pnpm install` then `turbo build` (one install before the build, no per-package installs).
+From the repo root, run `pnpm i` once, then `pnpm build`.
 
 ## Usage
 
-Start using Svartz by either using this repository as a template, forking it, or using our init cli.
+Initialize the current directory without cloning this repository:
 
 ```bash
-pnpm dlx svartz init
+npx svartz@latest init
+npm run dev
 ```
+
+The initializer creates a small SvelteKit shell, `svartz.config.ts`, and `vault/index.md`. It uses npm by default and an existing project's package manager when one is declared. `npm run build` creates the static site; `npm run preview` serves the built output.
+
+In an existing SvelteKit app, the same command adds Svartz dependencies, configuration, and a Vite wrapper while preserving routes, layouts, adapter, and existing scripts. It adds `svartz:dev`, `svartz:build`, and `svartz:preview` scripts. Existing vault definitions remain in their config; `init` does not replace them. Use `--no-install` or `--no-git` when you want to handle those steps yourself.
 
 The local CLI is vault-aware:
 
 ```bash
-pnpm --filter svartz build
-pnpm --filter svartz build -- --vault docs
-pnpm --filter svartz dev -- --vault docs
+pnpm exec svartz build
+pnpm exec svartz build --vault docs
+pnpm exec svartz dev --vault docs
 ```
 
 - `svartz build` without `--vault` builds every configured vault.
@@ -40,7 +41,7 @@ pnpm --filter svartz dev -- --vault docs
 
 ### Managed Turbo tasks
 
-When the CLI resolves `svartz.config.ts`, it also syncs root-level Turbo/package automation for the configured vaults:
+For this repository's `apps/web` shell, the CLI also syncs root-level Turbo/package automation for the configured vaults:
 
 - Root `package.json` scripts are managed under the `svartz:*` namespace.
 - Root `turbo.json` tasks are managed under `//#svartz:*`.
@@ -82,7 +83,3 @@ Current behavior is correctness-first:
 - Test runtime fixtures live in `apps/web/src/lib/svartz/testing/fixtures/`.
 - `apps/web/vite.config.ts` aliases `virtual:svartz/theme` and `virtual:svartz/artifacts` to those files only in Vitest mode.
 - `@svartz/vite` tests cover vault change classification, rebuild triggering, and browser full-reload signaling.
-
-## TODO
-
-- [ ] Everything

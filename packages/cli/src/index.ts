@@ -41,6 +41,7 @@ import {
 import { writeGeneratedTailwindSourcesFile } from "./tailwind-sources";
 import { syncManagedTurboFiles } from "./turbo-sync";
 import { resolveAppLocation, type AppLocation } from "./workspace";
+import { initProject } from "./init";
 
 class CliAppRootMissing extends Data.TaggedError("CliAppRootMissing")<{
   readonly appRoot: string;
@@ -832,6 +833,22 @@ function createProgram(): Command {
     .name("svartz")
     .description("Build and serve static Svartz vault sites")
     .showHelpAfterError();
+
+  program
+    .command("init")
+    .description("Initialize Svartz in the current directory")
+    .option("--no-install", "Write the project without installing dependencies")
+    .option("--no-git", "Do not initialize a Git repository")
+    .action(async (options: { install: boolean; git: boolean }) => {
+      const result = await initProject(options);
+      if (result.kind === "already-configured") {
+        console.log("Svartz is already configured here. No files changed.");
+        return;
+      }
+      console.log(result.kind === "created" ? "Created a Svartz site." : "Added Svartz to this SvelteKit app.");
+      const script = result.kind === "created" ? "dev" : "svartz:dev";
+      console.log(`Run ${result.packageManager} run ${script} to start the vault.`);
+    });
 
   program
     .command("build")

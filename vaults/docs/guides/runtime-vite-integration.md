@@ -16,6 +16,8 @@ This keeps multi-vault builds isolated while preserving normal SvelteKit route p
 
 For an existing app, put `svartz.config.ts` beside its `package.json` and `vite.config.ts`. Set the vault target to `{ type: "host" }` and run `svartz build --vault <id>` or `svartz dev --vault <id>`. The CLI injects its Vite plugin for these commands. It keeps the host's scripts, routes, adapter, and `.svelte-kit` files. Svartz artifacts stay under `.svartz/vaults/<id>`; the host adapter decides the final output location. The host can import `virtual:svartz/artifacts` to use published content in its own pages.
 
+Run `npx svartz@latest init` in an existing app to add the config, dependencies, and `withSvartzHost` Vite wrapper. SvelteKit reloads the Vite config for its client build, so the wrapper keeps Svartz virtual modules available there. `init` leaves existing routes, layouts, adapter, build scripts, and configured vault paths intact.
+
 ## Config Handoff
 
 The CLI owns config discovery and resolution.

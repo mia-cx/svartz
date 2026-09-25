@@ -1,5 +1,7 @@
 # CLI: `svartz init` command design
 
+> Historical proposal. The implemented v1 behavior is tracked in [#18](implementation/18-init.md). The project initializes the current directory through `npx svartz@latest init`; it does not clone this repository or prompt for theme management.
+
 ## Overview
 
 `pnpm create svartz` or `pnpm dlx svartz init` scaffolds a new Svartz project.

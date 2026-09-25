@@ -1,0 +1,301 @@
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import {
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { resolveAppLocation } from "./workspace";
+
+const templateRoot = fileURLToPath(new URL("../template/", import.meta.url));
+const configName = "svartz.config.ts";
+const configNames = [
+  "svartz.config.ts",
+  "svartz.config.mjs",
+  "svartz.config.js",
+  ".svartzrc.ts",
+  ".svartzrc.mjs",
+  ".svartzrc.js",
+] as const;
+const svartzDependencies = [
+  "svartz",
+  "@svartz/config",
+  "@svartz/theme-minimal",
+  "@svartz/ui",
+  "@svartz/vite",
+] as const;
+
+type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
+type Manifest = {
+  name?: string;
+  private?: boolean;
+  type?: string;
+  packageManager?: string;
+  scripts?: Record<string, string>;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+};
+
+export type InitOptions = {
+  readonly cwd?: string;
+  readonly install?: boolean;
+  readonly git?: boolean;
+};
+
+export type InitResult = {
+  readonly kind: "created" | "integrated" | "already-configured";
+  readonly packageManager: PackageManager;
+};
+
+async function templateFiles(
+  directory = templateRoot,
+  relative = "",
+): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = await Promise.all(
+    entries.map(async (entry) => {
+      const name = path.join(relative, entry.name);
+      return entry.isDirectory()
+        ? templateFiles(path.join(directory, entry.name), name)
+        : [name];
+    }),
+  );
+  return files.flat().sort();
+}
+
+function packageManager(root: string, manifest?: Manifest): PackageManager {
+  const declared = manifest?.packageManager?.split("@")[0];
+  if (
+    declared === "npm" ||
+    declared === "pnpm" ||
+    declared === "yarn" ||
+    declared === "bun"
+  )
+    return declared;
+  if (existsSync(path.join(root, "pnpm-lock.yaml"))) return "pnpm";
+  if (existsSync(path.join(root, "yarn.lock"))) return "yarn";
+  if (
+    existsSync(path.join(root, "bun.lock")) ||
+    existsSync(path.join(root, "bun.lockb"))
+  )
+    return "bun";
+  return "npm";
+}
+
+function packageName(root: string): string {
+  return (
+    path
+      .basename(root)
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, "-")
+      .replace(/^[-.]+|[-.]+$/g, "") || "svartz-site"
+  );
+}
+
+function insideGitWorktree(root: string): boolean {
+  return (
+    spawnSync("git", ["rev-parse", "--is-inside-work-tree"], {
+      cwd: root,
+      stdio: "ignore",
+    }).status === 0
+  );
+}
+
+function freshManifest(root: string): Manifest {
+  return {
+    name: packageName(root),
+    private: true,
+    type: "module",
+    scripts: {
+      dev: "svartz dev --vault notes",
+      build: "svartz build --vault notes",
+      preview: "svartz preview --vault notes",
+      prepare: "svelte-kit sync",
+    },
+    devDependencies: {
+      "@svartz/config": "latest",
+      "@svartz/theme-minimal": "latest",
+      "@svartz/ui": "latest",
+      "@svartz/vite": "latest",
+      svartz: "latest",
+      "@sveltejs/adapter-static": "^3.0.10",
+      "@sveltejs/kit": "^2.50.2",
+      "@sveltejs/vite-plugin-svelte": "^6.2.4",
+      "@tailwindcss/forms": "^0.5.11",
+      "@tailwindcss/typography": "^0.5.19",
+      "@tailwindcss/vite": "^4.1.18",
+      mdsvex: "^0.12.6",
+      svelte: "^5.51.0",
+      tailwindcss: "^4.1.18",
+      typescript: "^5.9.3",
+      vite: "^7.3.1",
+    },
+  };
+}
+
+function integrateManifest(manifest: Manifest, vaultId?: string): Manifest {
+  const vaultFlag = vaultId ? ` --vault ${vaultId}` : "";
+  const scripts = { ...manifest.scripts };
+  scripts["svartz:dev"] ??= `svartz dev${vaultFlag}`;
+  scripts["svartz:build"] ??= `svartz build${vaultFlag}`;
+  scripts["svartz:preview"] ??= `svartz preview${vaultFlag}`;
+  const devDependencies = { ...manifest.devDependencies };
+  for (const name of svartzDependencies) {
+    if (!manifest.dependencies?.[name] && !devDependencies[name])
+      devDependencies[name] = "latest";
+  }
+  return { ...manifest, scripts, devDependencies };
+}
+
+function integrateViteConfig(source: string): string {
+  if (
+    /from\s+['"]@svartz\/vite\/host['"]/.test(source) &&
+    source.includes("withSvartzHost(")
+  )
+    return source;
+  const defaultExport = /^([ \t]*)export\s+default\s+/m;
+  if (!defaultExport.test(source)) {
+    throw new Error(
+      "Cannot integrate: Vite config has no default export. Add withSvartzHost from @svartz/vite/host manually.",
+    );
+  }
+  return `import { withSvartzHost } from '@svartz/vite/host';\n${source.replace(defaultExport, "$1const __svartz_host_config = ")}\nexport default withSvartzHost(__svartz_host_config);\n`;
+}
+
+async function writeNewFile(
+  destination: string,
+  content: string,
+): Promise<void> {
+  await mkdir(path.dirname(destination), { recursive: true });
+  const file = await open(destination, "wx");
+  try {
+    await file.writeFile(content);
+  } finally {
+    await file.close();
+  }
+}
+
+async function run(
+  command: string,
+  args: string[],
+  cwd: string,
+): Promise<void> {
+  const child = spawn(
+    process.platform === "win32" ? `${command}.cmd` : command,
+    args,
+    {
+      cwd,
+      stdio: "inherit",
+    },
+  );
+  const code = await new Promise<number>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", (status) => resolve(status ?? 1));
+  });
+  if (code !== 0)
+    throw new Error(
+      `${command} ${args.join(" ")} failed with exit code ${code}`,
+    );
+}
+
+/** Initialize the invocation directory without replacing consumer-owned files. */
+export async function initProject(
+  options: InitOptions = {},
+): Promise<InitResult> {
+  const root = path.resolve(options.cwd ?? process.cwd());
+  const location = resolveAppLocation(root);
+  const existingConfig = configNames
+    .map((name) => path.join(root, name))
+    .find(existsSync);
+  const existingManifestPath = path.join(root, "package.json");
+  const existingManifest = existsSync(existingManifestPath)
+    ? (JSON.parse(await readFile(existingManifestPath, "utf8")) as Manifest)
+    : undefined;
+  const manager = packageManager(root, existingManifest);
+
+  if (location.hostApp) {
+    const viteSource = await readFile(location.viteConfigPath, "utf8");
+    const integratedViteSource = integrateViteConfig(viteSource);
+    const integratedManifest = integrateManifest(
+      existingManifest ?? {},
+      existingConfig ? undefined : "notes",
+    );
+    const manifestChanged =
+      JSON.stringify(existingManifest) !== JSON.stringify(integratedManifest);
+    if (
+      existingConfig &&
+      integratedViteSource === viteSource &&
+      !manifestChanged
+    ) {
+      return { kind: "already-configured", packageManager: manager };
+    }
+    if (!existingConfig) {
+      const vaultPath = path.join(root, "vault");
+      if (existsSync(vaultPath) && !(await stat(vaultPath)).isDirectory()) {
+        throw new Error(
+          "Cannot initialize: vault exists and is not a directory.",
+        );
+      }
+      const siteName = existingManifest?.name ?? packageName(root);
+      const config = (
+        await readFile(path.join(templateRoot, configName), "utf8")
+      ).replace("__SVARTZ_SITE_NAME__", JSON.stringify(siteName));
+      const starterNote = path.join(vaultPath, "index.md");
+      await writeNewFile(path.join(root, configName), config);
+      if (!existsSync(starterNote)) {
+        await writeNewFile(
+          starterNote,
+          await readFile(path.join(templateRoot, "vault/index.md"), "utf8"),
+        );
+      }
+    }
+    if (integratedViteSource !== viteSource)
+      await writeFile(location.viteConfigPath, integratedViteSource);
+    if (manifestChanged)
+      await writeFile(
+        existingManifestPath,
+        `${JSON.stringify(integratedManifest, null, 2)}\n`,
+      );
+    if (options.install !== false) await run(manager, ["install"], root);
+    return { kind: "integrated", packageManager: manager };
+  }
+
+  if (existingConfig) {
+    if (existsSync(location.viteConfigPath))
+      return { kind: "already-configured", packageManager: manager };
+    throw new Error(
+      "Cannot initialize: Svartz config exists, but no SvelteKit app was found. No files changed.",
+    );
+  }
+
+  const files = await templateFiles();
+  const destinationName = (name: string) =>
+    name === "gitignore" ? ".gitignore" : name;
+  const conflicts = [...files.map(destinationName), "package.json"].filter(
+    (name) => existsSync(path.join(root, name)),
+  );
+  if (conflicts.length)
+    throw new Error(
+      `Cannot initialize: these files already exist: ${conflicts.join(", ")}`,
+    );
+  const siteName = packageName(root);
+  for (const name of files) {
+    const content = (
+      await readFile(path.join(templateRoot, name), "utf8")
+    ).replaceAll("__SVARTZ_SITE_NAME__", JSON.stringify(siteName));
+    await writeNewFile(path.join(root, destinationName(name)), content);
+  }
+  await writeNewFile(
+    existingManifestPath,
+    `${JSON.stringify(freshManifest(root), null, 2)}\n`,
+  );
+  if (options.git !== false && !insideGitWorktree(root))
+    await run("git", ["init"], root);
+  if (options.install !== false) await run(manager, ["install"], root);
+  return { kind: "created", packageManager: manager };
+}
