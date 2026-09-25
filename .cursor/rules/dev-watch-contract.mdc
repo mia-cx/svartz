@@ -1,10 +1,6 @@
 ---
 description: Svartz dev watch and restart contract for CLI/Vite/plugin work
-globs:
-  - packages/cli/**
-  - packages/vite/**
-  - packages/plugins/**
-  - packages/config/**
+globs: packages/cli/**, packages/vite/**, packages/plugins/**, packages/config/**
 alwaysApply: false
 ---
 

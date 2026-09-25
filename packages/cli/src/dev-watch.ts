@@ -80,12 +80,11 @@ function isLocalWorkspacePackage(packageRoot: string, workspaceRoot: string): bo
   return isInWorkspace && !isInNodeModules;
 }
 
-/** Watch editable themes, rebuilding workspace packages by their manifest name. */
+/** Watch editable themes and rebuild local packages before restarting dev. */
 function getThemeWatchDescriptors(
   themeBase: string,
   appRoot: string,
   workspaceRoot: string,
-  buildWorkspaceTheme = true,
 ): WatchDescriptor[] {
   const themeRoot = resolveThemePackageRoot(themeBase, appRoot);
   if (!themeRoot) return [];
@@ -98,7 +97,7 @@ function getThemeWatchDescriptors(
 
   const packageJsonPath = path.join(themeRoot, "package.json");
   const manifest = JSON.parse(readFileSync(packageJsonPath, "utf8")) as { name?: unknown };
-  const buildFilters = buildWorkspaceTheme && typeof manifest.name === "string" ? [manifest.name] : [];
+  const buildFilters = typeof manifest.name === "string" ? [manifest.name] : [];
   const sourcePath = path.join(themeRoot, "src");
   return [
     {

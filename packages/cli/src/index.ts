@@ -431,7 +431,7 @@ const loadDevWatchContext = async (
   ];
 
   for (const vault of vaults) {
-    descriptors.push(...getThemeWatchDescriptors(vault.theme.base, workspace.appRoot, workspaceRoot, !workspace.hostApp));
+    descriptors.push(...getThemeWatchDescriptors(vault.theme.base, workspace.appRoot, workspaceRoot));
   }
 
   return {
