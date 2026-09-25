@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { mergePlugins } from "@svartz/core";
-import { lstat, readdir, readlink, realpath, stat } from "node:fs/promises";
+import { lstat, readlink, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import type {
   FrontmatterFields,
@@ -143,15 +143,22 @@ const normalizeMountPath = (value: string | undefined): string => {
 };
 
 const isWithin = (root: string, candidate: string): boolean => {
-  const path = relative(root, candidate);
+  // Build roots must remain distinct on case-insensitive hosts too.
+  const path = relative(root.normalize("NFC").toLowerCase(), candidate.normalize("NFC").toLowerCase());
   return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 };
 
 const MAX_BUILD_ROOT_SYMLINKS = 40;
 const BUILD_ROOT_SEPARATORS = sep === "\\" ? /[\\/]/ : /\//;
 
+const ordinaryWindowsPath = (path: string): string => {
+  if (sep !== "\\" || !path.startsWith("\\\\?\\")) return path;
+  return path.startsWith("\\\\?\\UNC\\") ? `\\\\${path.slice(8)}` : path.slice(4);
+};
+
 /** Follow symlink targets in filesystem order, including `..` after another symlink. */
 const canonicalBuildRoot = async (path: string): Promise<string> => {
+  path = ordinaryWindowsPath(path);
   let current = parse(path).root;
   let remaining = path.slice(current.length).split(BUILD_ROOT_SEPARATORS);
   let linksFollowed = 0;
@@ -174,28 +181,14 @@ const canonicalBuildRoot = async (path: string): Promise<string> => {
       continue;
     }
     if (!entry.isSymbolicLink()) {
-      const names = await readdir(current);
-      const folded = segment.normalize("NFC").toLowerCase();
-      let actual = names.find((name) => name === segment) ??
-        names.find((name) => name.normalize("NFC").toLowerCase() === folded);
-      if (!actual) {
-        for (const name of names) {
-          const sibling = await lstat(join(current, name));
-          if (sibling.dev === entry.dev && sibling.ino === entry.ino) {
-            actual = name;
-            break;
-          }
-        }
-      }
-      if (!actual) throw new Error(`Build-root component disappeared at ${candidate}`);
-      current = await realpath(join(current, actual));
+      current = ordinaryWindowsPath(await realpath(candidate));
       continue;
     }
 
     if (++linksFollowed > MAX_BUILD_ROOT_SYMLINKS) {
       throw new Error(`Build-root symlink cycle at ${candidate}`);
     }
-    const target = await readlink(candidate);
+    const target = ordinaryWindowsPath(await readlink(candidate));
     const absoluteTarget = isAbsolute(target);
     const targetRoot = parse(target).root;
     if (absoluteTarget) current = sep === "\\" && targetRoot.length === 1 ? parse(current).root : targetRoot;
