@@ -179,6 +179,16 @@ it.each(["^3.4.17", "3.x", ">=3 <4", "v3.4.17"])("rejects a Tailwind 3 host befo
   await expect(access(path.join(root, "svartz.config.ts"))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
+it("accepts a Tailwind 4 prerelease containing 3 in its suffix", async () => {
+  const root = await fixture();
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0", tailwindcss: "^4.0.0-dev3" },
+  }));
+
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
+});
+
 it("preserves host app types and adds virtual module declarations once", async () => {
   const root = await fixture();
   await mkdir(path.join(root, "src"));
@@ -320,6 +330,21 @@ it("wraps the Vite default export even if an imported helper is called elsewhere
   const source = await readFile(path.join(root, "vite.config.ts"), "utf8");
   expect(source).toContain("const auxiliary = wrapHost({});");
   expect(source).toContain("export default wrapHost(__svartz_host_config)");
+});
+
+it.each([
+  "export default $host({ plugins: [] });",
+  "export default ($host)({ plugins: [] });",
+])("recognizes an existing host wrapper with a dollar-sign alias", async (defaultExport) => {
+  const root = await fixture();
+  const config = `import { withSvartzHost as $host } from '@svartz/vite/host';\n${defaultExport}\n`;
+  await writeFile(path.join(root, "vite.config.ts"), config);
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  await initProject({ cwd: root, install: false, git: false });
+  expect(await readFile(path.join(root, "vite.config.ts"), "utf8")).toBe(config);
 });
 
 it("keeps a host-owned catchall route", async () => {

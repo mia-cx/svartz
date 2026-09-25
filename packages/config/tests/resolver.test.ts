@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtemp, mkdir, rm, stat, symlink } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, parse, resolve } from "node:path";
 import {
@@ -179,7 +179,6 @@ describe("resolveConfigPaths", () => {
     const root = await mkdtemp(resolve(tmpdir(), "svartz-case-build-roots-"));
     try {
       await mkdir(resolve(root, "Shared"));
-      const caseInsensitive = await stat(resolve(root, "shared")).then(() => true, () => false);
       const config: SvartzConfig = {
         version: "1.0.0",
         vaults: [
@@ -187,9 +186,43 @@ describe("resolveConfigPaths", () => {
           { id: "work", path: VALID_VAULT, outDir: "shared/blog/dist", target: { type: "host" }, mountPath: "/work" },
         ],
       };
-      if (caseInsensitive) await expect(resolveConfig(config, root)).rejects.toThrow(VaultBuildRootConflict);
-      else await expect(resolveConfig(config, root)).resolves.toBeDefined();
+      await expect(resolveConfig(config, root)).rejects.toThrow(VaultBuildRootConflict);
     } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("rejects build roots that differ only by case before either exists", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "svartz-missing-case-build-roots-"));
+    try {
+      const config: SvartzConfig = {
+        version: "1.0.0",
+        vaults: [
+          { id: "blog", path: VALID_VAULT, outDir: "Future/blog/dist", target: { type: "host" }, mountPath: "/blog" },
+          { id: "work", path: VALID_VAULT, outDir: "future/blog/dist", target: { type: "host" }, mountPath: "/work" },
+        ],
+      };
+      await expect(resolveConfig(config, root)).rejects.toThrow(VaultBuildRootConflict);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("resolves build roots through accessible but non-listable ancestors", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "svartz-non-listable-build-roots-"));
+    try {
+      await mkdir(resolve(root, "shared"));
+      await mkdir(resolve(root, "shared/blog"));
+      await mkdir(resolve(root, "shared/work"));
+      await chmod(resolve(root, "shared"), 0o111);
+      const config: SvartzConfig = {
+        version: "1.0.0",
+        vaults: [
+          { id: "blog", path: VALID_VAULT, outDir: "shared/blog/dist", target: { type: "host" }, mountPath: "/blog" },
+          { id: "work", path: VALID_VAULT, outDir: "shared/work/dist", target: { type: "host" }, mountPath: "/work" },
+        ],
+      };
+      await expect(resolveConfig(config, root)).resolves.toBeDefined();
+    } finally {
+      await chmod(resolve(root, "shared"), 0o755);
       await rm(root, { recursive: true, force: true });
     }
   });
