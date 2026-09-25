@@ -57,7 +57,8 @@ export function ancestorFolderIdsForSlug(slug: string | undefined): string[] {
 export function buildBreadcrumbs(
 	slug: string | undefined,
 	entries: readonly UiIndexEntry[] = [],
-	homeHref = '/'
+	homeHref = '/',
+	folders: readonly Pick<UiFolderEntry, 'slug' | 'href'>[] = []
 ): Breadcrumb[] {
 	if (!slug || slug === 'index') {
 		return [{ title: 'Home', href: homeHref }];
@@ -65,13 +66,16 @@ export function buildBreadcrumbs(
 
 	const segments = slug.split('/');
 	const breadcrumbs: Breadcrumb[] = [{ title: 'Home', href: homeHref }];
+	const rootHref = homeHref.endsWith('/') ? homeHref : `${homeHref}/`;
 	let current = '';
 
 	for (const segment of segments) {
 		current = current ? `${current}/${segment}` : segment;
 		breadcrumbs.push({
 			title: titleFromSlugSegment(segment),
-			href: entries.find((entry) => entry.slug === current)?.href ?? slugToHref(current)
+			href: entries.find((entry) => entry.slug === current)?.href
+				?? folders.find((folder) => folder.slug === current)?.href
+				?? `${rootHref}${current}/`
 		});
 	}
 

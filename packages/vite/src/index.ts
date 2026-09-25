@@ -55,7 +55,7 @@ import {
 } from "./plugins";
 import { createVaultChangeEvent } from "./watch";
 import { isHostRouteFile, staticHostRoutes } from "./manual-routes";
-import { createHostRegistrySource, getGeneratedHostRegistryPath } from "./host-registry";
+import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath } from "./host-registry";
 import { emitProtectedGroupArtifacts } from "./protected-payload";
 import { writeProtectedBridgeModules, type ProtectedBridgeModule } from "./protected-bridge";
 
@@ -233,6 +233,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
               emittedBrowserResources,
               context.config.id,
               protectedBridgeModules,
+              deploymentBasePath(context.config),
             ),
           ),
         ],
@@ -416,6 +417,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
           emittedBrowserResources,
           context.config.id,
           protectedBridgeModules,
+          deploymentBasePath(context.config),
         );
       }
 

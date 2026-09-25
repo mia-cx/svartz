@@ -131,9 +131,9 @@
 	</aside>
 
 	<main class="content-column" id="main-content" tabindex="-1">
-		<Breadcrumbs slug={breadcrumbSlug} entries={visibleEntries} {homeHref} />
+		<Breadcrumbs slug={breadcrumbSlug} entries={visibleEntries} {homeHref} folders={vault?.folders} />
 		{#if entry}
-			<NoteHeader {entry} />
+			<NoteHeader {entry} tags={vault?.tags} />
 		{/if}
 		<section class="page-body">
 			{@render children?.()}

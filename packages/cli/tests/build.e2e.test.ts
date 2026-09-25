@@ -73,7 +73,7 @@ describe("svartz CLI", () => {
       await writeFile(configPath, `export default {
         version: "1.0.0",
         vaults: [{ id: "docs", path: "vaults/docs",
-          target: { type: "static" }, site: { title: "Docs", url: "https://example.test" } }],
+          target: { type: "static", basePath: "/site" }, site: { title: "Docs", url: "https://example.test/site" } }],
       };\n`);
       await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
       await access(resolve(DIST_ROOT, "__svartz/social/index.png"));
@@ -84,12 +84,20 @@ describe("svartz CLI", () => {
       await access(resolve(ROOT, ".svartz/vaults/docs/artifacts/runtime-theme.ts"));
       await access(resolve(ROOT, ".svartz/vaults/docs/artifacts/runtime-artifacts.ts"));
       const html = await readFile(resolve(DIST_ROOT, "index.html"), "utf8");
-      expect(html).toContain("https://example.test/__svartz/social/index.png");
-      expect(html).toContain('<link rel="canonical" href="https://example.test/"');
+      expect(html).toContain("https://example.test/site/__svartz/social/index.png");
+      expect(html).toContain('<link rel="canonical" href="https://example.test/site/"');
+      expect(html).toContain('property="og:url" content="https://example.test/site/"');
+      expect(html).toContain('href="https://example.test/site/__svartz/favicon.svg"');
+      expect(html).not.toContain("/site/site/");
       expect(html).toContain('property="og:title"');
+      expect(html).toContain("Svartz Documentation Vault");
+      const noteHtml = await readFile(resolve(DIST_ROOT, "guides/create-plugin/index.html"), "utf8");
+      expect(noteHtml).toContain('<link rel="canonical" href="https://example.test/site/guides/create-plugin/"');
+      expect(noteHtml).toContain('property="og:image" content="https://example.test/site/__svartz/social/guides/create-plugin.png"');
+      expect(noteHtml).not.toContain("/site/site/");
       const sitemap = await readFile(DIST_SITEMAP_PATH, "utf8");
-      expect(sitemap).toContain("<loc>https://example.test/</loc>");
-      expect(sitemap).toContain("<loc>https://example.test/tags/guides/</loc>");
+      expect(sitemap).toContain("<loc>https://example.test/site/</loc>");
+      expect(sitemap).toContain("<loc>https://example.test/site/tags/guides/</loc>");
       expect(sitemap).not.toContain("404.html");
     } finally {
       await rm(configPath, { force: true });

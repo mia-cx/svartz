@@ -162,12 +162,14 @@ declare module 'virtual:svartz/artifacts' {
 		author?: string;
 		image?: string;
 	}>;
+	export const deploymentBasePath: string;
 }
 
 declare module 'virtual:svartz/host' {
 	interface HostVaultMetadata {
 		readonly id: string;
 		readonly mountPath: string;
+		readonly basePath: string;
 		readonly artifacts: Pick<typeof import('virtual:svartz/artifacts'), 'index' | 'siteConfig'>;
 	}
 	interface PreparedHostVault extends HostVaultMetadata {

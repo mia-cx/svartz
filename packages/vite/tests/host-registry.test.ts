@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ResolvedConfig } from "@svartz/core";
-import { createHostRegistrySource, getGeneratedHostRegistryPath } from "../src/host-registry";
+import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath } from "../src/host-registry";
 
 const vault = (id: string, mountPath: string): ResolvedConfig => ({
   version: "1.0.0",
@@ -32,8 +32,17 @@ describe("host registry", () => {
     expect(source).not.toMatch(/import \* as (?:artifacts|theme)/);
     expect(source).toContain('mountPath: "/blog"');
     expect(source).toContain('mountPath: "/work"');
+    expect(source).toContain('basePath: ""');
     expect(source).toContain("await theme.ready;");
     expect(source).toContain("await preparing.get(selected.id);");
     expect(getGeneratedHostRegistryPath("/workspace")).toBe("/workspace/.svartz/host/runtime.ts");
+  });
+
+  it("uses the target or canonical host URL as the deployment base", () => {
+    expect(deploymentBasePath({ ...vault("docs", ""), target: { type: "static", basePath: "/site" } })).toBe("/site");
+    expect(deploymentBasePath({ ...vault("docs", ""), target: { type: "static" }, site: { title: "Docs", url: "https://example.test/site" } })).toBe("");
+    expect(deploymentBasePath({ ...vault("blog", "/blog"), site: { title: "Blog", url: "https://example.test/site" } })).toBe("/site");
+    expect(createHostRegistrySource([{ ...vault("blog", "/blog"), site: { title: "Blog", url: "https://example.test/site" } }]))
+      .toContain('basePath: "/site"');
   });
 });

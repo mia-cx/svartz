@@ -4,13 +4,15 @@
 	let {
 		slug,
 		entries = [],
-		homeHref = '/'
+		homeHref = '/',
+		folders = []
 	}: {
 		slug?: string;
 		entries?: readonly { slug: string; path?: string; title: string; href?: string }[];
 		homeHref?: string;
+		folders?: readonly { slug: string; href: string }[];
 	} = $props();
-	const items = $derived(buildBreadcrumbs(slug, entries, homeHref));
+	const items = $derived(buildBreadcrumbs(slug, entries, homeHref, folders));
 </script>
 
 <nav aria-label="Breadcrumbs">

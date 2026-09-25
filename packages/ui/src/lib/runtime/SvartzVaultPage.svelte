@@ -24,6 +24,7 @@
 	} = $props();
 	let unlockedGroups = $state<ReadonlyMap<string, ProtectedGroupPayload>>(new Map());
 	const discovery = $derived(runtimeArtifacts.createUnlockedVault([...unlockedGroups.values()]));
+	const vault = $derived(discovery.vault);
 	function revealGroup(id: string, payload: ProtectedGroupPayload): void {
 		unlockedGroups = new Map([...unlockedGroups, [id, payload]]);
 	}
@@ -42,7 +43,7 @@
 	const resolveRuntimeRoute = $derived(runtimeTheme.resolveRuntimeRoute);
 	const assets = $derived(runtimeArtifacts.assets);
 	const backlinks = $derived(discovery.index.backlinks);
-	const folders = $derived(runtimeArtifacts.folders);
+	const folders = $derived(vault.folders);
 	const getNoteArtifact = $derived(runtimeArtifacts.getNoteArtifact);
 	const graph = $derived(discovery.index.graph);
 	const hasNoteArtifact = $derived(runtimeArtifacts.hasNoteArtifact);
@@ -53,9 +54,9 @@
 	const searchIndex = $derived(discovery.searchIndex);
 	const searchOptions = $derived(runtimeArtifacts.searchOptions);
 	const siteConfig = $derived(runtimeArtifacts.siteConfig);
-	const tags = $derived(runtimeArtifacts.tags);
+	const deploymentBasePath = $derived(runtimeArtifacts.deploymentBasePath);
+	const tags = $derived(vault.tags);
 	const themeConfig = $derived(runtimeArtifacts.themeConfig);
-	const vault = $derived(discovery.vault);
 	$effect(() => {
 		if (!browser) return;
 		let released = false;
@@ -137,17 +138,24 @@
 		return resolveComponentModule(theme.layouts.notFoundPage);
 	}
 
-	function resolveAbsoluteUrl(value: string | undefined): string | undefined {
+	function resolveSiteAssetUrl(value: string | undefined): string | undefined {
 		if (!value || !siteConfig.url) return undefined;
 		if (/^https?:\/\//i.test(value)) return value;
 		return new URL(value.replace(/^\/+/, ''), `${siteConfig.url.replace(/\/+$/, '')}/`).href;
 	}
 
+	function resolvePublishedUrl(value: string | undefined): string | undefined {
+		if (!value || !siteConfig.url) return undefined;
+		if (/^https?:\/\//i.test(value)) return value;
+		const origin = new URL(siteConfig.url).origin;
+		return new URL(value, new URL(activePathname, origin)).href;
+	}
+
 	const activePathname = $derived(pathname);
 	const appPathname = $derived(
-		base && activePathname.startsWith(`${base}/`)
-			? activePathname.slice(base.length)
-			: activePathname === base
+		deploymentBasePath && activePathname.startsWith(`${deploymentBasePath}/`)
+			? activePathname.slice(deploymentBasePath.length)
+			: activePathname === deploymentBasePath
 				? '/'
 				: activePathname
 	);
@@ -201,8 +209,12 @@
 			: siteConfig.title
 	);
 	const pageDescription = $derived(entry?.description ?? siteConfig.description);
-	const canonicalUrl = $derived(resolveAbsoluteUrl(activePathname));
-	const socialImageUrl = $derived(resolveAbsoluteUrl(entry?.socialImage ?? siteConfig.image));
+	const canonicalUrl = $derived(resolvePublishedUrl(activePathname));
+	const socialImageUrl = $derived(
+		entry?.socialImage && entry.socialImage !== siteConfig.image
+			? resolvePublishedUrl(entry.socialImage)
+			: resolveSiteAssetUrl(siteConfig.image)
+	);
 
 	const layoutModule = $derived(resolveComponentModule(resolveLayoutReference(runtimeRoute)));
 	const pageModule = $derived(resolvePageModule(runtimeRoute));
@@ -217,13 +229,13 @@
 		<link
 			rel="icon"
 			href={siteConfig.url
-				? resolveAbsoluteUrl(index.favicon.svg ?? index.favicon.png)
+				? resolveSiteAssetUrl(index.favicon.svg ?? index.favicon.png)
 				: index.favicon.inline}
 			type={siteConfig.url && index.favicon.svg ? 'image/svg+xml' : 'image/png'}
 		/>
 		{#if siteConfig.url}<link
 				rel="apple-touch-icon"
-				href={resolveAbsoluteUrl(index.favicon.appleTouch)}
+				href={resolveSiteAssetUrl(index.favicon.appleTouch)}
 			/>{/if}
 	{/if}
 	{#if pageDescription}<meta name="description" content={pageDescription} />{/if}
