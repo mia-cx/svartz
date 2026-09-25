@@ -147,6 +147,10 @@ describe("VaultThemeConfigSchema", () => {
 });
 
 describe("TargetConfigSchema", () => {
+  it("accepts a host-owned SvelteKit adapter", () => {
+    expect(Either.isRight(decode(TargetConfigSchema, { type: "host" }))).toBe(true);
+  });
+
   it("accepts cloudflare-workers target with wrangler Route shapes (string, ZoneNameRoute)", () => {
     const result = decode(TargetConfigSchema, {
       type: "cloudflare-workers",

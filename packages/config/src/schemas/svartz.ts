@@ -65,6 +65,9 @@ const VaultOptionsSchema = Schema.Struct({
 
 const TargetConfigSchema = Schema.Union(
   Schema.Struct({
+    type: Schema.Literal("host"),
+  }),
+  Schema.Struct({
     type: Schema.Literal("cloudflare-workers"),
   }).pipe(Schema.extend(WranglerConfigSchema)),
   Schema.Struct({
@@ -79,7 +82,6 @@ const TargetConfigSchema = Schema.Union(
     type: Schema.Literal("node"),
     basePath: Schema.optional(Schema.String),
   }),
-  // TODO: add netlify, vercel, bun, etc.
 );
 
 const BuildOptionsSchema = Schema.Struct({

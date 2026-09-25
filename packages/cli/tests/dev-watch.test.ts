@@ -117,6 +117,8 @@ describe("CLI dev watch helpers", () => {
     expect(descriptors.some((descriptor) =>
       matchesWatchDescriptor(path.join(localThemeRoot, "src", "index.ts"), descriptor),
     )).toBe(true);
+    expect(getThemeWatchDescriptors(localThemeRoot, appRoot, workspaceRoot, false)[0]?.buildFilters)
+      .toEqual([]);
   });
 
   it("uses the same project-relative theme in config and Vite", async () => {

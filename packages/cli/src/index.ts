@@ -40,6 +40,7 @@ import {
 } from "./dev-watch";
 import { writeGeneratedTailwindSourcesFile } from "./tailwind-sources";
 import { syncManagedTurboFiles } from "./turbo-sync";
+import { resolveAppLocation, type AppLocation } from "./workspace";
 
 class CliAppRootMissing extends Data.TaggedError("CliAppRootMissing")<{
   readonly appRoot: string;
@@ -88,9 +89,8 @@ type PreviewOptions = BuildOptions & {
   readonly port?: string;
 };
 
-type WorkspaceContext = {
+type WorkspaceContext = AppLocation & {
   readonly config: ResolvedConfigSet;
-  readonly appRoot: string;
 };
 
 type DevWatchContext = {
@@ -116,9 +116,6 @@ const runEffect = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
     if (Either.isRight(result)) return result.right;
     throw result.left;
   });
-
-const workspaceRootFromAppRoot = (appRoot: string): string =>
-  path.resolve(appRoot, "../..");
 
 const dedupeWatchDescriptors = (
   descriptors: readonly WatchDescriptor[],
@@ -346,15 +343,16 @@ const loadWorkspace = (configPath?: string): Effect.Effect<WorkspaceContext, Cli
       try: () => loadConfig(configPath),
       catch: (cause) => cause as Error,
     });
-    yield* Effect.tryPromise({
-      try: () => syncManagedTurboFiles(config),
-      catch: (cause) => cause as Error,
-    });
+    const location = resolveAppLocation(config.configDir);
+    if (!location.hostApp) {
+      yield* Effect.tryPromise({
+        try: () => syncManagedTurboFiles(config),
+        catch: (cause) => cause as Error,
+      });
+    }
+    yield* ensureDirectory(location.appRoot);
 
-    const appRoot = path.join(config.configDir, "apps/web");
-    yield* ensureDirectory(appRoot);
-
-    return { config, appRoot };
+    return { config, ...location };
   });
 
 const selectVault = (
@@ -390,19 +388,19 @@ const loadDevWatchContext = async (
 ): Promise<DevWatchContext> => {
   const workspace = await runEffect(loadWorkspace(options.config));
   const vault = await runEffect(selectVault(workspace.config, options.vault));
-  const workspaceRoot = workspaceRootFromAppRoot(workspace.appRoot);
+  const workspaceRoot = workspace.projectRoot;
 
   const descriptors: WatchDescriptor[] = [
     ...getConfigWatchDescriptors(workspace.config.configDir, options.config),
     {
-      path: path.join(workspace.appRoot, "vite.config.ts"),
-      label: "apps/web vite config",
+      path: workspace.viteConfigPath,
+      label: "SvelteKit Vite config",
       exact: true,
     },
-    ...createWorkspaceSourceWatchDescriptors(workspaceRoot),
+    ...(!workspace.hostApp ? createWorkspaceSourceWatchDescriptors(workspaceRoot) : []),
   ];
 
-  descriptors.push(...getThemeWatchDescriptors(vault.theme.base, workspace.appRoot, workspaceRoot));
+  descriptors.push(...getThemeWatchDescriptors(vault.theme.base, workspace.appRoot, workspaceRoot, !workspace.hostApp));
 
   return {
     workspace,
@@ -424,25 +422,28 @@ const ensureBuildTargetSupported = (
       });
 
 const createAppConfig = (
-  appRoot: string,
+  workspace: WorkspaceContext,
   vault: ResolvedConfig,
   mode: "development" | "production",
   command: "serve" | "build",
   serverOptions?: Partial<ServerOptions>,
 ): Effect.Effect<InlineConfig, CliError> =>
   Effect.gen(function* () {
+    const { appRoot, projectRoot, hostApp, viteConfigPath } = workspace;
     yield* ensureVaultWorkspace(appRoot, vault);
-    yield* ensureVaultKitSymlink(appRoot, vault);
+    if (!hostApp) yield* ensureVaultKitSymlink(appRoot, vault);
     process.chdir(appRoot);
-    applyPlatformEnvForVault(vault);
+    if (!hostApp) applyPlatformEnvForVault(vault);
     process.env["SVARTZ_OUT_DIR"] = vault.outDir;
-    process.env["SVARTZ_KIT_OUT_DIR"] = kitOutDirForVault(vault);
+    if (hostApp) delete process.env["SVARTZ_KIT_OUT_DIR"];
+    else process.env["SVARTZ_KIT_OUT_DIR"] = kitOutDirForVault(vault);
     process.env["SVARTZ_BASE_PATH"] = basePathForVault(vault);
-    process.env["SVARTZ_TARGET_TYPE"] = vault.target.type;
+    if (hostApp) delete process.env["SVARTZ_TARGET_TYPE"];
+    else process.env["SVARTZ_TARGET_TYPE"] = vault.target.type;
     process.env["SVARTZ_THEME_MODULE_PATH"] = getGeneratedRuntimeThemeModulePath(vault);
     process.env["SVARTZ_ARTIFACTS_MODULE_PATH"] = getGeneratedRuntimeArtifactsModulePath(vault);
     const themeRoot = resolveThemePackageRoot(vault.theme.base, appRoot);
-    const workspaceRoot = workspaceRootFromAppRoot(appRoot);
+    const workspaceRoot = projectRoot;
     const themeSourceCandidate = themeRoot
       ? path.join(themeRoot, "src", "lib", "index.ts")
       : "";
@@ -466,7 +467,7 @@ const createAppConfig = (
       try: () =>
         loadConfigFromFile(
           { command, mode },
-          path.join(appRoot, "vite.config.ts"),
+          viteConfigPath,
           appRoot,
         ),
       catch: (cause) => cause as Error,
@@ -474,8 +475,8 @@ const createAppConfig = (
 
     if (!loaded) {
       return yield* new CliViteConfigMissing({
-        path: path.join(appRoot, "vite.config.ts"),
-        message: "Could not load apps/web/vite.config.ts.",
+        path: viteConfigPath,
+        message: `Could not load ${viteConfigPath}.`,
       });
     }
 
@@ -525,12 +526,11 @@ const isStaleVaultBuildLock = async (lockDir: string): Promise<boolean> => {
 };
 
 const withVaultBuildLock = (
-  appRoot: string,
+  projectRoot: string,
   fn: () => Promise<void>,
 ): Promise<void> =>
   new Promise((resolve, reject) => {
-    const workspaceRoot = path.resolve(appRoot, "../..");
-    const lockRoot = path.join(workspaceRoot, ".svartz");
+    const lockRoot = path.join(projectRoot, ".svartz");
     const lockDir = path.join(lockRoot, ".vault-build.lock");
     let waited = 0;
 
@@ -569,21 +569,21 @@ const withVaultBuildLock = (
   });
 
 const buildVault = (
-  appRoot: string,
+  workspace: WorkspaceContext,
   vault: ResolvedConfig,
 ): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
-    const supportedVault = yield* ensureBuildTargetSupported(vault);
+    const supportedVault = workspace.hostApp ? vault : yield* ensureBuildTargetSupported(vault);
     yield* Effect.tryPromise({
       try: () =>
-        withVaultBuildLock(appRoot, async () => {
+        withVaultBuildLock(workspace.projectRoot, async () => {
           try {
             const config = await runEffect(
-              createAppConfig(appRoot, supportedVault, "production", "build"),
+              createAppConfig(workspace, supportedVault, "production", "build"),
             );
             await viteBuild(config);
           } finally {
-            await removeVaultKitSymlink(appRoot, supportedVault);
+            if (!workspace.hostApp) await removeVaultKitSymlink(workspace.appRoot, supportedVault);
           }
         }),
       catch: (cause) => cause as Error,
@@ -591,19 +591,19 @@ const buildVault = (
   });
 
 const devVault = (
-  appRoot: string,
+  workspace: WorkspaceContext,
   vault: ResolvedConfig,
   options: DevOptions,
 ): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
-    const supportedVault = yield* ensureBuildTargetSupported(vault);
+    const supportedVault = workspace.hostApp ? vault : yield* ensureBuildTargetSupported(vault);
     const serverOptions: Partial<ServerOptions> = {};
 
     if (options.host) serverOptions.host = options.host;
     if (options.port) serverOptions.port = Number(options.port);
 
     const config = yield* createAppConfig(
-      appRoot,
+      workspace,
       supportedVault,
       "development",
       "serve",
@@ -625,14 +625,14 @@ const devVault = (
   });
 
 const previewVault = (
-  appRoot: string,
+  workspace: WorkspaceContext,
   vault: ResolvedConfig,
   options: PreviewOptions,
 ): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
-    const supportedVault = yield* ensureBuildTargetSupported(vault);
+    const supportedVault = workspace.hostApp ? vault : yield* ensureBuildTargetSupported(vault);
     const config = yield* createAppConfig(
-      appRoot,
+      workspace,
       supportedVault,
       "production",
       "build",
@@ -640,7 +640,7 @@ const previewVault = (
     // base is set via SVARTZ_BASE_PATH → svelte.config.js kit.paths.base; SvelteKit
     // overrides Vite's base, so merging base here would trigger the override warning.
     const previewConfig = mergeConfig(config, {
-      build: { outDir: supportedVault.outDir },
+      ...(workspace.hostApp ? {} : { build: { outDir: supportedVault.outDir } }),
       preview: {
         ...(options.host && { host: options.host }),
         ...(options.port && { port: Number(options.port) }),
@@ -657,7 +657,7 @@ const previewCommand = (options: PreviewOptions): Effect.Effect<void, CliError> 
   Effect.gen(function* () {
     const workspace = yield* loadWorkspace(options.config);
     const vault = yield* selectVault(workspace.config, options.vault);
-    yield* previewVault(workspace.appRoot, vault, options);
+    yield* previewVault(workspace, vault, options);
   });
 
 const createDevWatcher = (
@@ -690,7 +690,7 @@ const devRunnerCommand = (options: DevOptions): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
     const workspace = yield* loadWorkspace(options.config);
     const vault = yield* selectVault(workspace.config, options.vault);
-    yield* devVault(workspace.appRoot, vault, options);
+    yield* devVault(workspace, vault, options);
   });
 
 const runDevSupervisor = async (options: DevOptions): Promise<void> => {
@@ -798,13 +798,13 @@ const buildCommand = (options: BuildOptions): Effect.Effect<void, CliError> =>
     const workspace = yield* loadWorkspace(options.config);
     if (options.vault) {
       const vault = yield* selectVault(workspace.config, options.vault);
-      yield* buildVault(workspace.appRoot, vault);
+      yield* buildVault(workspace, vault);
       return;
     }
 
     yield* Effect.forEach(
       workspace.config.vaults,
-      (vault) => buildVault(workspace.appRoot, vault),
+      (vault) => buildVault(workspace, vault),
       { concurrency: 1 },
     );
   });
@@ -814,7 +814,7 @@ const buildAllCommand = (options: SharedOptions): Effect.Effect<void, CliError> 
     const workspace = yield* loadWorkspace(options.config);
     yield* Effect.forEach(
       workspace.config.vaults,
-      (vault) => buildVault(workspace.appRoot, vault),
+      (vault) => buildVault(workspace, vault),
       { concurrency: 1 },
     );
   });
