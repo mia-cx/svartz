@@ -1,132 +1,46 @@
-# @svartz/core
+# `@svartz/core`
 
-Shared types, plugin contract, theme contract, and utilities for Svartz. Author-facing APIs are Effect-free; Effect Schema is used internally for runtime validation.
+Shared plugin and theme contracts, resolved vault types, route matching, publication-safe vault views, and protected-note helpers. Plugin and theme author APIs do not require Effect. Plugin shapes and key theme fields are checked at runtime.
 
-## What lives here
+## Plugin contract
 
-### Shared types
-
-Resolved configuration types used by `@svartz/config` and `@svartz/vite-plugin`:
-
-- `ResolvedSvartzConfig`, `ResolvedVaultConfig`, `ResolvedVaultDefaults`
-- `ResolvedFrontmatterConfig`, `ResolvedThemeConfig`, `ResolvedBuildConfig`
-
-Pipeline types for the plugin system:
-
-- `ProcessedFile`, `ChangeEvent`, `RawLink`
-- `Index`, `IndexEntry`, `IndexLink`
-- `Graph`, `GraphTarget`
-- `MaybePromise<T>`
-
-Shared primitives:
-
-- `LinkResolutionStrategy`, `TargetConfig`
-
-### Plugin contract
-
-Plugin interfaces and hook types:
-
-- `SvartzPlugin` (author-facing), `NormalizedSvartzPlugin` (runner-facing)
-- `PluginContext`, `PluginHook`, `PluginChangeHook`
-- `HookOptions`, `PluginHookInput`, `PluginChangeHookInput`
-- `StageName`, `STAGE_NAMES`
-
-Plugin utilities:
-
-- `definePlugin(factory)` — wrap a plugin factory with validation + normalization
-- `normalizePlugin(plugin)` — convert shorthand hooks to object form
-- `mergePlugins(defaults, vault)` — layered merge with dedupe and disable
-- `isPluginEnabled(plugin)` — check if a plugin is not disabled
-- `sortPluginsForStage(plugins, stage)` — sort by enforce tier (`pre`/`default`/`post`)
-
-Error classes (plain classes with `_tag`, Effect-compatible):
-
-- `PluginValidationError` — invalid plugin shape
-- `PluginHookError` — hook execution failure
-
-Effect Schema (internal validation, exported for tooling):
-
-- `PluginSchema`, `HookInputSchema`, `HookOptionsSchema` — canonical schema definitions
-- `validatePluginShape(input)` — schema-based structural validation
-
-### Theme contract
-
-Theme interfaces:
-
-- `SvartzTheme` — full theme manifest (id, version, contractVersion, layouts, routes, components, capabilities, etc.)
-- `ThemeLayoutMap` — maps named slots to component loaders (required: `defaultPage`, `notePage`)
-- `ThemeRouteDefinition` — route id, pattern, and metadata
-- `ThemeComponentLoader` — sync or lazy reference to Svelte components
-- `ThemeComponentRegistry` — named component entries (callout, backlinks, graphPanel, etc.)
-- `ThemeArtifactRequirements` — declares which pipeline artifacts the theme needs
-- `ThemeRenderCapabilities` — declarative flags for what the theme can render
-- `ThemePluginPreset` — plugins the theme ships with
-
-Theme utilities:
-
-- `defineTheme(manifest | factory)` — validate and wrap a theme definition
-- `validateTheme(theme)` — standalone validation
-- `CONTRACT_VERSION` — current contract version constant (`1.0.0`)
-
-Error classes:
-
-- `ThemeValidationError` — invalid theme manifest
-
-### Tailwind + Wrangler schemas
-
-Canonical schema definitions (Effect Schema) and inferred types:
-
-- `TailwindThemeConfigSchema`, `TailwindThemeConfig`, `DefaultThemeOverrideHints`
-- `WranglerConfigSchema`, `WranglerConfigFieldsSchema`, and all building-block schemas/types
-
-These are re-exported by `@svartz/config` for backward compatibility.
-
-## Contract versioning
-
-`contractVersion` is a semver string on both plugins and themes. The runner checks `semverMajor` compatibility against `CONTRACT_VERSION`.
-
-- Themes: `contractVersion` is **required**
-- Plugins: `contractVersion` is optional (backward compatible)
-
-## Plugin merge order
-
-Runner merge order (most generic to most specific):
-
-1. Core plugins (`createCorePlugins()`)
-2. Theme plugin preset (`theme.pluginPreset.plugins`)
-3. Config defaults plugins (`config.defaults.plugins`)
-4. Config vault plugins (`config.vault.plugins`)
-
-Conflict: duplicate ID replaces existing entry in-place; new ID appends.
-
-## Warning policy
-
-Unknown keys on plugin and theme objects emit `console.warn` and are otherwise ignored. This policy applies uniformly to all schema-validated contracts.
-
-## Usage
+`definePlugin(factory)` validates and normalizes a `SvartzPlugin`. `createCorePlugins()` lives in `@svartz/plugins`; configured plugins can replace or disable its defaults by ID. Hooks run in the order in `STAGE_NAMES`, with `pre`, default, and `post` tiers inside each stage. The main transform hooks are `transformOfm`, `transformGfm`, `transformToc`, `transformDescription`, `transformSyntax`, `transformLatex`, and `transformEmbeds`. `emitArtifacts` is the final output hook. `handleChange` receives vault file events in dev mode.
 
 ```ts
-import type { ResolvedVaultConfig, ProcessedFile, SvartzPlugin } from "@svartz/core";
-import { definePlugin, defineTheme, CONTRACT_VERSION } from "@svartz/core";
+import { CONTRACT_VERSION, definePlugin } from '@svartz/core';
 
-const myPlugin = definePlugin(() => ({
-  id: "my-plugin",
+export const upperCase = definePlugin(() => ({
+  id: 'example:uppercase',
   contractVersion: CONTRACT_VERSION,
-  transformOfm(ctx) {
-    for (const file of ctx.files) {
-      file.content = file.content.toUpperCase();
-    }
-  },
+  transformDescription(ctx) {
+    for (const file of ctx.files) file.content = file.content.toUpperCase();
+  }
 }));
+```
 
-const myTheme = defineTheme({
-  id: "my-theme",
-  version: "0.1.0",
+The runner receives one `ResolvedConfig` per vault. `ProcessedFile` carries the candidate note through discovery, frontmatter, publication, route allocation, and transforms. The final `Index` contains published entries, search documents, graph, backlinks, tags, folders, routes, and reachable assets. `createVaultView` exposes that published index to host routes and themes.
+
+## Theme contract
+
+`defineTheme(manifest | factory)` validates an `SvartzTheme`. A theme supplies layouts, route definitions, optional component slots, and optional plugin presets. `ThemeComponentLoader` accepts an eager Svelte module or a lazy import function. The runtime awaits lazy entries before server rendering and hydration. See [`@svartz/ui`](../ui/README.md) for the SvelteKit route handoff.
+
+```ts
+import { CONTRACT_VERSION, defineTheme } from '@svartz/core';
+import SiteLayout from './SiteLayout.svelte';
+
+export default defineTheme({
+  id: 'example:theme',
+  version: '1.0.0',
   contractVersion: CONTRACT_VERSION,
   layouts: {
-    defaultPage: { default: DefaultLayout },
-    notePage: { default: NoteLayout },
+    defaultPage: { default: SiteLayout },
+    notePage: { default: SiteLayout }
   },
-  routes: [{ id: "note", pattern: "/notes/:slug" }],
+  routes: [
+    { id: 'note', pattern: '/:slug', layoutSlot: 'notePage' },
+    { id: 'tag', pattern: '/tags/:slug', component: () => import('./TagPage.svelte') }
+  ]
 });
 ```
+
+The contract major version must match `CONTRACT_VERSION`. Required layouts, route IDs and patterns, and component loaders fail validation when malformed; unknown fields warn. TypeScript checks the rest of the declared contract. The source of truth for exported names is [`src/index.ts`](src/index.ts).

@@ -103,6 +103,16 @@ function validateTheme(theme: SvartzTheme): void {
     });
   }
 
+  for (const route of theme.routes) {
+    if (!route || typeof route.id !== "string" || route.id.trim().length === 0 ||
+      typeof route.pattern !== "string" || route.pattern.trim().length === 0) {
+      throw new ThemeValidationError({
+        themeId: theme.id,
+        message: "Theme routes need a non-empty id and pattern",
+      });
+    }
+  }
+
   const noteRoute = theme.routes.find((r) => r.id === "note");
   if (!noteRoute) {
     throw new ThemeValidationError({
