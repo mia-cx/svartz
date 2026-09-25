@@ -135,11 +135,12 @@ function createThemeVirtualModuleSource(
     : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../node_modules/@svartz/core/dist/index.js");
   return [
     `import * as themeModule from ${JSON.stringify(themeModuleId)};`,
-    `import { matchThemeRoute, resolveThemeRouteToArtifactKey } from ${JSON.stringify(coreModuleId)};`,
+    `import { matchThemeRoute, materializeTheme, resolveThemeRouteToArtifactKey } from ${JSON.stringify(coreModuleId)};`,
     "",
     `const _themeConfig = ${JSON.stringify(themeConfig)};`,
     "const _themeExport = themeModule.default ?? themeModule.theme ?? themeModule;",
-    "export const theme = typeof _themeExport === 'function' ? _themeExport(_themeConfig) : _themeExport;",
+    "const _manifest = typeof _themeExport === 'function' ? _themeExport(_themeConfig) : _themeExport;",
+    "export const theme = await materializeTheme(_manifest);",
     "export const routes = theme.routes;",
     "",
     "export function resolveRuntimeRoute(input) {",

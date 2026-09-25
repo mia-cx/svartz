@@ -1,4 +1,4 @@
-import type { SvartzTheme } from "./types";
+import type { SvartzTheme, ThemeComponentLoader } from "./types";
 import { CONTRACT_VERSION, THEME_FEATURE_STAGES } from "./types";
 import { ThemeValidationError } from "./errors";
 
@@ -26,6 +26,16 @@ const KNOWN_THEME_KEYS = new Set<string>([
   "defaults",
   "hooks",
 ]);
+
+function validateComponentLoader(themeId: string, slot: string, loader: ThemeComponentLoader): void {
+  if (typeof loader === "function" ||
+    (loader && typeof loader === "object" && Object.hasOwn(loader, "default"))) return;
+
+  throw new ThemeValidationError({
+    themeId,
+    message: `Theme component "${slot}" must be an eager module or lazy import function`,
+  });
+}
 
 function validateTheme(theme: SvartzTheme): void {
   if (!theme.id || typeof theme.id !== "string") {
@@ -79,6 +89,13 @@ function validateTheme(theme: SvartzTheme): void {
     });
   }
 
+  for (const [slot, loader] of Object.entries(theme.layouts)) {
+    if (loader !== undefined) validateComponentLoader(theme.id, `layouts.${slot}`, loader);
+  }
+  for (const [slot, loader] of Object.entries(theme.components ?? {})) {
+    if (loader !== undefined) validateComponentLoader(theme.id, `components.${slot}`, loader);
+  }
+
   if (!Array.isArray(theme.routes) || theme.routes.length === 0) {
     throw new ThemeValidationError({
       themeId: theme.id,
@@ -99,6 +116,12 @@ function validateTheme(theme: SvartzTheme): void {
       themeId: theme.id,
       message: 'Theme note route pattern must contain a ":slug" segment',
     });
+  }
+
+  for (const route of theme.routes) {
+    if (route.component !== undefined) {
+      validateComponentLoader(theme.id, `routes.${route.id}`, route.component);
+    }
   }
 
   if (theme.requiredFeatures !== undefined &&

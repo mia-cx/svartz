@@ -77,6 +77,8 @@ Duplicate ID replaces in-place; new ID appends; disabled removed.
 - The pipeline gets a fresh compiler contribution bag for each run, even when `ctx.meta` survives a dev rebuild. A disabled plugin contributes nothing. Resource IDs deduplicate within a build.
 - `@svartz/vite` imports contributed browser resources from the generated artifacts bridge. A rebuild without the feature removes the import.
 - `.md` and `.mdx` render as inert Markdown HTML. Only `.svx` executes authored Svelte.
+- Markdown emits five content component slots: callout, codeBlock, image, link, embed. The host's `SvartzRuntimePage.contentComponents` wins over `theme.components`, then the built-in HTML element. Keep nested children as Svelte snippets when overriding.
+- Browser script modules export `mount(pathname)` and optionally return a disposer. Svartz mounts after hydration and disposes on navigation, vault change, and unmount. Do not install global listeners at import time.
 
 ## Theme contract
 
@@ -86,6 +88,7 @@ Duplicate ID replaces in-place; new ID appends; disabled removed.
 - `capabilities` says what a theme can display; only `requiredFeatures` makes a disabled transformer a configuration error
 - `search` and `toc` are derived from the canonical index — not independent artifacts
 - `ThemeComponentLoader`: sync `{ default: unknown }` or lazy `() => Promise<{ default: unknown }>`
+- Vite materializes all runtime theme component loaders before SSR and hydration. Build-time validation rejects malformed loader references; materialization rejects missing default exports.
 
 ## Publication boundary
 

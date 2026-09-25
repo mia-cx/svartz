@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { defineTheme, validateTheme } from "../src/theme/define-theme";
 import { ThemeValidationError } from "../src/theme/errors";
+import { materializeTheme } from "../src/theme/materialize-theme";
 import { CONTRACT_VERSION } from "../src/theme/types";
 import type { SvartzTheme, ThemeComponentLoader } from "../src/theme/types";
 
@@ -32,6 +33,15 @@ describe("CONTRACT_VERSION", () => {
 describe("validateTheme", () => {
   it("accepts a valid theme manifest", () => {
     expect(() => validateTheme(makeValidTheme())).not.toThrow();
+  });
+
+  it("rejects malformed component entries during config validation", () => {
+    expect(() => validateTheme(makeValidTheme({
+      layouts: { defaultPage: stubLoader, notePage: "./Note.svelte" as never },
+    }))).toThrow(/layouts.notePage/);
+    expect(() => validateTheme(makeValidTheme({
+      components: { callout: {} as never },
+    }))).toThrow(/components.callout/);
   });
 
   it("accepts image templates and rejects malformed theme image hooks", () => {
@@ -252,5 +262,32 @@ describe("defineTheme", () => {
     );
     const theme = factory();
     expect(theme.routes).toHaveLength(3);
+  });
+});
+
+describe("materializeTheme", () => {
+  it("loads lazy layouts, route pages, and shared components before rendering", async () => {
+    const lazy = vi.fn(async () => ({ default: { name: "lazy" } }));
+    const manifest = makeValidTheme({
+      layouts: { defaultPage: stubLoader, notePage: lazy },
+      components: { searchBox: lazy },
+      routes: [{ id: "note", pattern: "/:slug", component: lazy }],
+    });
+
+    const loaded = await materializeTheme(manifest);
+
+    expect(loaded.layouts.defaultPage).toBe(stubLoader);
+    expect(loaded.layouts.notePage).toEqual({ default: { name: "lazy" } });
+    expect(loaded.components?.searchBox).toEqual({ default: { name: "lazy" } });
+    expect(loaded.routes[0]?.component).toEqual({ default: { name: "lazy" } });
+    expect(lazy).toHaveBeenCalledOnce();
+    expect(typeof manifest.layouts.notePage).toBe("function");
+  });
+
+  it("reports a lazy import without a default component", async () => {
+    const manifest = makeValidTheme({
+      layouts: { defaultPage: stubLoader, notePage: async () => ({} as never) },
+    });
+    await expect(materializeTheme(manifest)).rejects.toThrow(/layouts.notePage/);
   });
 });

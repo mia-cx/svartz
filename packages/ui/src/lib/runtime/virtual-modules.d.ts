@@ -25,6 +25,7 @@ declare module 'virtual:svartz/theme' {
 		readonly version: string;
 		readonly contractVersion: string;
 		readonly layouts: Record<string, ThemeComponentLoader | undefined>;
+		readonly components?: Record<string, ThemeComponentLoader | undefined>;
 		readonly routes: readonly RuntimeRouteMatch['route'][];
 	};
 
@@ -61,6 +62,7 @@ declare module 'virtual:svartz/artifacts' {
 		readonly tags: readonly string[];
 		readonly aliases: readonly string[];
 		readonly description?: string;
+		readonly socialImage?: string;
 		readonly content: string;
 		readonly toc: readonly {
 			readonly depth: number;
@@ -101,6 +103,7 @@ declare module 'virtual:svartz/artifacts' {
 
 	export const artifacts: ReadonlyMap<string, RuntimeArtifactRecord>;
 	export const browserResources: Readonly<Record<string, string>>;
+	export function mountBrowserResources(pathname: string): Promise<() => void>;
 	export function hasNoteArtifact(key: string): boolean;
 	export function getNoteArtifact(
 		key: string
@@ -127,6 +130,12 @@ declare module 'virtual:svartz/artifacts' {
 			readonly sourcePath: string;
 			readonly mimeType?: string;
 		}[];
+		readonly favicon?: {
+			readonly svg?: string;
+			readonly png: string;
+			readonly appleTouch: string;
+			readonly inline: string;
+		};
 	};
 	export const vault: {
 		readonly id: string;

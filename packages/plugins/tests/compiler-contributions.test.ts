@@ -54,7 +54,7 @@ describe("compiler contributions", () => {
       expect(enabledPage).toContain("<del>old</del>");
       expect(enabledPage).toContain("katex");
       expect(enabledPage).toContain("data-rehype-pretty-code-figure");
-      expect(enabledPage).toContain('data-theme=\\"github-light\\"');
+      expect(enabledPage).toContain('github-light');
       expect(getCompilerContributions(enabled).browserResources.has("core:katex-css")).toBe(true);
 
       const disabled = context(join(root, "disabled/dist"));

@@ -1,4 +1,5 @@
 import { getCompilerContributions, type PluginContext } from "@svartz/core";
+import type { Root } from "hast";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeRaw from "rehype-raw";
 import rehypeSlug from "rehype-slug";
@@ -7,10 +8,9 @@ import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
 
-/** Render inert Markdown with the active vault's compiler plugins. */
-export async function renderMarkdown(ctx: PluginContext, content: string): Promise<string> {
+function createMarkdownProcessor(ctx: PluginContext) {
   const compiler = getCompilerContributions(ctx);
-  const markdown = unified()
+  return unified()
     .use(remarkParse)
     .use({ plugins: compiler.remarkPlugins })
     .use(remarkRehype, { allowDangerousHtml: true })
@@ -20,7 +20,17 @@ export async function renderMarkdown(ctx: PluginContext, content: string): Promi
       behavior: "append",
       properties: { ariaHidden: true, tabIndex: -1, className: ["heading-anchor"] },
     })
-    .use({ plugins: compiler.rehypePlugins })
-    .use(rehypeStringify);
-  return String(await markdown.process(content));
+    .use({ plugins: compiler.rehypePlugins });
+}
+
+/** Parse inert Markdown with the active vault's compiler plugins. */
+export async function renderMarkdownTree(ctx: PluginContext, content: string): Promise<Root> {
+  const processor = createMarkdownProcessor(ctx);
+  return await processor.run(processor.parse(content)) as Root;
+}
+
+/** Render inert Markdown HTML for feeds and other text-only outputs. */
+export async function renderMarkdown(ctx: PluginContext, content: string): Promise<string> {
+  const processor = createMarkdownProcessor(ctx).use(rehypeStringify);
+  return String(await processor.process(content));
 }

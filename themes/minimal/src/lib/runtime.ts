@@ -13,13 +13,12 @@ import { createMinimalTheme, type MinimalThemeConfig, type MinimalThemeModules }
 import FeedPage from './pages/FeedPage.svelte';
 import FolderListPage from './pages/FolderListPage.svelte';
 import FolderPage from './pages/FolderPage.svelte';
-import NotFoundPage from './pages/NotFoundPage.svelte';
 import TagListPage from './pages/TagListPage.svelte';
 import TagPage from './pages/TagPage.svelte';
 
 const modules: MinimalThemeModules = {
 	siteLayout: { default: SiteLayout },
-	notFoundPage: { default: NotFoundPage },
+	notFoundPage: () => import('./pages/NotFoundPage.svelte'),
 	tagListPage: { default: TagListPage },
 	tagPage: { default: TagPage },
 	folderListPage: { default: FolderListPage },
@@ -34,7 +33,7 @@ const modules: MinimalThemeModules = {
 	noteHeader: { default: NoteHeader }
 };
 
-/** Vite-bundled runtime manifest with eager components for SSR and hydration. */
+/** Vite-bundled runtime manifest. Lazy entries load before SSR and hydration. */
 const theme = defineTheme((config?: MinimalThemeConfig) => createMinimalTheme(modules, config));
 
 export { theme };

@@ -88,7 +88,7 @@ Theme-owned runtime surface:
 - `resolveRuntimeRoute({ pathname, slug? })`
 - `resolveRouteToArtifactKey({ pathname, slug? })`
 
-This module re-exports the validated theme package and uses core route-matcher helpers.
+This module loads eager and lazy theme components before SSR and hydration, then uses core route-matcher helpers.
 
 ### `virtual:svartz/artifacts`
 
@@ -97,12 +97,13 @@ Artifact bridge surface:
 - `artifacts`
 - `hasNoteArtifact(key)` and `getNoteArtifact(key)`
 - `browserResources` asset URLs for resources contributed by active hooks
+- `mountBrowserResources(pathname)` to mount active browser scripts and return their cleanup
 - `index`
 - `graph`
 - `backlinks`
 - `search`
 
-This module imports note pages, global layout data, and active browser resources. Rebuilding after a resource is no longer used removes its import.
+This module imports note pages, global layout data, and active CSS and assets. Browser scripts export `mount(pathname)` and may return a disposer. The runtime mounts them on navigation and disposes on route changes or unmount. Rebuilding after a resource is no longer used removes its import.
 
 ## Apps Web Route Shells
 
@@ -118,6 +119,21 @@ The shared shell component:
 - chooses the theme layout via `layoutSlot`
 - loads the note page via `virtual:svartz/artifacts`
 - passes `theme`, `route`, `match`, `entry`, `index`, `graph`, `backlinks`, and `search`
+
+For a host catch-all route, pass content overrides directly to the package renderer. This affects published Markdown in that host; it does not replace theme layouts or authored `.svx` components.
+
+```svelte
+<script lang="ts">
+  import SvartzRuntimePage from '@svartz/ui/runtime';
+  import type { ContentComponentOverrides } from '@svartz/ui/runtime';
+  import MyLink from '$lib/MyLink.svelte';
+  import { page } from '$app/state';
+
+  const contentComponents = { link: MyLink } satisfies ContentComponentOverrides;
+</script>
+
+<SvartzRuntimePage pathname={page.url.pathname} {contentComponents} />
+```
 
 ## Testing
 

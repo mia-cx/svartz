@@ -56,6 +56,10 @@ interface ThemeRouteDefinition {
  */
 interface ThemeComponentRegistry {
   readonly callout?: ThemeComponentLoader;
+  readonly codeBlock?: ThemeComponentLoader;
+  readonly image?: ThemeComponentLoader;
+  readonly link?: ThemeComponentLoader;
+  readonly embed?: ThemeComponentLoader;
   readonly backlinks?: ThemeComponentLoader;
   readonly graphPanel?: ThemeComponentLoader;
   readonly searchBox?: ThemeComponentLoader;

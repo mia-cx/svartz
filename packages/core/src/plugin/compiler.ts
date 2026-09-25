@@ -1,7 +1,9 @@
 import type { Pluggable } from "unified";
 import type { PluginContext } from "./types";
 
-/** Browser import contributed by an active content plugin. */
+/** Browser import contributed by an active content plugin.
+ * Script modules export `mount(pathname)` and return an optional disposer.
+ */
 export interface BrowserResource {
   readonly id: string;
   readonly kind: "css" | "script" | "asset";

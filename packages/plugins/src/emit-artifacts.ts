@@ -15,7 +15,8 @@ import rehypeSlug from "rehype-slug";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { definePlugin, getCompilerContributions, SEARCH_INDEX_OPTIONS, type Artifact, type Index } from "@svartz/core";
-import { renderMarkdown } from "./internal/render-markdown";
+import { renderMarkdownTree } from "./internal/render-markdown";
+import { compileContent } from "./internal/compile-content";
 
 type MdsvexOptions = NonNullable<Parameters<typeof compile>[1]>;
 
@@ -58,7 +59,7 @@ function serializeValue(value: unknown): string {
 }
 
 async function compileNoteComponent(
-  ctx: Parameters<typeof renderMarkdown>[0],
+  ctx: Parameters<typeof renderMarkdownTree>[0],
   file: {
     readonly path: string;
     readonly slug: string;
@@ -70,7 +71,7 @@ async function compileNoteComponent(
   rehypePlugins: MdsvexOptions["rehypePlugins"],
 ): Promise<string> {
   const header = [
-    "<script context=\"module\" lang=\"ts\">",
+    "<script module lang=\"ts\">",
     `export const svartz = ${serializeValue({
       slug: file.slug,
       path: file.path,
@@ -80,8 +81,8 @@ async function compileNoteComponent(
   ].join("\n");
 
   if (file.extension !== ".svx") {
-    const html = await renderMarkdown(ctx, file.content);
-    return `${header}\n\n{@html ${JSON.stringify(html)}}`;
+    const markup = compileContent(await renderMarkdownTree(ctx, file.content));
+    return `${header}\n\n<script lang="ts">\nimport type { ContentComponents } from "@svartz/ui/runtime";\nlet { contentComponents }: { contentComponents: ContentComponents } = $props();\n</script>\n\n${markup}`;
   }
 
   const source = `${header}\n\n${file.content}`;

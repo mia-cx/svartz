@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { materializeTheme } from '@svartz/core';
 import createMinimalTheme from './runtime';
 
 describe('@svartz/theme-minimal runtime modules', () => {
-	it('exposes eager layout, route, and shared component modules for SSR', () => {
-		const theme = createMinimalTheme();
+	it('loads eager and lazy layout, route, and shared components for SSR', async () => {
+		const manifest = createMinimalTheme();
+		expect(typeof manifest.layouts.notFoundPage).toBe('function');
+		const theme = await materializeTheme(manifest);
 
 		for (const layout of Object.values(theme.layouts)) {
 			if (!layout) continue;
