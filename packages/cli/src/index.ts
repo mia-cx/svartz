@@ -35,6 +35,7 @@ import {
   createWorkspaceSourceWatchDescriptors,
   getThemeWatchDescriptors,
   getConfigWatchDescriptors,
+  getViteConfigWatchDescriptors,
   isLocalWorkspacePackage,
   matchesWatchDescriptor,
   uniqBuildFilters,
@@ -398,11 +399,9 @@ const loadDevWatchContext = async (
 
   const descriptors: WatchDescriptor[] = [
     ...getConfigWatchDescriptors(workspace.config.configDir, options.config),
-    {
-      path: workspace.viteConfigPath,
-      label: "SvelteKit Vite config",
-      exact: true,
-    },
+    ...(workspace.hostApp
+      ? await getViteConfigWatchDescriptors(workspace.viteConfigPath, workspace.appRoot)
+      : [{ path: workspace.viteConfigPath, label: "SvelteKit Vite config", exact: true }]),
     ...(!workspace.hostApp ? createWorkspaceSourceWatchDescriptors(workspaceRoot) : []),
   ];
 

@@ -285,6 +285,15 @@ describe("resolveConfigPaths", () => {
     expect(resolved.vaults[0]?.theme.base).toBe(resolve(PKG_ROOT, "themes/custom"));
   });
 
+  it("resolves Windows-style relative theme paths from the config directory", async () => {
+    const config: SvartzConfig = {
+      ...minimalConfig,
+      defaults: { theme: ".\\themes\\custom" },
+    };
+    const resolved = await resolveConfig(config, PKG_ROOT);
+    expect(resolved.vaults[0]?.theme.base).toBe(resolve(PKG_ROOT, "themes/custom"));
+  });
+
   it("preserves absolute theme paths", async () => {
     const themePath = resolve(PKG_ROOT, "themes/custom");
     const config: SvartzConfig = {
