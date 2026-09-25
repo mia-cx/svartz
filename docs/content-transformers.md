@@ -48,3 +48,13 @@ export default defineConfig({
 `hardLineBreaks()` turns prose newlines into line breaks. `roamFlavoredMarkdown()` handles Roam's underscore italics, highlights, TODO/DONE controls, `{{or:...}}`, `[[>]]` quotes, and audio/video/PDF embeds. Roam markers remain syntax, even when a note named `TODO` exists. Local media references keep their attachments in the published vault. Generated controls are native HTML and media URLs must use HTTP(S) or a relative path. `oxHugoFlavoredMarkdown()` normalizes relrefs, heading anchors, figures, shortcodes, and Org math before Svartz resolves links. Its options can disable each conversion. It processes Markdown files, leaving executable `.svx` source intact. Svartz parses both YAML (`---`) and TOML (`+++`) frontmatter before applying publication rules. The source normalizers leave fenced and inline code alone.
 
 `citations()` reads `bibliography.bib` from the vault directory by default. Override `bibliographyFile`, `csl`, `linkCitations`, and `suppressBibliography` as needed. Bibliography paths resolve from the vault, including in a SvelteKit host. A missing file fails the build with its path. Only cited entries appear in a generated note bibliography. Disable or remove the plugin to leave citation text unchanged.
+
+## Presentations
+
+`presentation()` lets readers present any note of the vault as slides:
+
+```ts
+plugins: [presentation()]            // or presentation({ key: 's' })
+```
+
+On a note, press `P` to start. Each top-level `---` begins a new slide; a `---` inside a callout or quote stays part of its slide, and a note without one plays as a single slide. The arrow keys, Space and Shift+Space, Enter, and PageUp/PageDown move through the deck, Home and End jump to its ends, and Esc (or leaving fullscreen) ends it. A slide taller than the screen scrolls before the deck moves on. The key does nothing while typing in a field or with Ctrl, Cmd, or Alt held. Slides are 16:9 at 1280×720, scaled to fit the screen, and use the theme's colours and prose type. They're static copies of the note: diagrams, maths, highlighted code, and links carry over, but copy buttons and callout fold toggles don't.
