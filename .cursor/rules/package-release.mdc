@@ -12,6 +12,6 @@ alwaysApply: false
 - Pack and publish public packages with pnpm. It converts `workspace:` dependencies to npm-compatible version ranges. `npm pack` leaves the workspace specs in the archives.
 - Keep every public package at the same v1 version. Publish dependencies before `svartz`, because `npx svartz@latest init` installs the others from npm.
 - Validate the packed archives in a temporary project outside the monorepo. Source imports and workspace symlinks hide missing package files and dependency declarations.
-- The CLI's Vite dependency is a peer. A Vite 8 host must resolve its own Vite 8 through the packed CLI. Tailwind scans `dist` in packed theme and UI packages, because archives omit `src`; only runtime dependencies contribute source globs.
+- The CLI's Vite dependency is a peer. A Vite 8 host must resolve its own Vite 8 through the packed CLI. `@svartz/vite` also peers on the host's Svelte Vite plugin: v6 for Vite 7, v7 for Vite 8. Exercise protected SVX in the packed Vite 8 host. Tailwind scans `dist` in packed theme/UI packages and their runtime dependency or component-library peer packages, never dev-only tooling.
 - Type-check generated routes in the packed host with the `@svartz/vite/virtual-modules` reference. The older UI reference has a narrower runtime index and does not type-check host discovery helpers.
 - The seven public packages use MCX v1.0. Keep a copy of the repository `LICENSE` in each package root and verify the text inside every packed archive.

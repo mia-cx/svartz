@@ -41,9 +41,15 @@ function getTailwindSourceGlobs(appRoot: string, vault: ResolvedConfig): string[
 
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as {
       dependencies?: Record<string, string>;
+      peerDependencies?: Record<string, string>;
     };
 
-    for (const packageName of Object.keys(packageJson.dependencies ?? {})) {
+    const runtimePackages = new Set([
+      ...Object.keys(packageJson.dependencies ?? {}),
+      ...Object.keys(packageJson.peerDependencies ?? {}).filter((name) =>
+        name !== "svelte" && name !== "vite" && !name.startsWith("@sveltejs/")),
+    ]);
+    for (const packageName of runtimePackages) {
       const packageRoot = resolveThemePackageRoot(packageName, appRoot);
       if (!packageRoot || packageRoot === themeRoot) continue;
       sourceGlobs.push(packageContentGlob(packageRoot));
