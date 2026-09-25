@@ -10,6 +10,7 @@ import type {
   FrontmatterFieldsSchema,
   SiteConfigSchema,
   DiscoveryConfigSchema,
+  AnalyticsConfigSchema,
 } from "../schemas";
 
 // --- Inferred types from Schema ---
@@ -30,6 +31,7 @@ type FrontmatterFields = Schema.Schema.Type<
 >;
 type SiteConfig = Schema.Schema.Type<typeof SiteConfigSchema>;
 type DiscoveryConfig = Schema.Schema.Type<typeof DiscoveryConfigSchema>;
+type AnalyticsConfig = Schema.Schema.Type<typeof AnalyticsConfigSchema>;
 
 export {
   type SvartzConfig,
@@ -42,4 +44,5 @@ export {
   type FrontmatterFields,
   type SiteConfig,
   type DiscoveryConfig,
+  type AnalyticsConfig,
 };

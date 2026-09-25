@@ -3,6 +3,7 @@ import { Schema, Either, Effect } from "effect";
 import {
   SvartzConfigSchema,
   VaultThemeConfigSchema,
+  AnalyticsConfigSchema,
   TargetConfigSchema,
   LinkResolutionStrategySchema,
 } from "../src/schemas";
@@ -177,6 +178,45 @@ describe("VaultThemeConfigSchema", () => {
       colors: { accent: "red" },
     });
     expect(Either.isLeft(result)).toBe(true);
+  });
+
+  it("preserves Giscus settings and requires a term for explicit mappings", () => {
+    const result = decode(VaultThemeConfigSchema, {
+      base: "@svartz/theme-minimal",
+      comments: { repo: "mia/site", repoId: "R_1", category: "Notes", categoryId: "D_1", mapping: "specific", term: "journal", reactionsEnabled: false },
+    });
+    expect(Either.isRight(result)).toBe(true);
+    if (Either.isRight(result) && typeof result.right !== "string") {
+      expect(result.right.comments?.term).toBe("journal");
+      expect(result.right.comments?.reactionsEnabled).toBe(false);
+    }
+    expect(Either.isLeft(decode(VaultThemeConfigSchema, {
+      base: "@svartz/theme-minimal",
+      comments: { repo: "mia/site", repoId: "R_1", category: "Notes", categoryId: "D_1", mapping: "number" },
+    }))).toBe(true);
+  });
+});
+
+describe("AnalyticsConfigSchema", () => {
+  it.each([
+    { provider: "plausible" },
+    { provider: "google", tagId: "G-123" },
+    { provider: "umami", websiteId: "abc" },
+    { provider: "goatcounter", websiteId: "mia" },
+    { provider: "posthog", apiKey: "phc_123" },
+    { provider: "tinylytics", siteId: "abc" },
+    { provider: "cabin" },
+    { provider: "clarity", projectId: "abc" },
+    { provider: "matomo", host: "https://stats.example.com", siteId: "1" },
+    { provider: "vercel" },
+    { provider: "rybbit", siteId: "abc" },
+  ])("accepts $provider", (analytics) => {
+    expect(Either.isRight(decode(AnalyticsConfigSchema, analytics))).toBe(true);
+  });
+
+  it("rejects invalid provider URLs and missing IDs", () => {
+    expect(Either.isLeft(decode(AnalyticsConfigSchema, { provider: "matomo", host: "javascript:alert(1)", siteId: "1" }))).toBe(true);
+    expect(Either.isLeft(decode(AnalyticsConfigSchema, { provider: "google" }))).toBe(true);
   });
 });
 

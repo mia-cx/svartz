@@ -122,12 +122,13 @@ describe("@svartz/vite artifact helpers", () => {
       { title: "Test" },
       [
         { id: "math-css", kind: "css", importId: "/plugins/katex.min.css" },
-        { id: "diagram-script", kind: "script", importId: "/plugins/diagram.js" },
+        { id: "diagram-script", kind: "script", importId: "/plugins/diagram.js", options: { enabled: true } },
         { id: "icon", kind: "asset", importId: "/plugins/icon.svg" },
       ],
     );
     expect(source).toContain('import "/plugins/katex.min.css";');
     expect(source).toContain('load: () => import("/plugins/diagram.js")');
+    expect(source).toContain('options: {"enabled":true}');
     expect(source).toContain("export async function mountBrowserResources(pathname)");
     expect(source).toContain("return mountBrowserScripts(browserScripts, pathname);");
     expect(source).toContain('import browserAsset2 from "/plugins/icon.svg";');

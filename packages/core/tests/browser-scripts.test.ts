@@ -27,4 +27,19 @@ describe("browser script lifecycle", () => {
     ], "/")).rejects.toThrow(/broken.*mount/);
     expect(cleanup).toHaveBeenCalledOnce();
   });
+
+  it("passes resource settings without mixing mounts", async () => {
+    const calls: unknown[][] = [];
+    const scripts = [{
+      id: "analytics",
+      options: { provider: "google", tagId: "G-123" },
+      load: async () => ({ mount: (...args: unknown[]) => { calls.push(args); } }),
+    }];
+    await mountBrowserScripts(scripts, "/blog/one/");
+    await mountBrowserScripts(scripts, "/blog/two/");
+    expect(calls).toEqual([
+      ["/blog/one/", { provider: "google", tagId: "G-123" }],
+      ["/blog/two/", { provider: "google", tagId: "G-123" }],
+    ]);
+  });
 });

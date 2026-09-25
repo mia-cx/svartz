@@ -2,7 +2,10 @@
 	import type { Component } from 'svelte';
 	import { base } from '$app/paths';
 	import { browser } from '$app/environment';
-	import { resolveContentComponents, type ContentComponentOverrides } from './content-components.js';
+	import {
+		resolveContentComponents,
+		type ContentComponentOverrides
+	} from './content-components.js';
 	type ThemeModule = typeof import('virtual:svartz/theme');
 	type ArtifactsModule = typeof import('virtual:svartz/artifacts');
 	let {
@@ -17,7 +20,12 @@
 		contentComponents?: ContentComponentOverrides;
 	} = $props();
 	const theme = $derived(runtimeTheme.theme);
-	const contentComponents = $derived(resolveContentComponents(hostContentComponents, theme.components as Parameters<typeof resolveContentComponents>[1]));
+	const contentComponents = $derived(
+		resolveContentComponents(
+			hostContentComponents,
+			theme.components as Parameters<typeof resolveContentComponents>[1]
+		)
+	);
 	const resolveRuntimeRoute = $derived(runtimeTheme.resolveRuntimeRoute);
 	const assets = $derived(runtimeArtifacts.assets);
 	const backlinks = $derived(runtimeArtifacts.backlinks);
@@ -39,10 +47,15 @@
 		if (!browser) return;
 		let released = false;
 		let dispose: (() => void) | undefined;
-		void runtimeArtifacts.mountBrowserResources(pathname).then((cleanup) => {
-			if (released) cleanup();
-			else dispose = cleanup;
-		}).catch((error: unknown) => console.error('[svartz:web] browser resource mount failed', error));
+		void runtimeArtifacts
+			.mountBrowserResources(pathname)
+			.then((cleanup) => {
+				if (released) cleanup();
+				else dispose = cleanup;
+			})
+			.catch((error: unknown) =>
+				console.error('[svartz:web] browser resource mount failed', error)
+			);
 		return () => {
 			released = true;
 			dispose?.();
@@ -184,8 +197,17 @@
 <svelte:head>
 	<title>{documentTitle}</title>
 	{#if index.favicon}
-		<link rel="icon" href={siteConfig.url ? resolveAbsoluteUrl(index.favicon.svg ?? index.favicon.png) : index.favicon.inline} type={siteConfig.url && index.favicon.svg ? 'image/svg+xml' : 'image/png'} />
-		{#if siteConfig.url}<link rel="apple-touch-icon" href={resolveAbsoluteUrl(index.favicon.appleTouch)} />{/if}
+		<link
+			rel="icon"
+			href={siteConfig.url
+				? resolveAbsoluteUrl(index.favicon.svg ?? index.favicon.png)
+				: index.favicon.inline}
+			type={siteConfig.url && index.favicon.svg ? 'image/svg+xml' : 'image/png'}
+		/>
+		{#if siteConfig.url}<link
+				rel="apple-touch-icon"
+				href={resolveAbsoluteUrl(index.favicon.appleTouch)}
+			/>{/if}
 	{/if}
 	{#if pageDescription}<meta name="description" content={pageDescription} />{/if}
 	{#if canonicalUrl}<link rel="canonical" href={canonicalUrl} />{/if}
@@ -210,28 +232,11 @@
 </svelte:head>
 
 {#if LayoutComponent && PageComponent}
-	<LayoutComponent
-		{assets}
-		{theme}
-		{themeConfig}
-		route={runtimeRoute?.route}
-		match={runtimeRoute}
-		{entry}
-		{index}
-		{vault}
-		{graph}
-		{backlinks}
-		{folders}
-		{routes}
-		{search}
-		{searchDocuments}
-		{searchIndex}
-		{searchOptions}
-		{tags}
-	>
-		<PageComponent
-			{contentComponents}
+	<!-- Clarity must never record a note body, including content decrypted after hydration. -->
+	<div data-clarity-mask="true" style="display: contents">
+		<LayoutComponent
 			{assets}
+			{theme}
 			{themeConfig}
 			route={runtimeRoute?.route}
 			match={runtimeRoute}
@@ -247,8 +252,28 @@
 			{searchIndex}
 			{searchOptions}
 			{tags}
-		/>
-	</LayoutComponent>
+		>
+			<PageComponent
+				{contentComponents}
+				{assets}
+				{themeConfig}
+				route={runtimeRoute?.route}
+				match={runtimeRoute}
+				{entry}
+				{index}
+				{vault}
+				{graph}
+				{backlinks}
+				{folders}
+				{routes}
+				{search}
+				{searchDocuments}
+				{searchIndex}
+				{searchOptions}
+				{tags}
+			/>
+		</LayoutComponent>
+	</div>
 {:else}
 	<p>Route component unavailable.</p>
 {/if}

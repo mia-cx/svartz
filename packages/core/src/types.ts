@@ -38,6 +38,20 @@ interface ResolvedSiteConfig {
   readonly favicon?: string;
 }
 
+/** Public analytics settings shipped to the browser only when selected by a consumer. */
+type AnalyticsConfig =
+  | { readonly provider: "plausible"; readonly host?: string; readonly scriptSrc?: string }
+  | { readonly provider: "google"; readonly tagId: string }
+  | { readonly provider: "umami"; readonly websiteId: string; readonly host?: string }
+  | { readonly provider: "goatcounter"; readonly websiteId: string; readonly host?: string; readonly scriptSrc?: string }
+  | { readonly provider: "posthog"; readonly apiKey: string; readonly host?: string }
+  | { readonly provider: "tinylytics"; readonly siteId: string }
+  | { readonly provider: "cabin"; readonly host?: string }
+  | { readonly provider: "clarity"; readonly projectId: string }
+  | { readonly provider: "matomo"; readonly host: string; readonly siteId: string }
+  | { readonly provider: "vercel" }
+  | { readonly provider: "rybbit"; readonly siteId: string; readonly host?: string };
+
 type DateSource = "frontmatter" | "git" | "filesystem";
 
 interface ResolvedDiscoveryConfig {
@@ -66,6 +80,7 @@ interface ResolvedVaultDefaults {
   readonly theme: ResolvedThemeConfig;
   readonly frontmatter: ResolvedFrontmatterConfig;
   readonly site: ResolvedSiteConfig;
+  readonly analytics?: AnalyticsConfig;
   readonly discovery: ResolvedDiscoveryConfig;
   readonly mountPath: string;
 }
@@ -84,6 +99,7 @@ interface ResolvedConfig {
   readonly theme: ResolvedThemeConfig;
   readonly frontmatter: ResolvedFrontmatterConfig;
   readonly site: ResolvedSiteConfig;
+  readonly analytics?: AnalyticsConfig;
   readonly discovery: ResolvedDiscoveryConfig;
   /** Vault URL prefix within the host app, separate from SvelteKit's deployment base. */
   readonly mountPath: string;
@@ -271,6 +287,7 @@ export type {
   DateSource,
   ResolvedDiscoveryConfig,
   AssetRecord,
+  AnalyticsConfig,
   ArtifactBag,
   ChangeEvent,
   FolderIndexEntry,

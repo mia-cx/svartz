@@ -26,6 +26,22 @@ const minimalConfig: SvartzConfig = {
 };
 
 describe("resolveConfigPaths", () => {
+  it("inherits analytics defaults and lets a vault select another provider", async () => {
+    const config: SvartzConfig = {
+      ...minimalConfig,
+      defaults: { analytics: { provider: "plausible" } },
+      vaults: [
+        minimalConfig.vaults[0]!,
+        { id: "other", path: "tests/fixtures/valid-vault", target: { type: "static" }, analytics: { provider: "google", tagId: "G-123" } },
+      ],
+    };
+    const resolved = await resolveConfig(config, PKG_ROOT);
+    expect(resolved.vaults.map((vault) => vault.analytics)).toEqual([
+      { provider: "plausible" },
+      { provider: "google", tagId: "G-123" },
+    ]);
+  });
+
   it("rejects duplicate vault ids before artifact paths collide", async () => {
     const config: SvartzConfig = {
       version: "1.0.0",

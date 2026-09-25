@@ -1,11 +1,12 @@
 /** Lifecycle contract for a script contributed by a content plugin. */
 export interface BrowserScriptModule {
-  mount(pathname: string): void | (() => void) | Promise<void | (() => void)>;
+  mount(pathname: string, options?: unknown): void | (() => void) | Promise<void | (() => void)>;
 }
 
 export interface BrowserScriptLoader {
   readonly id: string;
   readonly load: () => Promise<unknown>;
+  readonly options?: unknown;
 }
 
 /** Mount active scripts and return one disposer for the current route. */
@@ -20,12 +21,12 @@ export async function mountBrowserScripts(
   };
 
   try {
-    for (const { id, load } of scripts) {
+    for (const { id, load, options } of scripts) {
       const module = await load() as Partial<BrowserScriptModule>;
       if (!module || typeof module.mount !== "function") {
         throw new Error(`[svartz:plugin] browser script "${id}" must export mount(pathname)`);
       }
-      const dispose = await module.mount(pathname);
+      const dispose = await module.mount(pathname, options);
       if (typeof dispose === "function") disposers.push(dispose);
     }
   } catch (error) {

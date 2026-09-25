@@ -5,6 +5,7 @@
 		category: string;
 		categoryId: string;
 		mapping: string;
+		term?: string;
 		strict: boolean;
 		reactionsEnabled: boolean;
 		inputPosition: string;
@@ -17,8 +18,8 @@
 		return document.documentElement.classList.contains('dark') ? cfg.darkTheme : cfg.lightTheme;
 	}
 
-	function sendThemeUpdate(theme: string) {
-		const iframe = document.querySelector<HTMLIFrameElement>('.giscus-frame');
+	function sendThemeUpdate(node: HTMLDivElement, theme: string) {
+		const iframe = node.querySelector<HTMLIFrameElement>('.giscus-frame');
 		iframe?.contentWindow?.postMessage({ giscus: { setConfig: { theme } } }, 'https://giscus.app');
 	}
 
@@ -30,6 +31,7 @@
 		script.setAttribute('data-category', cfg.category);
 		script.setAttribute('data-category-id', cfg.categoryId);
 		script.setAttribute('data-mapping', cfg.mapping);
+		if (cfg.term) script.setAttribute('data-term', cfg.term);
 		script.setAttribute('data-strict', cfg.strict ? '1' : '0');
 		script.setAttribute('data-reactions-enabled', cfg.reactionsEnabled ? '1' : '0');
 		script.setAttribute('data-emit-metadata', '0');
@@ -40,12 +42,13 @@
 		script.async = true;
 		node.appendChild(script);
 
-		const observer = new MutationObserver(() => sendThemeUpdate(currentTheme(cfg)));
+		const observer = new MutationObserver(() => sendThemeUpdate(node, currentTheme(cfg)));
 		observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
 		return {
 			destroy() {
 				observer.disconnect();
+				node.replaceChildren();
 			}
 		};
 	}
@@ -56,6 +59,7 @@
 		category,
 		categoryId,
 		mapping = 'pathname',
+		term,
 		strict = false,
 		reactionsEnabled = true,
 		inputPosition = 'bottom',
@@ -69,6 +73,7 @@
 		category: string;
 		categoryId: string;
 		mapping?: 'url' | 'title' | 'og:title' | 'specific' | 'number' | 'pathname';
+		term?: string;
 		strict?: boolean;
 		reactionsEnabled?: boolean;
 		inputPosition?: 'top' | 'bottom';
@@ -85,6 +90,7 @@
 		category,
 		categoryId,
 		mapping,
+		term,
 		strict,
 		reactionsEnabled,
 		inputPosition,
@@ -95,5 +101,7 @@
 </script>
 
 {#if enabled}
-	<div class="giscus mt-8" use:giscus={giscusConfig}></div>
+	{#key JSON.stringify(giscusConfig)}
+		<div class="giscus mt-8" use:giscus={giscusConfig}></div>
+	{/key}
 {/if}
