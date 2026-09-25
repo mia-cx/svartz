@@ -8,10 +8,12 @@ import GithubSlugger from "github-slugger";
 import type { RawLink, TocEntry } from "@svartz/core";
 import { toString } from "mdast-util-to-string";
 import remarkParse from "remark-parse";
+import { parse as parseToml } from "smol-toml";
 import { unified } from "unified";
 import { SKIP, visit } from "unist-util-visit";
 
-const FRONTMATTER_BLOCK_REGEX = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/;
+const FRONTMATTER_OPEN_REGEX = /^(---|\+\+\+)\s*\r?\n/;
+const FRONTMATTER_BLOCK_REGEX = /^(---|\+\+\+)\s*\r?\n([\s\S]*?)\r?\n\1\s*(?:\r?\n|$)/;
 const TEMPLATER_TAG_REGEX = /<%[\s\S]*?%>/g;
 const markdownParser = unified().use(remarkParse);
 
@@ -39,19 +41,23 @@ export const extractFrontmatter = (
 ): { frontmatter?: Record<string, unknown>; bodyMarkdown: string } => {
   const frontmatterMatch = FRONTMATTER_BLOCK_REGEX.exec(content);
   if (!frontmatterMatch) {
+    if (FRONTMATTER_OPEN_REGEX.test(content)) throw new Error("Unterminated frontmatter");
     return {
       frontmatter: undefined,
       bodyMarkdown: content,
     };
   }
 
-  const frontmatterSource = frontmatterMatch[1]!;
+  const frontmatterSource = frontmatterMatch[2]!;
   const bodyMarkdown = content.slice(frontmatterMatch[0].length);
 
   try {
-    const result = matter(`---\n${sanitizeFrontmatterSource(frontmatterSource)}\n---\n${bodyMarkdown}`);
+    const parsed: unknown = frontmatterMatch[1] === "+++"
+      ? parseToml(frontmatterSource)
+      : matter(`---\n${sanitizeFrontmatterSource(frontmatterSource)}\n---\n${bodyMarkdown}`).data;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid frontmatter object");
     return {
-      frontmatter: result.data as Record<string, unknown>,
+      frontmatter: parsed as Record<string, unknown>,
       bodyMarkdown,
     };
   } catch {
@@ -64,7 +70,15 @@ export const extractFrontmatter = (
 
 type PositionedLink = RawLink & { start: number; end: number };
 
-function collectLinkSpans(markdown: string): PositionedLink[] {
+function isRoamMarker(markdown: string, start: number, end: number, target: string): boolean {
+  if (target === ">" && /^(?:\s|$)/.test(markdown.slice(end))) return true;
+  if (markdown.slice(start - 2, start) !== "{{") return false;
+  const suffix = markdown.slice(end);
+  return (/^(?:TODO|DONE)$/i.test(target) && suffix.startsWith("}}")) ||
+    (/^(?:audio|video|pdf)$/i.test(target) && /^:\s*[^}\r\n]+\}\}/.test(suffix));
+}
+
+function collectLinkSpans(markdown: string, roamReserved = false): PositionedLink[] {
   const links: PositionedLink[] = [];
   const htmlRanges = htmlElementRanges(markdown);
   const wikilinkRegex = /(?<!!)\[\[([^\]]+)\]\]/g;
@@ -79,6 +93,7 @@ function collectLinkSpans(markdown: string): PositionedLink[] {
         if (markdown[offset - 1] === "!" || isEscaped(markdown, offset)) continue;
         const [targetWithSection, ...labelParts] = match[1]!.split("|");
         const [target, section] = targetWithSection!.split("#");
+        if (roamReserved && isRoamMarker(markdown, offset, offset + match[0].length, target ?? "")) continue;
         if (target?.startsWith("http://") || target?.startsWith("https://")) continue;
         links.push({
           raw: match[0], target: target ?? "", section: section || undefined,
@@ -102,12 +117,12 @@ function collectLinkSpans(markdown: string): PositionedLink[] {
   return links;
 }
 
-export const extractRawLinks = (markdown: string): RawLink[] =>
-  collectLinkSpans(markdown).map(({ start: _start, end: _end, ...link }) => link);
+export const extractRawLinks = (markdown: string, roamReserved = false): RawLink[] =>
+  collectLinkSpans(markdown, roamReserved).map(({ start: _start, end: _end, ...link }) => link);
 
 /** Source spans for authored links; excludes code, embeds, escaped text, and raw HTML. */
-export function findRawLinkSpans(markdown: string, raw: string, type: RawLink["type"]): { start: number; end: number }[] {
-  return collectLinkSpans(markdown)
+export function findRawLinkSpans(markdown: string, raw: string, type: RawLink["type"], roamReserved = false): { start: number; end: number }[] {
+  return collectLinkSpans(markdown, roamReserved)
     .filter((link) => link.raw === raw && link.type === type)
     .map(({ start, end }) => ({ start, end }));
 }

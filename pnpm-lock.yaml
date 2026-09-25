@@ -251,6 +251,9 @@ importers:
       katex:
         specifier: ^0.18.9
         version: 0.18.9
+      mdast-util-find-and-replace:
+        specifier: 3.0.2
+        version: 3.0.2
       mdast-util-to-string:
         specifier: ^4.0.0
         version: 4.0.0
@@ -275,6 +278,9 @@ importers:
       rehype-autolink-headings:
         specifier: ^7.1.0
         version: 7.1.0
+      rehype-citation:
+        specifier: 2.3.2
+        version: 2.3.2
       rehype-katex:
         specifier: ^7.0.1
         version: 7.0.1
@@ -290,6 +296,9 @@ importers:
       rehype-stringify:
         specifier: ^10.0.1
         version: 10.0.1
+      remark-breaks:
+        specifier: 4.0.0
+        version: 4.0.0
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
@@ -308,6 +317,9 @@ importers:
       shiki:
         specifier: ^1.26.2
         version: 1.29.2
+      smol-toml:
+        specifier: ^1.7.0
+        version: 1.9.0
       unified:
         specifier: ^11.0.5
         version: 11.0.5
@@ -318,6 +330,9 @@ importers:
       '@types/hast':
         specifier: ^3.0.4
         version: 3.0.4
+      '@types/mdast':
+        specifier: ^4.0.0
+        version: 4.0.4
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.13
@@ -4543,6 +4558,10 @@ packages:
   slash@5.1.0:
     resolution: {integrity: sha512-ZA6oR3T/pEyuqwMgAKT0/hAv8oAXckzbkmR0UkUosQ+Mc4RxGoJkRmwHgHufaenlyAgE1Mxgpdcrf75y6XcnDg==}
     engines: {node: '>=14.16'}
+
+  smol-toml@1.9.0:
+    resolution: {integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==}
+    engines: {node: '>= 18'}
 
   source-map-js@1.2.1:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
@@ -9246,6 +9265,8 @@ snapshots:
   sisteransi@1.0.5: {}
 
   slash@5.1.0: {}
+
+  smol-toml@1.9.0: {}
 
   source-map-js@1.2.1: {}
 

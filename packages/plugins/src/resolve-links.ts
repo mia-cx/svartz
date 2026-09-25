@@ -10,7 +10,7 @@
 import GithubSlugger from "github-slugger";
 import { posix } from "node:path";
 import { definePlugin } from "@svartz/core";
-import { createAssetResolver } from "./internal/asset-references";
+import { createAssetResolver, roamMediaReferences } from "./internal/asset-references";
 import { findRawLinkSpans } from "./internal/parse";
 import { resolveLink, buildSlugMap } from "./internal/resolve";
 import { alternateNames, routeHref } from "./internal/routes";
@@ -59,13 +59,14 @@ function replaceLinkMarkup(
   href: string,
   label: string,
   type: "wikilink" | "markdown",
+  roamReserved: boolean,
 ): string {
-  return replaceAuthoredLinkMarkup(markdown, raw, type, `<a href="${href}">${escapeHtml(label)}</a>`);
+  return replaceAuthoredLinkMarkup(markdown, raw, type, `<a href="${href}">${escapeHtml(label)}</a>`, roamReserved);
 }
 
-function replaceAuthoredLinkMarkup(markdown: string, raw: string, type: "wikilink" | "markdown", html: string): string {
+function replaceAuthoredLinkMarkup(markdown: string, raw: string, type: "wikilink" | "markdown", html: string, roamReserved: boolean): string {
   let content = markdown;
-  for (const replacement of findRawLinkSpans(markdown, raw, type).reverse()) {
+  for (const replacement of findRawLinkSpans(markdown, raw, type, roamReserved).reverse()) {
     content = content.slice(0, replacement.start) + html + content.slice(replacement.end);
   }
   return content;
@@ -77,9 +78,9 @@ function escapeHtml(value: string): string {
   })[character]!);
 }
 
-function replaceMissingWikilink(markdown: string, raw: string, label: string): string {
+function replaceMissingWikilink(markdown: string, raw: string, label: string, roamReserved: boolean): string {
   return replaceAuthoredLinkMarkup(markdown, raw, "wikilink",
-    `<span class="svartz-unresolved-link" role="link" aria-disabled="true">${escapeHtml(label)}</span>`);
+    `<span class="svartz-unresolved-link" role="link" aria-disabled="true">${escapeHtml(label)}</span>`, roamReserved);
 }
 
 export const resolveLinks = definePlugin(() => ({
@@ -99,6 +100,7 @@ export const resolveLinks = definePlugin(() => ({
 
       const slugMap = buildSlugMap(slugSources);
       const resolveAsset = createAssetResolver(assetFiles);
+      const roamMedia = ctx.meta.get("svartz:roamMedia") === true;
 
       for (const file of ctx.files) {
         if (!isMarkdownFile(file.extension)) {
@@ -108,7 +110,16 @@ export const resolveLinks = definePlugin(() => ({
 
         const resolved = new Set<string>();
         const linkTargets: Record<string, string> = {};
-        let rewrittenContent = file.content.replace(
+        let rewrittenContent = file.content;
+        if (roamMedia) {
+          for (const reference of roamMediaReferences(file.content).reverse()) {
+            const assetPath = resolveAsset(file, reference.target);
+            if (!assetPath) continue;
+            rewrittenContent = rewrittenContent.slice(0, reference.start) +
+              toRelativeAssetHref(file.slug, assetPath) + rewrittenContent.slice(reference.end);
+          }
+        }
+        rewrittenContent = rewrittenContent.replace(
           MARKDOWN_ASSET,
           (raw, start: string, target: string, end: string) => {
             const assetPath = resolveAsset(file, target);
@@ -138,6 +149,7 @@ export const resolveLinks = definePlugin(() => ({
               toRelativeAssetHref(file.slug, assetPath),
               label,
               rawLink.type,
+              roamMedia,
             );
             continue;
           }
@@ -158,9 +170,10 @@ export const resolveLinks = definePlugin(() => ({
               toRelativeNoteHref(file.slug, target, rawLink.section),
               label,
               rawLink.type,
+              roamMedia,
             );
           } else if (rawLink.type === "wikilink") {
-            rewrittenContent = replaceMissingWikilink(rewrittenContent, rawLink.raw, label);
+            rewrittenContent = replaceMissingWikilink(rewrittenContent, rawLink.raw, label, roamMedia);
           }
         }
 
