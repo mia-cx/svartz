@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { mergePlugins } from "@svartz/core";
-import { realpath, stat } from "node:fs/promises";
+import { lstat, readlink, realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import type {
   FrontmatterFields,
@@ -19,7 +19,7 @@ import type {
   VaultConfig,
   VaultThemeConfig,
 } from "./types/index";
-import { VaultBuildRootConflict, VaultIdConflict, VaultIdNotFound, VaultMountConflict, VaultPathInvalid } from "./types/index";
+import { VaultBuildRootConflict, VaultBuildRootResolutionFailed, VaultIdConflict, VaultIdNotFound, VaultMountConflict, VaultPathInvalid } from "./types/index";
 
 // --- Hardcoded defaults ---
 
@@ -148,14 +148,23 @@ const isWithin = (root: string, candidate: string): boolean => {
 };
 
 /** Resolve an existing ancestor so two not-yet-created build roots cannot hide behind a symlink. */
-const canonicalBuildRoot = async (path: string): Promise<string> => {
+const canonicalBuildRoot = async (path: string, visited = new Set<string>()): Promise<string> => {
   try {
     return await realpath(path);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    try {
+      if ((await lstat(path)).isSymbolicLink()) {
+        if (visited.has(path)) throw new Error(`Build-root symlink cycle at ${path}`);
+        visited.add(path);
+        return canonicalBuildRoot(resolve(dirname(path), await readlink(path)), visited);
+      }
+    } catch (cause) {
+      if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
+    }
     const parent = dirname(path);
     if (parent === path) throw error;
-    return resolve(await canonicalBuildRoot(parent), basename(path));
+    return resolve(await canonicalBuildRoot(parent, visited), basename(path));
   }
 };
 
@@ -230,7 +239,7 @@ const resolveVaultConfig = (
 export const resolveConfig = (
   config: SvartzConfig,
   configDir: string,
-): Effect.Effect<ResolvedConfigSet, VaultPathInvalid | VaultMountConflict | VaultBuildRootConflict | VaultIdConflict> =>
+): Effect.Effect<ResolvedConfigSet, VaultPathInvalid | VaultMountConflict | VaultBuildRootConflict | VaultBuildRootResolutionFailed | VaultIdConflict> =>
   Effect.gen(function* () {
     const buildDefaults = resolveBuildDefaults(config.build);
     const vaults = yield* Effect.forEach(
@@ -256,9 +265,17 @@ export const resolveConfig = (
     }
 
     const hostVaults = vaults.filter((vault) => vault.target.type === "host");
-    const buildRoots = yield* Effect.forEach(vaults, (vault) =>
-      Effect.promise(() => canonicalBuildRoot(resolve(vault.outDir, ".."))),
-    );
+    const buildRoots = yield* Effect.forEach(vaults, (vault) => {
+      const path = resolve(vault.outDir, "..");
+      return Effect.tryPromise({
+        try: () => canonicalBuildRoot(path),
+        catch: (cause) => new VaultBuildRootResolutionFailed({
+          vaultId: vault.id,
+          path,
+          message: `Could not resolve build root for vault "${vault.id}" (${path}): ${String(cause)}`,
+        }),
+      });
+    });
     for (let first = 0; first < vaults.length; first++) {
       for (let next = first + 1; next < vaults.length; next++) {
         const current = vaults[first]!;

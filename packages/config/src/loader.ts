@@ -13,6 +13,7 @@ import {
   ConfigNotFound,
   VaultMountConflict,
   VaultBuildRootConflict,
+  VaultBuildRootResolutionFailed,
   VaultIdConflict,
   VaultPathInvalid,
 } from "./types/index";
@@ -174,7 +175,7 @@ export const loadConfig = (
   configPath?: string,
 ): Effect.Effect<
   ResolvedSvartzConfig,
-  ConfigNotFound | ConfigImportFailed | ConfigDecodeFailed | VaultPathInvalid | VaultMountConflict | VaultBuildRootConflict | VaultIdConflict
+  ConfigNotFound | ConfigImportFailed | ConfigDecodeFailed | VaultPathInvalid | VaultMountConflict | VaultBuildRootConflict | VaultBuildRootResolutionFailed | VaultIdConflict
 > =>
   Effect.gen(function* () {
     // Validate the config path and resolve it to an absolute path.
