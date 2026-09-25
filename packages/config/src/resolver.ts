@@ -103,6 +103,15 @@ const mergeExclude = (
   vaultExclude: readonly string[] | undefined,
 ): string[] => [...new Set([...DEFAULT_EXCLUDE, ...(defaultExclude ?? []), ...(vaultExclude ?? [])])];
 
+const normalizeMountPath = (value: string | undefined): string => {
+  if (!value || value === "/") return "";
+  const segments = value.split("/").filter(Boolean);
+  if (segments.some((segment) => segment === "." || segment === ".." || segment.startsWith("["))) {
+    throw new Error(`Invalid vault mountPath "${value}"`);
+  }
+  return `/${segments.join("/")}`;
+};
+
 // --- Single vault resolution ---
 
 const resolveVaultConfig = (
@@ -159,6 +168,7 @@ const resolveVaultConfig = (
       theme: mergeThemes(defaults?.theme, vault.theme, configDir),
       frontmatter: mergeFrontmatter(defaults?.frontmatter, vault.frontmatter),
       site: mergeSite(defaults?.site, vault.site, vault.id),
+      mountPath: normalizeMountPath(vault.mountPath ?? defaults?.mountPath),
       target: vault.target,
       plugins,
     };

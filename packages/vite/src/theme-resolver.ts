@@ -1,7 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateTheme, type ResolvedConfig, type SvartzTheme } from "@svartz/core";
 
 type ThemeModule = Record<string, unknown> & {
@@ -54,9 +54,19 @@ function resolveThemeRuntimeImportId(
   resolveFromDirectory = process.cwd(),
 ): string {
   const themeModuleId = resolveThemeModuleId(config);
-  const runtimeModuleId =
-    themeModuleId === BUILTIN_THEME_MODULE_ID ? BUILTIN_THEME_RUNTIME_MODULE_ID : themeModuleId;
-  return pathToFileURL(resolveThemeEntry(runtimeModuleId, resolveFromDirectory)).href;
+  if (themeModuleId === BUILTIN_THEME_MODULE_ID) {
+    return pathToFileURL(resolveThemeEntry(BUILTIN_THEME_RUNTIME_MODULE_ID, resolveFromDirectory)).href;
+  }
+  const packageRoot = resolveThemePackageRoot(themeModuleId, resolveFromDirectory);
+  if (packageRoot && (themeModuleId.startsWith("/") || themeModuleId.startsWith("."))) {
+    const runtime = path.join(packageRoot, "dist/runtime.js");
+    if (existsSync(runtime)) return pathToFileURL(runtime).href;
+  }
+  try {
+    return pathToFileURL(resolveThemeEntry(`${themeModuleId}/runtime`, resolveFromDirectory)).href;
+  } catch {
+    return pathToFileURL(resolveThemeEntry(themeModuleId, resolveFromDirectory)).href;
+  }
 }
 
 function resolveThemeBuildImportId(
@@ -119,9 +129,13 @@ function createThemeVirtualModuleSource(
   themeModuleId: string,
   themeConfig: Record<string, unknown> = {},
 ): string {
+  // Generated files live under the host project, which may not install core directly.
+  const coreModuleId = typeof import.meta.resolve === "function"
+    ? fileURLToPath(import.meta.resolve("@svartz/core"))
+    : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../node_modules/@svartz/core/dist/index.js");
   return [
     `import * as themeModule from ${JSON.stringify(themeModuleId)};`,
-    'import { matchThemeRoute, resolveThemeRouteToArtifactKey } from "@svartz/core";',
+    `import { matchThemeRoute, resolveThemeRouteToArtifactKey } from ${JSON.stringify(coreModuleId)};`,
     "",
     `const _themeConfig = ${JSON.stringify(themeConfig)};`,
     "const _themeExport = themeModule.default ?? themeModule.theme ?? themeModule;",

@@ -33,6 +33,8 @@ it("builds and serves a vault inside an existing host without replacing host fil
   roots.push(root);
   await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "node_modules"), "dir");
   await mkdir(path.join(root, "src/routes/other"), { recursive: true });
+  await mkdir(path.join(root, "src/routes/blog/about"), { recursive: true });
+  await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
   await mkdir(path.join(root, "vault"));
   await mkdir(path.join(root, ".svelte-kit"));
 
@@ -46,7 +48,8 @@ it("builds and serves a vault inside an existing host without replacing host fil
   const viteConfig = [
     "import { sveltekit } from '@sveltejs/kit/vite';",
     "import { defineConfig } from 'vite';",
-    "export default defineConfig({ plugins: [sveltekit()] });",
+    `import { withSvartzHost } from ${JSON.stringify(path.join(workspaceRoot, "packages/vite/dist/host.js"))};`,
+    "export default withSvartzHost(defineConfig({ plugins: [sveltekit()] }));",
   ].join("\n");
   const svelteConfig = "import adapter from '@sveltejs/adapter-node';\nexport default { kit: { adapter: adapter() } };\n";
   await writeFile(path.join(root, "package.json"), packageJson);
@@ -56,12 +59,19 @@ it("builds and serves a vault inside an existing host without replacing host fil
   await writeFile(path.join(root, ".svelte-kit/keep"), "host state");
   await writeFile(path.join(root, "src/routes/+page.svelte"), "<h1>Host home</h1>\n");
   await writeFile(path.join(root, "src/routes/other/+page.svelte"), "<h1>Other route</h1>\n");
+  await writeFile(path.join(root, "src/routes/blog/about/+page.svelte"), "<h1>Manual about</h1>\n");
+  for (const name of ["+page.svelte", "+page.ts"]) {
+    await writeFile(path.join(root, "src/routes/[...slug]", name),
+      await readFile(path.join(workspaceRoot, "packages/cli/template/src/routes/[...slug]", name)));
+  }
   await writeFile(path.join(root, "vault/index.md"), "# Published note\n\nVault content.\n");
+  await writeFile(path.join(root, "vault/about.md"), "---\naliases: [about-alt]\n---\n# Vault about\n\nVault about body.\n");
   await writeFile(path.join(root, "svartz.config.ts"), `export default {
     version: "1.0.0",
     vaults: [{
       id: "notes",
       path: "vault",
+      mountPath: "/blog",
       theme: ${JSON.stringify(path.join(workspaceRoot, "themes/minimal"))},
       target: { type: "host" },
       site: { title: "Notes", url: "https://example.test" },
@@ -84,6 +94,8 @@ it("builds and serves a vault inside an existing host without replacing host fil
   await access(path.join(root, ".svelte-kit/output/server/entries/pages/other/_page.svelte.js"));
   expect(await readFile(path.join(root, ".svartz/vaults/notes/artifacts/pages/index.svelte"), "utf8"))
     .toContain("Published note");
+  expect(await readFile(path.join(root, ".svartz/vaults/notes/artifacts/pages/about-2.svelte"), "utf8"))
+    .toContain("Vault about body");
 
   const port = await freePort();
   const dev = spawn(process.execPath, [
@@ -112,6 +124,16 @@ it("builds and serves a vault inside an existing host without replacing host fil
     expect(response, stderr).toBeDefined();
     expect(response?.status, stderr).toBe(200);
     expect(await response?.text()).toContain("Other route");
+    const manual = await fetch(`http://127.0.0.1:${port}/blog/about`);
+    expect(await manual.text()).toContain("Manual about");
+    const vault = await fetch(`http://127.0.0.1:${port}/blog/about-2`);
+    const vaultBody = await vault.text();
+    expect(vault.status, `${stderr}\n${vaultBody}`).toBe(200);
+    expect(vaultBody).toContain("Vault about body");
+    const alias = await fetch(`http://127.0.0.1:${port}/blog/about-alt`, { redirect: "manual" });
+    expect(alias.status).toBe(308);
+    expect(alias.headers.get("location")).toBe("/blog/about-2/");
+    expect((await fetch(`http://127.0.0.1:${port}/blog/missing`)).status).toBe(404);
   } finally {
     dev.kill("SIGTERM");
     if (dev.exitCode === null) await once(dev, "exit");

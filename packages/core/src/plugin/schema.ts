@@ -38,6 +38,7 @@ const PluginSchema = Schema.Struct({
   discoverFiles: Schema.optional(HookInputSchema),
   parseFrontmatter: Schema.optional(HookInputSchema),
   filterUnpublished: Schema.optional(HookInputSchema),
+  allocateRoutes: Schema.optional(HookInputSchema),
   resolveLinks: Schema.optional(HookInputSchema),
   transformOfm: Schema.optional(HookInputSchema),
   transformGfm: Schema.optional(HookInputSchema),

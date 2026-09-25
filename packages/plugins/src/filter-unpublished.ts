@@ -47,9 +47,9 @@ export const filterUnpublished = definePlugin(() => ({
 
       const bodies = ctx.meta.get("sourceBodies");
       if (bodies instanceof Map) {
-        const slugs = new Set(publishedNotes.map((file) => file.slug));
-        for (const slug of bodies.keys()) {
-          if (!slugs.has(slug)) bodies.delete(slug);
+        const paths = new Set(publishedNotes.map((file) => file.path));
+        for (const path of bodies.keys()) {
+          if (!paths.has(path)) bodies.delete(path);
         }
       }
     },

@@ -3,6 +3,7 @@ import { posix } from "node:path";
 import { definePlugin, type RawLink } from "@svartz/core";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
 import { createAssetResolver } from "./internal/asset-references";
+import { alternateNames } from "./internal/routes";
 import { extractSectionMarkdown } from "./internal/parse";
 
 const EMBED_REGEX = /!\[\[([^\]]+)\]\]/g;
@@ -109,9 +110,8 @@ export const transformEmbeds = definePlugin(() => ({
       const slugMap = buildSlugMap(
         noteFiles.map((file) => ({
           slug: file.slug,
-          aliases: Array.isArray(file.frontmatter?.[ctx.config.frontmatter.aliasesField])
-            ? (file.frontmatter?.[ctx.config.frontmatter.aliasesField] as string[])
-            : [],
+          path: file.path,
+          aliases: alternateNames(file.frontmatter, ctx.config.frontmatter.aliasesField),
         })),
       );
       const allSlugs = noteFiles.map((file) => file.slug);
@@ -133,7 +133,7 @@ export const transformEmbeds = definePlugin(() => ({
         }
 
         seen.add(visitKey);
-        const targetSource = sourceBodies.get(targetSlug) ?? noteBySlug.get(targetSlug)?.content;
+        const targetSource = sourceBodies.get(noteBySlug.get(targetSlug)?.path ?? "") ?? noteBySlug.get(targetSlug)?.content;
         if (!targetSource) {
           return `<p><a href="${relativeNoteHref(sourceSlug, targetSlug, section)}">${alias ?? targetSlug}</a></p>`;
         }

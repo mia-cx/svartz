@@ -53,6 +53,7 @@ declare module 'virtual:svartz/artifacts' {
 
 	export interface RuntimeIndexEntry {
 		readonly slug: string;
+		readonly href: string;
 		readonly path: string;
 		readonly title: string;
 		readonly tags: readonly string[];
@@ -74,6 +75,7 @@ declare module 'virtual:svartz/artifacts' {
 	export interface RuntimeSearchDocument {
 		readonly id: string;
 		readonly slug: string;
+		readonly href: string;
 		readonly title: string;
 		readonly description?: string;
 		readonly content: string;
@@ -110,7 +112,9 @@ declare module 'virtual:svartz/artifacts' {
 		readonly tags: readonly RuntimeTagEntry[];
 		readonly folders: readonly RuntimeFolderEntry[];
 		readonly routes: {
+			readonly mountPath: string;
 			readonly notes: readonly string[];
+			readonly redirects: Readonly<Record<string, string>>;
 			readonly tags: readonly string[];
 			readonly folders: readonly string[];
 			readonly feed: readonly string[];

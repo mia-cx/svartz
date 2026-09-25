@@ -182,6 +182,7 @@ function normalizePlugin(plugin: SvartzPlugin): NormalizedSvartzPlugin {
       plugin.id,
       "filterUnpublished",
     ),
+    allocateRoutes: normalizeHook(plugin.allocateRoutes, plugin.id, "allocateRoutes"),
     resolveLinks: normalizeHook(
       plugin.resolveLinks,
       plugin.id,

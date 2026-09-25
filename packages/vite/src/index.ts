@@ -52,11 +52,13 @@ import {
   resolveRuntimePlugins,
 } from "./plugins";
 import { createVaultChangeEvent } from "./watch";
+import { isHostRouteFile, staticHostRoutes } from "./manual-routes";
 
 const PIPELINE_STAGES: readonly StageName[] = [
   "discoverFiles",
   "parseFrontmatter",
   "filterUnpublished",
+  "allocateRoutes",
   "resolveLinks",
   "transformOfm",
   "transformGfm",
@@ -164,8 +166,11 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     theme = await loadThemeModule((id) => import(id), context.config, context.root);
     plugins = resolveRuntimePlugins(context.config, theme);
     const runnerContext = createRunnerContext();
+    if (context.config.target.type === "host") {
+      runnerContext.meta.set("reservedRoutes", await staticHostRoutes(context.root, context.config.mountPath));
+    }
 
-    if (changeEvent) {
+    if (changeEvent && !isHostRouteFile(context.root, changeEvent.file)) {
       const changeResult = await executeHandleChange(plugins, changeEvent, runnerContext);
       if (changeResult.fatalError) {
         throw changeResult.fatalError;
@@ -303,6 +308,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     configureServer(server) {
       devServer = server;
       server.watcher.add(context.config.path);
+      if (context.config.target.type === "host") server.watcher.add(join(context.root, "src/routes"));
       server.middlewares.use((request, response, next) => {
         if (request.method !== "GET" && request.method !== "HEAD") return next();
         const artifact = assetForRequest(request.url ?? "", server.config.base ?? "/");
@@ -322,6 +328,10 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
         (file: string) => {
           if (!watcherPrimed) return;
 
+          if (context.config.target.type === "host" && isHostRouteFile(context.root, file)) {
+            scheduleVaultRebuild({ type, file });
+            return;
+          }
           const event = createVaultChangeEvent(context.config, type, file);
           if (!event) return;
           scheduleVaultRebuild(event);

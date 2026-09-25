@@ -31,7 +31,7 @@ const ARTIFACTS_PLACEHOLDER_SOURCE = [
   'export function getNoteArtifact(key) {',
   '  throw new Error(`[svartz:vite] note artifact "${key}" is not available yet`);',
   '}',
-  'export const index = { version: "0.0.0", entries: [], graph: {}, backlinks: {}, search: [], tags: [], folders: [], routes: { notes: [], tags: [], folders: [], feed: [], all: [] }, assets: [] };',
+  'export const index = { version: "0.0.0", entries: [], graph: {}, backlinks: {}, search: [], tags: [], folders: [], routes: { mountPath: "", notes: [], redirects: {}, tags: [], folders: [], feed: [], all: [] }, assets: [] };',
   'export const graph = index.graph;',
   'export const backlinks = index.backlinks;',
   'export const search = index.search;',

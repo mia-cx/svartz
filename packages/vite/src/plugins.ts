@@ -14,6 +14,7 @@ const REQUIRED_STAGES = [
   "discoverFiles",
   "parseFrontmatter",
   "filterUnpublished",
+  "allocateRoutes",
   "resolveLinks",
   "indexContent",
   "emitArtifacts",

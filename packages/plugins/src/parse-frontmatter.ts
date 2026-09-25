@@ -28,7 +28,7 @@ export const parseFrontmatter = definePlugin(() => ({
         file.frontmatter = frontmatter;
         file.content = bodyMarkdown;
         file.rawLinks = extractRawLinks(bodyMarkdown);
-        sourceBodies.set(file.slug, bodyMarkdown);
+        sourceBodies.set(file.path, bodyMarkdown);
       }
 
       ctx.meta.set("sourceBodies", sourceBodies);

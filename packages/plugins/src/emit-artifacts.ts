@@ -109,7 +109,7 @@ function buildSearchModuleSource(index: Index): string {
   const searchDocuments = Array.isArray(index.search) ? index.search : [];
   const miniSearch = new MiniSearch({
     fields: ["title", "description", "content", "tags", "aliases"],
-    storeFields: ["slug", "title", "description", "tags"],
+    storeFields: ["slug", "href", "title", "description", "tags"],
     idField: "id",
   });
 

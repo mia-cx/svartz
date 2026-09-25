@@ -20,16 +20,13 @@ import type {
 } from "@svartz/core";
 import { countWords, extractDescription, stripMarkdownToText } from "./internal/parse";
 import { normalizeDateTime } from "./internal/datetime";
+import { allocateRedirects, alternateNames, routeHref } from "./internal/routes";
 
 const INDEX_VERSION = "1.0.0";
 const DEFAULT_INDEX_TIMESTAMP = new Date(0);
 
 function isMarkdownFile(extension: string | undefined): boolean {
   return extension !== undefined && [".md", ".mdx", ".svx"].includes(extension);
-}
-
-function slugToHref(slug: string): string {
-  return slug === "index" ? "/" : `/${slug}/`;
 }
 
 function folderSlugFromEntry(slug: string): string | undefined {
@@ -75,6 +72,8 @@ export const indexContent = definePlugin(() => ({
     run(ctx) {
       const fm = ctx.config.frontmatter;
       const routeConfig = resolveThemeRouteConfig(ctx.config.theme);
+      const mountPath = ctx.config.mountPath ?? "";
+      const reservedPaths = (ctx.meta.get("reservedRoutes") as ReadonlySet<string> | undefined) ?? new Set<string>();
       const entries: IndexEntry[] = [];
       const search: SearchDocument[] = [];
       const tagCounts = new Map<string, number>();
@@ -103,9 +102,7 @@ export const indexContent = definePlugin(() => ({
           ? (frontmatter[fm.tagsField] as string[])
           : [];
 
-        const aliases = Array.isArray(frontmatter[fm.aliasesField])
-          ? [...new Set(frontmatter[fm.aliasesField] as string[])]
-          : [];
+        const aliases = alternateNames(frontmatter, fm.aliasesField);
 
         const fmDesc = frontmatter[fm.descriptionField];
         const description =
@@ -138,17 +135,14 @@ export const indexContent = definePlugin(() => ({
 
         const links: IndexLink[] = (file.rawLinks ?? []).map((rl) => ({
           raw: rl.raw,
-          href:
-            file.links?.find((resolved) => {
-              const target = rl.target.toLowerCase().split("/").pop();
-              return target && resolved.endsWith(target);
-            }) ?? null,
+          href: file.linkTargets?.[rl.raw] ?? null,
           section: rl.section,
           label: rl.label,
         }));
 
         entries.push({
           slug: file.slug,
+          href: routeHref(file.slug, mountPath),
           path: file.path,
           title,
           tags,
@@ -167,6 +161,7 @@ export const indexContent = definePlugin(() => ({
         search.push({
           id: file.slug,
           slug: file.slug,
+          href: routeHref(file.slug, mountPath),
           title,
           description,
           content: plainTextContent,
@@ -183,7 +178,7 @@ export const indexContent = definePlugin(() => ({
           folderCounts.set(folderSlug, (folderCounts.get(folderSlug) ?? 0) + 1);
         }
 
-        noteRouteSet.add(slugToHref(file.slug));
+        noteRouteSet.add(routeHref(file.slug, mountPath));
       }
 
       entries.sort((a, b) => a.slug.localeCompare(b.slug));
@@ -229,7 +224,7 @@ export const indexContent = definePlugin(() => ({
           slug,
           title: slug,
           noteCount,
-          href: `/${routeConfig.tags}/${slug}/`,
+          href: routeHref(`${routeConfig.tags}/${slug}`, mountPath),
         }));
 
       const folders: FolderIndexEntry[] = [...folderCounts.entries()]
@@ -238,29 +233,43 @@ export const indexContent = definePlugin(() => ({
           slug,
           title: folderTitle(slug),
           noteCount,
-          href: `/${routeConfig.folders}/${slug}/`,
+          href: routeHref(`${routeConfig.folders}/${slug}`, mountPath),
         }));
 
-      const tagsRoot = `/${routeConfig.tags}/`;
-      const foldersRoot = `/${routeConfig.folders}/`;
-      const feedRoot = `/${routeConfig.feed}/`;
+      const tagsRoot = routeHref(routeConfig.tags, mountPath);
+      const foldersRoot = routeHref(routeConfig.folders, mountPath);
+      const feedRoot = routeHref(routeConfig.feed, mountPath);
+      const home = routeHref("index", mountPath);
+      const isManualRoute = (href: string) =>
+        reservedPaths.has(href.slice(mountPath.length).replace(/^\/+|\/+$/g, ""));
+      const naturalFolderRoutes = folders
+        .map((folder) => routeHref(folder.slug, mountPath))
+        .filter((href) => !isManualRoute(href));
+      const tagRoutes = [tagsRoot, ...tags.map((entry) => entry.href)].filter((href) => !isManualRoute(href));
+      const folderRoutes = [foldersRoot, ...folders.map((entry) => entry.href), ...naturalFolderRoutes]
+        .filter((href) => !isManualRoute(href));
+      const feedRoutes = entries.length > 0 && !isManualRoute(feedRoot) ? [feedRoot] : [];
+      const listingPaths = [home, ...tagRoutes, ...folderRoutes, ...feedRoutes]
+        .map((href) => href.slice(mountPath.length).replace(/^\/+|\/+$/g, ""));
+      const redirects = allocateRedirects(
+        ctx.files, mountPath, new Set([...reservedPaths, ...listingPaths]), fm.aliasesField,
+      );
 
       const routes: RouteIndex = {
+        mountPath,
         notes: [...noteRouteSet].sort(),
-        tags: [tagsRoot, ...tags.map((entry) => entry.href)],
-        folders: [foldersRoot, ...folders.map((entry) => entry.href)],
-        feed: entries.length > 0 ? [feedRoot] : [],
-        all: [
-          "/",
-          ...new Set([
-            ...noteRouteSet,
-            tagsRoot,
-            ...tags.map((entry) => entry.href),
-            foldersRoot,
-            ...folders.map((entry) => entry.href),
-            ...(entries.length > 0 ? [feedRoot] : []),
-          ]),
-        ].sort(),
+        redirects,
+        tags: tagRoutes,
+        folders: folderRoutes,
+        feed: feedRoutes,
+        all: [...new Set([
+          ...(!isManualRoute(home) ? [home] : []),
+          ...noteRouteSet,
+          ...tagRoutes,
+          ...folderRoutes,
+          ...feedRoutes,
+          ...Object.keys(redirects),
+        ])].sort(),
       };
 
       const index: Index = {

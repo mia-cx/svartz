@@ -8,6 +8,12 @@ const LinkResolutionStrategySchema = Schema.Literal(
   "absolute",
 );
 
+const MountPathSchema = Schema.String.pipe(Schema.filter(
+  (value) => /^\/?(?:[A-Za-z0-9._~-]+\/?)*$/.test(value) &&
+    value.split("/").every((segment) => segment !== "." && segment !== ".."),
+  { message: () => "mountPath must contain only static URL segments" },
+));
+
 const VaultThemeConfigSchema = Schema.Union(
   Schema.String,
   Schema.Struct({
@@ -50,6 +56,7 @@ const PluginEntrySchema = Schema.Unknown;
 
 /** Shared vault options; defaults and VaultConfig both use this shape. */
 const VaultOptionsSchema = Schema.Struct({
+  mountPath: Schema.optional(MountPathSchema),
   publicationMode: Schema.optional(Schema.Literal("exclusion", "inclusion")),
   include: Schema.optional(Schema.Array(Schema.String)),
   exclude: Schema.optional(Schema.Array(Schema.String)),
@@ -97,6 +104,7 @@ const VaultConfigSchema = Schema.Struct({
   id: Schema.String,
   path: Schema.String,
   target: TargetConfigSchema,
+  mountPath: Schema.optional(MountPathSchema),
   publicationMode: Schema.optional(Schema.Literal("exclusion", "inclusion")),
   include: Schema.optional(Schema.Array(Schema.String)),
   exclude: Schema.optional(Schema.Array(Schema.String)),

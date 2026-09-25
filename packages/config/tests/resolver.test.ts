@@ -51,6 +51,22 @@ describe("resolveConfigPaths", () => {
     expect(resolved.vaults[0]!.outDir).toBe(resolve(PKG_ROOT, "build/main"));
   });
 
+  it("normalizes a vault mount independently of the deployment base", async () => {
+    const config: SvartzConfig = {
+      version: "1.0.0",
+      defaults: { mountPath: "/notes/" },
+      vaults: [{
+        id: "main",
+        path: "tests/fixtures/valid-vault",
+        mountPath: "blog/posts/",
+        target: { type: "static", basePath: "/site" },
+      }],
+    };
+    const resolved = await resolveConfig(config, PKG_ROOT);
+    expect(resolved.vaults[0]!.mountPath).toBe("/blog/posts");
+    expect(resolved.vaults[0]!.target.basePath).toBe("/site");
+  });
+
   it("applies hardcoded defaults when no defaults or per-vault overrides", async () => {
     const resolved = await resolveConfig(minimalConfig, PKG_ROOT);
     const vault = resolved.vaults[0]!;
