@@ -21,6 +21,18 @@ class VaultPathInvalid extends Data.TaggedError("VaultPathInvalid")<{
   readonly message: string;
 }> {}
 
+class VaultMountConflict extends Data.TaggedError("VaultMountConflict")<{
+  readonly firstVaultId: string;
+  readonly secondVaultId: string;
+  readonly mountPath: string;
+  readonly message: string;
+}> {}
+
+class VaultIdConflict extends Data.TaggedError("VaultIdConflict")<{
+  readonly vaultId: string;
+  readonly message: string;
+}> {}
+
 class VaultIdNotFound extends Data.TaggedError("VaultIdNotFound")<{
   readonly vaultId: string;
   readonly message: string;
@@ -31,6 +43,8 @@ type ConfigError =
   | ConfigImportFailed
   | ConfigDecodeFailed
   | VaultPathInvalid
+  | VaultMountConflict
+  | VaultIdConflict
   | VaultIdNotFound;
 
 export {
@@ -38,6 +52,8 @@ export {
   ConfigImportFailed,
   ConfigDecodeFailed,
   VaultPathInvalid,
+  VaultMountConflict,
+  VaultIdConflict,
   VaultIdNotFound,
   type ConfigError,
 };

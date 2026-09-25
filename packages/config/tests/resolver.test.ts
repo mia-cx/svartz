@@ -5,6 +5,8 @@ import {
   getVault,
   listVaults,
   VaultPathInvalid,
+  VaultMountConflict,
+  VaultIdConflict,
   VaultIdNotFound,
 } from "../src/index";
 import type { SvartzConfig, ResolvedSvartzConfig } from "../src/index";
@@ -24,6 +26,40 @@ const minimalConfig: SvartzConfig = {
 };
 
 describe("resolveConfigPaths", () => {
+  it("rejects duplicate vault ids before artifact paths collide", async () => {
+    const config: SvartzConfig = {
+      version: "1.0.0",
+      vaults: [
+        { id: "same", path: "tests/fixtures/valid-vault", mountPath: "/blog", target: { type: "host" } },
+        { id: "same", path: "tests/fixtures/valid-vault", mountPath: "/work", target: { type: "host" } },
+      ],
+    };
+    await expect(resolveConfig(config, PKG_ROOT)).rejects.toThrow(VaultIdConflict);
+  });
+  it.each([["/blog", "/blog"], ["/blog", "/blog/work"], ["", "/blog"]])(
+    "rejects overlapping host mounts %s and %s",
+    async (firstMount, secondMount) => {
+      const config: SvartzConfig = {
+        version: "1.0.0",
+        vaults: [
+          { id: "blog", path: "tests/fixtures/valid-vault", mountPath: firstMount, target: { type: "host" } },
+          { id: "work", path: "tests/fixtures/valid-vault", mountPath: secondMount, target: { type: "host" } },
+        ],
+      };
+      await expect(resolveConfig(config, PKG_ROOT)).rejects.toThrow(VaultMountConflict);
+    },
+  );
+
+  it("accepts separate host mounts", async () => {
+    const config: SvartzConfig = {
+      version: "1.0.0",
+      vaults: [
+        { id: "blog", path: "tests/fixtures/valid-vault", mountPath: "/blog", target: { type: "host" } },
+        { id: "work", path: "tests/fixtures/valid-vault", mountPath: "/work", target: { type: "host" } },
+      ],
+    };
+    expect((await resolveConfig(config, PKG_ROOT)).vaults.map((vault) => vault.mountPath)).toEqual(["/blog", "/work"]);
+  });
   it("resolves vault path to absolute", async () => {
     const resolved = await resolveConfig(minimalConfig, PKG_ROOT);
     expect(resolved.vaults[0]!.path).toBe(VALID_VAULT);

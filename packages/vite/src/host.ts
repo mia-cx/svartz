@@ -18,6 +18,9 @@ export function withSvartzHost(config: UserConfigExport): UserConfigExport {
                   process.env.SVARTZ_ARTIFACTS_MODULE_PATH,
               }
             : {}),
+          ...(process.env.SVARTZ_HOST_MODULE_PATH
+            ? { "virtual:svartz/host": process.env.SVARTZ_HOST_MODULE_PATH }
+            : {}),
           ...(process.env.SVARTZ_TAILWIND_SOURCES_PATH
             ? {
                 "virtual:svartz/tailwind-sources.css":

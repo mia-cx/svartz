@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ResolvedConfig } from "@svartz/config";
-import { getVaultBuildRoot, resolveThemePackageRoot } from "@svartz/vite";
+import { getGeneratedHostRegistryPath, getVaultBuildRoot, resolveThemePackageRoot } from "@svartz/vite";
 
 function dedupePaths(paths: readonly string[]): string[] {
   return [...new Set(paths)];
@@ -82,9 +82,22 @@ async function writeGeneratedTailwindSourcesFile(
   return cssFilePath;
 }
 
+async function writeGeneratedHostTailwindSourcesFile(
+  appRoot: string,
+  configDir: string,
+  vaults: readonly ResolvedConfig[],
+): Promise<string> {
+  const cssFilePath = path.join(path.dirname(getGeneratedHostRegistryPath(configDir)), "tailwind-sources.css");
+  const sourceGlobs = dedupePaths(vaults.flatMap((vault) => getTailwindSourceGlobs(appRoot, vault)));
+  await mkdir(path.dirname(cssFilePath), { recursive: true });
+  await writeFile(cssFilePath, createTailwindSourcesCss(sourceGlobs, cssFilePath));
+  return cssFilePath;
+}
+
 export {
   createTailwindSourcesCss,
   getGeneratedTailwindSourcesPath,
   getTailwindSourceGlobs,
   writeGeneratedTailwindSourcesFile,
+  writeGeneratedHostTailwindSourcesFile,
 };

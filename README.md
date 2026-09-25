@@ -28,6 +28,7 @@ The initializer creates a small SvelteKit shell, `svartz.config.ts`, and `vault/
 In an existing SvelteKit app, the same command adds Svartz dependencies, configuration, and a Vite wrapper while preserving routes, layouts, adapter, and existing scripts. It adds `svartz:dev`, `svartz:build`, and `svartz:preview` scripts. Existing vault definitions remain in their config; `init` does not replace them. Use `--no-install` or `--no-git` when you want to handle those steps yourself.
 
 Configure [vault mounts and canonical routes](docs/routes.md) when an existing app serves notes under paths such as `/journal`.
+One SvelteKit host can [compose multiple mounted vaults](docs/host-vaults.md) in a single build.
 
 The local CLI is vault-aware:
 
@@ -37,9 +38,9 @@ pnpm exec svartz build --vault docs
 pnpm exec svartz dev --vault docs
 ```
 
-- `svartz build` without `--vault` builds every configured vault.
-- Build outputs live under `.svartz/vaults/<vault-id>/dist`.
-- SvelteKit internals live under `.svartz/vaults/<vault-id>/.svelte-kit` so parallel vault workspaces do not trample each other.
+- `svartz build` builds every configured vault. In a SvelteKit host, all vaults share one build even when `--vault` is given.
+- Vault artifacts live under `.svartz/vaults/<vault-id>`. A host app's adapter decides its site output path.
+- Standalone vault builds keep SvelteKit internals under `.svartz/vaults/<vault-id>/.svelte-kit`.
 
 ### Managed Turbo tasks
 

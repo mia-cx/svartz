@@ -1,7 +1,7 @@
 import type { EntryGenerator } from './$types';
 import { error, redirect } from '@sveltejs/kit';
 import { base } from '$app/paths';
-import { routes } from 'virtual:svartz/artifacts';
+import { routes } from 'virtual:svartz/host';
 
 export const load = ({ url }) => {
   const appPath = base ? url.pathname.slice(base.length) || '/' : url.pathname;
@@ -12,5 +12,4 @@ export const load = ({ url }) => {
 };
 
 export const entries: EntryGenerator = async () => routes.all
-  .filter((pathname) => pathname !== '/')
   .map((pathname) => ({ slug: pathname.replace(/^\/+|\/+$/g, '') }));
