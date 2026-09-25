@@ -40,7 +40,7 @@ it("collects imported CSS across Windows paths and accepts a custom route withou
     const output = join(root, "output");
     await mkdir(join(output, "server"), { recursive: true });
     await writeFile(join(output, "server", "entry.js"), "export const customRoute = true;\n");
-    const plugin = hostStylesPlugin([{ modules: ["C:\\vault\\runtime.ts"], path: stylesPath }]);
+    const plugin = hostStylesPlugin([{ modules: ["C:\\vault\\runtime.ts"], pagesRoot: "C:\\vault\\pages", path: stylesPath }]);
     if (typeof plugin.generateBundle !== "function" || typeof plugin.writeBundle !== "function") {
       throw new Error("Host style hooks are missing");
     }
@@ -49,11 +49,22 @@ it("collects imported CSS across Windows paths and accepts a custom route withou
       viteMetadata: { importedCss: new Set(css) },
     });
     await plugin.generateBundle.call({ environment: { name: "client" } } as never, {} as never, {
-      "runtime.js": chunk("runtime.js", { "C:/vault/runtime.ts?import": {} }, ["shared.js"], ["layout.js"], ["runtime.css"]),
+      "runtime.js": chunk("runtime.js", { "C:/vault/runtime.ts?import": {} }, ["shared.js"], ["layout.js", "styled.js", "other.js", "grouped.js"], ["runtime.css"]),
       "shared.js": chunk("shared.js", {}, ["runtime.js"], [], ["shared.css"]),
       "layout.js": chunk("layout.js", {}, [], [], ["layout.css"]),
+      "styled.js": chunk("styled.js", { "C:/vault/pages/styled.svelte": {} }, ["shared.js"], [], ["styled.css"]),
+      "other.js": chunk("other.js", { "C:/vault/pages/other.svelte": {} }, [], [], ["other.css"]),
+      "grouped.js": chunk("grouped.js", { "C:/vault/pages/first.svelte": {}, "C:/vault/pages/second.svelte": {} }, [], [], ["grouped.css"]),
     } as never, false);
-    expect(JSON.parse(await readFile(stylesPath, "utf8"))).toEqual(["layout.css", "runtime.css", "shared.css"]);
+    expect(JSON.parse(await readFile(stylesPath, "utf8"))).toEqual({
+      shared: ["layout.css", "runtime.css", "shared.css"],
+      notes: {
+        "pages/styled.svelte": ["styled.css"],
+        "pages/other.svelte": ["other.css"],
+        "pages/first.svelte": ["grouped.css"],
+        "pages/second.svelte": ["grouped.css"],
+      },
+    });
     await plugin.writeBundle.call({ environment: { name: "client" } } as never, { dir: join(output, "client") } as never, {} as never);
     expect(await readFile(join(output, "server", "entry.js"), "utf8")).toBe("export const customRoute = true;\n");
   } finally {

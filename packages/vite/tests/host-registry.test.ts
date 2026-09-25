@@ -31,7 +31,7 @@ describe("host registry", () => {
     expect(source).toContain('import("/workspace/.svartz/vaults/blog/artifacts/runtime-artifacts.ts")');
     expect(source).toContain('import("/workspace/.svartz/vaults/work/artifacts/runtime-theme.ts")');
     expect(source).toContain('import.meta.env.SSR ?');
-    expect(source).toContain('return selected ? runtimeStyles[vaults.indexOf(selected)] ?? [] : [];');
+    expect(source).toContain('return [...styles.shared, ...(key ? styles.notes[key] ?? [] : [])];');
     expect(source).not.toMatch(/import \* as (?:artifacts|theme)/);
     expect(source).toContain('mountPath: "/blog"');
     expect(source).toContain('mountPath: "/work"');

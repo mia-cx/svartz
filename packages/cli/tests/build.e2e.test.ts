@@ -70,10 +70,15 @@ describe("svartz CLI", () => {
 
   it("links styled notes in the standalone shell without loading JavaScript", async () => {
     const notePath = resolve(ROOT, "vaults/docs/standalone-style.svx");
+    const otherPath = resolve(ROOT, "vaults/docs/unrelated-style.svx");
     try {
       await writeFile(notePath, "<h1 class='standalone-tone'>Standalone style</h1><style>.standalone-tone { color: rgb(12, 34, 56); }</style>\n");
+      await writeFile(otherPath, "<h1 class='unrelated-tone'>Unrelated style</h1><style>.unrelated-tone { color: rgb(78, 90, 12); }</style>\n");
       await run(process.execPath, ["packages/cli/dist/index.js", "build", "--vault", "docs"]);
-      const styles = JSON.parse(await readFile(getGeneratedHostStylesPath(getGeneratedHostRegistryPath(ROOT), "docs"), "utf8")) as string[];
+      const manifest = JSON.parse(await readFile(getGeneratedHostStylesPath(getGeneratedHostRegistryPath(ROOT), "docs"), "utf8")) as {
+        shared: string[]; notes: Record<string, string[]>;
+      };
+      const styles = [...manifest.shared, ...manifest.notes["pages/standalone-style.svelte"]!];
       expect(styles.length).toBeGreaterThan(0);
       const css = (await Promise.all(styles.map((file) =>
         readFile(resolve(DIST_ROOT, file), "utf8")))).join("\n");
@@ -81,8 +86,11 @@ describe("svartz CLI", () => {
       const html = await readFile(resolve(DIST_ROOT, "standalone-style/index.html"), "utf8");
       expect(html).toContain("Standalone style");
       expect(styles.some((file) => html.includes(file))).toBe(true);
+      expect(manifest.notes["pages/unrelated-style.svelte"]?.length).toBeGreaterThan(0);
+      expect(manifest.notes["pages/unrelated-style.svelte"]?.some((file) => html.includes(file))).toBe(false);
     } finally {
       await rm(notePath, { force: true });
+      await rm(otherPath, { force: true });
     }
   }, 240_000);
 
@@ -100,7 +108,10 @@ describe("svartz CLI", () => {
       };\n`);
       await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
       for (const id of ["docs", "other"]) {
-        const styles = JSON.parse(await readFile(getGeneratedHostStylesPath(getGeneratedHostRegistryPath(ROOT), id), "utf8")) as string[];
+        const manifest = JSON.parse(await readFile(getGeneratedHostStylesPath(getGeneratedHostRegistryPath(ROOT), id), "utf8")) as {
+          shared: string[]; notes: Record<string, string[]>;
+        };
+        const styles = [...manifest.shared, ...manifest.notes["pages/multi-vault-style.svelte"]!];
         expect(styles.length).toBeGreaterThan(0);
         const html = await readFile(resolve(ROOT, `.svartz/vaults/${id}/dist/multi-vault-style/index.html`), "utf8");
         expect(styles.some((file) => html.includes(file))).toBe(true);
