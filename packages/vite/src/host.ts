@@ -46,16 +46,17 @@ export function hostStylesPlugin(manifests: readonly HostStyleManifest[]): Plugi
       await Promise.all(manifests.map(async ({ modules, pagesRoot, path }) => {
         const runtimeModules = new Set(modules.map(normalizeModulePath));
         const noteRoot = `${normalizeModulePath(pagesRoot).replace(/\/+$/, "")}/`;
-        const noteChunks = new Map<string, string>();
+        const noteChunks = new Map<string, string[]>();
         for (const item of Object.values(bundle)) {
           if (item.type !== "chunk") continue;
-          const noteModule = Object.keys(item.modules)
+          const noteModules = Object.keys(item.modules)
             .map((id) => normalizeModulePath(id.split("?")[0]!))
-            .find((id) => id.startsWith(noteRoot) && id.endsWith(".svelte"));
-          if (noteModule) noteChunks.set(item.fileName, `pages/${noteModule.slice(noteRoot.length)}`);
+            .filter((id) => id.startsWith(noteRoot) && id.endsWith(".svelte"));
+          if (noteModules.length > 0) noteChunks.set(item.fileName,
+            noteModules.map((id) => `pages/${id.slice(noteRoot.length)}`));
         }
         const shared = new Set<string>();
-        const notes = new Map<string, Set<string>>();
+        const noteChunkStyles = new Map<string, Set<string>>();
         const collect = (fileName: string, stylesheets: Set<string>, visited: Set<string>): void => {
           if (visited.has(fileName)) return;
           visited.add(fileName);
@@ -66,15 +67,14 @@ export function hostStylesPlugin(manifests: readonly HostStyleManifest[]): Plugi
           for (const file of css ?? []) stylesheets.add(file);
           for (const imported of item.imports) collect(imported, stylesheets, visited);
           for (const imported of item.dynamicImports) {
-            const noteKey = noteChunks.get(imported);
-            if (!noteKey) {
+            if (!noteChunks.has(imported)) {
               collect(imported, stylesheets, visited);
               continue;
             }
-            let noteStyles = notes.get(noteKey);
+            let noteStyles = noteChunkStyles.get(imported);
             if (!noteStyles) {
-              noteStyles = new Set();
-              notes.set(noteKey, noteStyles);
+              noteStyles = new Set<string>();
+              noteChunkStyles.set(imported, noteStyles);
               collect(imported, noteStyles, new Set());
             }
           }
@@ -84,6 +84,16 @@ export function hostStylesPlugin(manifests: readonly HostStyleManifest[]): Plugi
           if (item.type !== "chunk") continue;
           if (!Object.keys(item.modules).some((id) => runtimeModules.has(normalizeModulePath(id.split("?")[0]!)))) continue;
           collect(item.fileName, shared, visited);
+        }
+        const notes = new Map<string, Set<string>>();
+        for (const [fileName, noteKeys] of noteChunks) {
+          const css = noteChunkStyles.get(fileName);
+          if (!css) continue;
+          for (const noteKey of noteKeys) {
+            const styles = notes.get(noteKey) ?? new Set<string>();
+            for (const file of css) styles.add(file);
+            notes.set(noteKey, styles);
+          }
         }
         const styles: HostStyles = {
           shared: [...shared].sort(),

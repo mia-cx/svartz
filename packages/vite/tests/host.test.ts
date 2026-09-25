@@ -49,17 +49,20 @@ it("collects imported CSS across Windows paths and accepts a custom route withou
       viteMetadata: { importedCss: new Set(css) },
     });
     await plugin.generateBundle.call({ environment: { name: "client" } } as never, {} as never, {
-      "runtime.js": chunk("runtime.js", { "C:/vault/runtime.ts?import": {} }, ["shared.js"], ["layout.js", "styled.js", "other.js"], ["runtime.css"]),
+      "runtime.js": chunk("runtime.js", { "C:/vault/runtime.ts?import": {} }, ["shared.js"], ["layout.js", "styled.js", "other.js", "grouped.js"], ["runtime.css"]),
       "shared.js": chunk("shared.js", {}, ["runtime.js"], [], ["shared.css"]),
       "layout.js": chunk("layout.js", {}, [], [], ["layout.css"]),
       "styled.js": chunk("styled.js", { "C:/vault/pages/styled.svelte": {} }, ["shared.js"], [], ["styled.css"]),
       "other.js": chunk("other.js", { "C:/vault/pages/other.svelte": {} }, [], [], ["other.css"]),
+      "grouped.js": chunk("grouped.js", { "C:/vault/pages/first.svelte": {}, "C:/vault/pages/second.svelte": {} }, [], [], ["grouped.css"]),
     } as never, false);
     expect(JSON.parse(await readFile(stylesPath, "utf8"))).toEqual({
       shared: ["layout.css", "runtime.css", "shared.css"],
       notes: {
         "pages/styled.svelte": ["styled.css"],
         "pages/other.svelte": ["other.css"],
+        "pages/first.svelte": ["grouped.css"],
+        "pages/second.svelte": ["grouped.css"],
       },
     });
     await plugin.writeBundle.call({ environment: { name: "client" } } as never, { dir: join(output, "client") } as never, {} as never);
