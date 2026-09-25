@@ -1,0 +1,9 @@
+---
+description: Reload editable Svartz config modules
+globs: packages/config/src/loader.ts, packages/config/tests/loader.test.ts
+alwaysApply: false
+---
+
+# Config imports
+
+Jiti's `moduleCache: false` does not bypass Node's native ESM cache for `.mjs` and `.js` under `"type": "module"`. Give those native imports a fresh file URL query on each load. Keep `.ts` and CommonJS `.js` on Jiti so their existing import behavior survives.

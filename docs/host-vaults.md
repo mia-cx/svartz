@@ -2,6 +2,8 @@
 
 Place vaults in the host's `svartz.config.ts` with separate `mountPath` values. The host keeps its own SvelteKit routes and adapter.
 
+Svartz also loads `.mjs` and `.js` config files. Calls to `loadConfig` in the same process pick up edits to `.mjs`, ESM `.js`, and `.ts` files. An ESM `.js` config follows its nearest `package.json` with `"type": "module"`.
+
 ```ts
 import { defineConfig } from '@svartz/config';
 
