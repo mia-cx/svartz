@@ -18,7 +18,7 @@ export default withSvartzHost(defineConfig({ plugins: [sveltekit()] }));
 
 - `virtual:svartz/artifacts` exposes the generated note components, published index, route data, and browser resources for one vault.
 - `virtual:svartz/theme` exposes the theme, its route matcher, and a `ready` promise that loads lazy components.
-- `virtual:svartz/host` exposes all configured vault modules, combined routes, `resolveHostVault(pathname)`, and `prepareHostVault(pathname)`.
+- `virtual:svartz/host` exposes each host vault's published metadata, combined routes, `resolveHostVault(pathname)`, and `prepareHostVault(pathname)`. The latter loads only the selected vault's runtime code.
 
 The generated catchall awaits `prepareHostVault` in universal `load` before rendering. A custom route that renders `SvartzRuntimePage` must do the same, after removing SvelteKit's deployment base from the pathname. The helper avoids top-level await in the generated theme module, which can stall SSR chunk rendering when a lazy page imports a shared package. See [`@svartz/ui`](../ui/README.md) for a working route example.
 

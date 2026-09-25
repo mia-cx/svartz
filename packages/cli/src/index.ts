@@ -387,13 +387,38 @@ const selectVault = (
     return vault;
   });
 
+const selectHostVaults = (
+  config: ResolvedConfigSet,
+  vaultId?: string,
+): Effect.Effect<readonly ResolvedConfig[], CliVaultNotFound | CliUnsupportedTarget> =>
+  Effect.gen(function* () {
+    if (vaultId) {
+      const selected = yield* selectVault(config, vaultId);
+      if (selected.target.type !== "host") {
+        return yield* new CliUnsupportedTarget({
+          vaultId: selected.id,
+          targetType: selected.target.type,
+          message: `Vault "${selected.id}" targets "${selected.target.type}" and cannot be mounted in a host app. Set target.type to "host".`,
+        });
+      }
+    }
+    const vaults = config.vaults.filter((vault) => vault.target.type === "host");
+    if (vaults.length === 0) {
+      return yield* new CliVaultNotFound({
+        vaultId: vaultId ?? "<host>",
+        availableVaults: [],
+        message: "No host vaults are configured. Set target.type to \"host\" for a vault mounted in this app.",
+      });
+    }
+    return vaults;
+  });
+
 const loadDevWatchContext = async (
   options: DevOptions,
 ): Promise<DevWatchContext> => {
   const workspace = await runEffect(loadWorkspace(options.config));
-  if (options.vault) await runEffect(selectVault(workspace.config, options.vault));
   const vaults = workspace.hostApp
-    ? workspace.config.vaults
+    ? await runEffect(selectHostVaults(workspace.config, options.vault))
     : [await runEffect(selectVault(workspace.config, options.vault))];
   const workspaceRoot = workspace.projectRoot;
 
@@ -614,8 +639,10 @@ const previewVaults = (
 const previewCommand = (options: PreviewOptions): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
     const workspace = yield* loadWorkspace(options.config);
-    const vault = yield* selectVault(workspace.config, options.vault);
-    yield* previewVaults(workspace, workspace.hostApp ? workspace.config.vaults : [vault], options);
+    const vaults = workspace.hostApp
+      ? yield* selectHostVaults(workspace.config, options.vault)
+      : [yield* selectVault(workspace.config, options.vault)];
+    yield* previewVaults(workspace, vaults, options);
   });
 
 const createDevWatcher = (
@@ -647,8 +674,10 @@ const createDevWatcher = (
 const devRunnerCommand = (options: DevOptions): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
     const workspace = yield* loadWorkspace(options.config);
-    const vault = yield* selectVault(workspace.config, options.vault);
-    yield* devVaults(workspace, workspace.hostApp ? workspace.config.vaults : [vault], options);
+    const vaults = workspace.hostApp
+      ? yield* selectHostVaults(workspace.config, options.vault)
+      : [yield* selectVault(workspace.config, options.vault)];
+    yield* devVaults(workspace, vaults, options);
   });
 
 const runDevSupervisor = async (options: DevOptions): Promise<void> => {
@@ -754,15 +783,13 @@ const runDevSupervisor = async (options: DevOptions): Promise<void> => {
 const buildCommand = (options: BuildOptions): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
     const workspace = yield* loadWorkspace(options.config);
-    if (options.vault) {
-      const vault = yield* selectVault(workspace.config, options.vault);
-      yield* buildVaults(workspace, workspace.hostApp ? workspace.config.vaults : [vault]);
+    if (workspace.hostApp) {
+      yield* buildVaults(workspace, yield* selectHostVaults(workspace.config, options.vault));
       return;
     }
-
-    if (workspace.hostApp) {
-      yield* selectVault(workspace.config);
-      yield* buildVaults(workspace, workspace.config.vaults);
+    if (options.vault) {
+      const vault = yield* selectVault(workspace.config, options.vault);
+      yield* buildVaults(workspace, [vault]);
       return;
     }
 
@@ -777,8 +804,7 @@ const buildAllCommand = (options: SharedOptions): Effect.Effect<void, CliError> 
   Effect.gen(function* () {
     const workspace = yield* loadWorkspace(options.config);
     if (workspace.hostApp) {
-      yield* selectVault(workspace.config);
-      yield* buildVaults(workspace, workspace.config.vaults);
+      yield* buildVaults(workspace, yield* selectHostVaults(workspace.config));
       return;
     }
     yield* Effect.forEach(

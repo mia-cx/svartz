@@ -6,6 +6,7 @@ import {
   listVaults,
   VaultPathInvalid,
   VaultMountConflict,
+  VaultBuildRootConflict,
   VaultIdConflict,
   VaultIdNotFound,
 } from "../src/index";
@@ -84,6 +85,19 @@ describe("resolveConfigPaths", () => {
       ],
     };
     expect((await resolveConfig(config, PKG_ROOT)).vaults.map((vault) => vault.mountPath)).toEqual(["/blog", "/work"]);
+  });
+  it.each([
+    ["shared/blog", "shared/blog"],
+    ["shared/blog", "shared/blog/nested"],
+  ])("rejects overlapping build roots %s and %s", async (firstRoot, secondRoot) => {
+    const config: SvartzConfig = {
+      version: "1.0.0",
+      vaults: [
+        { id: "blog", path: "tests/fixtures/valid-vault", outDir: `${firstRoot}/dist`, target: { type: "host" }, mountPath: "/blog" },
+        { id: "work", path: "tests/fixtures/valid-vault", outDir: `${secondRoot}/dist`, target: { type: "host" }, mountPath: "/work" },
+      ],
+    };
+    await expect(resolveConfig(config, PKG_ROOT)).rejects.toThrow(VaultBuildRootConflict);
   });
   it("resolves vault path to absolute", async () => {
     const resolved = await resolveConfig(minimalConfig, PKG_ROOT);
