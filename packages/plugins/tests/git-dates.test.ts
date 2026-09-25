@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -23,10 +23,12 @@ it("reads first and latest commit dates for a vault nested in a repository", asy
     await commit("2020-01-02T03:04:05+00:00");
     await writeFile(join(vault, "note.md"), "Second");
     await commit("2022-01-02T03:04:05+00:00");
+    await rename(join(vault, "note.md"), join(vault, "renamed.md"));
+    await commit("2023-01-02T03:04:05+00:00");
 
     const dates = await readGitDates(vault);
-    expect(dates.get("note.md")?.createdAt.toISOString()).toBe("2020-01-02T03:04:05.000Z");
-    expect(dates.get("note.md")?.modifiedAt.toISOString()).toBe("2022-01-02T03:04:05.000Z");
+    expect(dates.get("renamed.md")?.createdAt.toISOString()).toBe("2020-01-02T03:04:05.000Z");
+    expect(dates.get("renamed.md")?.modifiedAt.toISOString()).toBe("2023-01-02T03:04:05.000Z");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
