@@ -17,6 +17,7 @@ import {
   getGeneratedRuntimeArtifactsModulePath,
   getGeneratedRuntimeThemeModulePath,
   getVaultBuildRoot,
+  resolveThemePackageRoot,
   svartz,
 } from "@svartz/vite";
 import {
@@ -30,7 +31,7 @@ import {
 } from "vite";
 import {
   createWorkspaceSourceWatchDescriptors,
-  findPackageRootForModule,
+  getThemeWatchDescriptors,
   getConfigWatchDescriptors,
   isLocalWorkspacePackage,
   matchesWatchDescriptor,
@@ -401,20 +402,7 @@ const loadDevWatchContext = async (
     ...createWorkspaceSourceWatchDescriptors(workspaceRoot),
   ];
 
-  const themeRoot = findPackageRootForModule(vault.theme.base, workspace.appRoot);
-  if (themeRoot && isLocalWorkspacePackage(themeRoot, workspaceRoot)) {
-    descriptors.push({
-      path: path.join(themeRoot, "src"),
-      label: `${vault.theme.base} source`,
-      buildFilters: [vault.theme.base],
-    });
-    descriptors.push({
-      path: path.join(themeRoot, "package.json"),
-      label: `${vault.theme.base} package`,
-      exact: true,
-      buildFilters: [vault.theme.base],
-    });
-  }
+  descriptors.push(...getThemeWatchDescriptors(vault.theme.base, workspace.appRoot, workspaceRoot));
 
   return {
     workspace,
@@ -453,13 +441,14 @@ const createAppConfig = (
     process.env["SVARTZ_TARGET_TYPE"] = vault.target.type;
     process.env["SVARTZ_THEME_MODULE_PATH"] = getGeneratedRuntimeThemeModulePath(vault);
     process.env["SVARTZ_ARTIFACTS_MODULE_PATH"] = getGeneratedRuntimeArtifactsModulePath(vault);
-    const themeRoot = findPackageRootForModule(vault.theme.base, appRoot);
+    const themeRoot = resolveThemePackageRoot(vault.theme.base, appRoot);
+    const workspaceRoot = workspaceRootFromAppRoot(appRoot);
     const themeSourceCandidate = themeRoot
       ? path.join(themeRoot, "src", "lib", "index.ts")
       : "";
     if (
       themeRoot &&
-      isLocalWorkspacePackage(themeRoot, workspaceRootFromAppRoot(appRoot)) &&
+      isLocalWorkspacePackage(themeRoot, workspaceRoot) &&
       themeSourceCandidate &&
       existsSync(themeSourceCandidate)
     ) {
@@ -499,7 +488,7 @@ const createAppConfig = (
       plugins: [svartz({ config: vault, mode }) as never],
       server: {
         fs: {
-          allow: [path.resolve(appRoot, "../..")],
+          allow: [workspaceRoot, ...(themeRoot ? [themeRoot] : [])],
         },
         ...serverOptions,
       },

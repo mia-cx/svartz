@@ -2,8 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ResolvedConfig } from "@svartz/config";
-import { getVaultBuildRoot } from "@svartz/vite";
-import { findPackageRootForModule } from "./dev-watch";
+import { getVaultBuildRoot, resolveThemePackageRoot } from "@svartz/vite";
 
 function dedupePaths(paths: readonly string[]): string[] {
   return [...new Set(paths)];
@@ -24,7 +23,7 @@ function toRelativeGlob(fromDirectory: string, targetGlob: string): string {
 
 /** Collects Tailwind source globs for the resolved theme and its package deps (for example @svartz/ui). */
 function getTailwindSourceGlobs(appRoot: string, vault: ResolvedConfig): string[] {
-  const themeRoot = findPackageRootForModule(vault.theme.base, appRoot);
+  const themeRoot = resolveThemePackageRoot(vault.theme.base, appRoot);
   if (!themeRoot) return [];
 
   const sourceGlobs = [path.join(themeRoot, "src", "**/*.{svelte,ts}")];
@@ -44,7 +43,7 @@ function getTailwindSourceGlobs(appRoot: string, vault: ResolvedConfig): string[
       ...packageJson.dependencies,
       ...packageJson.devDependencies,
     })) {
-      const packageRoot = findPackageRootForModule(packageName, appRoot);
+      const packageRoot = resolveThemePackageRoot(packageName, appRoot);
       if (!packageRoot || packageRoot === themeRoot) continue;
       sourceGlobs.push(path.join(packageRoot, "src", "**/*.{svelte,ts}"));
     }

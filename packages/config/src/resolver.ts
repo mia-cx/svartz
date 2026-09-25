@@ -53,11 +53,19 @@ const normalizeTheme = (
 const mergeThemes = (
   defaultTheme: VaultThemeConfig | undefined,
   vaultTheme: VaultThemeConfig | undefined,
-): ResolvedThemeConfig =>
-  ({
+  configDir: string,
+): ResolvedThemeConfig => {
+  const theme = {
     ...normalizeTheme(defaultTheme),
     ...(vaultTheme ? normalizeTheme(vaultTheme) : {}),
-  }) as ResolvedThemeConfig;
+  };
+  return {
+    ...theme,
+    base: theme.base.startsWith("./") || theme.base.startsWith("../")
+      ? resolve(configDir, theme.base)
+      : theme.base,
+  };
+};
 
 // --- Frontmatter merge ---
 
@@ -148,7 +156,7 @@ const resolveVaultConfig = (
         vault.linkResolution ??
         defaults?.linkResolution ??
         DEFAULT_LINK_RESOLUTION,
-      theme: mergeThemes(defaults?.theme, vault.theme),
+      theme: mergeThemes(defaults?.theme, vault.theme, configDir),
       frontmatter: mergeFrontmatter(defaults?.frontmatter, vault.frontmatter),
       site: mergeSite(defaults?.site, vault.site, vault.id),
       target: vault.target,
