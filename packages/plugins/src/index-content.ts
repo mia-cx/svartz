@@ -22,6 +22,7 @@ import type {
 import { countWords, extractDescription, stripMarkdownToText } from "./internal/parse";
 import { normalizeDateTime } from "./internal/datetime";
 import { allocateRedirects, alternateNames, routeHref } from "./internal/routes";
+import { normalizeSlugSegment } from "./internal/slug";
 
 const INDEX_VERSION = "1.0.0";
 const DEFAULT_INDEX_TIMESTAMP = new Date(0);
@@ -30,15 +31,9 @@ function isMarkdownFile(extension: string | undefined): boolean {
   return extension !== undefined && [".md", ".mdx", ".svx"].includes(extension);
 }
 
-function folderSlugFromEntry(slug: string): string | undefined {
-  const segments = slug.split("/");
-  if (segments.length <= 1) return undefined;
-
-  if (segments[segments.length - 1] === "index") {
-    return segments.slice(0, -1).join("/") || undefined;
-  }
-
-  return segments.slice(0, -1).join("/") || undefined;
+function folderSlugsFromPath(path: string): string[] {
+  const segments = path.replaceAll("\\", "/").split("/").slice(0, -1).map(normalizeSlugSegment);
+  return segments.map((_, index) => segments.slice(0, index + 1).join("/"));
 }
 
 function folderTitle(slug: string): string {
@@ -115,7 +110,7 @@ export const indexContent = definePlugin(() => ({
             : "Untitled";
 
         const tags = Array.isArray(frontmatter[fm.tagsField])
-          ? (frontmatter[fm.tagsField] as string[])
+          ? [...new Set(frontmatter[fm.tagsField] as string[])]
           : [];
 
         const aliases = alternateNames(frontmatter, fm.aliasesField);
@@ -189,8 +184,7 @@ export const indexContent = definePlugin(() => ({
           tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
         }
 
-        const folderSlug = folderSlugFromEntry(file.slug);
-        if (folderSlug) {
+        for (const folderSlug of folderSlugsFromPath(file.path)) {
           folderCounts.set(folderSlug, (folderCounts.get(folderSlug) ?? 0) + 1);
         }
 

@@ -7,7 +7,7 @@
  *   - Two files at different paths never produce the same canonical slug.
  */
 
-const normalizeSlugSegment = (segment: string): string =>
+export const normalizeSlugSegment = (segment: string): string =>
   segment
     .replace(/\s/g, "-")
     .replace(/&/g, "-and-")

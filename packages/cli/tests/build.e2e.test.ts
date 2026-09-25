@@ -46,6 +46,12 @@ describe("svartz CLI", () => {
       await expect(access(DIST_INDEX_PATH)).resolves.toBeUndefined();
       await expect(access(DIST_NOT_FOUND_PATH)).resolves.toBeUndefined();
       await expect(access(DIST_SITEMAP_PATH)).rejects.toMatchObject({ code: "ENOENT" });
+      const guides = await readFile(resolve(DIST_ROOT, "folders/guides/index.html"), "utf8");
+      expect(guides).toContain("Create Plugin");
+      const utilities = await readFile(resolve(DIST_ROOT, "folders/plugins/utilities/index.html"), "utf8");
+      expect(utilities).toContain("parse");
+      const tag = await readFile(resolve(DIST_ROOT, "tags/guides/index.html"), "utf8");
+      expect(tag).toContain("Create Plugin");
 
       const html = await readFile(DIST_INDEX_PATH, "utf8");
       expect(html).toContain("<title>");
