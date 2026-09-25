@@ -14,4 +14,5 @@ alwaysApply: false
 - Svartz-generated artifacts stay under `.svartz/vaults/<id>`; the host's build output stays where its adapter puts it.
 - Local workspace theme package builds use the package name, not a theme path. Ordinary host apps restart on local theme edits without running a pnpm workspace filter.
 - A host build composes all configured host vaults in one Vite run. `virtual:svartz/host` selects mount-scoped artifact and theme modules; `virtual:svartz/artifacts` remains the single-vault contract. Keep generated asset output names under each mount to prevent filename collisions. `--vault` does not narrow a host build.
+- Read `kit.paths.base` from SvelteKit's resolved Vite definition. `site.url` is optional host metadata, and `$app/paths.base` can be relative during SSR. Pass app-relative paths to the host registry exactly once.
 - Generated catchall pages import `virtual:svartz/tailwind-sources.css`; the host CSS entry includes Tailwind and scans packed theme/UI `dist`. `withSvartzHost` adds the Tailwind plugin only when the host has none. Custom catchalls keep ownership and must import the CSS entry themselves.

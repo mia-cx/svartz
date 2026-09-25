@@ -55,7 +55,7 @@ import {
 } from "./plugins";
 import { createVaultChangeEvent } from "./watch";
 import { isHostRouteFile, staticHostRoutes } from "./manual-routes";
-import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath } from "./host-registry";
+import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath, svelteKitBasePath } from "./host-registry";
 import { emitProtectedGroupArtifacts } from "./protected-payload";
 import { writeProtectedBridgeModules, type ProtectedBridgeModule } from "./protected-bridge";
 
@@ -92,6 +92,7 @@ function selectedThemeSourcePath(config: ResolvedConfig): string | undefined {
 
 function svartz(options: SvartzVitePluginOptions): Plugin {
   let context = createSvartzViteContext(options);
+  let kitBasePath: string | undefined;
   let themeModuleId = resolveThemeModuleId(context.config);
   let theme: SvartzTheme | undefined;
   let plugins: ReturnType<typeof resolveRuntimePlugins> = [];
@@ -233,7 +234,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
               emittedBrowserResources,
               context.config.id,
               protectedBridgeModules,
-              deploymentBasePath(context.config),
+              deploymentBasePath(context.config, kitBasePath),
             ),
           ),
         ],
@@ -310,6 +311,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     },
     configResolved(resolved) {
       context = createSvartzViteContext(options, resolved);
+      kitBasePath = svelteKitBasePath(resolved.define);
       themeModuleId = selectedThemeSourcePath(context.config)
         ? resolveThemeModuleId(context.config)
         : resolveThemeRuntimeImportId(context.config, context.root);
@@ -417,7 +419,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
           emittedBrowserResources,
           context.config.id,
           protectedBridgeModules,
-          deploymentBasePath(context.config),
+          deploymentBasePath(context.config, kitBasePath),
         );
       }
 
@@ -453,6 +455,7 @@ export {
   createVaultChangeEvent,
   createHostRegistrySource,
   getGeneratedHostRegistryPath,
+  svelteKitBasePath,
 };
 export type {
   ResolvedSvartzVirtualModuleId,

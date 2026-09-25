@@ -41,6 +41,7 @@ declare module "virtual:svartz/artifacts" {
   ): { default: unknown; svartzProtected?: { slug: string; payloadId: string; payloadPath: string } };
   export const index: Index;
   export const vault: VaultView;
+  export const deploymentBasePath: string;
   export const searchOptions: typeof import("@svartz/core").SEARCH_INDEX_OPTIONS;
   export const graph: Graph;
   export const backlinks: Index["backlinks"];
@@ -71,6 +72,7 @@ declare module "virtual:svartz/host" {
   interface HostVaultMetadata {
     readonly id: string;
     readonly mountPath: string;
+    readonly basePath: string;
     readonly artifacts: Pick<typeof import("virtual:svartz/artifacts"), "index" | "siteConfig">;
   }
   interface PreparedHostVault extends HostVaultMetadata {

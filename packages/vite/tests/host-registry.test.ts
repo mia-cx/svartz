@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ResolvedConfig } from "@svartz/core";
-import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath } from "../src/host-registry";
+import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath, svelteKitBasePath } from "../src/host-registry";
 
 const vault = (id: string, mountPath: string): ResolvedConfig => ({
   version: "1.0.0",
@@ -43,6 +43,12 @@ describe("host registry", () => {
     expect(deploymentBasePath({ ...vault("docs", ""), target: { type: "static" }, site: { title: "Docs", url: "https://example.test/site" } })).toBe("");
     expect(deploymentBasePath({ ...vault("blog", "/blog"), site: { title: "Blog", url: "https://example.test/site" } })).toBe("/site");
     expect(createHostRegistrySource([{ ...vault("blog", "/blog"), site: { title: "Blog", url: "https://example.test/site" } }]))
-      .toContain('basePath: "/site"');
+      .toContain('basePath: ""');
+    expect(svelteKitBasePath({ __SVELTEKIT_PATHS_BASE__: '"/site"' })).toBe("/site");
+    expect(deploymentBasePath({ ...vault("blog", "/blog"), site: { title: "Blog" } }, "/site")).toBe("/site");
+    const source = createHostRegistrySource([vault("blog", "/site/docs")], "/site");
+    expect(source).toContain('basePath: "/site"');
+    expect(source).toContain("return pathname === mountPath || pathname.startsWith(`${mountPath}/`);");
+    expect(source).not.toContain("pathname.slice(basePath.length)");
   });
 });
