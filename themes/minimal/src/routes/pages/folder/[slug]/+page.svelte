@@ -5,6 +5,10 @@
 	const slug = $derived(page.params.slug ?? 'docs');
 
 	const index = {
+		folders: [
+			{ slug: 'docs', noteSlugs: ['docs', 'docs/getting-started', 'docs/api', 'docs/guides/quickstart'] },
+			{ slug: 'docs/guides', noteSlugs: ['docs/guides/quickstart'] }
+		],
 		entries: [
 			{ slug: 'docs', title: 'Docs index', description: 'Overview of the docs section.' },
 			{ slug: 'docs/getting-started', title: 'Getting Started', description: 'Setup guide.' },
@@ -15,7 +19,7 @@
 
 	const props = [
 		{ name: 'match', type: '{ params: { slug: string } }?', description: 'Route match — params.slug is the folder path to show (e.g. "docs").' },
-		{ name: 'index', type: '{ entries: Entry[] }?', description: 'Full vault index. Entries are filtered by slug prefix matching the folder.' }
+		{ name: 'index', type: '{ entries: Entry[]; folders: Folder[] }?', description: 'Published entries and physical folder membership.' }
 	];
 </script>
 
@@ -28,8 +32,8 @@
 	</div>
 	<h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">FolderPage</h1>
 	<p class="mt-3 text-base text-zinc-600 dark:text-zinc-400">
-		Renders the <code class="font-mono text-sm">/folders/[slug]</code> page — filters all vault
-		entries whose slug starts with the given folder path and displays them as a list.
+		Renders the <code class="font-mono text-sm">/folders/[slug]</code> page using each
+		folder's published note membership.
 	</p>
 
 	<!-- Preview -->

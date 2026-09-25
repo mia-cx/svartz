@@ -154,6 +154,8 @@ interface FolderIndexEntry {
   readonly slug: string;
   readonly title: string;
   readonly noteCount: number;
+  /** Canonical slugs of published notes physically inside this folder. */
+  readonly noteSlugs: readonly string[];
   readonly href: string;
 }
 

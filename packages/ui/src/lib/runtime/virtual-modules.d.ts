@@ -99,6 +99,7 @@ declare module 'virtual:svartz/artifacts' {
 		readonly slug: string;
 		readonly title: string;
 		readonly noteCount: number;
+		readonly noteSlugs: readonly string[];
 		readonly href: string;
 	}
 
