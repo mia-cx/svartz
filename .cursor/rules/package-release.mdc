@@ -1,0 +1,15 @@
+---
+description: Pack and publish Svartz workspace packages without leaking workspace dependency specs
+globs:
+  - packages/*/package.json
+  - themes/*/package.json
+  - scripts/check-release.mjs
+alwaysApply: false
+---
+
+# Package release
+
+- Pack and publish public packages with pnpm. It converts `workspace:` dependencies to npm-compatible version ranges. `npm pack` leaves the workspace specs in the archives.
+- Keep every public package at the same v1 version. Publish dependencies before `svartz`, because `npx svartz@latest init` installs the others from npm.
+- Validate the packed archives in a temporary project outside the monorepo. Source imports and workspace symlinks hide missing package files and dependency declarations.
+- The seven public packages use MCX v1.0. Keep a copy of the repository `LICENSE` in each package root and verify the text inside every packed archive.

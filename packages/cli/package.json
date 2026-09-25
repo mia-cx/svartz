@@ -1,9 +1,10 @@
 {
   "name": "svartz",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "publishConfig": {
     "access": "public"
   },
+  "engines": { "node": "^20.19.0 || >=22.12.0" },
   "description": "Svartz CLI for building static Obsidian vault sites.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -33,7 +34,7 @@
     "sveltekit",
     "digital-garden"
   ],
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@svartz/config": "workspace:*",
     "@svartz/vite": "workspace:*",

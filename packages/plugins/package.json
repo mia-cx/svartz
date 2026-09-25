@@ -1,6 +1,9 @@
 {
   "name": "@svartz/plugins",
-  "version": "0.0.1",
+  "version": "1.0.0",
+  "publishConfig": { "access": "public" },
+  "files": ["dist"],
+  "engines": { "node": "^20.19.0 || >=22.12.0" },
   "type": "module",
   "description": "Core pipeline plugins for the Svartz build system",
   "exports": {
@@ -21,7 +24,7 @@
     "url": "https://github.com/mia-cx/svartz.git",
     "directory": "packages/plugins"
   },
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@svartz/core": "workspace:*",
     "effect": "^3.19.19",
