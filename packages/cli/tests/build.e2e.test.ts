@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { beforeAll, describe, expect, it } from "vitest";
 import { deriveProtectionKey, openProtectedPayload, type ProtectedEnvelope, type ProtectedGroupPayload } from "@svartz/core";
+import { getGeneratedHostStylesPath, getGeneratedHostRegistryPath } from "@svartz/vite";
 import { chromium } from "playwright";
 
 const execFileAsync = promisify(execFile);
@@ -72,7 +73,7 @@ describe("svartz CLI", () => {
     try {
       await writeFile(notePath, "<h1 class='standalone-tone'>Standalone style</h1><style>.standalone-tone { color: rgb(12, 34, 56); }</style>\n");
       await run(process.execPath, ["packages/cli/dist/index.js", "build", "--vault", "docs"]);
-      const styles = JSON.parse(await readFile(resolve(ROOT, ".svartz/host/styles/646f6373.json"), "utf8")) as string[];
+      const styles = JSON.parse(await readFile(getGeneratedHostStylesPath(getGeneratedHostRegistryPath(ROOT), "docs"), "utf8")) as string[];
       expect(styles.length).toBeGreaterThan(0);
       const css = (await Promise.all(styles.map((file) =>
         readFile(resolve(DIST_ROOT, file), "utf8")))).join("\n");
@@ -82,6 +83,33 @@ describe("svartz CLI", () => {
       expect(styles.some((file) => html.includes(file))).toBe(true);
     } finally {
       await rm(notePath, { force: true });
+    }
+  }, 240_000);
+
+  it("links CSS for every standalone vault built in one CLI process", async () => {
+    const configPath = resolve(ROOT, ".svartz-multi-style-e2e.config.ts");
+    const notePath = resolve(ROOT, "vaults/docs/multi-vault-style.svx");
+    const packageSource = await readFile(resolve(ROOT, "package.json"), "utf8");
+    const turboSource = await readFile(resolve(ROOT, "turbo.json"), "utf8");
+    try {
+      await writeFile(notePath, "<h1 class='multi-tone'>Styled vault</h1><style>.multi-tone { color: rgb(12, 34, 56); }</style>\n");
+      await writeFile(configPath, `export default {
+        version: "1.0.0",
+        vaults: ["docs", "other"].map((id) => ({ id, path: "vaults/docs",
+          target: { type: "static" }, site: { title: id, url: "https://example.test" } })),
+      };\n`);
+      await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
+      for (const id of ["docs", "other"]) {
+        const styles = JSON.parse(await readFile(getGeneratedHostStylesPath(getGeneratedHostRegistryPath(ROOT), id), "utf8")) as string[];
+        expect(styles.length).toBeGreaterThan(0);
+        const html = await readFile(resolve(ROOT, `.svartz/vaults/${id}/dist/multi-vault-style/index.html`), "utf8");
+        expect(styles.some((file) => html.includes(file))).toBe(true);
+      }
+    } finally {
+      await rm(configPath, { force: true });
+      await rm(notePath, { force: true });
+      await writeFile(resolve(ROOT, "package.json"), packageSource);
+      await writeFile(resolve(ROOT, "turbo.json"), turboSource);
     }
   }, 240_000);
 

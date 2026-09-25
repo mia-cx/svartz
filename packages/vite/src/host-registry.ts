@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { ResolvedConfig } from "@svartz/core";
 import {
@@ -72,9 +73,9 @@ export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitB
   ].join("\n");
 }
 
-/** Use lowercase hex so IDs cannot escape the styles directory or collide on case-insensitive filesystems. */
+/** Use a fixed-length lowercase digest so every valid ID fits a filesystem filename. */
 export function getGeneratedHostStylesPath(hostRegistryPath: string, vaultId: string): string {
-  return join(dirname(hostRegistryPath), "styles", `${Buffer.from(vaultId).toString("hex") || "_"}.json`);
+  return join(dirname(hostRegistryPath), "styles", `${createHash("sha256").update(vaultId).digest("hex")}.json`);
 }
 
 export function getGeneratedHostRegistryPath(configDir: string): string {
