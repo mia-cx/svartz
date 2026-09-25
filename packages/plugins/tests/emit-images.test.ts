@@ -67,6 +67,16 @@ it("generates only public note previews and keeps explicit images", async () => 
   expect(ctx.index?.favicon?.svg).toBe("/blog/__svartz/favicon.svg");
 });
 
+it("uses the site fallback for redacted locked entries", async () => {
+  const ctx = await context({ image: "/fallback.png" });
+  ctx.index = { ...ctx.index!, entries: ctx.index!.entries.map((entry) => entry.slug === "locked"
+    ? { ...entry, locked: true, properties: {} }
+    : entry) };
+  await emitImages().emitArtifacts!.run(ctx);
+  expect(ctx.index?.entries.find((entry) => entry.slug === "locked")?.socialImage).toBe("/fallback.png");
+  expect(ctx.artifacts.has("assets/__svartz/social/locked.png")).toBe(false);
+});
+
 it.each(["svg", "png", "jpg", "jpeg", "webp", "ico"])("decodes %s favicon input", async (extension) => {
   const ctx = await context({ favicon: `icon.${extension}` });
   const root = ctx.config.path;

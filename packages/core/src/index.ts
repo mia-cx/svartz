@@ -29,8 +29,18 @@ export type {
   TagIndexEntry,
   TocEntry,
 } from "./types";
-export { createVaultView, type VaultNoteView, type VaultView } from "./vault-view";
+export { createVaultEntryView, createVaultView, type VaultNoteView, type VaultView } from "./vault-view";
 export { SEARCH_INDEX_OPTIONS } from "./search-options";
+export {
+  createProtectionSalt,
+  deriveProtectionKey,
+  sealProtectedPayload,
+  openProtectedPayload,
+  ProtectionFormatError,
+  ProtectionAuthenticationError,
+  type ProtectedEnvelope,
+} from "./protection";
+export { ProtectedSession, mergeProtectedIndex, resolveProtectedBridgeImports, type ProtectedGroupPayload } from "./protected-session";
 
 // Plugin contract — types
 export type {

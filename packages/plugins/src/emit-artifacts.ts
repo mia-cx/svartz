@@ -14,7 +14,7 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSlug from "rehype-slug";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { definePlugin, getCompilerContributions, SEARCH_INDEX_OPTIONS, type Artifact, type Index } from "@svartz/core";
+import { definePlugin, getCompilerContributions, SEARCH_INDEX_OPTIONS, type Artifact, type Index, type PluginContext, type ProcessedFile } from "@svartz/core";
 import { renderMarkdownTree } from "./internal/render-markdown";
 import { compileContent } from "./internal/compile-content";
 
@@ -59,14 +59,8 @@ function serializeValue(value: unknown): string {
 }
 
 async function compileNoteComponent(
-  ctx: Parameters<typeof renderMarkdownTree>[0],
-  file: {
-    readonly path: string;
-    readonly slug: string;
-    readonly extension?: string;
-    readonly content: string;
-    readonly frontmatter?: Record<string, unknown>;
-  },
+  ctx: PluginContext,
+  file: ProcessedFile,
   remarkPlugins: MdsvexOptions["remarkPlugins"],
   rehypePlugins: MdsvexOptions["rehypePlugins"],
 ): Promise<string> {
@@ -94,6 +88,18 @@ async function compileNoteComponent(
     rehypePlugins,
   });
   return result?.code ?? source;
+}
+
+/** Compile a protected note in memory for the separate encrypted bundle. */
+export async function compileProtectedNoteSource(ctx: PluginContext, file: ProcessedFile): Promise<string> {
+  if (!file.protection) throw new Error(`Note "${file.path}" is not protected`);
+  const compiler = getCompilerContributions(ctx);
+  return compileNoteComponent(
+    ctx,
+    file,
+    compiler.remarkPlugins as MdsvexOptions["remarkPlugins"],
+    [...(BASE_REHYPE_PLUGINS ?? []), ...compiler.rehypePlugins] as MdsvexOptions["rehypePlugins"],
+  );
 }
 
 function buildSearchModuleSource(index: Index): string {
@@ -145,7 +151,18 @@ export const emitArtifacts = definePlugin(() => ({
         noteFiles.map(async (file) => {
           const key = `pages/${file.slug}.svelte`;
           const path = join(artifactsRoot, key);
-          const contents = await compileNoteComponent(ctx, file, remarkPlugins, rehypePlugins);
+          // The public Vite graph may import this page. Protected source is compiled separately.
+          let contents: string;
+          if (file.protection) {
+            const token = (ctx.meta.get("svartz:protectedGroupTokens") as ReadonlyMap<string, string> | undefined)
+              ?.get(file.protection.group);
+            if (!token) throw new Error(`Protected note "${file.path}" has no encrypted group token`);
+            const payloadPath = `${ctx.config.mountPath ?? ""}/__svartz/protected/${token}.json`;
+            const payloadId = `vault:${ctx.config.id}:group:${token}`;
+            contents = `<script module>export const svartzProtected = ${JSON.stringify({ slug: file.slug, payloadId, payloadPath })};</script>\n<div data-svartz-protected-note></div>`;
+          } else {
+            contents = await compileNoteComponent(ctx, file, remarkPlugins, rehypePlugins);
+          }
 
           const artifact: Artifact = {
             key,
@@ -161,7 +178,10 @@ export const emitArtifacts = definePlugin(() => ({
       );
       const assetArtifacts = await Promise.all(
         assetFiles
-          .filter((file) => file.sourcePath)
+          .filter((file) => file.sourcePath && (
+            !ctx.meta.has("svartz:publicAssetPaths") ||
+            (ctx.meta.get("svartz:publicAssetPaths") as ReadonlySet<string>).has(file.path)
+          ))
           .map(async (file) => {
             const key = `assets/${file.path}`;
             const path = join(artifactsRoot, key);

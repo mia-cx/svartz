@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,6 +61,7 @@ const context = (
       theme: { base: "minimal" },
       target: { type: "static" },
       plugins: [],
+      passwordGroups: {},
     },
     files,
     artifacts: new Map(),
@@ -68,6 +69,126 @@ const context = (
   }) as PluginContext;
 
 describe("v1 publication boundary", () => {
+  it("fails closed for missing protected groups or passwords after publication filtering", () => {
+    const unknown = context([note("locked.md", "SECRET", { password_group: "friends" })]);
+    expect(() => filterUnpublished().filterUnpublished!.run(unknown)).toThrow(/undefined password group/);
+
+    const missing = context([note("locked.md", "SECRET", { password_group: "friends" })]);
+    Object.assign(missing.config.passwordGroups, { friends: { env: "SVARTZ_TEST_PROTECTED_PASSWORD" } });
+    expect(() => filterUnpublished().filterUnpublished!.run(missing)).toThrow(/SVARTZ_TEST_PROTECTED_PASSWORD/);
+
+    const unpublished = context([note("private.md", "SECRET", { private: true, password_group: "friends" })]);
+    filterUnpublished().filterUnpublished!.run(unpublished);
+    expect(unpublished.files).toEqual([]);
+  });
+
+  it("marks public protected notes without putting password values on files", () => {
+    vi.stubEnv("SVARTZ_TEST_PROTECTED_PASSWORD", "not-a-public-value");
+    try {
+      const ctx = context([note("locked.md", "SECRET", { password_group: "friends", hide_locked: true })]);
+      Object.assign(ctx.config.passwordGroups, { friends: { env: "SVARTZ_TEST_PROTECTED_PASSWORD" } });
+      expect(() => filterUnpublished().filterUnpublished!.run(ctx)).toThrow(/encrypted publication pipeline/);
+      ctx.meta.set("svartz:protectionReady", true);
+      filterUnpublished().filterUnpublished!.run(ctx);
+      expect(ctx.files[0]?.protection).toEqual({ group: "friends", hidden: true });
+      const firstToken = (ctx.meta.get("svartz:protectedGroupTokens") as Map<string, string>).get("friends");
+      filterUnpublished().filterUnpublished!.run(ctx);
+      expect((ctx.meta.get("svartz:protectedGroupTokens") as Map<string, string>).get("friends")).toBe(firstToken);
+      expect(JSON.stringify(ctx.files[0]?.protection)).not.toContain("not-a-public-value");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("keeps protected embed bodies inside their password group", () => {
+    const publicNote = note("public.md", "![[friends]]");
+    const friends = note("friends.md", "FRIENDS_SECRET ![[family]]", { title: "Friends" });
+    friends.protection = { group: "friends", hidden: false };
+    const family = note("family.md", "FAMILY_SECRET", { title: "Hidden family" });
+    family.protection = { group: "family", hidden: true };
+    const ctx = context([publicNote, friends, family]);
+    ctx.meta.set("sourceBodies", new Map(ctx.files.map((file) => [file.path, file.content])));
+
+    transformEmbeds().transformEmbeds!.run(ctx);
+
+    expect(publicNote.content).toContain("data-svartz-locked");
+    expect(publicNote.content).toContain("Friends");
+    expect(publicNote.content).not.toContain("FRIENDS_SECRET");
+    expect(publicNote.content).not.toContain("FAMILY_SECRET");
+    expect(friends.content).toContain("data-svartz-locked");
+    expect(friends.content).not.toContain("FAMILY_SECRET");
+    expect(friends.content).not.toContain("Hidden family");
+  });
+
+  it("indexes only public metadata and assets while retaining protected routes", () => {
+    vi.stubEnv("SVARTZ_TEST_PROTECTED_PASSWORD", "secret-password");
+    try {
+      const ctx = context([
+        note("public.md", "[[locked]] ![Public](media/public.png)"),
+        note("locked.md", "BODY_SECRET ![Private](media/private.png)", {
+          title: "Locked title", description: "DESCRIPTION_SECRET", tags: ["secret-tag"],
+          aliases: ["SECRET_ALIAS"], password_group: "friends", created_at: "2026-01-01",
+        }),
+        note("secret-folder/hidden.md", "HIDDEN_SECRET", { title: "HIDDEN_TITLE", password_group: "friends", hide_locked: true }),
+        asset("media/public.png"),
+        asset("media/private.png"),
+      ]);
+      Object.assign(ctx.config.passwordGroups, { friends: { env: "SVARTZ_TEST_PROTECTED_PASSWORD" } });
+      ctx.meta.set("svartz:protectionReady", true);
+      filterUnpublished().filterUnpublished!.run(ctx);
+      resolveLinks().resolveLinks!.run(ctx);
+      indexContent().indexContent!.run(ctx);
+
+      const index = ctx.index!;
+      expect(index.entries.map((entry) => entry.slug)).toEqual(["locked", "public"]);
+      expect(index.entries[0]).toMatchObject({
+        href: "/locked/", title: "Locked title", locked: true, path: "",
+        properties: {}, content: "", tags: [], aliases: [], links: [],
+      });
+      expect(index.entries[0]?.createdAt).toBeUndefined();
+      expect(index.routes.notes).toContain("/secret-folder/hidden/");
+      expect(index.folders).not.toContainEqual(expect.objectContaining({ slug: "secret-folder" }));
+      expect(index.search.map((entry) => entry.slug)).toEqual(["public"]);
+      expect(index.graph).toEqual({ public: [] });
+      expect(index.assets.map((item) => item.path)).toEqual(["media/public.png"]);
+      expect(JSON.stringify(index)).not.toMatch(/BODY_SECRET|DESCRIPTION_SECRET|HIDDEN_SECRET|HIDDEN_TITLE|SECRET_ALIAS|secret-tag|private\.png|secret-password/);
+      const protectedEntries = ctx.meta.get("svartz:protectedEntries") as Map<string, unknown[]>;
+      expect(protectedEntries.get("friends")).toHaveLength(2);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("never sends protected note source or private assets to the public emitter", async () => {
+    vi.stubEnv("SVARTZ_TEST_PROTECTED_PASSWORD", "secret-password");
+    const root = await mkdtemp(join(tmpdir(), "svartz-protected-emitter-"));
+    try {
+      const ctx = context([
+        {
+          ...note("locked.md", "<h1>EXECUTABLE_SECRET</h1> ![Private](media/private.png)", {
+            title: "Locked", password_group: "friends",
+          }),
+          path: "locked.svx", extension: ".svx",
+        },
+        asset("media/private.png"),
+      ], "exclusion", [], [], root, join(root, "dist"));
+      Object.assign(ctx.config.passwordGroups, { friends: { env: "SVARTZ_TEST_PROTECTED_PASSWORD" } });
+      ctx.meta.set("svartz:protectionReady", true);
+      filterUnpublished().filterUnpublished!.run(ctx);
+      indexContent().indexContent!.run(ctx);
+      await emitArtifacts().emitArtifacts!.run(ctx);
+
+      expect([...ctx.artifacts.keys()].sort()).toEqual(["index.ts", "pages/locked.svelte", "search.ts"]);
+      expect(ctx.artifacts.get("pages/locked.svelte")?.contents).toMatch(/svartzProtected.*__svartz\/protected\/[A-Za-z0-9_-]+\.json/);
+      expect(ctx.artifacts.get("pages/locked.svelte")?.contents).toContain("<div data-svartz-protected-note></div>");
+      expect([...ctx.artifacts.values()].map((item) => String(item.contents)).join(""))
+        .not.toMatch(/EXECUTABLE_SECRET|private\.png|secret-password|friends/);
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("keeps a public note's frontmatter social image but not a private note's image", () => {
     const ctx = context([
       note("public.md", "", { socialImage: "media/cover.png" }),
@@ -77,6 +198,27 @@ describe("v1 publication boundary", () => {
     ]);
     filterUnpublished().filterUnpublished!.run(ctx);
     expect(ctx.files.map((file) => file.path)).toEqual(["public.md", "media/cover.png"]);
+  });
+
+  it("includes attachment URLs in responsive images and media tags", () => {
+    const ctx = context([
+      note("locked.md", '<picture><source srcset="media/small.webp 1x, media/large.webp 2x"><img src="media/fallback.png"></picture><video poster="media/poster.jpg" src="media/clip.mp4"></video><a href="media/file.pdf">Download</a>', { password_group: "friends" }),
+      ...["small.webp", "large.webp", "fallback.png", "poster.jpg", "clip.mp4", "file.pdf", "unused.png"].map((name) => asset(`media/${name}`)),
+    ]);
+    vi.stubEnv("SVARTZ_TEST_PROTECTED_PASSWORD", "secret-password");
+    try {
+      Object.assign(ctx.config.passwordGroups, { friends: { env: "SVARTZ_TEST_PROTECTED_PASSWORD" } });
+      ctx.meta.set("svartz:protectionReady", true);
+      filterUnpublished().filterUnpublished!.run(ctx);
+      const selected = (ctx.meta.get("svartz:protectedAssetPaths") as Map<string, Set<string>>).get("friends");
+      expect([...selected ?? []].sort()).toEqual([
+        "media/clip.mp4", "media/fallback.png", "media/file.pdf", "media/large.webp",
+        "media/poster.jpg", "media/small.webp",
+      ]);
+      expect(ctx.files.map((file) => file.path)).not.toContain("media/unused.png");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("fails closed when a note declares malformed frontmatter", () => {

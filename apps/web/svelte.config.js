@@ -35,6 +35,12 @@ function resolveAdapter(target) {
 const config = {
 	kit: {
 		adapter: resolveAdapter(targetType),
+		csp: {
+			directives: {
+				'script-src': ['self', 'blob:'],
+				'style-src': ['self', 'blob:', 'unsafe-inline']
+			}
+		},
 		outDir: kitOutDir,
 		paths: {
 			base: basePath

@@ -86,12 +86,15 @@ export const indexContent = definePlugin(() => ({
       const mountPath = ctx.config.mountPath ?? "";
       const reservedPaths = (ctx.meta.get("reservedRoutes") as ReadonlySet<string> | undefined) ?? new Set<string>();
       const entries: IndexEntry[] = [];
+      const protectedEntries = new Map<string, IndexEntry[]>();
       const search: SearchDocument[] = [];
       const tagCounts = new Map<string, number>();
       const folderCounts = new Map<string, number>();
       const noteRouteSet = new Set<string>();
+      const publicAssetPaths = ctx.meta.get("svartz:publicAssetPaths") as ReadonlySet<string> | undefined;
       const assetRecords = ctx.files
         .filter((file) => !isMarkdownFile(file.extension))
+        .filter((file) => !publicAssetPaths || publicAssetPaths.has(file.path))
         .map((file) => ({
           path: file.path,
           sourcePath: file.sourcePath ?? file.path,
@@ -146,7 +149,7 @@ export const indexContent = definePlugin(() => ({
           label: rl.label,
         }));
 
-        entries.push({
+        const entry: IndexEntry = {
           slug: file.slug,
           href: routeHref(file.slug, mountPath),
           path: file.path,
@@ -167,9 +170,37 @@ export const indexContent = definePlugin(() => ({
           createdAt,
           modifiedAt,
           publishedAt,
-        });
+        };
 
-        search.push({
+        if (file.protection) {
+          const groupEntries = protectedEntries.get(file.protection.group) ?? [];
+          groupEntries.push(entry);
+          protectedEntries.set(file.protection.group, groupEntries);
+          if (!file.protection.hidden) {
+            entries.push({
+              slug: file.slug,
+              href: entry.href,
+              path: "",
+              properties: {},
+              page: { toc: false, comments: false },
+              title,
+              locked: true,
+              tags: [],
+              aliases: [],
+              content: "",
+              links: [],
+              toc: [],
+              wordCount: 0,
+              readingTimeMinutes: 0,
+            });
+          }
+          noteRouteSet.add(entry.href);
+          if (file.protection.hidden) continue;
+        } else {
+          entries.push(entry);
+        }
+
+        if (!file.protection) search.push({
           id: file.slug,
           slug: file.slug,
           href: routeHref(file.slug, mountPath),
@@ -180,16 +211,20 @@ export const indexContent = definePlugin(() => ({
           aliases,
         });
 
-        for (const tag of tags) {
+        for (const tag of file.protection ? [] : tags) {
           tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
         }
 
-        for (const folderSlug of folderSlugsFromPath(file.path)) {
-          folderCounts.set(folderSlug, (folderCounts.get(folderSlug) ?? 0) + 1);
+        if (!file.protection?.hidden) {
+          for (const folderSlug of folderSlugsFromPath(file.path)) {
+            folderCounts.set(folderSlug, (folderCounts.get(folderSlug) ?? 0) + 1);
+          }
         }
 
         noteRouteSet.add(routeHref(file.slug, mountPath));
       }
+
+      ctx.meta.set("svartz:protectedEntries", protectedEntries);
 
       entries.sort((a, b) => a.slug.localeCompare(b.slug));
       search.sort((a, b) => a.slug.localeCompare(b.slug));
@@ -201,9 +236,12 @@ export const indexContent = definePlugin(() => ({
         backlinks[entry.slug] = [];
       }
 
+      const publicSlugs = new Set(ctx.files
+        .filter((file) => isMarkdownFile(file.extension) && !file.protection)
+        .map((file) => file.slug));
       for (const file of ctx.files) {
-        if (!isMarkdownFile(file.extension)) continue;
-        const resolvedLinks = file.links ?? [];
+        if (!isMarkdownFile(file.extension) || file.protection) continue;
+        const resolvedLinks = (file.links ?? []).filter((target) => publicSlugs.has(target));
         graph[file.slug] = [...resolvedLinks].sort();
 
         for (const target of resolvedLinks) {
@@ -262,7 +300,8 @@ export const indexContent = definePlugin(() => ({
       const listingPaths = [home, ...tagRoutes, ...folderRoutes, ...feedRoutes]
         .map((href) => href.slice(mountPath.length).replace(/^\/+|\/+$/g, ""));
       const redirects = allocateRedirects(
-        ctx.files, mountPath, new Set([...reservedPaths, ...listingPaths]), fm.aliasesField,
+        ctx.files.filter((file) => !file.protection), mountPath,
+        new Set([...reservedPaths, ...listingPaths]), fm.aliasesField,
       );
 
       const routes: RouteIndex = {

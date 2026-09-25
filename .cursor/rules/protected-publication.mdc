@@ -1,0 +1,18 @@
+---
+description: Keep encrypted SVX plaintext outside static publication
+globs: packages/core/src/protection.ts, packages/core/src/protected-session.ts, packages/plugins/src/filter-unpublished.ts, packages/plugins/src/index-content.ts, packages/plugins/src/emit-artifacts.ts, packages/vite/src/protected-*.ts, packages/ui/src/lib/runtime/ProtectedNote.svelte, packages/ui/src/lib/runtime/protected-client.ts
+alwaysApply: false
+---
+
+# Protected publication
+
+- Filter publication before links, embeds, indexes, and output. Keep unpublished and cross-group note content out of protected bundles too.
+- The public Vite graph imports locked shell components only. Compile transformed protected notes in a separate in-memory Vite build, then write ciphertext after the ordinary emitter clears its output directory.
+- Check every note import's path before handling its query. Permit only the Svelte-generated style query for same-group notes; other queries can inline cross-group plaintext into the ciphertext.
+- Give each group a fresh opaque token per build. Put the token, never the group name or password, in public shell URLs and authenticated payload IDs.
+- Bridge Svelte and client-safe Kit modules through host-generated facade chunks. A protected blob import must use the host's Svelte instance. Reject server-only imports before sealing.
+- Bridge client-safe `$lib` modules as host-owned imports too. A shared context key needs the same module instance on both sides; keep protected-only code in the vault.
+- Keep keys and private attachment object URLs in browser memory and revoke attachment URLs on lock. Imported ES module records can remain in the browser realm after lock. The browser needs `script-src blob:` to execute decrypted modules.
+- The standalone shell allows blob scripts and styles in its SvelteKit CSP. Host apps must set those directives themselves; prerendered pages carry CSP in a meta tag.
+- Discover static attachment references in Markdown and HTML `src`, `href`, `poster`, and `srcset`. Match the longest vault-relative asset path when rewriting these attributes after unlock, so nested files beat same-named root files. Scan SvelteKit's generated output as well as public files for plaintext.
+- Only the Vite pipeline sets `svartz:protectionReady`. A standalone filter call without that pipeline fails closed for protected notes. Never add a test-only environment switch that enables incomplete encrypted builds.

@@ -51,6 +51,7 @@ import {
 } from "./transform-embeds";
 import { indexContent, INDEX_CONTENT_ID } from "./index-content";
 import { emitArtifacts, EMIT_ARTIFACTS_ID } from "./emit-artifacts";
+export { compileProtectedNoteSource } from "./emit-artifacts";
 import { emitDiscovery, EMIT_DISCOVERY_ID } from "./emit-discovery";
 import { emitImages, EMIT_IMAGES_ID } from "./emit-images";
 import { analytics, ANALYTICS_ID } from "./analytics";

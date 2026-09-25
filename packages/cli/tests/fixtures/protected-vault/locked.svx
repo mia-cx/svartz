@@ -1,0 +1,13 @@
+---
+title: Locked title
+description: PRIVATE_DESCRIPTION_MARKER
+password_group: friends
+---
+
+<script>
+  import Counter from './Counter.svelte';
+</script>
+
+<h1>PRIVATE_BODY_MARKER</h1>
+<Counter />
+<img src="./photo.svg" alt="Protected attachment" />

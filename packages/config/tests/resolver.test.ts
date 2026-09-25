@@ -26,6 +26,15 @@ const minimalConfig: SvartzConfig = {
 };
 
 describe("resolveConfigPaths", () => {
+  it("passes only password environment names into resolved vaults", async () => {
+    const config: SvartzConfig = {
+      ...minimalConfig,
+      passwordGroups: { friends: { env: "SVARTZ_FRIENDS_PASSWORD" } },
+    };
+    const resolved = await resolveConfig(config, PKG_ROOT);
+    expect(resolved.vaults[0]?.passwordGroups).toEqual({ friends: { env: "SVARTZ_FRIENDS_PASSWORD" } });
+  });
+
   it("inherits analytics defaults and lets a vault select another provider", async () => {
     const config: SvartzConfig = {
       ...minimalConfig,

@@ -5,7 +5,8 @@ import { unified } from "unified";
 import { visit } from "unist-util-visit";
 
 const WIKILINK = /!?\[\[([^\]]+)\]\]/g;
-const HTML_ASSET = /<(?:a|audio|iframe|img|source|video)\b[^>]*\b(?:href|src)\s*=\s*["']([^"']+)["']/gi;
+const HTML_TAG = /<(?:a|audio|iframe|img|link|source|video)\b[^>]*>/gi;
+const HTML_ASSET = /\b(?:href|src|poster|srcset)\s*=\s*(["'])(.*?)\1/gi;
 const markdown = unified().use(remarkParse);
 
 function assetTarget(target: string): string | undefined {
@@ -72,7 +73,15 @@ export function referencedAssets(
           resolve(match[1]!.split("|", 1)[0]!.split("#", 1)[0]!);
         }
       } else if (node.type === "html") {
-        for (const match of node.value.matchAll(HTML_ASSET)) resolve(match[1]!);
+        for (const tag of node.value.matchAll(HTML_TAG)) {
+          for (const match of tag[0].matchAll(HTML_ASSET)) {
+            if (/\bsrcset\s*=/i.test(match[0])) {
+              for (const candidate of match[2]!.split(",")) resolve(candidate.trim().split(/\s+/, 1)[0]!);
+            } else {
+              resolve(match[2]!);
+            }
+          }
+        }
       }
     });
   }

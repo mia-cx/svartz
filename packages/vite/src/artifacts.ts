@@ -1,6 +1,7 @@
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Artifact, BrowserResource, ResolvedConfig } from "@svartz/core";
+import type { ProtectedBridgeModule } from "./protected-bridge";
 
 const GENERATED_ARTIFACTS_DIRNAME = "artifacts" as const;
 const GENERATED_PAGES_DIRNAME = "pages" as const;
@@ -52,6 +53,7 @@ function createArtifactsVirtualModuleSource(
   siteConfig: ResolvedConfig["site"] = { title: "Svartz" },
   browserResources: readonly BrowserResource[] = [],
   vaultId = "default",
+  protectedBridgeModules: readonly ProtectedBridgeModule[] = [],
 ): string {
   const coreModuleId = typeof import.meta.resolve === "function"
     ? fileURLToPath(import.meta.resolve("@svartz/core"))
@@ -90,12 +92,15 @@ function createArtifactsVirtualModuleSource(
     resource.kind === "asset" ? [`  ${JSON.stringify(resource.id)}: browserAsset${index},`] : [],
   ).join("\n");
   const { favicon: _faviconSource, ...publicSiteConfig } = siteConfig;
+  const bridgeLoaders = protectedBridgeModules.map((module) =>
+    `  ${JSON.stringify(module.id)}: () => import(${JSON.stringify(module.path)}),`,
+  ).join("\n");
 
   return [
     resourceImports,
     `import { index, graph, backlinks, search, tags, folders, routes, assets } from ${JSON.stringify(indexModulePath)};`,
     `import { searchDocuments, searchIndex } from ${JSON.stringify(searchModulePath)};`,
-    `import { createVaultView, mountBrowserScripts, SEARCH_INDEX_OPTIONS } from ${JSON.stringify(coreModuleId)};`,
+    `import { createVaultView, mergeProtectedIndex, mountBrowserScripts, SEARCH_INDEX_OPTIONS } from ${JSON.stringify(coreModuleId)};`,
     `import { base } from "$app/paths";`,
     noteImports,
     "",
@@ -105,6 +110,17 @@ function createArtifactsVirtualModuleSource(
     "export async function mountBrowserResources(pathname) {",
     "  if (import.meta.env.SSR) return () => {};",
     "  return mountBrowserScripts(browserScripts, pathname);",
+    "}",
+    `const protectedBridgeLoaders = {\n${bridgeLoaders}\n};`,
+    "export async function loadProtectedBridgeUrls(ids) {",
+    "  const entries = await Promise.all(ids.map(async (id) => {",
+    "    const load = protectedBridgeLoaders[id];",
+    "    if (!load) throw new Error(`Unsupported protected runtime import: ${id}`);",
+    "    const module = await load();",
+    "    if (!module.svartzBridgeExports) throw new Error(`Incomplete protected runtime bridge: ${id}`);",
+    "    return [id, module.svartzBridgeUrl];",
+    "  }));",
+    "  return Object.fromEntries(entries);",
     "}",
     "",
     "const noteArtifactModules = {",
@@ -126,6 +142,10 @@ function createArtifactsVirtualModuleSource(
     `export const themeConfig = ${JSON.stringify(themeConfig)};`,
     `export const siteConfig = ${JSON.stringify(publicSiteConfig)};`,
     `export const vault = createVaultView(index, ${JSON.stringify(vaultId)}, base);`,
+    `export function createUnlockedVault(groups) {`,
+    `  const unlockedIndex = mergeProtectedIndex(index, groups);`,
+    `  return { index: unlockedIndex, vault: createVaultView(unlockedIndex, ${JSON.stringify(vaultId)}, base), searchDocuments: unlockedIndex.search, searchIndex: groups.length ? undefined : searchIndex };`,
+    `}`,
     `export const searchOptions = SEARCH_INDEX_OPTIONS;`,
     "",
     "export { index, graph, backlinks, search, tags, folders, routes, assets, searchDocuments, searchIndex };",

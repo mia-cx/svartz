@@ -138,4 +138,15 @@ describe("@svartz/vite artifact helpers", () => {
     expect(next).not.toContain("katex.min.css");
     expect(next).not.toContain("diagram.js");
   });
+
+  it("loads protected runtime facades by URL after unlock", () => {
+    const source = createArtifactsVirtualModuleSource(
+      [], "/out/index.ts", "/out/search.ts", {}, { title: "Test" }, [], "blog",
+      [{ id: "svelte/internal/client", path: "/out/bridge/client.ts" }],
+    );
+    expect(source).toContain('"svelte/internal/client": () => import("/out/bridge/client.ts")');
+    expect(source).toContain("export async function loadProtectedBridgeUrls(ids)");
+    expect(source).toContain("mergeProtectedIndex(index, groups)");
+    expect(source).toContain("return [id, module.svartzBridgeUrl]");
+  });
 });

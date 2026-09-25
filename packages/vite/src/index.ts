@@ -54,6 +54,8 @@ import {
 import { createVaultChangeEvent } from "./watch";
 import { isHostRouteFile, staticHostRoutes } from "./manual-routes";
 import { createHostRegistrySource, getGeneratedHostRegistryPath } from "./host-registry";
+import { emitProtectedGroupArtifacts } from "./protected-payload";
+import { writeProtectedBridgeModules, type ProtectedBridgeModule } from "./protected-bridge";
 
 const PIPELINE_STAGES: readonly StageName[] = [
   "discoverFiles",
@@ -89,6 +91,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   let emittedArtifacts: Artifact[] = [];
   let emittedAssets = new Map<string, Artifact>();
   let emittedBrowserResources: BrowserResource[] = [];
+  let protectedBridgeModules: ProtectedBridgeModule[] = [];
   let runnerMeta = new Map<string, unknown>();
   let devServer: ViteDevServer | undefined;
   let pendingChange: ChangeEvent | undefined;
@@ -174,6 +177,9 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     const runnerContext = createRunnerContext();
     runnerContext.meta.set("svartz:mode", context.mode);
     runnerContext.meta.set("svartz:theme", theme);
+    runnerContext.meta.set("svartz:protectedBridgeImports", new Set<string>());
+    // The emitter and host bridge are installed before publication filtering runs.
+    runnerContext.meta.set("svartz:protectionReady", true);
     if (context.config.target.type === "host") {
       runnerContext.meta.set("reservedRoutes", await staticHostRoutes(context.root, context.config.mountPath));
     }
@@ -188,6 +194,8 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     }
 
     await runStages(plugins, runnerContext, PIPELINE_STAGES);
+    await emitProtectedGroupArtifacts(runnerContext, context.root);
+    protectedBridgeModules = await writeProtectedBridgeModules(runnerContext);
     runnerMeta = runnerContext.meta;
     emittedArtifacts = [...runnerContext.artifacts.values()];
     emittedBrowserResources = [...(runnerContext.compiler?.browserResources.values() ?? [])];
@@ -212,6 +220,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
               context.config.site,
               emittedBrowserResources,
               context.config.id,
+              protectedBridgeModules,
             ),
           ),
         ],
@@ -392,6 +401,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
           context.config.site,
           emittedBrowserResources,
           context.config.id,
+          protectedBridgeModules,
         );
       }
 

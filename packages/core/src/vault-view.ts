@@ -20,10 +20,10 @@ export interface VaultView {
   note(reference: string): VaultNoteView | undefined;
 }
 
-/** Compose SvelteKit's deployment base with the index's vault-mounted URLs once. */
-export function createVaultView(index: Index, id: string, basePath = ""): VaultView {
+/** Apply the deployment base to one published entry, including a newly unlocked hidden note. */
+export function createVaultEntryView(entry: IndexEntry, basePath = ""): IndexEntry {
   const withBase = (href: string) => `${basePath}${href}`;
-  const entries = index.entries.map((entry) => ({
+  return {
     ...entry,
     href: withBase(entry.href),
     socialImage: entry.socialImage?.startsWith("/") ? withBase(entry.socialImage) : entry.socialImage,
@@ -31,7 +31,13 @@ export function createVaultView(index: Index, id: string, basePath = ""): VaultV
       ...link,
       href: link.href?.startsWith("/") ? withBase(link.href) : link.href,
     })),
-  }));
+  };
+}
+
+/** Compose SvelteKit's deployment base with the index's vault-mounted URLs once. */
+export function createVaultView(index: Index, id: string, basePath = ""): VaultView {
+  const withBase = (href: string) => `${basePath}${href}`;
+  const entries = index.entries.map((entry) => createVaultEntryView(entry, basePath));
   const bySlug = new Map(entries.map((entry) => [entry.slug, entry]));
   const byHref = new Map(entries.map((entry) => [entry.href, entry]));
   const search = index.search.map((document) => ({ ...document, href: withBase(document.href) }));

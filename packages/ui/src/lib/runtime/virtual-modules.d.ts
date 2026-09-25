@@ -44,12 +44,11 @@ declare module 'virtual:svartz/theme' {
 
 declare module 'virtual:svartz/artifacts' {
 	import type { Component } from 'svelte';
+	import type { ProtectedGroupPayload } from '@svartz/core';
 
 	export interface RuntimeArtifactRecord {
 		readonly key: string;
 		readonly path: string;
-		readonly properties: Readonly<Record<string, unknown>>;
-		readonly page: { readonly toc: boolean; readonly comments: boolean };
 		readonly type: string;
 		readonly noteSlug?: string;
 	}
@@ -59,6 +58,7 @@ declare module 'virtual:svartz/artifacts' {
 		readonly href: string;
 		readonly path: string;
 		readonly title: string;
+		readonly locked?: boolean;
 		readonly tags: readonly string[];
 		readonly aliases: readonly string[];
 		readonly description?: string;
@@ -71,8 +71,8 @@ declare module 'virtual:svartz/artifacts' {
 		}[];
 		readonly wordCount: number;
 		readonly readingTimeMinutes: number;
-		readonly createdAt: Date;
-		readonly modifiedAt: Date;
+		readonly createdAt?: Date;
+		readonly modifiedAt?: Date;
 		readonly publishedAt?: Date;
 	}
 
@@ -104,10 +104,11 @@ declare module 'virtual:svartz/artifacts' {
 	export const artifacts: ReadonlyMap<string, RuntimeArtifactRecord>;
 	export const browserResources: Readonly<Record<string, string>>;
 	export function mountBrowserResources(pathname: string): Promise<() => void>;
+	export function loadProtectedBridgeUrls(ids: readonly string[]): Promise<Readonly<Record<string, string>>>;
 	export function hasNoteArtifact(key: string): boolean;
 	export function getNoteArtifact(
 		key: string
-	): { default: Component<any> };
+	): { default: Component<any>; svartzProtected?: { slug: string; payloadId: string; payloadPath: string } };
 	export const index: {
 		readonly version: string;
 		readonly entries: readonly RuntimeIndexEntry[];
@@ -164,6 +165,12 @@ declare module 'virtual:svartz/artifacts' {
 	export const assets: typeof index.assets;
 	export const searchDocuments: readonly RuntimeSearchDocument[];
 	export const searchIndex: unknown;
+	export function createUnlockedVault(groups: readonly ProtectedGroupPayload[]): {
+		index: typeof index;
+		vault: typeof vault;
+		searchDocuments: readonly RuntimeSearchDocument[];
+		searchIndex: unknown;
+	};
 	/** Vault-level theme config (everything under `theme:` in svartz.config, minus `base`). */
 	export const themeConfig: Readonly<Record<string, unknown>>;
 	export const siteConfig: Readonly<{

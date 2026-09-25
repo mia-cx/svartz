@@ -192,11 +192,19 @@ const SemverSchema = Schema.String.pipe(
   Schema.pattern(/^\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$/),
 );
 
+const PasswordGroupsSchema = Schema.Record({
+  key: Schema.String.pipe(Schema.pattern(/^[A-Za-z0-9_-]+$/)),
+  value: Schema.Struct({
+    env: Schema.String.pipe(Schema.pattern(/^(?!(?:PUBLIC_|VITE_))[A-Za-z_][A-Za-z0-9_]*$/)),
+  }),
+});
+
 const SvartzConfigSchema = Schema.Struct({
   $schema: Schema.optional(Schema.String),
   version: SemverSchema,
   defaults: Schema.optional(SvartzDefaultsSchema),
   build: Schema.optional(BuildOptionsSchema),
+  passwordGroups: Schema.optional(PasswordGroupsSchema),
   vaults: Schema.Array(VaultConfigSchema),
 });
 
@@ -215,5 +223,6 @@ export {
   SvartzDefaultsSchema,
   VaultConfigSchema,
   SemverSchema,
+  PasswordGroupsSchema,
   SvartzConfigSchema,
 };

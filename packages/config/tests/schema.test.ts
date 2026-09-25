@@ -4,6 +4,7 @@ import {
   SvartzConfigSchema,
   VaultThemeConfigSchema,
   AnalyticsConfigSchema,
+  PasswordGroupsSchema,
   TargetConfigSchema,
   LinkResolutionStrategySchema,
 } from "../src/schemas";
@@ -217,6 +218,26 @@ describe("AnalyticsConfigSchema", () => {
   it("rejects invalid provider URLs and missing IDs", () => {
     expect(Either.isLeft(decode(AnalyticsConfigSchema, { provider: "matomo", host: "javascript:alert(1)", siteId: "1" }))).toBe(true);
     expect(Either.isLeft(decode(AnalyticsConfigSchema, { provider: "google" }))).toBe(true);
+  });
+});
+
+describe("PasswordGroupsSchema", () => {
+  it("accepts environment references but not plaintext passwords", () => {
+    expect(Either.isRight(decode(PasswordGroupsSchema, {
+      friends: { env: "SVARTZ_FRIENDS_PASSWORD" },
+    }))).toBe(true);
+    expect(Either.isRight(decode(PasswordGroupsSchema, {
+      friends: { env: "PRIVATE_FRIENDS_PASSWORD" },
+    }))).toBe(true);
+    expect(Either.isLeft(decode(PasswordGroupsSchema, {
+      friends: { password: "plaintext" },
+    }))).toBe(true);
+    expect(Either.isLeft(decode(PasswordGroupsSchema, {
+      friends: { env: "bad-name" },
+    }))).toBe(true);
+    for (const env of ["PUBLIC_FRIENDS_PASSWORD", "VITE_FRIENDS_PASSWORD"]) {
+      expect(Either.isLeft(decode(PasswordGroupsSchema, { friends: { env } }))).toBe(true);
+    }
   });
 });
 

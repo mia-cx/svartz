@@ -105,6 +105,8 @@ interface ResolvedConfig {
   readonly mountPath: string;
   readonly target: TargetConfig;
   readonly plugins: readonly unknown[];
+  /** Environment variable names only. Password values never enter resolved config. */
+  readonly passwordGroups: Readonly<Record<string, { readonly env: string }>>;
 }
 
 // --- Artifact model ---
@@ -200,6 +202,8 @@ interface ProcessedFile {
   slug: string;
   content: string;
   frontmatter?: Record<string, unknown>;
+  /** Set only after publication filtering has confirmed this note is public. */
+  protection?: { readonly group: string; readonly hidden: boolean };
   rawLinks?: RawLink[];
   links?: string[];
   linkTargets?: Record<string, string>;
@@ -236,6 +240,8 @@ interface IndexEntry {
     readonly comments: boolean;
   };
   readonly title: string;
+  /** Public shell for a protected note. Only its title and URL are authored metadata. */
+  readonly locked?: boolean;
   readonly tags: readonly string[];
   readonly aliases: readonly string[];
   readonly description?: string;
@@ -245,8 +251,8 @@ interface IndexEntry {
   readonly toc: readonly TocEntry[];
   readonly wordCount: number;
   readonly readingTimeMinutes: number;
-  readonly createdAt: Date;
-  readonly modifiedAt: Date;
+  readonly createdAt?: Date;
+  readonly modifiedAt?: Date;
   readonly publishedAt?: Date;
 }
 

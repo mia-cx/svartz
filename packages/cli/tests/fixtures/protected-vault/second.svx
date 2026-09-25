@@ -1,0 +1,6 @@
+---
+title: Second locked title
+password_group: family
+---
+
+<h1>SECOND_PRIVATE_MARKER</h1>
