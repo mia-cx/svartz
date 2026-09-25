@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -63,7 +63,7 @@ async function freePort() {
   return port;
 }
 
-async function checkDev(project, expected) {
+async function checkDev(project, pathname, expected) {
   const port = await freePort();
   const child = spawn(path.join(project, 'node_modules/.bin/svartz'),
     ['dev', '--vault', 'notes', '--host', '127.0.0.1', '--port', String(port)],
@@ -77,7 +77,7 @@ async function checkDev(project, expected) {
     for (let attempt = 0; attempt < 120; attempt++) {
       if (child.exitCode !== null) throw new Error(`Dev server exited: ${output}`);
       try {
-        const response = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2000) });
+        const response = await fetch(`http://127.0.0.1:${port}${pathname}`, { signal: AbortSignal.timeout(2000) });
         const body = await response.text();
         if (response.ok && body.includes(expected)) return;
         lastResponse = `${response.status} ${body.slice(0, 500)}`;
@@ -105,14 +105,16 @@ async function checkFresh(project, launcher, archives) {
   await command('npm', ['install', '--no-audit', '--no-fund'], project);
   await command('node', ['--input-type=module', '-e', [
     "import { citations, hardLineBreaks, oxHugoFlavoredMarkdown, roamFlavoredMarkdown } from '@svartz/plugins';",
+    "import minimalTheme from '@svartz/theme-minimal';",
     'for (const plugin of [citations(), hardLineBreaks(), oxHugoFlavoredMarkdown(), roamFlavoredMarkdown()]) {',
     "  if (!plugin.id) throw new Error('Packed optional plugin export is invalid');",
     '}',
+    "if (minimalTheme().version !== '1.0.0') throw new Error('Packed minimal theme has a stale manifest version');",
   ].join('\n')], project);
   await command('npm', ['run', 'build'], project);
   const html = await readFile(path.join(project, '.svartz/vaults/notes/dist/index.html'), 'utf8');
   assert.match(html, /Svartz/);
-  await checkDev(project, 'Svartz');
+  await checkDev(project, '/', 'Svartz');
   console.log('Packed fresh project: install, static build, and dev passed.');
 }
 
@@ -125,11 +127,15 @@ async function checkHost(project, launcher, archives) {
       '@sveltejs/adapter-static': '^3.0.10',
       '@sveltejs/kit': '^2.63.0',
       '@sveltejs/vite-plugin-svelte': '^7.0.0',
-      svelte: '^5.56.0', typescript: '^5.9.3', vite: '^8.0.0',
+      svelte: '^5.56.0', 'svelte-check': '^4.4.2', typescript: '^5.9.3', vite: '^8.0.0',
     },
   }, null, 2));
   await write(project, 'vite.config.ts', "import { sveltekit } from '@sveltejs/kit/vite';\nimport { defineConfig } from 'vite';\nexport default defineConfig({ plugins: [sveltekit()] });\n");
   await write(project, 'svelte.config.js', "import adapter from '@sveltejs/adapter-static';\nexport default { kit: { adapter: adapter() } };\n");
+  await write(project, 'tsconfig.json', JSON.stringify({
+    extends: './.svelte-kit/tsconfig.json',
+    compilerOptions: { allowJs: true, checkJs: true, moduleResolution: 'bundler', skipLibCheck: true, strict: true },
+  }, null, 2));
   await write(project, 'src/app.html', '<!doctype html><html lang="en"><head>%sveltekit.head%</head><body>%sveltekit.body%</body></html>');
   await write(project, 'src/routes/+layout.ts', 'export const prerender = true;\n');
   await write(project, 'src/routes/+page.svelte', '<h1>Portfolio home</h1>\n');
@@ -137,8 +143,10 @@ async function checkHost(project, launcher, archives) {
   await localDependencies(project, archives);
   const configPath = path.join(project, 'svartz.config.ts');
   const config = await readFile(configPath, 'utf8');
-  await writeFile(configPath, config.replace(/site: \{ title: ([^}]+) \}/,
-    "site: { title: $1, url: 'https://example.test' }"));
+  await writeFile(configPath, config
+    .replace("target: { type: 'host' },", "target: { type: 'host' },\n    mountPath: 'notes',")
+    .replace(/site: \{ title: ([^}]+) \}/,
+      "site: { title: $1, url: 'https://example.test' }"));
   await write(project, 'src/routes/check/+page.svelte', "<script lang=\"ts\">import { index } from 'virtual:svartz/artifacts';</script><p>Published notes: {index.entries.length}</p>\n");
   await write(project, 'check-types.ts', [
     '/// <reference types="@svartz/vite/virtual-modules" />',
@@ -154,13 +162,30 @@ async function checkHost(project, launcher, archives) {
     "export const GET = () => new Response(renderHostRss(vaults, ['notes'], { title: 'Portfolio', url: 'https://example.test' }), { headers: { 'content-type': 'application/rss+xml' } });",
   ].join('\n'));
   await command('npm', ['install', '--no-audit', '--no-fund'], project);
+  await command('node', ['--input-type=module', '-e', [
+    "import { createRequire } from 'node:module';",
+    "const require = createRequire(import.meta.resolve('svartz'));",
+    "const version = require('vite/package.json').version;",
+    "if (!version.startsWith('8.')) throw new Error(`Packed CLI loaded Vite ${version}, expected Vite 8`);",
+  ].join('\n')], project);
   await command(path.join(project, 'node_modules/.bin/tsc'),
     ['--noEmit', '--skipLibCheck', '--module', 'esnext', '--moduleResolution', 'bundler', '--target', 'es2022', 'vite.config.ts', 'svartz.config.ts', 'check-types.ts'], project);
   await command('npm', ['run', 'svartz:build'], project);
+  await command(path.join(project, 'node_modules/.bin/svelte-check'), ['--tsconfig', './tsconfig.json'], project);
+  const sourcesPath = path.join(project, '.svartz/vaults/notes/tailwind-sources.css');
+  const tailwindSources = await readFile(sourcesPath, 'utf8');
+  const sourceGlobs = [...tailwindSources.matchAll(/@source "([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(sourceGlobs.length, 2, 'Packed host must scan only the theme and UI package');
+  for (const sourceGlob of sourceGlobs) {
+    assert(sourceGlob.includes('/dist/'), `Packed package source must use dist: ${sourceGlob}`);
+    await stat(path.resolve(path.dirname(sourcesPath), sourceGlob.split('/**/')[0]));
+  }
   assert.match(await readFile(path.join(project, 'src/routes/+page.svelte'), 'utf8'), /Portfolio home/);
   assert.match(await readFile(path.join(project, 'build/check.html'), 'utf8'), /Published notes: 1/);
+  assert.match(await readFile(path.join(project, 'build/notes.html'), 'utf8'), /Welcome/);
   assert.match(await readFile(path.join(project, 'build/rss.xml'), 'utf8'), /https:\/\/example\.test\//);
-  await checkDev(project, 'Portfolio home');
+  await checkDev(project, '/', 'Portfolio home');
+  await checkDev(project, '/notes/', 'Welcome');
   console.log('Packed Vite 8 host: integration, types, static build, and dev passed.');
 }
 

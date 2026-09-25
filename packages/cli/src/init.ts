@@ -274,6 +274,17 @@ export async function initProject(
   const manager = packageManager(root, existingManifest);
 
   if (location.hostApp) {
+    const appTypesPath = path.join(root, "src", "app.d.ts");
+    const appTypesReference = '/// <reference types="@svartz/vite/virtual-modules" />';
+    const previousAppTypesReference = '/// <reference types="@svartz/ui/virtual-modules" />';
+    const appTypesSource = existsSync(appTypesPath)
+      ? await readFile(appTypesPath, "utf8")
+      : undefined;
+    const integratedAppTypes = appTypesSource?.includes(appTypesReference)
+      ? appTypesSource
+      : appTypesSource?.includes(previousAppTypesReference)
+        ? appTypesSource.replace(previousAppTypesReference, appTypesReference)
+      : `${appTypesReference}\n${appTypesSource ?? ""}`;
     const catchallRoot = path.join(root, "src", "routes", "[...slug]");
     const catchallLoadPath = path.join(catchallRoot, "+page.ts");
     const installCatchall = !(await hasHostCatchall(root));
@@ -292,6 +303,7 @@ export async function initProject(
     if (
       existingConfig &&
       integratedViteSource === viteSource &&
+      integratedAppTypes === appTypesSource &&
       !manifestChanged &&
       !installCatchall &&
       !migrateCatchall
@@ -320,6 +332,10 @@ export async function initProject(
     }
     if (integratedViteSource !== viteSource)
       await writeFile(location.viteConfigPath, integratedViteSource);
+    if (integratedAppTypes !== appTypesSource) {
+      if (appTypesSource === undefined) await writeNewFile(appTypesPath, integratedAppTypes);
+      else await writeFile(appTypesPath, integratedAppTypes);
+    }
     if (installCatchall) {
       for (const name of ["+page.svelte", "+page.ts"]) {
         await writeNewFile(

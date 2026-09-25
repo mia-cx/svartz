@@ -20,9 +20,9 @@ Parallel CLI processes also share a project build lock. A crashed build's lock r
 
 `npx svartz@latest init` initializes the directory where it runs. A new project gets an editable SvelteKit shell, a `vault/index.md` starter note, the minimal theme dependency, and `svartz.config.ts`. It installs with npm unless an existing package manager is declared. It initializes Git for a new standalone project unless already inside a Git worktree. `--no-install` and `--no-git` skip those steps.
 
-In an existing SvelteKit app, `init` keeps routes, layouts, adapter, and existing scripts. It adds Svartz dependencies and scripts, wraps the existing Vite export with `withSvartzHost`, and preserves any existing Svartz config and vault definitions. This wrapper supplies virtual-module aliases during SvelteKit's client build. If a file cannot be safely integrated, `init` reports the conflict before writing.
+In an existing SvelteKit app, `init` keeps routes, layouts, adapter, and existing scripts. It adds Svartz dependencies and scripts, wraps the existing Vite export with `withSvartzHost`, and preserves any existing Svartz config and vault definitions. It adds the published Vite virtual-module type reference to `src/app.d.ts` while preserving host declarations. This wrapper supplies virtual-module aliases during SvelteKit's client build. If a file cannot be safely integrated, `init` reports the conflict before writing.
 
-Rerun `npx svartz@latest init` after upgrading a scaffolded host. It updates only the exact older generated catchall loader to await lazy theme pages; a custom catchall remains yours.
+Rerun `npx svartz@latest init` after upgrading a scaffolded host. It updates the older virtual-module type reference and only the exact older generated catchall loader; a custom catchall remains yours.
 
 Use `svartz build --vault <id>` to target one standalone vault. A SvelteKit host always builds all configured host vaults together, because they share one Vite build and adapter output.
 

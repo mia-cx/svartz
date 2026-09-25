@@ -35,13 +35,15 @@
     "digital-garden"
   ],
   "license": "SEE LICENSE IN LICENSE",
+  "peerDependencies": {
+    "vite": "^7.0.0 || ^8.0.0"
+  },
   "dependencies": {
     "@svartz/config": "workspace:*",
     "@svartz/vite": "workspace:*",
     "chokidar": "^5.0.0",
     "commander": "^13.0.0",
-    "effect": "^3.19.19",
-    "vite": "^7.3.1"
+    "effect": "^3.19.19"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -49,6 +51,7 @@
     "playwright": "^1.58.2",
     "tsup": "^8.0.0",
     "typescript": "^5.9.3",
+    "vite": "^7.3.1",
     "vitest": "^4.0.18"
   }
 }

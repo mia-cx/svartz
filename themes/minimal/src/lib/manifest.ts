@@ -60,7 +60,7 @@ export function createMinimalTheme(
 		id: '@svartz/theme-minimal',
 		displayName: 'Svartz Minimal',
 		description: 'Quartz-like starter theme for Svartz static vault sites.',
-		version: '0.0.1',
+		version: '1.0.0',
 		contractVersion: '1.0.0',
 		socialImage,
 		faviconSvg,

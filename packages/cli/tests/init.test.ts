@@ -119,6 +119,39 @@ it("adds configuration to an existing Kit app without changing its routes or bui
   );
   expect(await readFile(path.join(root, "src/routes/[...slug]/+page.ts"), "utf8"))
     .toContain('virtual:svartz/host');
+  expect(await readFile(path.join(root, "src/app.d.ts"), "utf8"))
+    .toContain('/// <reference types="@svartz/vite/virtual-modules" />');
+});
+
+it("preserves host app types and adds virtual module declarations once", async () => {
+  const root = await fixture();
+  await mkdir(path.join(root, "src"));
+  await writeFile(path.join(root, "src/app.d.ts"), "declare global { namespace App { interface Locals { user: string } } }\nexport {};\n");
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
+  const appTypes = await readFile(path.join(root, "src/app.d.ts"), "utf8");
+  expect(appTypes).toContain("interface Locals { user: string }");
+  expect(appTypes.match(/@svartz\/vite\/virtual-modules/g)).toHaveLength(1);
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("already-configured");
+  expect(await readFile(path.join(root, "src/app.d.ts"), "utf8")).toBe(appTypes);
+});
+
+it("upgrades the previous UI virtual-module reference in an existing host", async () => {
+  const root = await fixture();
+  await mkdir(path.join(root, "src"));
+  await writeFile(path.join(root, "src/app.d.ts"), '/// <reference types="@svartz/ui/virtual-modules" />\nexport {};\n');
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  await initProject({ cwd: root, install: false, git: false });
+  expect(await readFile(path.join(root, "src/app.d.ts"), "utf8"))
+    .toBe('/// <reference types="@svartz/vite/virtual-modules" />\nexport {};\n');
 });
 
 it.each(["vite.config.cjs", "vite.config.cts"])(
