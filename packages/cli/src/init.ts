@@ -248,21 +248,29 @@ module.exports = async (env) => {
 };
 `;
   }
-  const hostImport = [...source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]@svartz\/vite\/host['"]/g)]
+  const activeSource = source.replace(/\/\*[\s\S]*?\*\/|^[ \t]*\/\/[^\r\n]*/gm,
+    (comment) => comment.replace(/[^\r\n]/g, " "));
+  const hostImport = [...activeSource.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]@svartz\/vite\/host['"]/g)]
     .flatMap((match) => match[1]!.split(","))
     .map((specifier) => /^withSvartzHost(?:\s+as\s+([A-Za-z_$][\w$]*))?$/.exec(specifier.trim()))
     .find((match) => match !== null);
   let binding = hostImport?.[1] ?? (hostImport ? "withSvartzHost" : "__svartz_with_host");
   const escapedBinding = binding.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  if (hostImport && new RegExp(`\\bexport\\s+default\\s+\\(*\\s*${escapedBinding}\\s*\\)*\\s*\\(`).test(source)) return source;
   if (!hostImport) {
     let suffix = 2;
     while (new RegExp(`\\b${binding}\\b`).test(source)) binding = `__svartz_with_host_${suffix++}`;
   }
-  const defaultExport = /^([ \t]*)export\s+default\s+/m;
-  if (!defaultExport.test(source)) return undefined;
+  const defaultExport = /(?:^|[;}\n])([ \t]*)export\s+default\s+/g;
+  const match = defaultExport.exec(activeSource);
+  if (!match) return undefined;
+  const exportIndex = match.index + match[0].lastIndexOf("export");
+  const expressionIndex = match.index + match[0].length;
+  if (hostImport && new RegExp(`^\\(*\\s*${escapedBinding}\\s*\\)*\\s*\\(`)
+    .test(activeSource.slice(expressionIndex))) return source;
   const hostImportLine = hostImport ? "" : `import { withSvartzHost as ${binding} } from '@svartz/vite/host';\n`;
-  return `${hostImportLine}${source.replace(defaultExport, "$1const __svartz_host_config = ")}\nexport default ${binding}(__svartz_host_config);\n`;
+  const wrapped = source.slice(0, exportIndex) + `const __svartz_host_config = ` +
+    source.slice(expressionIndex);
+  return `${hostImportLine}${wrapped}\nexport default ${binding}(__svartz_host_config);\n`;
 }
 
 async function hasHostCatchall(root: string): Promise<boolean> {
@@ -371,7 +379,8 @@ const initProjectEffect = (
     if (location.hostApp) {
       const tailwindVersion = existingManifest?.dependencies?.tailwindcss
         ?? existingManifest?.devDependencies?.tailwindcss;
-      if (tailwindVersion && /(?:^|[\s|@])(?:[~^<>=]*\s*)v?3(?=\.|x|\*|\b)/.test(tailwindVersion)) {
+      if (tailwindVersion && (/(?:^|[\s|@#])(?:[~^<>=]*\s*)v?3(?=\.|x|\*|\b)/.test(tailwindVersion) ||
+        /^workspace:\s*(?:[~^<>=]*\s*)v?3(?=\.|x|\*|\b)/.test(tailwindVersion))) {
         return yield* new InitLayoutError({
           reason: "unsupported-tailwind",
           message: "Cannot integrate: this host uses Tailwind CSS 3. Upgrade to Tailwind CSS 4 before running svartz init.",

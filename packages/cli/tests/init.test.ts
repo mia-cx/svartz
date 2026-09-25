@@ -162,7 +162,7 @@ it("keeps an existing layout CSS import when that stylesheet belongs to the host
     .toBe("body { background: rebeccapurple; }\n");
 });
 
-it.each(["^3.4.17", "3.x", ">=3 <4", "v3.4.17"])("rejects a Tailwind 3 host before writing for %s", async (version) => {
+it.each(["^3.4.17", "3.x", ">=3 <4", "v3.4.17", "workspace:^3.4.17", "github:tailwindlabs/tailwindcss#v3.4.17", "git+https://github.com/tailwindlabs/tailwindcss.git#v3.4.17"])("rejects a Tailwind 3 host before writing for %s", async (version) => {
   const root = await fixture();
   const viteConfig = "export default { plugins: [] };\n";
   const manifest = JSON.stringify({
@@ -179,11 +179,11 @@ it.each(["^3.4.17", "3.x", ">=3 <4", "v3.4.17"])("rejects a Tailwind 3 host befo
   await expect(access(path.join(root, "svartz.config.ts"))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
-it("accepts a Tailwind 4 prerelease containing 3 in its suffix", async () => {
+it.each(["^4.0.0-dev3", "file:../tailwindcss-v3-compat"])("accepts a non-v3 Tailwind spec %s", async (version) => {
   const root = await fixture();
   await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
   await writeFile(path.join(root, "package.json"), JSON.stringify({
-    devDependencies: { "@sveltejs/kit": "^2.0.0", tailwindcss: "^4.0.0-dev3" },
+    devDependencies: { "@sveltejs/kit": "^2.0.0", tailwindcss: version },
   }));
 
   expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
@@ -237,6 +237,49 @@ it.each([
   expect(source.match(/@svartz\/vite\/virtual-modules/g)).toHaveLength(1);
   expect(source).not.toContain("@svartz/ui/virtual-modules");
   expect(await initProject({ cwd: root, install: false, git: false })).toMatchObject({ kind: "already-configured" });
+});
+
+it.each([
+  "// export default $host({ plugins: [] });\nexport default { plugins: [] };",
+  "/*\nexport default $host({ plugins: [] });\n*/\nexport default { plugins: [] };",
+])("ignores a commented-out wrapper when integrating a host", async (defaultExport) => {
+  const root = await fixture();
+  await writeFile(path.join(root, "vite.config.ts"),
+    `import { withSvartzHost as $host } from '@svartz/vite/host';\n${defaultExport}\n`);
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  await initProject({ cwd: root, install: false, git: false });
+  const source = await readFile(path.join(root, "vite.config.ts"), "utf8");
+  expect(source).toContain("const __svartz_host_config = { plugins: [] };");
+  expect(source).toContain("export default $host(__svartz_host_config);");
+});
+
+it("recognizes an already wrapped export after a statement on the same line", async () => {
+  const root = await fixture();
+  const viteConfig = "import { withSvartzHost } from '@svartz/vite/host';\nconst config = {}; export default withSvartzHost(config);\n";
+  await writeFile(path.join(root, "vite.config.ts"), viteConfig);
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
+  expect(await readFile(path.join(root, "vite.config.ts"), "utf8")).toBe(viteConfig);
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("already-configured");
+});
+
+it("wraps an unconfigured export after a statement on the same line", async () => {
+  const root = await fixture();
+  await writeFile(path.join(root, "vite.config.ts"), "const config = {}; export default config;\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
+  const source = await readFile(path.join(root, "vite.config.ts"), "utf8");
+  expect(source).toContain("const config = {}; const __svartz_host_config = config;");
+  expect(source).toContain("export default __svartz_with_host(__svartz_host_config);");
 });
 
 it.each(["vite.config.cjs", "vite.config.cts"])(

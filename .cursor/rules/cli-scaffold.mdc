@@ -11,4 +11,4 @@ alwaysApply: false
 - Preflight complete destinations and file-valued ancestors before writing. Existing SvelteKit apps keep routes, layouts, adapters, and build scripts, including catchalls inside route groups. Existing Svartz configs and vault definitions stay intact.
 - SvelteKit reloads Vite config for its client build. Host configs need `withSvartzHost` from `@svartz/vite/host`; the first CLI-injected plugin alone cannot provide those aliases to the second build.
 - Preserve a host's existing `src/routes/layout.css` import, even if its root layout matches an earlier generated template. Reject declared Tailwind CSS 3 before writing; generated host CSS requires Tailwind CSS 4.
-- Only a wrapped Vite default export carries Svartz into SvelteKit's second build; helper calls elsewhere do not. Keep existing host type references and reject symlinked catchall directories before writing host files.
+- Only an active wrapped Vite default export carries Svartz into SvelteKit's second build; helper calls and commented-out exports do not. Keep existing host type references and reject symlinked catchall directories before writing host files.

@@ -151,14 +151,17 @@ const isWithin = (root: string, candidate: string): boolean => {
 const MAX_BUILD_ROOT_SYMLINKS = 40;
 const BUILD_ROOT_SEPARATORS = sep === "\\" ? /[\\/]/ : /\//;
 
-const ordinaryWindowsPath = (path: string): string => {
-  if (sep !== "\\" || !path.startsWith("\\\\?\\")) return path;
-  return path.startsWith("\\\\?\\UNC\\") ? `\\\\${path.slice(8)}` : path.slice(4);
+/** Convert only device paths that have an equivalent ordinary Windows root. */
+export const ordinaryWindowsPath = (path: string): string => {
+  if (!path.startsWith("\\\\?\\")) return path;
+  const devicePath = path.slice(4);
+  if (/^UNC[\\/]/i.test(devicePath)) return `\\\\${devicePath.slice(4).replaceAll("/", "\\")}`;
+  return /^[A-Za-z]:[\\/]/.test(devicePath) ? devicePath.replaceAll("/", "\\") : path;
 };
 
 /** Follow symlink targets in filesystem order, including `..` after another symlink. */
 const canonicalBuildRoot = async (path: string): Promise<string> => {
-  path = ordinaryWindowsPath(path);
+  if (sep === "\\") path = ordinaryWindowsPath(path);
   let current = parse(path).root;
   let remaining = path.slice(current.length).split(BUILD_ROOT_SEPARATORS);
   let linksFollowed = 0;
@@ -181,14 +184,16 @@ const canonicalBuildRoot = async (path: string): Promise<string> => {
       continue;
     }
     if (!entry.isSymbolicLink()) {
-      current = ordinaryWindowsPath(await realpath(candidate));
+      const resolved = await realpath(candidate);
+      current = sep === "\\" ? ordinaryWindowsPath(resolved) : resolved;
       continue;
     }
 
     if (++linksFollowed > MAX_BUILD_ROOT_SYMLINKS) {
       throw new Error(`Build-root symlink cycle at ${candidate}`);
     }
-    const target = ordinaryWindowsPath(await readlink(candidate));
+    const linked = await readlink(candidate);
+    const target = sep === "\\" ? ordinaryWindowsPath(linked) : linked;
     const absoluteTarget = isAbsolute(target);
     const targetRoot = parse(target).root;
     if (absoluteTarget) current = sep === "\\" && targetRoot.length === 1 ? parse(current).root : targetRoot;
