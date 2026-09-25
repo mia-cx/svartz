@@ -10,6 +10,12 @@ export const COLOR_MODE_KEY = 'svartz:color-mode';
  */
 export const COLOR_MODE_SCRIPT = `(()=>{try{const m=localStorage.getItem(${JSON.stringify(COLOR_MODE_KEY)});if(m==='light'||m==='dark')document.documentElement.classList.add(m)}catch{}})()`;
 
+/**
+ * CSP source for `COLOR_MODE_SCRIPT`. A host with a Content Security Policy adds it
+ * to `script-src` so the script can run; `color-mode.test.ts` keeps it in sync.
+ */
+export const COLOR_MODE_SCRIPT_HASH = "'sha256-rCQ5ZkhaVaditdWZrzCU2tHXYFq9cOfGEFSuMlTQJoc='";
+
 /** The mode the page currently renders in. */
 export function currentColorMode(): ColorMode {
 	const root = document.documentElement;

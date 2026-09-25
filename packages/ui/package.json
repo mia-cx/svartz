@@ -52,6 +52,11 @@
 		},
 		"./base.css": "./dist/styles/base.css",
 		"./tokens.css": "./dist/styles/tokens.css",
+		"./color-mode": {
+			"types": "./dist/color-mode.d.ts",
+			"import": "./dist/color-mode.js",
+			"default": "./dist/color-mode.js"
+		},
 		"./brand": {
 			"types": "./dist/brand.d.ts",
 			"import": "./dist/brand.js",

@@ -15,7 +15,7 @@ export { default as LinkPreviews } from './LinkPreviews.svelte';
 export { default as SearchDialog } from './SearchDialog.svelte';
 export { default as DescText } from './DescText.svelte';
 export * from './content/index.js';
-export { COLOR_MODE_KEY, COLOR_MODE_SCRIPT, currentColorMode, setColorMode, type ColorMode } from './color-mode.js';
+export { COLOR_MODE_KEY, COLOR_MODE_SCRIPT, COLOR_MODE_SCRIPT_HASH, currentColorMode, setColorMode, type ColorMode } from './color-mode.js';
 export { formatDate, isoDate, readingTime } from './format.js';
 export { count, folderContents, newestFirst, noteDate, notesTagged, topLevelSections, type FolderSection } from './listing.js';
 export { pageCrumbs, tagHrefFor } from './crumbs.js';
