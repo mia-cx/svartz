@@ -12,7 +12,7 @@ type AnalyticsWindow = Window & {
   dataLayer?: unknown[];
   gtag?: (...args: unknown[]) => void;
   plausible?: ((event: string, options?: unknown) => void) & { init?: (options: unknown) => void; q?: unknown[] };
-  umami?: { track: () => void };
+  umami?: { track: (payload: (properties: Record<string, unknown>) => Record<string, unknown>) => void };
   goatcounter?: { no_onload?: boolean; endpoint?: string; count?: (options: { path: string }) => void };
   tinylytics?: { triggerUpdate: () => void };
   _paq?: unknown[][];
@@ -55,6 +55,7 @@ function createTracker(config: AnalyticsConfig): Tracker {
         ready((pathname) => w.gtag?.("event", "page_view", {
           page_location: `${location.origin}${pathname}`,
           page_title: document.title,
+          send_to: config.tagId,
         }));
       });
     case "plausible":
@@ -69,13 +70,27 @@ function createTracker(config: AnalyticsConfig): Tracker {
             : { u: `${location.origin}${pathname}` }));
         });
       });
-    case "umami":
-      return manualTracker((ready) => {
-        appendScript(`${config.host ?? "https://cloud.umami.is"}/script.js`, {
-          "data-website-id": config.websiteId,
-          "data-auto-pageview": "false",
-        }, () => ready(() => browserWindow().umami?.track()));
+    case "umami": {
+      const queue: { pathname: string; title: string }[] = [];
+      let send: ((view: { pathname: string; title: string }) => void) | undefined;
+      const tracker: Tracker = { mounts: 0, track(pathname) {
+        const view = { pathname, title: document.title };
+        send ? send(view) : queue.push(view);
+      } };
+      appendScript(`${config.host ?? "https://cloud.umami.is"}/script.js`, {
+        "data-website-id": config.websiteId,
+        "data-auto-pageview": "false",
+        "data-auto-track": "false",
+      }, () => {
+        const umami = browserWindow().umami;
+        const track = umami?.track.bind(umami);
+        send = ({ pathname, title }) => track?.((properties) => ({
+          ...properties, website: config.websiteId, url: pathname, title,
+        }));
+        for (const view of queue.splice(0)) send(view);
       });
+      return tracker;
+    }
     case "goatcounter":
       return manualTracker((ready) => {
         const w = browserWindow();
