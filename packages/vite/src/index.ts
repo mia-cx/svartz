@@ -173,6 +173,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     plugins = resolveRuntimePlugins(context.config, theme);
     const runnerContext = createRunnerContext();
     runnerContext.meta.set("svartz:mode", context.mode);
+    runnerContext.meta.set("svartz:theme", theme);
     if (context.config.target.type === "host") {
       runnerContext.meta.set("reservedRoutes", await staticHostRoutes(context.root, context.config.mountPath));
     }
@@ -316,6 +317,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     configureServer(server) {
       devServer = server;
       server.watcher.add(context.config.path);
+      if (context.config.site.favicon) server.watcher.add(context.config.site.favicon);
       if (context.config.target.type === "host") server.watcher.add(join(context.root, "src/routes"));
       server.middlewares.use((request, response, next) => {
         if (request.method !== "GET" && request.method !== "HEAD") return next();
@@ -335,6 +337,11 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
         (type: ChangeEvent["type"]) =>
         (file: string) => {
           if (!watcherPrimed) return;
+
+          if (file === context.config.site.favicon) {
+            scheduleVaultRebuild({ type, file });
+            return;
+          }
 
           if (context.config.target.type === "host" && isHostRouteFile(context.root, file)) {
             scheduleVaultRebuild({ type, file });

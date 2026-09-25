@@ -85,11 +85,13 @@ const mergeSite = (
   defaultSite: SiteConfig | undefined,
   vaultSite: SiteConfig | undefined,
   vaultId: string,
+  configDir: string,
 ): ResolvedSiteConfig => {
   const merged = { title: vaultId, ...defaultSite, ...vaultSite };
   return {
     ...merged,
     ...(merged.url !== undefined && { url: merged.url.replace(/\/+$/, "") }),
+    ...(merged.favicon !== undefined && { favicon: resolve(configDir, merged.favicon) }),
   };
 };
 
@@ -97,6 +99,7 @@ const mergeDiscovery = (
   defaults: DiscoveryConfig | undefined,
   vault: DiscoveryConfig | undefined,
   publicUrl: string | undefined,
+  isHost: boolean,
 ): ResolvedDiscoveryConfig => ({
   feed: {
     enabled: vault?.feed?.enabled ?? defaults?.feed?.enabled ?? Boolean(publicUrl),
@@ -106,6 +109,12 @@ const mergeDiscovery = (
   },
   sitemap: {
     enabled: vault?.sitemap?.enabled ?? defaults?.sitemap?.enabled ?? Boolean(publicUrl),
+  },
+  socialImages: {
+    enabled: vault?.socialImages?.enabled ?? defaults?.socialImages?.enabled ?? Boolean(publicUrl),
+  },
+  favicon: {
+    enabled: vault?.favicon?.enabled ?? defaults?.favicon?.enabled ?? !isHost,
   },
   dateSources: vault?.dateSources ?? defaults?.dateSources ?? ["frontmatter", "git", "filesystem"],
 });
@@ -171,7 +180,7 @@ const resolveVaultConfig = (
       }[],
     ) as readonly unknown[];
 
-    const site = mergeSite(defaults?.site, vault.site, vault.id);
+    const site = mergeSite(defaults?.site, vault.site, vault.id, configDir);
     return {
       version: metadata.version,
       ...(metadata.$schema !== undefined && { $schema: metadata.$schema }),
@@ -188,7 +197,7 @@ const resolveVaultConfig = (
       theme: mergeThemes(defaults?.theme, vault.theme, configDir),
       frontmatter: mergeFrontmatter(defaults?.frontmatter, vault.frontmatter),
       site,
-      discovery: mergeDiscovery(defaults?.discovery, vault.discovery, site.url),
+      discovery: mergeDiscovery(defaults?.discovery, vault.discovery, site.url, vault.target.type === "host"),
       mountPath: normalizeMountPath(vault.mountPath ?? defaults?.mountPath),
       target: vault.target,
       plugins,

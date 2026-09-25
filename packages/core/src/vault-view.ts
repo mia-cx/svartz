@@ -26,6 +26,7 @@ export function createVaultView(index: Index, id: string, basePath = ""): VaultV
   const entries = index.entries.map((entry) => ({
     ...entry,
     href: withBase(entry.href),
+    socialImage: entry.socialImage?.startsWith("/") ? withBase(entry.socialImage) : entry.socialImage,
     links: entry.links.map((link) => ({
       ...link,
       href: link.href?.startsWith("/") ? withBase(link.href) : link.href,

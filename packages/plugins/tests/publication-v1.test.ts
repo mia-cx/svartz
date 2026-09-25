@@ -68,6 +68,17 @@ const context = (
   }) as PluginContext;
 
 describe("v1 publication boundary", () => {
+  it("keeps a public note's frontmatter social image but not a private note's image", () => {
+    const ctx = context([
+      note("public.md", "", { socialImage: "media/cover.png" }),
+      note("private.md", "", { private: true, socialImage: "media/secret.png" }),
+      asset("media/cover.png"),
+      asset("media/secret.png"),
+    ]);
+    filterUnpublished().filterUnpublished!.run(ctx);
+    expect(ctx.files.map((file) => file.path)).toEqual(["public.md", "media/cover.png"]);
+  });
+
   it("fails closed when a note declares malformed frontmatter", () => {
     const ctx = context([note("private.md", "---\nprivate: [\n---\nSecret")]);
     expect(() => parseFrontmatter().parseFrontmatter!.run(ctx)).toThrow("Invalid frontmatter in private.md");

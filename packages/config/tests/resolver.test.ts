@@ -114,6 +114,8 @@ describe("resolveConfigPaths", () => {
     expect(vault.theme).toEqual({ base: "@svartz/theme-minimal" });
     expect(vault.discovery.feed).toEqual({ enabled: false, limit: 10, content: "summary", sort: "published" });
     expect(vault.discovery.sitemap.enabled).toBe(false);
+    expect(vault.discovery.socialImages.enabled).toBe(false);
+    expect(vault.discovery.favicon.enabled).toBe(true);
     expect(vault.discovery.dateSources).toEqual(["frontmatter", "git", "filesystem"]);
   });
 
@@ -129,7 +131,26 @@ describe("resolveConfigPaths", () => {
     const vault = (await resolveConfig(config, PKG_ROOT)).vaults[0]!;
     expect(vault.discovery.feed).toEqual({ enabled: true, limit: 20, content: "summary", sort: "modified" });
     expect(vault.discovery.sitemap.enabled).toBe(false);
+    expect(vault.discovery.socialImages.enabled).toBe(true);
     expect(vault.discovery.dateSources).toEqual(["git", "filesystem"]);
+  });
+
+  it("preserves host favicon ownership until a vault opts in", async () => {
+    const config: SvartzConfig = {
+      ...minimalConfig,
+      vaults: [{ ...minimalConfig.vaults[0]!, target: { type: "host" } }],
+    };
+    expect((await resolveConfig(config, PKG_ROOT)).vaults[0]!.discovery.favicon.enabled).toBe(false);
+    config.vaults[0] = { ...config.vaults[0]!, discovery: { favicon: { enabled: true } } };
+    expect((await resolveConfig(config, PKG_ROOT)).vaults[0]!.discovery.favicon.enabled).toBe(true);
+  });
+
+  it("resolves a configured favicon against the config directory", async () => {
+    const config: SvartzConfig = {
+      ...minimalConfig,
+      vaults: [{ ...minimalConfig.vaults[0]!, site: { title: "Notes", favicon: "./icon.svg" } }],
+    };
+    expect((await resolveConfig(config, PKG_ROOT)).vaults[0]!.site.favicon).toBe(resolve(PKG_ROOT, "icon.svg"));
   });
 
   it("applies hardcoded frontmatter defaults", async () => {

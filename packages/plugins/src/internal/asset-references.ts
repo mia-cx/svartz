@@ -59,6 +59,11 @@ export function referencedAssets(
       if (path) selected.add(path);
     };
 
+    for (const field of ["socialImage", "image", "cover"] as const) {
+      const value = note.frontmatter?.[field];
+      if (typeof value === "string") resolve(value);
+    }
+
     visit(markdown.parse(note.content), (node) => {
       if (node.type === "link" || node.type === "image") {
         resolve(node.url);

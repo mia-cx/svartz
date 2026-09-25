@@ -104,6 +104,15 @@ describe("@svartz/vite artifact helpers", () => {
     expect(source).toContain("export const artifacts = new Map");
   });
 
+  it("keeps the config-local favicon source path out of browser modules", () => {
+    const source = createArtifactsVirtualModuleSource(
+      [], "/index.ts", "/search.ts", {},
+      { title: "Notes", favicon: "/home/mia/private/icon.svg" },
+    );
+    expect(source).toContain('export const siteConfig = {"title":"Notes"};');
+    expect(source).not.toContain("/home/mia/private/icon.svg");
+  });
+
   it("imports only resources contributed by the current build", () => {
     const source = createArtifactsVirtualModuleSource(
       [],

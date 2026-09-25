@@ -50,6 +50,10 @@ const SiteConfigSchema = Schema.Struct({
   url: Schema.optional(HttpUrlSchema),
   author: Schema.optional(Schema.String),
   image: Schema.optional(Schema.String),
+  favicon: Schema.optional(Schema.String.pipe(Schema.filter(
+    (value) => !/^[a-z]+:\/\//i.test(value),
+    { message: () => "site.favicon must be a local file path" },
+  ))),
 });
 
 const DiscoveryConfigSchema = Schema.Struct({
@@ -60,6 +64,12 @@ const DiscoveryConfigSchema = Schema.Struct({
     sort: Schema.optional(Schema.Literal("published", "modified")),
   })),
   sitemap: Schema.optional(Schema.Struct({
+    enabled: Schema.optional(Schema.Boolean),
+  })),
+  socialImages: Schema.optional(Schema.Struct({
+    enabled: Schema.optional(Schema.Boolean),
+  })),
+  favicon: Schema.optional(Schema.Struct({
     enabled: Schema.optional(Schema.Boolean),
   })),
   dateSources: Schema.optional(Schema.Array(Schema.Literal("frontmatter", "git", "filesystem")).pipe(

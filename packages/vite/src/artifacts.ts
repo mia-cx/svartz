@@ -86,6 +86,7 @@ function createArtifactsVirtualModuleSource(
   const resourceUrls = browserResources.flatMap((resource, index) =>
     resource.kind === "asset" ? [`  ${JSON.stringify(resource.id)}: browserAsset${index},`] : [],
   ).join("\n");
+  const { favicon: _faviconSource, ...publicSiteConfig } = siteConfig;
 
   return [
     resourceImports,
@@ -115,7 +116,7 @@ function createArtifactsVirtualModuleSource(
     "}",
     "",
     `export const themeConfig = ${JSON.stringify(themeConfig)};`,
-    `export const siteConfig = ${JSON.stringify(siteConfig)};`,
+    `export const siteConfig = ${JSON.stringify(publicSiteConfig)};`,
     `export const vault = createVaultView(index, ${JSON.stringify(vaultId)}, base);`,
     `export const searchOptions = SEARCH_INDEX_OPTIONS;`,
     "",

@@ -1,4 +1,20 @@
-import type { SvartzTheme, ThemeComponentLoader } from '@svartz/core';
+import type { SocialImageMetadata, SvartzTheme, ThemeComponentLoader } from '@svartz/core';
+
+const escapeXml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
+	'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;'
+})[character]!);
+
+/** Plain first-party preview; themes can replace the SVG template. */
+const socialImage = ({ title, description, siteTitle }: SocialImageMetadata): string => `
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#171717"/>
+  <text x="72" y="116" fill="#aaa" font-family="sans-serif" font-size="32">${escapeXml(siteTitle.slice(0, 60))}</text>
+  <text x="72" y="310" fill="#fff" font-family="sans-serif" font-size="68" font-weight="bold">${escapeXml(title.slice(0, 32))}</text>
+  <text x="72" y="382" fill="#fff" font-family="sans-serif" font-size="68" font-weight="bold">${escapeXml(title.slice(32, 64))}</text>
+  <text x="72" y="510" fill="#bbb" font-family="sans-serif" font-size="28">${escapeXml((description ?? '').slice(0, 75))}</text>
+</svg>`;
+
+const faviconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#171717"/><text x="32" y="46" text-anchor="middle" fill="#fff" font-family="sans-serif" font-size="42" font-weight="bold">S</text></svg>';
 
 /** Route prefix configuration — keys become URL path segments. */
 export interface MinimalRouteConfig {
@@ -46,6 +62,8 @@ export function createMinimalTheme(
 		description: 'Quartz-like starter theme for Svartz static vault sites.',
 		version: '0.0.1',
 		contractVersion: '1.0.0',
+		socialImage,
+		faviconSvg,
 		layouts: {
 			defaultPage: modules.siteLayout,
 			notePage: modules.siteLayout,

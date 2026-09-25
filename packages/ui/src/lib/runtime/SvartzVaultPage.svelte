@@ -95,7 +95,8 @@
 
 	function resolveAbsoluteUrl(value: string | undefined): string | undefined {
 		if (!value || !siteConfig.url) return undefined;
-		return new URL(value, `${siteConfig.url}/`).href;
+		if (/^https?:\/\//i.test(value)) return value;
+		return new URL(value.replace(/^\/+/, ''), `${siteConfig.url.replace(/\/+$/, '')}/`).href;
 	}
 
 	const activePathname = $derived(pathname);
@@ -154,7 +155,7 @@
 	);
 	const pageDescription = $derived(entry?.description ?? siteConfig.description);
 	const canonicalUrl = $derived(resolveAbsoluteUrl(activePathname));
-	const socialImageUrl = $derived(resolveAbsoluteUrl(siteConfig.image));
+	const socialImageUrl = $derived(resolveAbsoluteUrl(entry?.socialImage ?? siteConfig.image));
 
 	const layoutModule = $derived(resolveComponentModule(resolveLayoutReference(runtimeRoute)));
 	const pageModule = $derived(resolvePageModule(runtimeRoute));
@@ -164,6 +165,10 @@
 
 <svelte:head>
 	<title>{documentTitle}</title>
+	{#if index.favicon}
+		<link rel="icon" href={siteConfig.url ? resolveAbsoluteUrl(index.favicon.svg ?? index.favicon.png) : index.favicon.inline} type={siteConfig.url && index.favicon.svg ? 'image/svg+xml' : 'image/png'} />
+		{#if siteConfig.url}<link rel="apple-touch-icon" href={resolveAbsoluteUrl(index.favicon.appleTouch)} />{/if}
+	{/if}
 	{#if pageDescription}<meta name="description" content={pageDescription} />{/if}
 	{#if canonicalUrl}<link rel="canonical" href={canonicalUrl} />{/if}
 	<meta property="og:title" content={pageTitle} />

@@ -1,4 +1,4 @@
-import { access, readFile, rm } from "node:fs/promises";
+import { access, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,9 +55,30 @@ describe("svartz CLI", () => {
 
       const html = await readFile(DIST_INDEX_PATH, "utf8");
       expect(html).toContain("<title>");
+      expect(html).toContain("data:image/png;base64,");
       expect(html).toContain("<h1");
       expect(html).not.toContain('aria-live="polite">Loading');
     },
     240_000,
   );
+
+  it("builds social images and favicon variants for a static vault", async () => {
+    const configPath = resolve(ROOT, ".svartz-images-e2e.config.ts");
+    try {
+      await writeFile(configPath, `export default {
+        version: "1.0.0",
+        vaults: [{ id: "docs", path: "vaults/docs",
+          target: { type: "static" }, site: { title: "Docs", url: "https://example.test" } }],
+      };\n`);
+      await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
+      await access(resolve(DIST_ROOT, "__svartz/social/index.png"));
+      await access(resolve(DIST_ROOT, "__svartz/favicon.svg"));
+      await access(resolve(DIST_ROOT, "__svartz/favicon-32.png"));
+      await access(resolve(DIST_ROOT, "__svartz/apple-touch-icon.png"));
+      const html = await readFile(resolve(DIST_ROOT, "index.html"), "utf8");
+      expect(html).toContain("https://example.test/__svartz/social/index.png");
+    } finally {
+      await rm(configPath, { force: true });
+    }
+  }, 240_000);
 });

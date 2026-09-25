@@ -34,6 +34,12 @@ describe("validateTheme", () => {
     expect(() => validateTheme(makeValidTheme())).not.toThrow();
   });
 
+  it("accepts image templates and rejects malformed theme image hooks", () => {
+    expect(() => validateTheme(makeValidTheme({ socialImage: () => "<svg/>", faviconSvg: "<svg/>" }))).not.toThrow();
+    expect(() => validateTheme(makeValidTheme({ socialImage: "<svg/>" as never }))).toThrow(/socialImage/);
+    expect(() => validateTheme(makeValidTheme({ faviconSvg: () => "<svg/>" as never }))).toThrow(/faviconSvg/);
+  });
+
   it("accepts declared feature requirements and rejects unknown ones", () => {
     expect(() => validateTheme(makeValidTheme({ requiredFeatures: ["math"] }))).not.toThrow();
     expect(() => validateTheme(makeValidTheme({ requiredFeatures: ["unknown"] as never }))).toThrow(
