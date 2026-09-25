@@ -131,6 +131,7 @@ async function checkStyledHostCss(project) {
     return readFile(file, 'utf8');
   }))).join('\n');
   assert.match(css, /#11175b/, 'The rendered note must link its compiled CSS without JavaScript');
+  assert.match(css, /\.skip-link/, 'The rendered note must link its lazy layout CSS without JavaScript');
 }
 
 async function checkHost(project, launcher, archives) {
