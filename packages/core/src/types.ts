@@ -206,6 +206,8 @@ interface ProcessedFile {
   protection?: { readonly group: string; readonly hidden: boolean };
   rawLinks?: RawLink[];
   links?: string[];
+  /** Inline Obsidian tags found in the note body after OFM transformation. */
+  inlineTags?: string[];
   linkTargets?: Record<string, string>;
   createdAt?: Date;
   modifiedAt?: Date;

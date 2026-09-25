@@ -1,0 +1,15 @@
+---
+description: Keep Obsidian content transforms and browser rendering aligned
+globs: packages/plugins/src/resolve-links.ts, packages/plugins/src/transform-ofm.ts, packages/plugins/src/transform-embeds.ts, packages/plugins/src/transform-toc.ts, packages/plugins/src/internal/parse.ts, packages/plugins/src/internal/compile-content.ts, packages/plugins/src/browser-mermaid.ts
+alwaysApply: false
+---
+
+# Content transformers
+
+- Extract and rewrite authored links from parsed Markdown nodes. Code, escaped prose, raw HTML, and `![[embeds]]` must not become graph edges or rewritten links. Missing wikilinks become disabled markup.
+- Derive TOC headings and section embeds from one Markdown parser. Setext headings and duplicate IDs must agree with rendered heading anchors.
+- Parse inline tags from Markdown prose, skipping authored links and code. Expand published embeds with the same tag handling and record their tags on the host file. Normalize frontmatter tags before merging, so case variants share one route.
+- A callout title needs a blank blockquote line before its body. Otherwise Markdown merges them into one paragraph.
+- Rehype Pretty Code may put `data-language` on `pre` or `code`; the code-block slot must read both.
+- Mermaid fences become inert diagram markup through the OFM remark contribution. The browser renderer is a lazy, route-owned resource with strict Mermaid security. Keep diagram source inside protected payloads for encrypted notes.
+- Resolve first-party browser resource import IDs from the Vite package, since a consumer app does not need a direct `@svartz/plugins` dependency.

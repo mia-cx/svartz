@@ -109,6 +109,44 @@ describe("canonical route allocation", () => {
       "/blog/hello-world-3/", "/blog/hello-world/", null,
     ]);
     expect(ctx.index!.graph.links).toEqual(["hello-world", "hello-world-3"]);
+    expect(ctx.files.find((file) => file.path === "links.md")!.content).toContain(
+      '<span class="svartz-unresolved-link" role="link" aria-disabled="true">missing</span>',
+    );
     expect(ctx.index!.entries.some((entry) => entry.path === "private.md")).toBe(false);
+  });
+
+  it("does not rewrite an embed while resolving the same wikilink target", () => {
+    const ctx = context([note("hello.md", "Hello"), note("links.md", "[[hello]] ![[hello]]")]);
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    allocateRoutesPlugin().allocateRoutes!.run(ctx);
+    resolveLinks().resolveLinks!.run(ctx);
+    expect(ctx.files.find((file) => file.path === "links.md")!.content).toContain(
+      '<a href="../hello/">hello</a> ![[hello]]',
+    );
+  });
+
+  it("leaves unresolved wikilinks inside code samples untouched", () => {
+    const ctx = context([note("links.md", "[[missing]] `[[missing]]`\n\n```md\n[[missing]]\n```")]);
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    allocateRoutesPlugin().allocateRoutes!.run(ctx);
+    resolveLinks().resolveLinks!.run(ctx);
+    expect(ctx.files[0]!.content).toContain('<span class="svartz-unresolved-link" role="link" aria-disabled="true">missing</span> `[[missing]]`');
+    expect(ctx.files[0]!.content).toContain("```md\n[[missing]]\n```");
+  });
+
+  it("rewrites only authored Markdown links and keeps code out of the graph", () => {
+    const ctx = context([
+      note("target.md", "Target"),
+      note("links.md", "[target](target.md) `[target](target.md)`\n\n```md\n[private](private.md)\n```"),
+      note("private.md", "---\nprivate: true\n---\nSecret"),
+    ]);
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    filterUnpublished().filterUnpublished!.run(ctx);
+    allocateRoutesPlugin().allocateRoutes!.run(ctx);
+    resolveLinks().resolveLinks!.run(ctx);
+    const links = ctx.files.find((file) => file.path === "links.md")!;
+    expect(links.content).toContain('<a href="../target/">target</a> `[target](target.md)`');
+    expect(links.content).toContain("[private](private.md)");
+    expect(links.links).toEqual(["target"]);
   });
 });

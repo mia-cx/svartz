@@ -5,6 +5,7 @@ import { buildSlugMap, resolveLink } from "./internal/resolve";
 import { createAssetResolver } from "./internal/asset-references";
 import { alternateNames } from "./internal/routes";
 import { extractSectionMarkdown } from "./internal/parse";
+import { transformInlineTags } from "./transform-ofm";
 
 const EMBED_REGEX = /!\[\[([^\]]+)\]\]/g;
 const IMAGE_EXTENSIONS = new Set([
@@ -127,6 +128,8 @@ export const transformEmbeds = definePlugin(() => ({
       const allSlugs = noteFiles.map((file) => file.slug);
       const sourceBodies =
         (ctx.meta.get("sourceBodies") as Map<string, string> | undefined) ?? new Map();
+      const routes = ctx.config.theme.routes as { tags?: string } | undefined;
+      const tagsRoute = routes?.tags ?? "tags";
       const noteBySlug = new Map(noteFiles.map((file) => [file.slug, file] as const));
       const resolveAsset = createAssetResolver(assetFiles);
 
@@ -137,6 +140,7 @@ export const transformEmbeds = definePlugin(() => ({
         section: string | undefined,
         alias: string | undefined,
         seen: Set<string>,
+        hostTags: Set<string>,
       ): string => {
         const target = noteBySlug.get(targetSlug);
         if (target?.protection && target.protection.group !== sourceGroup) {
@@ -193,18 +197,23 @@ export const transformEmbeds = definePlugin(() => ({
             parsed.section,
             parsed.alias,
             new Set(seen),
+            hostTags,
           );
         });
+
+        const tagged = transformInlineTags(expanded, sourceSlug, tagsRoute);
+        for (const tag of tagged.tags) hostTags.add(tag);
 
         return [
           `<div class="svartz-embed" data-embed="${targetSlug}">`,
           `<p class="svartz-embed-source"><a href="${relativeNoteHref(sourceSlug, targetSlug, section)}">${alias ?? noteBySlug.get(targetSlug)?.frontmatter?.[ctx.config.frontmatter.titleField] ?? targetSlug}</a></p>`,
-          expanded,
+          tagged.content,
           "</div>",
         ].join("\n");
       };
 
       for (const file of noteFiles) {
+        const hostTags = new Set(file.inlineTags ?? []);
         file.content = file.content.replace(EMBED_REGEX, (_raw: string, inner: string) => {
           const parsed = splitEmbedInner(inner);
           const assetPath = resolveAsset(file, parsed.target);
@@ -237,8 +246,10 @@ export const transformEmbeds = definePlugin(() => ({
             parsed.section,
             parsed.alias,
             new Set([file.slug]),
+            hostTags,
           );
         });
+        file.inlineTags = [...hostTags];
       }
     },
     options: { fatal: true },

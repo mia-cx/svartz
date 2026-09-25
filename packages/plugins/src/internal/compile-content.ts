@@ -66,6 +66,19 @@ function findElement(element: Element, tagName: string): Element | undefined {
   return undefined;
 }
 
+function codeLanguage(element: Element): string | undefined {
+  for (const candidate of [element, findElement(element, "code"), findElement(element, "pre")]) {
+    if (!candidate) continue;
+    const language = candidate.properties.dataLanguage ?? candidate.properties["data-language"];
+    if (typeof language === "string" && language) return language;
+    const classes = candidate.properties.className;
+    const match = (Array.isArray(classes) ? classes : [classes])
+      .find((name) => typeof name === "string" && name.startsWith("language-"));
+    if (typeof match === "string") return match.slice("language-".length);
+  }
+  return;
+}
+
 function contentSlot(element: Element): ContentSlot | undefined {
   if (element.tagName === "blockquote" && findCalloutMarker(element)) return "callout";
   if (element.tagName === "figure" && element.properties.dataRehypePrettyCodeFigure !== undefined) return "codeBlock";
@@ -98,7 +111,7 @@ function serializeNode(node: RootContent | ElementContent, insideCode = false): 
       href: attrs.href,
       src: attrs.src,
       alt: attrs.alt,
-      language: String(node.properties.dataLanguage ?? "") || undefined,
+      language: activeSlot === "codeBlock" ? codeLanguage(node) : undefined,
       calloutType: marker ? String(marker.properties.dataCallout) : undefined,
       title: marker ? textContent(findElement(node, "strong") ?? node) : undefined,
       fold: marker?.properties.dataCalloutFold ? String(marker.properties.dataCalloutFold) : undefined,

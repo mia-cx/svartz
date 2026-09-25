@@ -11,6 +11,7 @@ import GithubSlugger from "github-slugger";
 import { posix } from "node:path";
 import { definePlugin } from "@svartz/core";
 import { createAssetResolver } from "./internal/asset-references";
+import { findRawLinkSpans } from "./internal/parse";
 import { resolveLink, buildSlugMap } from "./internal/resolve";
 import { alternateNames, routeHref } from "./internal/routes";
 
@@ -57,8 +58,28 @@ function replaceLinkMarkup(
   raw: string,
   href: string,
   label: string,
+  type: "wikilink" | "markdown",
 ): string {
-  return markdown.split(raw).join(`<a href="${href}">${label}</a>`);
+  return replaceAuthoredLinkMarkup(markdown, raw, type, `<a href="${href}">${escapeHtml(label)}</a>`);
+}
+
+function replaceAuthoredLinkMarkup(markdown: string, raw: string, type: "wikilink" | "markdown", html: string): string {
+  let content = markdown;
+  for (const replacement of findRawLinkSpans(markdown, raw, type).reverse()) {
+    content = content.slice(0, replacement.start) + html + content.slice(replacement.end);
+  }
+  return content;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character]!);
+}
+
+function replaceMissingWikilink(markdown: string, raw: string, label: string): string {
+  return replaceAuthoredLinkMarkup(markdown, raw, "wikilink",
+    `<span class="svartz-unresolved-link" role="link" aria-disabled="true">${escapeHtml(label)}</span>`);
 }
 
 export const resolveLinks = definePlugin(() => ({
@@ -116,6 +137,7 @@ export const resolveLinks = definePlugin(() => ({
               rawLink.raw,
               toRelativeAssetHref(file.slug, assetPath),
               label,
+              rawLink.type,
             );
             continue;
           }
@@ -135,7 +157,10 @@ export const resolveLinks = definePlugin(() => ({
               rawLink.raw,
               toRelativeNoteHref(file.slug, target, rawLink.section),
               label,
+              rawLink.type,
             );
+          } else if (rawLink.type === "wikilink") {
+            rewrittenContent = replaceMissingWikilink(rewrittenContent, rawLink.raw, label);
           }
         }
 

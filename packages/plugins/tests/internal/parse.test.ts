@@ -4,6 +4,8 @@ import {
   extractRawLinks,
   extractDescription,
   countWords,
+  extractHeadings,
+  extractSectionMarkdown,
 } from "../../src/internal/parse";
 
 describe("extractFrontmatter", () => {
@@ -90,6 +92,36 @@ describe("extractRawLinks", () => {
   it("ignores image embeds", () => {
     const links = extractRawLinks("![alt](image.png)");
     expect(links).toHaveLength(0);
+  });
+
+  it("ignores links in code, comments, HTML, and escaped prose", () => {
+    const markdown = [
+      "[[real]] [real](real.md) `[[inline]] [inline](inline.md)`",
+      "<!-- [[comment]] [comment](comment.md) -->",
+      "<span>[[html]] [html](html.md)</span>",
+      "\\[[escaped]]",
+      "```md",
+      "[[fenced]] [fenced](fenced.md)",
+      "```",
+    ].join("\n");
+    expect(extractRawLinks(markdown).map((link) => link.target)).toEqual(["real", "real.md"]);
+  });
+
+  it("does not extract a wikilink inside an authored Markdown link", () => {
+    expect(extractRawLinks("[[target]] [look [[nested]]](outer.md)").map((link) => link.target))
+      .toEqual(["target", "outer.md"]);
+  });
+});
+
+describe("heading extraction", () => {
+  it("uses Setext headings and stable duplicate IDs while ignoring code", () => {
+    const markdown = ["# Hello *world*", "Hello world", "===========", "```md", "# Fake", "```", "## Hello world"].join("\n");
+    expect(extractHeadings(markdown)).toEqual([
+      { depth: 1, text: "Hello world", slug: "hello-world" },
+      { depth: 1, text: "Hello world", slug: "hello-world-1" },
+      { depth: 2, text: "Hello world", slug: "hello-world-2" },
+    ]);
+    expect(extractSectionMarkdown(markdown, "hello-world-1")).toBe("Hello world\n===========\n```md\n# Fake\n```\n## Hello world");
   });
 });
 

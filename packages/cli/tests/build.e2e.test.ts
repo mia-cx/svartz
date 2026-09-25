@@ -137,7 +137,7 @@ describe("svartz CLI", () => {
           if (!file.isFile()) continue;
           const contents = await readFile(resolve(file.parentPath, file.name));
           expect(contents.toString("utf8")).not.toMatch(
-            /PRIVATE_BODY_MARKER|PRIVATE_DESCRIPTION_MARKER|PRIVATE_ASSET_MARKER|PRIVATE_HIDDEN_TITLE_MARKER|PRIVATE_HIDDEN_BODY_MARKER|SECOND_PRIVATE_MARKER|e2e-only-password|second-e2e-password/,
+            /PRIVATE_BODY_MARKER|PRIVATE_DESCRIPTION_MARKER|PRIVATE_ASSET_MARKER|PRIVATE_HIDDEN_TITLE_MARKER|PRIVATE_HIDDEN_BODY_MARKER|PRIVATE_MERMAID_MARKER|SECOND_PRIVATE_MARKER|e2e-only-password|second-e2e-password/,
           );
         }
       }
@@ -185,10 +185,13 @@ describe("svartz CLI", () => {
           const errors: string[] = [];
           page.on("pageerror", (error) => errors.push(error.message));
           page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
-          await page.goto(`http://127.0.0.1:${address.port}/locked/`);
+          await page.goto(`http://127.0.0.1:${address.port}/`);
+          await page.locator("pre.svartz-mermaid svg").waitFor({ timeout: 10_000 });
+          await page.getByRole("navigation", { name: "Explorer" }).getByRole("link", { name: "Locked title", exact: true }).click();
           await page.getByLabel("Password").fill("e2e-only-password");
           await page.getByRole("button", { name: "Unlock note" }).click();
           await page.getByText("PRIVATE_BODY_MARKER").waitFor({ timeout: 10_000 });
+          await page.locator("pre.svartz-mermaid svg").waitFor({ timeout: 10_000 });
           expect(await page.getByRole("button", { name: "Count: 0" }).count()).toBe(1);
           await page.getByRole("navigation", { name: "Explorer" }).getByRole("link", { name: "Second locked title" }).click();
           await page.getByLabel("Password").fill("second-e2e-password");

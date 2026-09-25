@@ -18,6 +18,7 @@ Excluded from this audit: `packages/vault (old, to be superseded)`, `packages/re
   From the workspace directory (e.g. `packages/config`):  
   `pnpm test` — run tests  
   `pnpm test:coverage` — run tests with V8 coverage and print a summary (and write `coverage/` if reporters include `html`).
+- **CLI:** Its test files run serially because build and browser cases share the root Svartz config and can exhaust a small VM when launched together.
 
 - **Install rule:** Use `pnpm i -D @vitest/coverage-v8` (or add to `package.json` and run `pnpm i` from root). Do not use `pnpm add`.
 
