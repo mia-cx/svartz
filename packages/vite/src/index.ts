@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import {
   mkdir,
   writeFile,
@@ -88,6 +89,15 @@ function extractThemeConfig(theme: { base: string; [key: string]: unknown }): Re
 function selectedThemeSourcePath(config: ResolvedConfig): string | undefined {
   if (process.env["SVARTZ_THEME_SOURCE_ID"] !== config.theme.base) return;
   return process.env["SVARTZ_THEME_SOURCE_PATH"];
+}
+
+/**
+ * The browser entry beside a theme's source manifest. The manifest (index.ts) may
+ * import build-time plugins that can't run in the browser; runtime.ts can.
+ */
+function runtimeThemeSourcePath(manifestPath: string): string | undefined {
+  const runtime = join(dirname(manifestPath), "runtime.ts");
+  return existsSync(runtime) ? runtime : undefined;
 }
 
 function svartz(options: SvartzVitePluginOptions): Plugin {
@@ -312,8 +322,9 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     configResolved(resolved) {
       context = createSvartzViteContext(options, resolved);
       kitBasePath = svelteKitBasePath(resolved.define);
-      themeModuleId = selectedThemeSourcePath(context.config)
-        ? resolveThemeModuleId(context.config)
+      const themeSourcePath = selectedThemeSourcePath(context.config);
+      themeModuleId = themeSourcePath
+        ? runtimeThemeSourcePath(themeSourcePath) ?? resolveThemeModuleId(context.config)
         : resolveThemeRuntimeImportId(context.config, context.root);
     },
     async buildStart() {
