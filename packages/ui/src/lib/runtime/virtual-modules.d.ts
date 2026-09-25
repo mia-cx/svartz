@@ -45,7 +45,7 @@ declare module 'virtual:svartz/theme' {
 
 declare module 'virtual:svartz/artifacts' {
 	import type { Component } from 'svelte';
-	import type { ProtectedGroupPayload } from '@svartz/core';
+	import type { IndexEntry, ProtectedGroupPayload } from '@svartz/core';
 
 	export interface RuntimeArtifactRecord {
 		readonly key: string;
@@ -54,28 +54,7 @@ declare module 'virtual:svartz/artifacts' {
 		readonly noteSlug?: string;
 	}
 
-	export interface RuntimeIndexEntry {
-		readonly slug: string;
-		readonly href: string;
-		readonly path: string;
-		readonly title: string;
-		readonly locked?: boolean;
-		readonly tags: readonly string[];
-		readonly aliases: readonly string[];
-		readonly description?: string;
-		readonly socialImage?: string;
-		readonly content: string;
-		readonly toc: readonly {
-			readonly depth: number;
-			readonly text: string;
-			readonly slug: string;
-		}[];
-		readonly wordCount: number;
-		readonly readingTimeMinutes: number;
-		readonly createdAt?: Date;
-		readonly modifiedAt?: Date;
-		readonly publishedAt?: Date;
-	}
+	export type RuntimeIndexEntry = IndexEntry;
 
 	export interface RuntimeSearchDocument {
 		readonly id: string;

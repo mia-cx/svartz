@@ -152,8 +152,15 @@ async function checkHost(project, launcher, archives) {
     '/// <reference types="@svartz/vite/virtual-modules" />',
     "import { prepareHostVault } from 'virtual:svartz/host';",
     "import { ready } from 'virtual:svartz/theme';",
+    "import { vault } from 'virtual:svartz/artifacts';",
     'const prepared: Promise<void> = ready;',
     "void Promise.all([prepared, prepareHostVault('/notes/')]);",
+    "const note = vault.note('/notes/');",
+    'if (note) {',
+    '  const properties: Readonly<Record<string, unknown>> = note.entry.properties;',
+    '  const comments: boolean = note.entry.page.comments;',
+    '  void [properties, comments];',
+    '}',
   ].join('\n'));
   await write(project, 'src/routes/rss.xml/+server.ts', [
     "import { vaults } from 'virtual:svartz/host';",
