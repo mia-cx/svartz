@@ -1,5 +1,6 @@
 <script lang="ts">
-	import SvartzRuntimePage from '$lib/svartz/SvartzRuntimePage.svelte';
+	import { page } from '$app/state';
+	import SvartzRuntimePage from '@svartz/ui/runtime';
 </script>
 
-<SvartzRuntimePage />
+<SvartzRuntimePage pathname={page.url.pathname} />

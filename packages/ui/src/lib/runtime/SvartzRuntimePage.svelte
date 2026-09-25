@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import type { Component } from 'svelte';
 	import { theme, resolveRuntimeRoute } from 'virtual:svartz/theme';
 	import {
@@ -24,7 +23,7 @@
 		| (() => Promise<ComponentModule>)
 		| { readonly default: Component<any> };
 	type RuntimeRouteMatch = ReturnType<typeof resolveRuntimeRoute>;
-	let { pathname = undefined }: { pathname?: string } = $props();
+	let { pathname }: { pathname: string } = $props();
 
 	function normalizeSlug(currentPathname: string): string | undefined {
 		if (currentPathname === '/') return undefined;
@@ -89,7 +88,7 @@
 		return new URL(value, `${siteConfig.url}/`).href;
 	}
 
-	const activePathname = $derived(pathname ?? page.url.pathname);
+	const activePathname = $derived(pathname);
 
 	const runtimeRoute = $derived(
 		resolveRuntimeRoute({
