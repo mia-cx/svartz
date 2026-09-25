@@ -145,7 +145,8 @@ async function templateFiles(
   return files.flat().sort();
 }
 
-function packageManager(root: string, manifest?: Manifest): PackageManager {
+/** Select the package manager declared by an existing project or its lockfile. */
+export function packageManager(root: string, manifest?: Manifest): PackageManager {
   const declared = manifest?.packageManager?.split("@")[0];
   if (
     declared === "npm" ||

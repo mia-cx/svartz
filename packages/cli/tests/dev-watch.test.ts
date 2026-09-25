@@ -133,6 +133,18 @@ describe("CLI dev watch helpers", () => {
       .toEqual(["@acme/theme-local"]);
   });
 
+  it("builds a host-owned theme from its own package directory", async () => {
+    const { appRoot, localThemeRoot, workspaceRoot } = await createWorkspaceFixture();
+    await mkdir(path.join(localThemeRoot, "src"));
+
+    const descriptors = getThemeWatchDescriptors(localThemeRoot, appRoot, workspaceRoot, true);
+    expect(descriptors[0]).toMatchObject({
+      path: path.join(localThemeRoot, "src"),
+      buildDirectory: localThemeRoot,
+    });
+    expect(descriptors[0]).not.toHaveProperty("buildFilters");
+  });
+
   it("rebuilds a local theme whose package entry points to dist", async () => {
     const { appRoot, localThemeRoot, workspaceRoot } = await createWorkspaceFixture();
     await mkdir(path.join(localThemeRoot, "src"));

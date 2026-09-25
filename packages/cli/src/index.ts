@@ -2,7 +2,7 @@
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { lstat, mkdir, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import chokidar, { type FSWatcher } from "chokidar";
@@ -45,7 +45,7 @@ import {
 import { writeGeneratedHostTailwindSourcesFile, writeGeneratedTailwindSourcesFile } from "./tailwind-sources";
 import { syncManagedTurboFiles } from "./turbo-sync";
 import { resolveAppLocation, type AppLocation } from "./workspace";
-import { initProject } from "./init";
+import { commandExecutable, initProject, packageManager } from "./init";
 import { withVaultBuildLock } from "./build-lock";
 
 class CliAppRootMissing extends Data.TaggedError("CliAppRootMissing")<{
@@ -129,7 +129,7 @@ const dedupeWatchDescriptors = (
   const deduped: WatchDescriptor[] = [];
 
   for (const descriptor of descriptors) {
-    const key = `${descriptor.path}:${descriptor.exact ? "exact" : "dir"}:${(descriptor.buildFilters ?? []).join(",")}`;
+    const key = `${descriptor.path}:${descriptor.exact ? "exact" : "dir"}:${(descriptor.buildFilters ?? []).join(",")}:${descriptor.buildDirectory ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
     deduped.push(descriptor);
@@ -432,7 +432,7 @@ const loadDevWatchContext = async (
   ];
 
   for (const vault of vaults) {
-    descriptors.push(...getThemeWatchDescriptors(vault.theme.base, workspace.appRoot, workspaceRoot));
+    descriptors.push(...getThemeWatchDescriptors(vault.theme.base, workspace.appRoot, workspaceRoot, workspace.hostApp));
   }
 
   return {
@@ -697,25 +697,30 @@ const runDevSupervisor = async (options: DevOptions): Promise<void> => {
   let child = startDevRunnerChild(options);
   let shuttingDown = false;
   let restarting = false;
+  let watcherPaused = false;
   let pendingDescriptors: WatchDescriptor[] = [];
+  let monitorRunner: (runner: ChildProcess) => void = () => {};
 
   function requestRestart(
     changedPath: string,
     descriptors: readonly WatchDescriptor[],
   ): void {
+    if (watcherPaused || shuttingDown) return;
     const labels = descriptors.map((descriptor) => descriptor.label).join(", ");
     console.log(`[svartz:dev] restarting after ${changedPath} (${labels})`);
     pendingDescriptors.push(...descriptors);
-    void flushRestartQueue();
+    void flushRestartQueue().catch((cause) => console.error("[svartz:dev] restart failed:", cause));
   }
 
   async function flushRestartQueue(): Promise<void> {
     if (restarting || shuttingDown || pendingDescriptors.length === 0) return;
     restarting = true;
+    watcherPaused = true;
 
     try {
       const restartBatch = pendingDescriptors;
       pendingDescriptors = [];
+      await watcher.close();
 
       const buildFilters = restartBatch.flatMap(
         (descriptor) => descriptor.buildFilters ?? [],
@@ -723,17 +728,31 @@ const runDevSupervisor = async (options: DevOptions): Promise<void> => {
       if (buildFilters.length > 0) {
         await buildWorkspacePackages(watchContext.workspaceRoot, buildFilters);
       }
+      const buildDirectories = [...new Set(restartBatch.flatMap(
+        (descriptor) => descriptor.buildDirectory ?? [],
+      ))];
+      if (buildDirectories.length > 0) {
+        const manifest = JSON.parse(await readFile(path.join(watchContext.workspace.appRoot, "package.json"), "utf8")) as { packageManager?: string };
+        const manager = commandExecutable(packageManager(watchContext.workspace.appRoot, manifest));
+        for (const directory of buildDirectories) {
+          await runCommand(manager, ["run", "build"], directory);
+        }
+      }
 
+      const nextContext = await loadDevWatchContext(options);
       await stopDevRunnerChild(child);
-      await watcher.close();
-
-      watchContext = await loadDevWatchContext(options);
+      watchContext = nextContext;
       watcher = createDevWatcher(watchContext, requestRestart);
       child = startDevRunnerChild(options);
+      monitorRunner(child);
+    } catch (cause) {
+      console.error("[svartz:dev] rebuild failed; waiting for another edit:", cause);
+      watcher = createDevWatcher(watchContext, requestRestart);
     } finally {
+      watcherPaused = false;
       restarting = false;
       if (pendingDescriptors.length > 0) {
-        await flushRestartQueue();
+        void flushRestartQueue().catch((cause) => console.error("[svartz:dev] restart failed:", cause));
       }
     }
   }
@@ -764,30 +783,29 @@ const runDevSupervisor = async (options: DevOptions): Promise<void> => {
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
 
-    child.on("error", (cause) => {
-      void cleanup();
-      reject(cause);
-    });
+    monitorRunner = (runner) => {
+      runner.on("error", (cause) => {
+        if (runner !== child) return;
+        void cleanup();
+        reject(cause);
+      });
 
-    child.on("exit", (code, signal) => {
-      if (shuttingDown || restarting) {
-        return;
-      }
+      runner.on("exit", (code, signal) => {
+        if (runner !== child || shuttingDown || restarting) return;
+        void watcher.close();
 
-      void watcher.close();
-
-      if (signal) {
-        reject(new Error(`svartz dev runner exited due to signal ${signal}`));
-        return;
-      }
-
-      if ((code ?? 0) !== 0) {
-        reject(new Error(`svartz dev runner exited with code ${String(code)}`));
-        return;
-      }
-
-      resolve();
-    });
+        if (signal) {
+          reject(new Error(`svartz dev runner exited due to signal ${signal}`));
+          return;
+        }
+        if ((code ?? 0) !== 0) {
+          reject(new Error(`svartz dev runner exited with code ${String(code)}`));
+          return;
+        }
+        resolve();
+      });
+    };
+    monitorRunner(child);
   });
 };
 

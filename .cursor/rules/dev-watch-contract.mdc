@@ -24,6 +24,7 @@ alwaysApply: false
 - Restart the dev runner for active theme package changes.
 - Watch `packages/config/src`, `packages/core/src`, `packages/plugins/src`, `packages/vite/src`, and `packages/ui/src` as best-effort workspace source roots.
 - When a watched workspace package change is inside this repo, rebuild the matching package before restarting the dev runner.
+- For host-owned themes, run `build` in the theme package with the host's package manager. Close the watcher before building so generated files cannot trigger another restart; reopen it after success or failure. A failed theme build keeps the current dev runner alive for the next edit.
 
 ## Test seams
 
