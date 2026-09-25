@@ -144,3 +144,35 @@ it("does not give an untracked reused path an older deleted note's dates", async
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("follows a note that returns to a path another note used in between", async () => {
+  const root = await mkdtemp(join(tmpdir(), "svartz-git-dates-returning-alias-"));
+  const vault = join(root, "vault");
+  try {
+    await mkdir(vault);
+    await exec("git", ["init", "-q", root]);
+    const commit = async (date: string) => {
+      await exec("git", ["-C", root, "add", "-A"]);
+      await exec("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com",
+        "commit", "-qm", date], { env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } });
+    };
+    await writeFile(join(vault, "a.md"), "Original note");
+    await commit("2010-01-02T03:04:05+00:00");
+    await rename(join(vault, "a.md"), join(vault, "x.md"));
+    await commit("2012-01-02T03:04:05+00:00");
+    await writeFile(join(vault, "a.md"), "Temporary note");
+    await commit("2014-01-02T03:04:05+00:00");
+    await rename(join(vault, "a.md"), join(vault, "b.md"));
+    await commit("2016-01-02T03:04:05+00:00");
+    await rename(join(vault, "x.md"), join(vault, "a.md"));
+    await commit("2018-01-02T03:04:05+00:00");
+
+    const dates = await readGitDates(vault);
+    expect(dates.get("a.md")?.createdAt.toISOString()).toBe("2010-01-02T03:04:05.000Z");
+    expect(dates.get("a.md")?.modifiedAt.toISOString()).toBe("2018-01-02T03:04:05.000Z");
+    expect(dates.get("b.md")?.createdAt.toISOString()).toBe("2014-01-02T03:04:05.000Z");
+    expect(dates.get("b.md")?.modifiedAt.toISOString()).toBe("2016-01-02T03:04:05.000Z");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

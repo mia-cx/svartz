@@ -22,6 +22,9 @@ export async function readGitDates(vaultPath: string): Promise<ReadonlyMap<strin
   }
 
   const scope = relative(repositoryRoot, vaultPath) || ".";
+  const tracked = (await exec("git", ["-C", repositoryRoot, "ls-files", "--cached", "--full-name", "-z", "--", scope], {
+    maxBuffer: 16 * 1024 * 1024,
+  })).stdout.split("\0").filter(Boolean);
   const child = spawn("git", ["-C", repositoryRoot, "-c", "core.quotePath=false", "log",
     "--format=COMMIT:%cI", "--name-status", "--find-renames", "--", scope]);
   let stderr = "";
@@ -35,12 +38,10 @@ export async function readGitDates(vaultPath: string): Promise<ReadonlyMap<strin
     });
   });
   const dates = new Map<string, GitDates>();
-  const renamedTo = new Map<string, string>();
-  const endedLifetimes = new Set<string>();
+  const active = new Map(tracked.map((path) => [path, path]));
   let commitDate: Date | undefined;
-  const record = (repositoryPath: string): void => {
-    const currentPath = renamedTo.get(repositoryPath) ?? repositoryPath;
-    if (!commitDate || endedLifetimes.has(currentPath)) return;
+  const record = (currentPath: string): void => {
+    if (!commitDate) return;
     const file = relative(vaultPath, resolve(repositoryRoot, currentPath)).replaceAll("\\", "/");
     if (!file || file === ".." || file.startsWith("../")) return;
     const previous = dates.get(file);
@@ -57,17 +58,17 @@ export async function readGitDates(vaultPath: string): Promise<ReadonlyMap<strin
         const [status, source, target] = raw.split("\t");
         if (!status || !source) continue;
         if (status.startsWith("R") && target) {
-          renamedTo.set(source, renamedTo.get(target) ?? target);
-          record(source);
-        } else {
-          const currentPath = renamedTo.get(source) ?? source;
-          record(source);
-          if (status === "A") {
-            renamedTo.delete(source);
-            endedLifetimes.add(currentPath);
-            endedLifetimes.add(source);
-          }
+          const currentPath = active.get(target);
+          if (!currentPath) continue;
+          record(currentPath);
+          active.delete(target);
+          active.set(source, currentPath);
+          continue;
         }
+        const currentPath = active.get(source);
+        if (!currentPath) continue;
+        if (status !== "D") record(currentPath);
+        if (status === "A") active.delete(source);
       }
     })(), closed]);
   } catch (error) {
