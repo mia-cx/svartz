@@ -145,6 +145,40 @@ it("upgrades only the previous generated CSS entry and root layout", async () =>
     .not.toContain("layout.css");
 });
 
+it("keeps an existing layout CSS import when that stylesheet belongs to the host", async () => {
+  const root = await fixture();
+  await mkdir(path.join(root, "src/routes"), { recursive: true });
+  const layout = "<script lang=\"ts\">\n  import './layout.css';\n  let { children } = $props();\n</script>\n\n{@render children()}\n";
+  await writeFile(path.join(root, "src/routes/+layout.svelte"), layout);
+  await writeFile(path.join(root, "src/routes/layout.css"), "body { background: rebeccapurple; }\n");
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
+  expect(await readFile(path.join(root, "src/routes/+layout.svelte"), "utf8")).toBe(layout);
+  expect(await readFile(path.join(root, "src/routes/layout.css"), "utf8"))
+    .toBe("body { background: rebeccapurple; }\n");
+});
+
+it.each(["^3.4.17", "3.x", ">=3 <4"])("rejects a Tailwind 3 host before writing for %s", async (version) => {
+  const root = await fixture();
+  const viteConfig = "export default { plugins: [] };\n";
+  const manifest = JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0", tailwindcss: version },
+  });
+  await writeFile(path.join(root, "vite.config.ts"), viteConfig);
+  await writeFile(path.join(root, "package.json"), manifest);
+
+  const failure = await initProject({ cwd: root, install: false, git: false }).catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(InitLayoutError);
+  expect(failure).toMatchObject({ reason: "unsupported-tailwind", message: expect.stringContaining("Tailwind CSS 4") });
+  expect(await readFile(path.join(root, "vite.config.ts"), "utf8")).toBe(viteConfig);
+  expect(await readFile(path.join(root, "package.json"), "utf8")).toBe(manifest);
+  await expect(access(path.join(root, "svartz.config.ts"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
 it("preserves host app types and adds virtual module declarations once", async () => {
   const root = await fixture();
   await mkdir(path.join(root, "src"));
