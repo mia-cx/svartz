@@ -43,7 +43,9 @@ describe("host registry", () => {
     expect(deploymentBasePath({ ...vault("docs", ""), target: { type: "static" }, site: { title: "Docs", url: "https://example.test/site" } })).toBe("");
     expect(deploymentBasePath({ ...vault("blog", "/blog"), site: { title: "Blog", url: "https://example.test/site" } })).toBe("/site");
     expect(createHostRegistrySource([{ ...vault("blog", "/blog"), site: { title: "Blog", url: "https://example.test/site" } }]))
-      .toContain('basePath: ""');
+      .toContain('basePath: "/site"');
+    expect(createHostRegistrySource([{ ...vault("blog", "/blog"), target: { type: "static", basePath: "/site" } }]))
+      .toContain('basePath: "/site"');
     expect(svelteKitBasePath({ __SVELTEKIT_PATHS_BASE__: '"/site"' })).toBe("/site");
     expect(deploymentBasePath({ ...vault("blog", "/blog"), site: { title: "Blog" } }, "/site")).toBe("/site");
     const source = createHostRegistrySource([vault("blog", "/site/docs")], "/site");

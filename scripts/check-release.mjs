@@ -164,17 +164,19 @@ async function checkHost(project, launcher, archives) {
   ].join('\n'));
   await write(project, 'check-ui-types.ts', [
     '/// <reference types="@svartz/ui/virtual-modules" />',
-    "import { vault, deploymentBasePath } from 'virtual:svartz/artifacts';",
+    "import { index, vault, deploymentBasePath } from 'virtual:svartz/artifacts';",
     "import { vaults } from 'virtual:svartz/host';",
     'const base: string = deploymentBasePath;',
     'const hostBase: string = vaults[0].basePath;',
+    '// @ts-expect-error Replacement v1 indexes may omit theme routes.',
+    'const requiredTheme: readonly string[] = index.routes.theme;',
     "const note = vault.note('/notes/');",
     'if (note) {',
     '  const properties: Readonly<Record<string, unknown>> = note.entry.properties;',
     '  const comments: boolean = note.entry.page.comments;',
     '  void [properties, comments];',
     '}',
-    'void [base, hostBase];',
+    'void [base, hostBase, requiredTheme];',
   ].join('\n'));
   await write(project, 'src/routes/rss.xml/+server.ts', [
     "import { vaults } from 'virtual:svartz/host';",
@@ -192,7 +194,7 @@ async function checkHost(project, launcher, archives) {
   await command(path.join(project, 'node_modules/.bin/tsc'),
     ['--noEmit', '--skipLibCheck', '--module', 'esnext', '--moduleResolution', 'bundler', '--target', 'es2022', 'vite.config.ts', 'svartz.config.ts', 'check-types.ts'], project);
   await command(path.join(project, 'node_modules/.bin/tsc'),
-    ['--noEmit', '--skipLibCheck', '--module', 'esnext', '--moduleResolution', 'bundler', '--target', 'es2022', 'check-ui-types.ts'], project);
+    ['--noEmit', '--strict', '--skipLibCheck', '--module', 'esnext', '--moduleResolution', 'bundler', '--target', 'es2022', 'check-ui-types.ts'], project);
   await command('npm', ['run', 'svartz:build'], project);
   await command(path.join(project, 'node_modules/.bin/svelte-check'), ['--tsconfig', './tsconfig.json'], project);
   const sourcesPath = path.join(project, '.svartz/vaults/notes/tailwind-sources.css');
