@@ -95,7 +95,7 @@ This module loads eager and lazy theme components before SSR and hydration, then
 Artifact bridge surface:
 
 - `artifacts`
-- `hasNoteArtifact(key)` and `getNoteArtifact(key)`
+- `hasNoteArtifact(key)`, `prepareNoteArtifact(key)`, and `getNoteArtifact(key)`
 - `browserResources` asset URLs for resources contributed by active hooks
 - `mountBrowserResources(pathname)` to mount active browser scripts and return their cleanup
 - `index`
@@ -103,7 +103,7 @@ Artifact bridge surface:
 - `backlinks`
 - `search`
 
-This module imports note pages, global layout data, and active CSS and assets. Browser scripts export `mount(pathname)` and may return a disposer. The runtime mounts them on navigation and disposes on route changes or unmount. Rebuilding after a resource is no longer used removes its import.
+This module loads note pages on demand. Direct consumers must call `await prepareNoteArtifact(key)` before `getNoteArtifact(key)`; `hasNoteArtifact(key)` only checks whether the key exists. The generated SvelteKit route does this before rendering through `prepareHostVault(pathname)`. Browser scripts export `mount(pathname)` and may return a disposer. The runtime mounts them on navigation and disposes on route changes or unmount. Rebuilding after a resource is no longer used removes its import.
 
 ## Apps Web Route Shells
 

@@ -7,13 +7,19 @@ import { HOST_STYLES_PLACEHOLDER } from "./host-registry";
 /** Generated runtime entry points and the CSS manifest for one host vault. */
 export interface HostStyleManifest {
   readonly modules: readonly string[];
+  readonly pagesRoot: string;
   readonly path: string;
+}
+
+interface HostStyles {
+  readonly shared: readonly string[];
+  readonly notes: Readonly<Record<string, readonly string[]>>;
 }
 
 const normalizeModulePath = (path: string): string => normalizePath(path.replaceAll("\\", "/"));
 
 /** Fill the generated registry before prerendering; custom hosts may have no registry consumer. */
-async function fillServerStyles(serverRoot: string, stylesheets: readonly (readonly string[])[]): Promise<void> {
+async function fillServerStyles(serverRoot: string, stylesheets: readonly HostStyles[]): Promise<void> {
   const marker = `JSON.parse(${JSON.stringify(HOST_STYLES_PLACEHOLDER)})`;
   const replacement = JSON.stringify(stylesheets);
   async function visit(directory: string): Promise<void> {
@@ -37,11 +43,20 @@ export function hostStylesPlugin(manifests: readonly HostStyleManifest[]): Plugi
     name: "svartz:host-styles",
     async generateBundle(_output, bundle) {
       if (this.environment.name !== "client") return;
-      await Promise.all(manifests.map(async ({ modules, path }) => {
+      await Promise.all(manifests.map(async ({ modules, pagesRoot, path }) => {
         const runtimeModules = new Set(modules.map(normalizeModulePath));
-        const stylesheets = new Set<string>();
-        const visited = new Set<string>();
-        const collect = (fileName: string): void => {
+        const noteRoot = `${normalizeModulePath(pagesRoot).replace(/\/+$/, "")}/`;
+        const noteChunks = new Map<string, string>();
+        for (const item of Object.values(bundle)) {
+          if (item.type !== "chunk") continue;
+          const noteModule = Object.keys(item.modules)
+            .map((id) => normalizeModulePath(id.split("?")[0]!))
+            .find((id) => id.startsWith(noteRoot) && id.endsWith(".svelte"));
+          if (noteModule) noteChunks.set(item.fileName, `pages/${noteModule.slice(noteRoot.length)}`);
+        }
+        const shared = new Set<string>();
+        const notes = new Map<string, Set<string>>();
+        const collect = (fileName: string, stylesheets: Set<string>, visited: Set<string>): void => {
           if (visited.has(fileName)) return;
           visited.add(fileName);
           const item = bundle[fileName];
@@ -49,20 +64,40 @@ export function hostStylesPlugin(manifests: readonly HostStyleManifest[]): Plugi
           const css = (item as typeof item & { viteMetadata?: { importedCss?: ReadonlySet<string> } })
             .viteMetadata?.importedCss;
           for (const file of css ?? []) stylesheets.add(file);
-          for (const imported of [...item.imports, ...item.dynamicImports]) collect(imported);
+          for (const imported of item.imports) collect(imported, stylesheets, visited);
+          for (const imported of item.dynamicImports) {
+            const noteKey = noteChunks.get(imported);
+            if (!noteKey) {
+              collect(imported, stylesheets, visited);
+              continue;
+            }
+            let noteStyles = notes.get(noteKey);
+            if (!noteStyles) {
+              noteStyles = new Set();
+              notes.set(noteKey, noteStyles);
+              collect(imported, noteStyles, new Set());
+            }
+          }
         };
+        const visited = new Set<string>();
         for (const item of Object.values(bundle)) {
           if (item.type !== "chunk") continue;
           if (!Object.keys(item.modules).some((id) => runtimeModules.has(normalizeModulePath(id.split("?")[0]!)))) continue;
-          collect(item.fileName);
+          collect(item.fileName, shared, visited);
         }
-        await writeFile(path, `${JSON.stringify([...stylesheets].sort())}\n`);
+        const styles: HostStyles = {
+          shared: [...shared].sort(),
+          notes: Object.fromEntries([...notes].map(([key, css]) => [
+            key, [...css].filter((file) => !shared.has(file)).sort(),
+          ])),
+        };
+        await writeFile(path, `${JSON.stringify(styles)}\n`);
       }));
     },
     async writeBundle(output) {
       if (this.environment.name !== "client" || !output.dir || basename(output.dir) !== "client") return;
       const stylesheets = await Promise.all(manifests.map(async ({ path }) =>
-        JSON.parse(await readFile(path, "utf8")) as string[]));
+        JSON.parse(await readFile(path, "utf8")) as HostStyles));
       await fillServerStyles(join(dirname(output.dir), "server"), stylesheets);
     },
   };

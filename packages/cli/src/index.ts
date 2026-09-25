@@ -16,6 +16,7 @@ import {
 } from "@svartz/config";
 import {
   getGeneratedRuntimeArtifactsModulePath,
+  getGeneratedPagesRoot,
   getGeneratedRuntimeThemeModulePath,
   createHostRegistrySource,
   getGeneratedHostStylesPath,
@@ -481,6 +482,7 @@ const createAppConfig = (
     process.env["SVARTZ_HOST_MODULE_PATH"] = hostRegistryPath;
     const styleManifests = vaults.map((item) => ({
       modules: [getGeneratedRuntimeArtifactsModulePath(item), getGeneratedRuntimeThemeModulePath(item)],
+      pagesRoot: getGeneratedPagesRoot(item),
       path: getGeneratedHostStylesPath(hostRegistryPath, item.id),
     }));
     const standalonePluginPath = path.join(path.dirname(hostRegistryPath), "standalone-vite-plugin.mjs");
@@ -493,7 +495,7 @@ const createAppConfig = (
         await Promise.all(vaults.map(async (vault) => {
           const stylesPath = getGeneratedHostStylesPath(hostRegistryPath, vault.id);
           await mkdir(path.dirname(stylesPath), { recursive: true });
-          await writeFile(stylesPath, "[]\n");
+          await writeFile(stylesPath, '{"shared":[],"notes":{}}\n');
         }));
         await writeFile(hostRegistryPath, createHostRegistrySource(vaults));
         if (!hostApp) await writeFile(standalonePluginPath, [
