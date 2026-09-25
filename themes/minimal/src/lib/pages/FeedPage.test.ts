@@ -5,7 +5,8 @@ import FeedPage from './FeedPage.svelte';
 const originalTimezone = process.env.TZ;
 
 afterEach(() => {
-	process.env.TZ = originalTimezone;
+	if (originalTimezone === undefined) delete process.env.TZ;
+	else process.env.TZ = originalTimezone;
 });
 
 it('uses a valid fallback date and the same UTC day as the note header', () => {
@@ -24,5 +25,7 @@ it('uses a valid fallback date and the same UTC day as the note header', () => {
 	});
 
 	expect(body).toContain('datetime="2026-09-25T00:30:00.000Z"');
-	expect(body).toContain('Sep 25, 2026');
+	expect(body).toContain(new Intl.DateTimeFormat(undefined, {
+		year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'
+	}).format(new Date('2026-09-25T00:30:00.000Z')));
 });
