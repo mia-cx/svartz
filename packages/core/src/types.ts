@@ -166,7 +166,8 @@ interface RouteIndex {
   readonly tags: readonly string[];
   readonly folders: readonly string[];
   readonly feed: readonly string[];
-  readonly theme: readonly string[];
+  /** Optional for indexes produced by v1 plugin replacements before theme pages existed. */
+  readonly theme?: readonly string[];
   readonly all: readonly string[];
 }
 

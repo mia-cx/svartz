@@ -131,6 +131,24 @@ describe("canonical route allocation", () => {
     expect(root.index!.routes.all).toContain("/about/");
   });
 
+  it("does not publish a static page shadowed by a higher-priority dynamic route", () => {
+    const ctx = context([note("note.md")]);
+    const page = { default: {} };
+    ctx.meta.set("svartz:theme", {
+      id: "test",
+      version: "1.0.0",
+      contractVersion: "1.0.0",
+      layouts: { defaultPage: page, notePage: page },
+      routes: [
+        { id: "note", pattern: "/:slug", priority: 10 },
+        { id: "about", pattern: "/about", component: page },
+      ],
+    } satisfies SvartzTheme);
+    indexContent().indexContent!.run(ctx);
+    expect(ctx.index!.routes.theme).not.toContain("/blog/about/");
+    expect(ctx.index!.routes.all).not.toContain("/blog/about/");
+  });
+
   it("resolves authored filenames after publication filtering and indexes final hrefs", () => {
     const ctx = context([
       note("hello world.md", "---\ntitle: Spaced\n---\nSpaced body."),

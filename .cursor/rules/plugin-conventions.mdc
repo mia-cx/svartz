@@ -110,6 +110,7 @@ Duplicate ID replaces in-place; new ID appends; disabled removed.
 - The allocator reserves natural URLs first. Exact authored filenames win; losers get the first free numeric suffix after all natural URLs and static host routes.
 - Keep `sourceBodies` keyed by source path until allocation. A provisional slug can collide.
 - Index entries, search documents, and routes carry final hrefs. Alias and permalink redirects only claim unoccupied routes.
+- Index a static theme component page only when the runtime route matcher selects that exact route after priority sorting. Replacement index providers may omit `routes.theme`; consumers treat it as empty.
 - Index entries sorted by slug; graph/backlinks keys sorted lexicographically
 - Link resolution tie-breaks: shared depth → path depth → lexicographic
 
