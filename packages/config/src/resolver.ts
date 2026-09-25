@@ -155,8 +155,8 @@ const BUILD_ROOT_SEPARATORS = sep === "\\" ? /[\\/]/ : /\//;
 export const ordinaryWindowsPath = (path: string): string => {
   if (!path.startsWith("\\\\?\\")) return path;
   const devicePath = path.slice(4);
-  if (/^UNC\\/i.test(devicePath)) return `\\\\${devicePath.slice(4)}`;
-  return /^[A-Za-z]:\\/.test(devicePath) ? devicePath : path;
+  if (/^UNC[\\/]/i.test(devicePath)) return `\\\\${devicePath.slice(4).replaceAll("/", "\\")}`;
+  return /^[A-Za-z]:[\\/]/.test(devicePath) ? devicePath.replaceAll("/", "\\") : path;
 };
 
 /** Follow symlink targets in filesystem order, including `..` after another symlink. */

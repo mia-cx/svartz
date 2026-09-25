@@ -21,7 +21,9 @@ const VALID_VAULT = resolve(__dirname, "fixtures/valid-vault");
 
 it("normalizes only ordinary Windows device roots", () => {
   expect(ordinaryWindowsPath("\\\\?\\C:\\future\\blog")).toBe("C:\\future\\blog");
+  expect(ordinaryWindowsPath("\\\\?\\C:/future/blog")).toBe("C:\\future\\blog");
   expect(ordinaryWindowsPath("\\\\?\\unc\\server\\share\\blog")).toBe("\\\\server\\share\\blog");
+  expect(ordinaryWindowsPath("\\\\?\\UNC/server/share/blog")).toBe("\\\\server\\share\\blog");
   expect(ordinaryWindowsPath("\\\\?\\Volume{GUID}\\blog")).toBe("\\\\?\\Volume{GUID}\\blog");
 });
 
