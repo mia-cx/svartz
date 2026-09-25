@@ -256,6 +256,32 @@ it.each([
   expect(source).toContain("export default $host(__svartz_host_config);");
 });
 
+it("recognizes an already wrapped export after a statement on the same line", async () => {
+  const root = await fixture();
+  const viteConfig = "import { withSvartzHost } from '@svartz/vite/host';\nconst config = {}; export default withSvartzHost(config);\n";
+  await writeFile(path.join(root, "vite.config.ts"), viteConfig);
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
+  expect(await readFile(path.join(root, "vite.config.ts"), "utf8")).toBe(viteConfig);
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("already-configured");
+});
+
+it("wraps an unconfigured export after a statement on the same line", async () => {
+  const root = await fixture();
+  await writeFile(path.join(root, "vite.config.ts"), "const config = {}; export default config;\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    devDependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
+  const source = await readFile(path.join(root, "vite.config.ts"), "utf8");
+  expect(source).toContain("const config = {}; const __svartz_host_config = config;");
+  expect(source).toContain("export default __svartz_with_host(__svartz_host_config);");
+});
+
 it.each(["vite.config.cjs", "vite.config.cts"])(
   "wraps a CommonJS host config in %s without replacing its config function",
   async (fileName) => {

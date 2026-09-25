@@ -256,17 +256,20 @@ module.exports = async (env) => {
     .find((match) => match !== null);
   let binding = hostImport?.[1] ?? (hostImport ? "withSvartzHost" : "__svartz_with_host");
   const escapedBinding = binding.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  if (hostImport && new RegExp(`^[ \\t]*export\\s+default\\s+\\(*\\s*${escapedBinding}\\s*\\)*\\s*\\(`, "m").test(activeSource)) return source;
   if (!hostImport) {
     let suffix = 2;
     while (new RegExp(`\\b${binding}\\b`).test(source)) binding = `__svartz_with_host_${suffix++}`;
   }
-  const defaultExport = /^([ \t]*)export\s+default\s+/m;
+  const defaultExport = /(?:^|[;}\n])([ \t]*)export\s+default\s+/g;
   const match = defaultExport.exec(activeSource);
   if (!match) return undefined;
+  const exportIndex = match.index + match[0].lastIndexOf("export");
+  const expressionIndex = match.index + match[0].length;
+  if (hostImport && new RegExp(`^\\(*\\s*${escapedBinding}\\s*\\)*\\s*\\(`)
+    .test(activeSource.slice(expressionIndex))) return source;
   const hostImportLine = hostImport ? "" : `import { withSvartzHost as ${binding} } from '@svartz/vite/host';\n`;
-  const wrapped = source.slice(0, match.index) + `${match[1]}const __svartz_host_config = ` +
-    source.slice(match.index + match[0].length);
+  const wrapped = source.slice(0, exportIndex) + `const __svartz_host_config = ` +
+    source.slice(expressionIndex);
   return `${hostImportLine}${wrapped}\nexport default ${binding}(__svartz_host_config);\n`;
 }
 
