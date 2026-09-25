@@ -100,7 +100,6 @@ interface ProcessedFile {
   readonly slug: string;        // Canonical slug (post-discover, stable across runs)
   readonly content: string;     // File contents (markdown)
   readonly frontmatter: Record<string, unknown>;
-  readonly published: boolean;  // Based on publishedField from config
   readonly createdAt?: string;  // ISO timestamp if extractable
   readonly updatedAt?: string;  // ISO timestamp if extractable
   readonly description?: string; // First 1-3 sentences (post-description-extraction)

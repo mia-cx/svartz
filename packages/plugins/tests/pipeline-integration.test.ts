@@ -24,7 +24,7 @@ const makeCtx = (files: ProcessedFile[]): PluginContext =>
         aliasesField: "aliases",
         createdAtField: "created_at",
         updatedAtField: "updated_at",
-        publishedField: "published",
+        publishedField: "published_at",
       },
       target: { type: "static" },
       plugins: [],
@@ -44,7 +44,7 @@ describe("pipeline integration: parse -> filter -> resolve -> transform -> index
         content: `---
 title: Hello World
 tags: [greeting]
-published: true
+published_at: 2026-01-01
 ---
 This is a hello page. See [[goodbye]] for farewell.`,
       },
@@ -55,7 +55,7 @@ This is a hello page. See [[goodbye]] for farewell.`,
         content: `---
 title: Goodbye World
 tags: [farewell]
-published: true
+published_at: 2026-01-01
 ---
 This is a goodbye page. Links to [[hello]].`,
       },
@@ -103,7 +103,7 @@ This is a goodbye page. Links to [[hello]].`,
         extension: ".md",
         content: `---
 title: Draft
-published: false
+draft: true
 ---
 This is a draft.`,
       },
@@ -113,7 +113,7 @@ This is a draft.`,
         extension: ".md",
         content: `---
 title: Public
-published: true
+published_at: 2026-01-01
 ---
 This is public.`,
       },

@@ -53,8 +53,8 @@ export function filterUnpublished(): SvartzPlugin {
 
 **Behavior:**
 
-- Reads `publishedField` from config (default: `"published"`)
-- Removes files where `frontmatter[publishedField]` is falsy or missing
+- Applies `publicationMode`, `include`, `exclude`, and note overrides
+- Keeps only attachments referenced by public notes
 - Modifies `ctx.files` in-place (removes items)
 
 ---

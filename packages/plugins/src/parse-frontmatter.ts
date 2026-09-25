@@ -2,8 +2,8 @@
  * core:parse-frontmatter — extract frontmatter and raw links from each file.
  *
  * Postcondition: markdown files have `rawLinks` populated.
- * If frontmatter parsing fails, the leading frontmatter block is stripped and
- * downstream plugins continue with `file.frontmatter === undefined`.
+ * Malformed frontmatter stops the build so a private note cannot publish after
+ * losing its privacy flag.
  */
 
 import { definePlugin } from "@svartz/core";
@@ -22,6 +22,9 @@ export const parseFrontmatter = definePlugin(() => ({
         if (![".md", ".mdx", ".svx"].includes(extension)) continue;
 
         const { frontmatter, bodyMarkdown } = extractFrontmatter(file.content);
+        if (frontmatter === undefined && bodyMarkdown !== file.content) {
+          throw new Error(`Invalid frontmatter in ${file.path}`);
+        }
         file.frontmatter = frontmatter;
         file.content = bodyMarkdown;
         file.rawLinks = extractRawLinks(bodyMarkdown);

@@ -125,7 +125,7 @@ export const indexContent = definePlugin(() => ({
 
         let publishedAt: Date | undefined;
         if (fm.publishedField) {
-          const pubVal = frontmatter[fm.publishedField];
+          const pubVal = frontmatter.published_at ?? frontmatter[fm.publishedField];
           if (pubVal === true) {
             publishedAt = createdAt;
           } else if (pubVal && pubVal !== false && pubVal !== "") {
@@ -197,6 +197,7 @@ export const indexContent = definePlugin(() => ({
       }
 
       for (const file of ctx.files) {
+        if (!isMarkdownFile(file.extension)) continue;
         const resolvedLinks = file.links ?? [];
         graph[file.slug] = [...resolvedLinks].sort();
 

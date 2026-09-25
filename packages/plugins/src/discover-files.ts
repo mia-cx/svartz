@@ -9,7 +9,7 @@ import { readdir, readFile, lstat, realpath, stat } from "node:fs/promises";
 import { join, extname, relative } from "node:path";
 import { definePlugin } from "@svartz/core";
 import { fileToSlug } from "./internal/slug";
-import { shouldIgnore, shouldIncludePath } from "./internal/ignore";
+import { shouldIgnore } from "./internal/ignore";
 
 const MAX_SYMLINK_DEPTH = 4;
 const MARKDOWN_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
@@ -24,8 +24,6 @@ export const discoverFiles = definePlugin(() => ({
   discoverFiles: {
     async run(ctx) {
       const vaultPath = ctx.config.path;
-      const include = ctx.config.include;
-      const exclude = ctx.config.exclude;
 
       const visitedInodes = new Set<number>();
       const filePaths: string[] = [];
@@ -55,9 +53,7 @@ export const discoverFiles = definePlugin(() => ({
 
             if (resolvedStat.isFile()) {
               const relPath = relative(vaultPath, fullPath);
-              if (shouldIncludePath(relPath, include, exclude)) {
-                filePaths.push(relPath);
-              }
+              filePaths.push(relPath);
             }
             continue;
           }
@@ -71,9 +67,7 @@ export const discoverFiles = definePlugin(() => ({
 
           if (entry.isFile()) {
             const relPath = relative(vaultPath, fullPath);
-            if (shouldIncludePath(relPath, include, exclude)) {
-              filePaths.push(relPath);
-            }
+            filePaths.push(relPath);
           }
         }
       };

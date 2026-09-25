@@ -2,6 +2,7 @@ import GithubSlugger from "github-slugger";
 import { posix } from "node:path";
 import { definePlugin, type RawLink } from "@svartz/core";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
+import { createAssetResolver } from "./internal/asset-references";
 import { extractSectionMarkdown } from "./internal/parse";
 
 const EMBED_REGEX = /!\[\[([^\]]+)\]\]/g;
@@ -76,7 +77,8 @@ function renderAssetEmbed(
   alias: string | undefined,
 ): string {
   const extension = assetPath.slice(assetPath.lastIndexOf(".")).toLowerCase();
-  const href = relativeHref(sourceSlug, `/${assetPath}`);
+  const href = relativeHref(sourceSlug, `/${assetPath}`)
+    .split("/").map(encodeURIComponent).join("/");
 
   if (IMAGE_EXTENSIONS.has(extension)) {
     return `![${alias ?? ""}](${href})`;
@@ -116,12 +118,7 @@ export const transformEmbeds = definePlugin(() => ({
       const sourceBodies =
         (ctx.meta.get("sourceBodies") as Map<string, string> | undefined) ?? new Map();
       const noteBySlug = new Map(noteFiles.map((file) => [file.slug, file] as const));
-      const assetByTarget = new Map<string, string>();
-
-      for (const file of assetFiles) {
-        assetByTarget.set(file.path.toLowerCase(), file.path);
-        assetByTarget.set((file.path.split("/").pop() ?? file.path).toLowerCase(), file.path);
-      }
+      const resolveAsset = createAssetResolver(assetFiles);
 
       const expandEmbed = (
         sourceSlug: string,
@@ -147,7 +144,7 @@ export const transformEmbeds = definePlugin(() => ({
 
         const expanded = embeddedMarkdown.replace(EMBED_REGEX, (_raw: string, inner: string) => {
           const parsed = splitEmbedInner(inner);
-          const assetPath = assetByTarget.get(parsed.target.toLowerCase());
+          const assetPath = resolveAsset(noteBySlug.get(targetSlug)!, parsed.target);
           if (assetPath) {
             return renderAssetEmbed(sourceSlug, assetPath, parsed.alias);
           }
@@ -190,7 +187,7 @@ export const transformEmbeds = definePlugin(() => ({
       for (const file of noteFiles) {
         file.content = file.content.replace(EMBED_REGEX, (_raw: string, inner: string) => {
           const parsed = splitEmbedInner(inner);
-          const assetPath = assetByTarget.get(parsed.target.toLowerCase());
+          const assetPath = resolveAsset(file, parsed.target);
           if (assetPath) {
             return renderAssetEmbed(file.slug, assetPath, parsed.alias);
           }

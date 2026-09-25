@@ -1,0 +1,229 @@
+import { describe, expect, it } from "vitest";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { PluginContext, ProcessedFile } from "@svartz/core";
+import { discoverFiles } from "../src/discover-files";
+import { parseFrontmatter } from "../src/parse-frontmatter";
+import { filterUnpublished } from "../src/filter-unpublished";
+import { resolveLinks } from "../src/resolve-links";
+import { transformEmbeds } from "../src/transform-embeds";
+import { indexContent } from "../src/index-content";
+import { emitArtifacts } from "../src/emit-artifacts";
+
+const note = (
+  path: string,
+  content: string,
+  frontmatter: Record<string, unknown> = {},
+): ProcessedFile => ({
+  path,
+  slug: path.replace(/\.md$/, ""),
+  extension: ".md",
+  content,
+  frontmatter,
+});
+
+const asset = (path: string): ProcessedFile => ({
+  path,
+  slug: path,
+  extension: path.slice(path.lastIndexOf(".")),
+  content: "",
+  sourcePath: `/vault/${path}`,
+});
+
+const context = (
+  files: ProcessedFile[],
+  publicationMode: "exclusion" | "inclusion" = "exclusion",
+  include: string[] = [],
+  exclude: string[] = [],
+  path = "/vault",
+  outDir = "/out",
+): PluginContext =>
+  ({
+    config: {
+      id: "test",
+      version: "1.0.0",
+      path,
+      outDir,
+      include,
+      exclude,
+      publicationMode,
+      frontmatter: {
+        publishedField: "published_at",
+        aliasesField: "aliases",
+        titleField: "title",
+        descriptionField: "description",
+        tagsField: "tags",
+        createdAtField: "created_at",
+        updatedAtField: "updated_at",
+      },
+      linkResolution: "closest",
+      theme: { base: "minimal" },
+      target: { type: "static" },
+      plugins: [],
+    },
+    files,
+    artifacts: new Map(),
+    meta: new Map(),
+  }) as PluginContext;
+
+describe("v1 publication boundary", () => {
+  it("fails closed when a note declares malformed frontmatter", () => {
+    const ctx = context([note("private.md", "---\nprivate: [\n---\nSecret")]);
+    expect(() => parseFrontmatter().parseFrontmatter!.run(ctx)).toThrow("Invalid frontmatter in private.md");
+  });
+
+  it("applies note overrides after patterns in draft, published_at, private order", () => {
+    const ctx = context(
+      [
+        note("ordinary.md", ""),
+        note("excluded.md", "", { draft: true, published_at: "2099-01-01", private: false }),
+        note("private.md", "", { published_at: "2099-01-01", private: true }),
+        note("draft.md", "", { draft: true }),
+        note("not-a-draft.md", "", { draft: "true", private: "true" }),
+      ],
+      "exclusion",
+      [],
+      ["excluded.md", "private.md"],
+    );
+
+    filterUnpublished().filterUnpublished!.run(ctx);
+    expect(ctx.files.map((file) => file.path)).toEqual([
+      "ordinary.md",
+      "excluded.md",
+      "not-a-draft.md",
+    ]);
+  });
+
+  it("publishes only inclusion matches or published_at overrides", () => {
+    const ctx = context(
+      [
+        note("posts/yes.md", ""),
+        note("posts/no.md", "", { private: true }),
+        note("notes/no.md", ""),
+        note("notes/override.md", "", { published_at: "2099-01-01" }),
+      ],
+      "inclusion",
+      ["posts/**"],
+      ["posts/no.md"],
+    );
+    filterUnpublished().filterUnpublished!.run(ctx);
+    expect(ctx.files.map((file) => file.path)).toEqual([
+      "posts/yes.md",
+      "notes/override.md",
+    ]);
+  });
+
+  it("chooses a note-relative attachment before a vault-root namesake", () => {
+    const ctx = context([
+      note("posts/public.md", "![Image](media/photo.png)"),
+      asset("media/photo.png"),
+      asset("posts/media/photo.png"),
+    ]);
+    filterUnpublished().filterUnpublished!.run(ctx);
+    expect(ctx.files.map((file) => file.path)).toEqual([
+      "posts/public.md",
+      "posts/media/photo.png",
+    ]);
+    resolveLinks().resolveLinks!.run(ctx);
+    expect(ctx.files[0]!.content).toContain("![Image](../media/photo.png)");
+  });
+
+  it("keeps only assets referenced by public content, including outside include patterns", () => {
+    const ctx = context(
+      [
+        note("posts/public.md", "![Image](media/photo.png) ![Space](media/my%20photo.png) ![[song.mp3]] <audio src=\"media/clip.mp3\"></audio> [[private]]\n\n```md\n![Unused](media/code-only.png)\n```"),
+        note("private.md", "![Hidden](media/secret.png)", { private: true }),
+        asset("media/photo.png"),
+        asset("media/my photo.png"),
+        asset("media/song.mp3"),
+        asset("media/clip.mp3"),
+        asset("media/secret.png"),
+        asset("media/orphan.png"),
+        asset("media/blocked.png"),
+        asset("media/code-only.png"),
+      ],
+      "inclusion",
+      ["posts/**"],
+      ["media/blocked.png"],
+    );
+    ctx.files[0]!.content += " ![[blocked.png]]";
+    ctx.meta.set("sourceBodies", new Map(ctx.files.filter((file) => file.extension === ".md").map((file) => [file.slug, file.content])));
+
+    filterUnpublished().filterUnpublished!.run(ctx);
+    expect(ctx.files.map((file) => file.path)).toEqual([
+      "posts/public.md",
+      "media/photo.png",
+      "media/my photo.png",
+      "media/song.mp3",
+      "media/clip.mp3",
+    ]);
+    expect([...((ctx.meta.get("sourceBodies") as Map<string, string>).keys())]).toEqual(["posts/public"]);
+
+    resolveLinks().resolveLinks!.run(ctx);
+    expect(ctx.files[0]!.links).toEqual([]);
+    expect(ctx.files[0]!.content).toContain("![Image](../../media/photo.png)");
+    expect(ctx.files[0]!.content).toContain("![Space](../../media/my%20photo.png)");
+    expect(ctx.files[0]!.content).toContain("<audio src=\"../../media/clip.mp3\">");
+    indexContent().indexContent!.run(ctx);
+    expect(Object.keys(ctx.index!.graph)).toEqual(["posts/public"]);
+    expect(ctx.index!.assets.map((entry) => entry.path)).toEqual([
+      "media/clip.mp3",
+      "media/my photo.png",
+      "media/photo.png",
+      "media/song.mp3",
+    ]);
+  });
+
+  it("discovers overrides before filtering and emits only public attachments", async () => {
+    const root = await mkdtemp(join(tmpdir(), "svartz-publication-"));
+    const vault = join(root, "vault");
+    try {
+      await Promise.all([
+        mkdir(join(vault, "posts"), { recursive: true }),
+        mkdir(join(vault, "hidden"), { recursive: true }),
+        mkdir(join(vault, "media"), { recursive: true }),
+      ]);
+      await Promise.all([
+        writeFile(join(vault, "posts/public.md"), "# Public\n![Image](media/photo.png)\n![[photo.png]]\n![[bridge]]\n![[private]]"),
+        writeFile(join(vault, "posts/bridge.md"), "# Bridge\n![[private]]"),
+        writeFile(join(vault, "hidden/override.md"), "---\ndraft: true\npublished_at: 2099-01-01\n---\n# Override"),
+        writeFile(join(vault, "private.md"), "---\nprivate: true\n---\nPRIVATE_MARKER ![[secret.png]]"),
+        writeFile(join(vault, "media/photo.png"), new Uint8Array([1, 2, 3])),
+        writeFile(join(vault, "media/secret.png"), new Uint8Array([4, 5, 6])),
+        writeFile(join(vault, "media/orphan.png"), new Uint8Array([7, 8, 9])),
+      ]);
+
+      const ctx = context([], "inclusion", ["posts/**"], [], vault, join(root, "dist"));
+      await discoverFiles().discoverFiles!.run(ctx);
+      parseFrontmatter().parseFrontmatter!.run(ctx);
+      filterUnpublished().filterUnpublished!.run(ctx);
+      expect(ctx.files.map((file) => file.path)).toEqual([
+        "hidden/override.md",
+        "media/photo.png",
+        "posts/bridge.md",
+        "posts/public.md",
+      ]);
+
+      resolveLinks().resolveLinks!.run(ctx);
+      expect(ctx.files.find((file) => file.path === "posts/public.md")?.content).toContain("![Image](../../media/photo.png)");
+      transformEmbeds().transformEmbeds!.run(ctx);
+      indexContent().indexContent!.run(ctx);
+      await emitArtifacts().emitArtifacts!.run(ctx);
+
+      expect([...ctx.artifacts.keys()].sort()).toEqual([
+        "assets/media/photo.png",
+        "index.ts",
+        "pages/hidden/override.svelte",
+        "pages/posts/bridge.svelte",
+        "pages/posts/public.svelte",
+        "search.ts",
+      ]);
+      expect(await readFile(join(root, "artifacts/assets/media/photo.png"))).toEqual(Buffer.from([1, 2, 3]));
+      expect(JSON.stringify(ctx.index)).not.toContain("PRIVATE_MARKER");
+      expect([...ctx.artifacts.values()].map((item) => String(item.contents)).join("")).not.toContain("PRIVATE_MARKER");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});

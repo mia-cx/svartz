@@ -54,13 +54,8 @@ describe("resolveConfigPaths", () => {
   it("applies hardcoded defaults when no defaults or per-vault overrides", async () => {
     const resolved = await resolveConfig(minimalConfig, PKG_ROOT);
     const vault = resolved.vaults[0]!;
-    expect(vault.include).toEqual([
-      "**/*.{md,mdx,svx}",
-      "**/*.{jpg,jpeg,png,gif,webp,avif,bmp,svg}",
-      "**/*.{mp3,m4a,wav,ogg,flac,webm,3gp}",
-      "**/*.{mp4,mov,mkv,ogv}",
-      "**/*.pdf",
-    ]);
+    expect(vault.include).toEqual([]);
+    expect(vault.publicationMode).toBe("exclusion");
     expect(vault.exclude).toEqual([".trash/**", "**/.trash/**"]);
     expect(vault.linkResolution).toBe("closest");
     expect(vault.theme.base).toBe("@svartz/theme-minimal");
@@ -76,7 +71,7 @@ describe("resolveConfigPaths", () => {
     expect(fm.aliasesField).toBe("aliases");
     expect(fm.createdAtField).toBe("created_at");
     expect(fm.updatedAtField).toBe("updated_at");
-    expect(fm.publishedField).toBe("published");
+    expect(fm.publishedField).toBe("published_at");
   });
 
   it("prefers per-vault values over defaults", async () => {

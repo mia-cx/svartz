@@ -198,7 +198,7 @@ See [[guides/create-theme#Best Practices]]
 ### Configuration
 
 - Use consistent frontmatter field names
-- Remember: missing `publishedField` = draft
+- The default publication mode publishes notes unless `exclude` matches
 - Override per-vault when needed
 - Validate your config
 
