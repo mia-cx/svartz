@@ -24,10 +24,15 @@
     "./browser-mermaid": {
       "import": "./dist/browser-mermaid.js",
       "types": "./dist/browser-mermaid.d.ts"
-    }
+    },
+    "./browser-presentation": {
+      "import": "./dist/browser-presentation.js",
+      "types": "./dist/browser-presentation.d.ts"
+    },
+    "./browser-presentation.css": "./dist/browser-presentation.css"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/browser-analytics.ts src/browser-mermaid.ts --format esm --dts",
+    "build": "tsup src/index.ts src/browser-analytics.ts src/browser-mermaid.ts src/browser-presentation.ts --format esm --dts && node -e \"require('node:fs').copyFileSync('src/browser-presentation.css', 'dist/browser-presentation.css')\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
