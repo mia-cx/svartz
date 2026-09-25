@@ -46,7 +46,7 @@ it("merges unlocked discovery without listing hidden notes", () => {
     search: [{ id: "public", slug: "public", href: "/public/", title: "public", content: "public", tags: [], aliases: [] }],
     graph: { public: [] }, backlinks: { public: [], locked: [] },
     tags: [], folders: [], assets: [],
-    routes: { mountPath: "", notes: ["/public/", "/locked/", "/hidden/"], redirects: {}, tags: [], folders: [], feed: [], all: [] },
+    routes: { mountPath: "", notes: ["/public/", "/locked/", "/hidden/"], redirects: {}, tags: [], folders: [], feed: [], theme: [], all: [] },
   };
   const group: ProtectedGroupPayload = {
     version: 1, notes: [], entries: [entry("locked"), entry("hidden")],

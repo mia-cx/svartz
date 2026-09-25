@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ProcessedFile, PluginContext } from "@svartz/core";
+import type { ProcessedFile, PluginContext, SvartzTheme } from "@svartz/core";
 import { parseFrontmatter } from "../src/parse-frontmatter";
 import { filterUnpublished } from "../src/filter-unpublished";
 import { resolveLinks } from "../src/resolve-links";
@@ -15,7 +15,7 @@ const note = (path: string, content = ""): ProcessedFile => ({
   content,
 });
 
-function context(files: ProcessedFile[]): PluginContext {
+function context(files: ProcessedFile[], mountPath = "/blog"): PluginContext {
   return {
     config: {
       version: "1.0.0",
@@ -37,7 +37,7 @@ function context(files: ProcessedFile[]): PluginContext {
         publishedField: "published_at",
       },
       site: { title: "Blog" },
-      mountPath: "/blog",
+      mountPath,
       target: { type: "host" },
       plugins: [],
     },
@@ -95,6 +95,40 @@ describe("canonical route allocation", () => {
     ctx.files[0]!.frontmatter = { aliases: ["tags", "folders", "feed", "start"] };
     indexContent().indexContent!.run(ctx);
     expect(ctx.index!.routes.redirects).toEqual({ "/blog/start/": "/blog/hello/" });
+  });
+
+  it("publishes concrete theme pages but leaves dynamic and host-owned paths alone", () => {
+    const ctx = context([note("note.md")]);
+    ctx.files[0]!.frontmatter = { aliases: ["about", "team"] };
+    const page = { default: {} };
+    const theme: SvartzTheme = {
+      id: "test",
+      version: "1.0.0",
+      contractVersion: "1.0.0",
+      layouts: { defaultPage: page, notePage: page },
+      routes: [
+        { id: "note", pattern: "/:slug" },
+        { id: "about", pattern: "/about", component: page },
+        { id: "team", pattern: "/team", component: page },
+        { id: "preview", pattern: "/preview", component: page, prerender: false },
+        { id: "dynamic", pattern: "/projects/:slug", component: page },
+      ],
+    };
+    ctx.meta.set("svartz:theme", theme);
+    ctx.meta.set("reservedRoutes", new Set(["team"]));
+    indexContent().indexContent!.run(ctx);
+
+    expect(ctx.index!.routes.all).toContain("/blog/about/");
+    expect(ctx.index!.routes.theme).toEqual(["/blog/about/"]);
+    expect(ctx.index!.routes.all).not.toContain("/blog/team/");
+    expect(ctx.index!.routes.all).not.toContain("/blog/preview/");
+    expect(ctx.index!.routes.all).not.toContain("/blog/projects/:slug/");
+    expect(ctx.index!.routes.redirects).not.toHaveProperty("/blog/about/");
+
+    const root = context([note("note.md")], "");
+    root.meta.set("svartz:theme", theme);
+    indexContent().indexContent!.run(root);
+    expect(root.index!.routes.all).toContain("/about/");
   });
 
   it("resolves authored filenames after publication filtering and indexes final hrefs", () => {

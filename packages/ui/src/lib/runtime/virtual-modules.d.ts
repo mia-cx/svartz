@@ -125,6 +125,7 @@ declare module 'virtual:svartz/artifacts' {
 			readonly tags: readonly string[];
 			readonly folders: readonly string[];
 			readonly feed: readonly string[];
+			readonly theme: readonly string[];
 			readonly all: readonly string[];
 		};
 		readonly assets: readonly {

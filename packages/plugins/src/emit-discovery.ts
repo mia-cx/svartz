@@ -83,7 +83,7 @@ function sitemap(ctx: PluginContext, base: string): string {
     .map((entry) => [entry.href, entry.modifiedAt]));
   const home = `${index?.routes.mountPath ?? ""}/`;
   if (index?.routes.all.includes(home) && !pages.has(home)) pages.set(home, undefined);
-  for (const href of [...(index?.routes.tags ?? []), ...(index?.routes.folders ?? []), ...(index?.routes.feed ?? [])]) {
+  for (const href of [...(index?.routes.tags ?? []), ...(index?.routes.folders ?? []), ...(index?.routes.feed ?? []), ...(index?.routes.theme ?? [])]) {
     if (!pages.has(href)) pages.set(href, undefined);
   }
   const urls = [...pages].sort(([left], [right]) => left.localeCompare(right)).map(([href, modified]) =>
