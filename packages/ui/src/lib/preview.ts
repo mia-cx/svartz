@@ -5,6 +5,8 @@
  */
 export const PREVIEW_ATTRIBUTE = 'data-sv-preview';
 
+const URL_ATTRIBUTES = ['href', 'src'] as const;
+
 const cache = new Map<string, Promise<Element[]>>();
 
 function withoutHash(href: string): string {
@@ -17,6 +19,13 @@ async function load(url: string): Promise<Element[]> {
 	const response = await fetch(url);
 	if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) return [];
 	const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+	// Notes link relatively (`../setup/`); pin each URL to the fetched page before it moves.
+	for (const element of page.querySelectorAll('[href], [src]')) {
+		for (const name of URL_ATTRIBUTES) {
+			const value = element.getAttribute(name);
+			if (value !== null) element.setAttribute(name, new URL(value, response.url).href);
+		}
+	}
 	return [...page.querySelectorAll(`[${PREVIEW_ATTRIBUTE}]`)];
 }
 
