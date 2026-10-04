@@ -79,9 +79,14 @@ function codeLanguage(element: Element): string | undefined {
   return;
 }
 
+// rehype-pretty-code sets the kebab-case key directly, after rehype-raw has run.
+const isCodeFigure = (element: Element) =>
+  element.properties["data-rehype-pretty-code-figure"] !== undefined ||
+  element.properties.dataRehypePrettyCodeFigure !== undefined;
+
 function contentSlot(element: Element): ContentSlot | undefined {
   if (element.tagName === "blockquote" && findCalloutMarker(element)) return "callout";
-  if (element.tagName === "figure" && element.properties.dataRehypePrettyCodeFigure !== undefined) return "codeBlock";
+  if (element.tagName === "figure" && isCodeFigure(element)) return "codeBlock";
   if (element.tagName === "pre") return "codeBlock";
   if (element.tagName === "img") return "image";
   if (element.tagName === "a") return "link";
@@ -100,8 +105,12 @@ function serializeNode(node: RootContent | ElementContent, insideCode = false): 
   const safeElement: Element = { ...node, properties: attributes(node) };
   const slot = contentSlot(node);
   const codeFigure = slot === "codeBlock" && node.tagName === "figure";
-  const children = node.children.map((child) => serializeNode(child, insideCode || codeFigure)).join("");
+  const serializedChildren = node.children.map((child) => serializeNode(child, insideCode || codeFigure)).join("");
   const activeSlot = insideCode && slot === "codeBlock" ? undefined : slot;
+  // A code block's <pre> stays literal inside the slot: Svelte keeps whitespace only inside a real <pre>.
+  const children = activeSlot === "codeBlock" && node.tagName === "pre"
+    ? wrapLiteral(safeElement, serializedChildren)
+    : serializedChildren;
   if (activeSlot) {
     const attrs = attributes(node);
     const marker = activeSlot === "callout" ? findCalloutMarker(node) : undefined;
@@ -125,9 +134,14 @@ function serializeNode(node: RootContent | ElementContent, insideCode = false): 
   }
 
   if (VOID_TAGS.has(node.tagName)) return escapeSvelte(toHtml(safeElement));
-  const shell = toHtml({ ...safeElement, children: [{ type: "text", value: MARKER }] });
+  return wrapLiteral(safeElement, children);
+}
+
+/** The element's own tags as literal markup around already-serialized children. */
+function wrapLiteral(element: Element, children: string): string {
+  const shell = toHtml({ ...element, children: [{ type: "text", value: MARKER }] });
   const markerAt = shell.indexOf(MARKER);
-  if (markerAt < 0) return escapeSvelte(toHtml(safeElement));
+  if (markerAt < 0) return escapeSvelte(toHtml(element));
   return escapeSvelte(shell.slice(0, markerAt)) + children + escapeSvelte(shell.slice(markerAt + MARKER.length));
 }
 

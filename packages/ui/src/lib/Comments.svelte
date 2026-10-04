@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { currentColorMode } from './color-mode.js';
+
 	type GiscusConfig = {
 		repo: string;
 		repoId: string;
@@ -15,7 +17,7 @@
 	};
 
 	function currentTheme(cfg: GiscusConfig): string {
-		return document.documentElement.classList.contains('dark') ? cfg.darkTheme : cfg.lightTheme;
+		return currentColorMode() === 'dark' ? cfg.darkTheme : cfg.lightTheme;
 	}
 
 	function sendThemeUpdate(node: HTMLDivElement, theme: string) {
@@ -42,12 +44,17 @@
 		script.async = true;
 		node.appendChild(script);
 
-		const observer = new MutationObserver(() => sendThemeUpdate(node, currentTheme(cfg)));
+		// Hosts may toggle the class themselves; without a class the OS scheme decides.
+		const update = () => sendThemeUpdate(node, currentTheme(cfg));
+		const observer = new MutationObserver(update);
 		observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+		const scheme = matchMedia('(prefers-color-scheme: dark)');
+		scheme.addEventListener('change', update);
 
 		return {
 			destroy() {
 				observer.disconnect();
+				scheme.removeEventListener('change', update);
 				node.replaceChildren();
 			}
 		};

@@ -80,6 +80,15 @@ describe("CLI dev watch helpers", () => {
     ).toBe(true);
   });
 
+  it("ignores Paraglide output that a package build writes into its own src", () => {
+    expect(
+      matchesWatchDescriptor("/workspace/packages/ui/src/lib/paraglide/runtime.js", {
+        path: "/workspace/packages/ui/src",
+        label: "@svartz/ui source",
+      }),
+    ).toBe(false);
+  });
+
   it("does not match sibling paths outside the watched root", () => {
     expect(
       matchesWatchDescriptor(

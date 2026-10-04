@@ -1,0 +1,536 @@
+/*
+ * Rendered note content: Obsidian Flavoured Markdown after the Svartz pipeline.
+ * Scope: `.sv-prose`. Themes tune it only through the dial tokens.
+ */
+
+/* Syntax colours for Shiki's css-variables theme (see @svartz/ui/syntax). */
+:root {
+	--shiki-foreground: var(--sv-text);
+	--shiki-background: transparent;
+	--shiki-token-comment: var(--sv-muted);
+	--shiki-token-punctuation: light-dark(oklch(0.48 0.01 80), oklch(0.7 0.01 80));
+	--shiki-token-keyword: light-dark(oklch(0.5 0.17 33), oklch(0.75 0.14 38));
+	--shiki-token-string: light-dark(oklch(0.48 0.12 150), oklch(0.8 0.12 150));
+	--shiki-token-string-expression: light-dark(oklch(0.48 0.12 150), oklch(0.8 0.12 150));
+	--shiki-token-constant: light-dark(oklch(0.5 0.14 252), oklch(0.78 0.11 252));
+	--shiki-token-function: light-dark(oklch(0.46 0.15 300), oklch(0.78 0.12 300));
+	--shiki-token-parameter: light-dark(oklch(0.5 0.13 60), oklch(0.8 0.11 70));
+	--shiki-token-link: var(--sv-accent-text);
+}
+
+.sv-prose {
+	max-inline-size: var(--sv-measure);
+	color: var(--sv-text);
+	font-family: var(--sv-font-sans);
+	font-size: var(--sv-step-0);
+	line-height: var(--sv-leading);
+	overflow-wrap: break-word;
+}
+
+.sv-prose > :first-child {
+	margin-block-start: 0;
+}
+
+/* Headings: Archivo at normal width, stepping down in size. */
+.sv-prose :is(h1, h2, h3, h4, h5, h6) {
+	position: relative;
+	margin: 1.6em 0 0.5em;
+	color: var(--sv-ink);
+	font-weight: 700;
+	line-height: var(--sv-leading-tight);
+	text-wrap: balance;
+	scroll-margin-block-start: var(--sv-space-6);
+}
+
+.sv-prose h1 { font-size: var(--sv-step-4); }
+.sv-prose h2 { font-size: var(--sv-step-3); }
+.sv-prose h3 { font-size: var(--sv-step-2); }
+.sv-prose h4 { font-size: var(--sv-step-1); }
+.sv-prose :is(h5, h6) { font-size: var(--sv-step-0); font-weight: 600; }
+
+.sv-prose .heading-anchor {
+	display: inline-grid;
+	place-items: center;
+	margin-inline-start: 0.3em;
+	padding: 0.1em;
+	color: var(--sv-muted);
+	vertical-align: middle;
+	opacity: 0;
+	transition: opacity var(--sv-duration-fast) var(--sv-ease);
+}
+
+.sv-prose :is(h1, h2, h3, h4, h5, h6):hover .heading-anchor,
+.sv-prose .heading-anchor:focus-visible {
+	opacity: 1;
+}
+
+.sv-prose .heading-anchor:hover {
+	color: var(--sv-accent-text);
+}
+
+/* Blocks */
+.sv-prose :is(p, ul, ol, dl, blockquote, table, figure, pre, details) {
+	margin-block: 0 1em;
+}
+
+.sv-prose :is(ul, ol) {
+	padding-inline-start: 1.4em;
+}
+
+.sv-prose ul { list-style: disc; }
+.sv-prose ol { list-style: decimal; }
+.sv-prose ul ul { list-style: circle; }
+
+.sv-prose li {
+	margin-block: 0.25em;
+	padding-inline-start: 0.2em;
+}
+
+.sv-prose li > :is(ul, ol) {
+	margin-block: 0.25em 0;
+}
+
+.sv-prose li::marker {
+	color: var(--sv-muted);
+}
+
+/* Task lists: disabled GFM checkboxes, drawn to match the design. */
+.sv-prose .contains-task-list {
+	list-style: none;
+	padding-inline-start: 0.2em;
+}
+
+/* Block flow with an absolute checkbox, so nested lists sit under their item. */
+.sv-prose .task-list-item {
+	position: relative;
+	padding-inline-start: 1.6em;
+}
+
+.sv-prose .task-list-item > input[type='checkbox'] {
+	position: absolute;
+	inset-inline-start: 0.1em;
+	inset-block-start: 0.33em;
+	appearance: none;
+	inline-size: 0.95em;
+	block-size: 0.95em;
+	margin: 0;
+	border: 1.5px solid var(--sv-rule-strong);
+	border-radius: var(--sv-radius-s);
+	background: var(--sv-paper);
+}
+
+.sv-prose .task-list-item input[type='checkbox']:checked {
+	border-color: var(--sv-ink);
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E")
+			center / 80% no-repeat,
+		var(--sv-ink);
+}
+
+.sv-prose .task-list-item:has(> input:checked) {
+	color: var(--sv-muted);
+	text-decoration: line-through;
+	text-decoration-color: var(--sv-rule-strong);
+}
+
+.sv-prose blockquote {
+	padding-inline-start: 1em;
+	border-inline-start: 2px solid var(--sv-rule-strong);
+	color: var(--sv-text);
+	font-style: italic;
+}
+
+.sv-prose hr {
+	block-size: 0;
+	margin-block: 2.5em;
+	border: 0;
+	border-block-start: var(--sv-rule-width) solid var(--sv-rule);
+}
+
+.sv-prose :is(img, video) {
+	display: block;
+	max-inline-size: 100%;
+	block-size: auto;
+	border-radius: var(--sv-radius-m);
+}
+
+.sv-prose p > img:only-child {
+	margin-inline: auto;
+}
+
+.sv-prose audio {
+	inline-size: 100%;
+}
+
+/* Inline */
+.sv-prose :is(strong, b) {
+	color: var(--sv-ink);
+	font-weight: 600;
+}
+
+.sv-prose mark {
+	padding: 0 0.15em;
+	border-radius: 2px;
+	background: var(--sv-mark);
+	color: inherit;
+	box-decoration-break: clone;
+	-webkit-box-decoration-break: clone;
+}
+
+.sv-prose :not(pre) > code {
+	padding: 0.1em 0.35em;
+	border-radius: var(--sv-radius-s);
+	background: var(--sv-sunken);
+	color: var(--sv-ink);
+	font-family: var(--sv-font-mono);
+	font-size: 0.86em;
+}
+
+.sv-prose kbd {
+	padding: 0 0.35em;
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	border-bottom-width: 2px;
+	border-radius: var(--sv-radius-s);
+	font-family: var(--sv-font-mono);
+	font-size: 0.8em;
+}
+
+/* Links: ink text, vermilion underline. */
+.sv-prose a {
+	color: var(--sv-ink);
+	text-decoration-line: underline;
+	text-decoration-color: var(--sv-accent);
+	text-decoration-thickness: 1.5px;
+	text-underline-offset: 0.2em;
+	transition:
+		color var(--sv-duration-fast) var(--sv-ease),
+		text-decoration-thickness var(--sv-duration-fast) var(--sv-ease);
+}
+
+.sv-prose a:hover {
+	color: var(--sv-accent-text);
+	text-decoration-thickness: 2.5px;
+}
+
+.sv-prose a.sv-tag {
+	color: var(--sv-text);
+	text-decoration: none;
+}
+
+.sv-prose .sv-link-external-icon {
+	display: inline;
+	margin-inline-start: 0.1em;
+	color: var(--sv-muted);
+	vertical-align: -0.05em;
+}
+
+.sv-prose .sv-link-footnote {
+	text-decoration: none;
+	font-family: var(--sv-font-mono);
+	font-size: 0.8em;
+}
+
+/* Tables */
+.sv-prose table {
+	display: block;
+	max-inline-size: 100%;
+	overflow-x: auto;
+	border-collapse: collapse;
+	font-size: var(--sv-step--1);
+	font-variant-numeric: tabular-nums;
+}
+
+.sv-prose :is(th, td) {
+	padding: 0.5em 0.9em 0.5em 0;
+	border-block-end: var(--sv-rule-width) solid var(--sv-rule);
+	text-align: start;
+	vertical-align: top;
+}
+
+.sv-prose th {
+	border-block-end-color: var(--sv-rule-strong);
+	color: var(--sv-muted);
+	font-family: var(--sv-font-sans);
+	font-size: var(--sv-label-size);
+	font-weight: 600;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+/* Code */
+.sv-prose .sv-code {
+	position: relative;
+	margin-block: 0 1.2em;
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	border-radius: var(--sv-radius-m);
+	background: var(--sv-sunken);
+}
+
+.sv-prose .sv-code pre {
+	margin: 0;
+	padding: var(--sv-space-4) 0;
+	overflow-x: auto;
+	background: transparent !important;
+	font-family: var(--sv-font-mono);
+	font-size: 0.85rem;
+	line-height: 1.65;
+	tab-size: 2;
+}
+
+.sv-prose .sv-code pre > code {
+	display: grid;
+	min-inline-size: max-content;
+	font-family: inherit;
+}
+
+.sv-prose .sv-code pre > code > :is([data-line], .line) {
+	padding-inline: var(--sv-space-4);
+	border-inline-start: 2px solid transparent;
+}
+
+.sv-prose .sv-code [data-highlighted-line] {
+	border-inline-start-color: var(--sv-accent);
+	background: var(--sv-accent-soft);
+}
+
+.sv-prose .sv-code [data-highlighted-chars] {
+	border-radius: 2px;
+	background: var(--sv-accent-soft);
+	box-shadow: 0 0 0 2px var(--sv-accent-soft);
+}
+
+.sv-prose .sv-code code[data-line-numbers] {
+	counter-reset: line;
+}
+
+.sv-prose .sv-code code[data-line-numbers] > [data-line]::before {
+	counter-increment: line;
+	content: counter(line);
+	display: inline-block;
+	inline-size: 2ch;
+	margin-inline-end: var(--sv-space-4);
+	color: var(--sv-muted);
+	text-align: end;
+}
+
+/* Room for the language label above the first line, unless a title bar holds it. */
+.sv-prose .sv-code:not(:has([data-rehype-pretty-code-title])) pre[data-language]:not([data-language='plaintext']) {
+	padding-block-start: 2.1rem;
+}
+
+/* Language label, from rehype-pretty-code's data attribute. */
+.sv-prose .sv-code pre[data-language]:not([data-language='plaintext'])::before {
+	content: attr(data-language);
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-end: calc(2rem + var(--sv-space-3));
+	padding-block: 0.55rem;
+	color: var(--sv-muted);
+	font-family: var(--sv-font-sans);
+	font-size: var(--sv-label-size);
+	font-weight: 600;
+	line-height: 1;
+	text-transform: uppercase;
+	pointer-events: none;
+}
+
+.sv-prose .sv-code [data-rehype-pretty-code-title] {
+	padding: var(--sv-space-2) var(--sv-space-4);
+	border-block-end: var(--sv-rule-width) solid var(--sv-rule);
+	color: var(--sv-ink);
+	font-family: var(--sv-font-mono);
+	font-size: 0.8rem;
+}
+
+.sv-prose .sv-code-copy {
+	position: absolute;
+	inset-block-start: var(--sv-space-1);
+	inset-inline-end: var(--sv-space-1);
+	z-index: 1;
+	inline-size: 1.75rem;
+	block-size: 1.75rem;
+	opacity: 0;
+	transition:
+		opacity var(--sv-duration-fast) var(--sv-ease),
+		background-color var(--sv-duration-fast) var(--sv-ease);
+}
+
+.sv-prose .sv-code:has([data-rehype-pretty-code-title]) .sv-code-copy {
+	inset-block-start: 0.15rem;
+}
+
+.sv-prose .sv-code-copy svg {
+	inline-size: 0.95rem;
+	block-size: 0.95rem;
+}
+
+.sv-prose .sv-code:hover .sv-code-copy,
+.sv-prose .sv-code-copy:focus-visible {
+	opacity: 1;
+}
+
+@media (hover: none) {
+	.sv-prose .sv-code-copy {
+		opacity: 1;
+	}
+}
+
+/* Callouts */
+.sv-prose .sv-callout {
+	margin-block: 0 1.2em;
+	padding: var(--sv-space-3) var(--sv-space-4);
+	border-radius: var(--sv-radius-m);
+	/* Tint over paper, so a nested callout keeps its own colour. */
+	background: linear-gradient(var(--sv-signal-soft), var(--sv-signal-soft)) var(--sv-paper);
+}
+
+.sv-prose .sv-callout[data-neutral] {
+	--sv-signal: var(--sv-muted);
+	--sv-signal-soft: var(--sv-surface);
+}
+
+.sv-prose .sv-callout-title {
+	display: flex;
+	align-items: center;
+	gap: 0.55em;
+	margin: 0;
+	color: var(--sv-signal);
+	font-family: var(--sv-font-sans);
+	font-size: var(--sv-label-size);
+	font-weight: 700;
+	line-height: 1.6;
+	text-transform: uppercase;
+	list-style: none;
+}
+
+.sv-prose summary.sv-callout-title {
+	cursor: pointer;
+	border-radius: var(--sv-radius-s);
+}
+
+.sv-prose summary.sv-callout-title::-webkit-details-marker {
+	display: none;
+}
+
+.sv-prose .sv-callout-icon {
+	display: inline-grid;
+	font-size: 1.25rem;
+}
+
+.sv-prose .sv-callout-fold {
+	margin-inline-start: auto;
+	inline-size: 1rem;
+	block-size: 1rem;
+	transition: rotate var(--sv-duration) var(--sv-ease);
+}
+
+.sv-prose details.sv-callout:not([open]) .sv-callout-fold {
+	rotate: -90deg;
+}
+
+/* Sibling margins space the body, so the paragraph dissolved below leaves no hole. */
+.sv-prose .sv-callout-body {
+	margin-block-start: var(--sv-space-2);
+}
+
+.sv-prose .sv-callout-body > * {
+	margin-block: 0;
+}
+
+.sv-prose .sv-callout-body > * + * {
+	margin-block-start: 0.75em;
+}
+
+/*
+ * The pipeline puts the type marker, bold title, and first body line in one
+ * paragraph. Dissolve that paragraph and hide the repeated title.
+ */
+.sv-prose .sv-callout-body > p:has(> .callout-marker) {
+	display: contents;
+}
+
+.sv-prose .sv-callout-body .callout-marker,
+.sv-prose .sv-callout-body .callout-marker + strong {
+	display: none;
+}
+
+/* Embeds */
+.sv-prose .svartz-embed {
+	margin-block: 0 1.2em;
+	padding: var(--sv-space-3) var(--sv-space-4);
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	border-inline-start: 2px solid var(--sv-ink);
+	border-radius: 0 var(--sv-radius-m) var(--sv-radius-m) 0;
+}
+
+.sv-prose .svartz-embed > :last-child {
+	margin-block-end: 0;
+}
+
+.sv-prose .svartz-embed-source + * {
+	margin-block-start: 0;
+}
+
+.sv-prose .svartz-embed-source {
+	margin-block-end: var(--sv-space-2);
+	font-family: var(--sv-font-sans);
+	font-size: var(--sv-label-size);
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.sv-prose .svartz-embed-source a {
+	color: var(--sv-muted);
+	text-decoration: none;
+}
+
+.sv-prose .svartz-embed-source a:hover {
+	color: var(--sv-accent-text);
+}
+
+.sv-prose .svartz-embed-locked {
+	border-style: dashed;
+	border-inline-start-style: solid;
+	color: var(--sv-muted);
+}
+
+.sv-prose .svartz-pdf-embed {
+	inline-size: 100%;
+	block-size: min(80vh, 48rem);
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	border-radius: var(--sv-radius-m);
+}
+
+/* Footnotes */
+.sv-prose .footnotes {
+	margin-block-start: 3em;
+	padding-block-start: var(--sv-space-4);
+	border-block-start: var(--sv-rule-width) solid var(--sv-rule);
+	color: var(--sv-muted);
+	font-size: var(--sv-step--1);
+}
+
+.sv-prose .footnotes ol {
+	padding-inline-start: 1.2em;
+}
+
+.sv-prose .sr-only {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
+/* Math */
+.sv-prose .katex-display {
+	margin-block: 0 1.2em;
+	padding-block: var(--sv-space-2);
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+
+.sv-prose .katex {
+	font-size: 1.08em;
+}

@@ -40,44 +40,48 @@ export function titleFromSlugSegment(segment: string): string {
 	return segment.replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-/** Returns folder ids that must be open so the given slug is visible in the explorer. */
+/**
+ * Folder ids to open so the given slug is visible in the explorer: every ancestor,
+ * plus the slug's own folder when it's a folder note (`guides`) or folder page.
+ */
 export function ancestorFolderIdsForSlug(slug: string | undefined): string[] {
 	if (!slug || slug === 'index') return [];
 	const segments = slug.split('/').filter(Boolean);
-	if (segments[segments.length - 1] === 'index') segments.pop();
 	const ids: string[] = [];
 	let path = '';
-	for (let i = 0; i < segments.length - 1; i += 1) {
+	for (let i = 0; i < segments.length; i += 1) {
 		path = path ? `${path}/${segments[i]}` : (segments[i] ?? '');
 		ids.push(`folder:${path}`);
 	}
 	return ids;
 }
 
+/**
+ * Home, each ancestor folder, then the note. A folder crumb uses its folder note
+ * (`guides/index.md`, published as `guides`) when one exists, then its folder page.
+ */
 export function buildBreadcrumbs(
 	slug: string | undefined,
 	entries: readonly UiIndexEntry[] = [],
 	homeHref = '/',
-	folders: readonly Pick<UiFolderEntry, 'slug' | 'href'>[] = []
+	folders: readonly (Pick<UiFolderEntry, 'slug' | 'href'> & Partial<Pick<UiFolderEntry, 'title'>>)[] = []
 ): Breadcrumb[] {
-	if (!slug || slug === 'index') {
-		return [{ title: 'Home', href: homeHref }];
-	}
+	const breadcrumbs: Breadcrumb[] = [{ title: 'Home', href: homeHref }];
+	if (!slug || slug === 'index') return breadcrumbs;
 
 	const segments = slug.split('/');
-	const breadcrumbs: Breadcrumb[] = [{ title: 'Home', href: homeHref }];
+	const bySlug = new Map(entries.map((entry) => [entry.slug, entry]));
 	const rootHref = homeHref.endsWith('/') ? homeHref : `${homeHref}/`;
 	let current = '';
 
-	for (const segment of segments) {
+	segments.forEach((segment) => {
 		current = current ? `${current}/${segment}` : segment;
+		const target = bySlug.get(current) ?? folders.find((candidate) => candidate.slug === current);
 		breadcrumbs.push({
-			title: titleFromSlugSegment(segment),
-			href: entries.find((entry) => entry.slug === current)?.href
-				?? folders.find((folder) => folder.slug === current)?.href
-				?? `${rootHref}${current}/`
+			title: target?.title ?? titleFromSlugSegment(segment),
+			href: target?.href ?? `${rootHref}${current}/`
 		});
-	}
+	});
 
 	return breadcrumbs;
 }
@@ -92,51 +96,74 @@ function createFolderNode(id: string, title: string, href: string): ExplorerNode
 	};
 }
 
+const naturalOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+function sortExplorerNodes(nodes: ExplorerNode[]): ExplorerNode[] {
+	return nodes
+		.map((node) => ({ ...node, children: sortExplorerNodes([...node.children]) }))
+		.sort(
+			(left, right) =>
+				Number(right.isFolder) - Number(left.isFolder) || naturalOrder.compare(left.title, right.title)
+		);
+}
+
+/**
+ * The vault as a tree: folders first, then notes, each in natural order. The home
+ * note is left out (the site title links home). A folder takes its title and link
+ * from its folder note (`guides/index.md`, published as `guides`) when one exists,
+ * otherwise from its generated folder page.
+ */
 export function buildExplorerTree(
 	entries: readonly UiIndexEntry[],
 	folders: readonly UiFolderEntry[] = []
 ): readonly ExplorerNode[] {
 	const roots: ExplorerNode[] = [];
 	const folderMap = new Map<string, ExplorerNode>();
+	const bySlug = new Map(entries.map((entry) => [entry.slug, entry]));
+	const parentSlugs = new Set(
+		entries.flatMap((entry) => {
+			const segments = entry.slug.split('/');
+			return segments.slice(1).map((_, depth) => segments.slice(0, depth + 1).join('/'));
+		})
+	);
 
-	for (const entry of [...entries].sort((left, right) => left.slug.localeCompare(right.slug))) {
+	const folderFor = (slug: string, segment: string): ExplorerNode => {
+		const existing = folderMap.get(slug);
+		if (existing) return existing;
+		const landing = bySlug.get(slug);
+		const generated = folders.find((folder) => folder.slug === slug);
+		const node = createFolderNode(
+			`folder:${slug}`,
+			landing?.title ?? generated?.title ?? titleFromSlugSegment(segment),
+			landing?.href ?? generated?.href ?? `/folders/${slug}/`
+		);
+		folderMap.set(slug, node);
+		return node;
+	};
+
+	for (const entry of entries) {
+		// The home note and folder notes don't list as notes.
+		if (entry.slug === 'index' || parentSlugs.has(entry.slug)) continue;
 		const segments = entry.slug.split('/');
-		const noteSegments =
-			segments[segments.length - 1] === 'index' ? segments.slice(0, -1) : segments;
 
-		let parentChildren = roots;
+		let siblings = roots;
 		let parentSlug = '';
-
-		for (let index = 0; index < noteSegments.length - 1; index += 1) {
-			const segment = noteSegments[index]!;
+		for (const segment of segments.slice(0, -1)) {
 			parentSlug = parentSlug ? `${parentSlug}/${segment}` : segment;
-			let node = folderMap.get(parentSlug);
-
-			if (!node) {
-				node = createFolderNode(
-					`folder:${parentSlug}`,
-					titleFromSlugSegment(segment),
-					folders.find((folder) => folder.slug === parentSlug)?.href ?? `/folders/${parentSlug}/`
-				);
-				folderMap.set(parentSlug, node);
-				parentChildren.push(node);
-			}
-
-			parentChildren = node.children as ExplorerNode[];
+			const known = folderMap.has(parentSlug);
+			const folder = folderFor(parentSlug, segment);
+			if (!known) siblings.push(folder);
+			siblings = folder.children as ExplorerNode[];
 		}
 
-		const title =
-			entry.slug.endsWith('/index') || entry.slug === 'index'
-				? titleFromSlugSegment(noteSegments[noteSegments.length - 1] ?? 'home')
-				: entry.title;
-		parentChildren.push({
+		siblings.push({
 			id: `note:${entry.slug}`,
-			title: entry.slug === 'index' ? 'Home' : title,
+			title: entry.title,
 			href: entry.href ?? slugToHref(entry.slug),
 			children: [],
 			isFolder: false
 		});
 	}
 
-	return roots;
+	return sortExplorerNodes(roots);
 }

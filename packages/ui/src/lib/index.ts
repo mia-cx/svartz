@@ -7,7 +7,43 @@ export { default as NoteHeader } from './NoteHeader.svelte';
 export { default as RecentNotes } from './RecentNotes.svelte';
 export { default as SearchBox } from './SearchBox.svelte';
 export { default as TableOfContents } from './TableOfContents.svelte';
+export { SVARTZ_MARK_SVG, svartzSocialImage } from './brand.js';
+export type { ThemePageProps, ThemeRouteMatch } from './runtime/theme-props.js';
+export type { ContentComponentProps } from './runtime/content-components.js';
+export { default as ColorModeToggle } from './ColorModeToggle.svelte';
+export { default as LinkPreviews } from './LinkPreviews.svelte';
+export { default as SearchDialog } from './SearchDialog.svelte';
+export { default as DescText } from './DescText.svelte';
+export * from './content/index.js';
+export { COLOR_MODE_KEY, COLOR_MODE_SCRIPT, COLOR_MODE_SCRIPT_HASH, currentColorMode, setColorMode, type ColorMode } from './color-mode.js';
+export { formatDate, isoDate, readingTime } from './format.js';
+export { count, folderContents, newestFirst, noteDate, notesTagged, topLevelSections, type FolderSection } from './listing.js';
+export { pageCrumbs, tagHrefFor } from './crumbs.js';
+export { assetHref } from './assets.js';
+export { wikilinkSegments, type LinkSegment } from './wikilinks.js';
 export {
+	isRecord,
+	readLinks,
+	themeSettings,
+	type CommentsSettings,
+	type SettingsLink,
+	type ThemeSettings
+} from './theme-settings.js';
+export { themeTokenCss, type ThemeTokens, type ThemeTokenValue } from './theme-tokens.js';
+export { PREVIEW_ATTRIBUTE, fetchPreview } from './preview.js';
+export {
+	createSearch,
+	excerpt,
+	highlight,
+	parseSearchQuery,
+	type SearchDocument,
+	type SearchHit,
+	type SearchOptions,
+	type TextSegment
+} from './search.js';
+export { explorerOpenIds } from './stores.js';
+export {
+	ancestorFolderIdsForSlug,
 	buildBreadcrumbs,
 	buildExplorerTree,
 	slugToHref,
@@ -17,4 +53,4 @@ export {
 	type UiFolderEntry,
 	type UiIndexEntry,
 	type UiTagEntry
-} from './navigation';
+} from './navigation.js';

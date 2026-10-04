@@ -1,36 +1,43 @@
+<!-- Every tag as its own section, with its first ten notes, as in Quartz's tag index. -->
 <script lang="ts">
-	type TagEntry = {
-		slug: string;
-		title: string;
-		noteCount: number;
-		href: string;
-	};
+	import { count, notesTagged, tagHrefFor, type ThemePageProps } from '@svartz/ui';
+	import ListHeader from '../components/ListHeader.svelte';
+	import PageList from '../components/PageList.svelte';
 
-	let { tags = [] }: { tags?: readonly TagEntry[] } = $props();
+	let { vault }: ThemePageProps = $props();
+
+	const SHOWN_PER_TAG = 10;
+	const tags = $derived([...vault.tags].sort((left, right) => left.slug.localeCompare(right.slug)));
+	const tagHref = $derived(tagHrefFor(vault));
 </script>
 
-<section class="grid gap-4">
-	<div>
-		<h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Tags</h1>
-		<p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{tags.length} tags in this vault.</p>
-	</div>
-	<ul class="grid gap-0">
-		{#each tags as tag (tag.slug)}
-			<li
-				class="flex items-center justify-between gap-4 border-b border-zinc-100 py-3 last:border-0 dark:border-zinc-800"
-			>
-				<a
-					href={tag.href}
-					class="font-medium text-zinc-900 transition-colors hover:text-blue-600 dark:text-zinc-100 dark:hover:text-blue-400"
-				>
-					#{tag.title}
-				</a>
-				<span
-					class="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
-				>
-					{tag.noteCount}
-				</span>
-			</li>
-		{/each}
-	</ul>
-</section>
+<ListHeader title="Tag index" summary="Found {count(tags.length, 'tag')}." />
+{#each tags as tag (tag.slug)}
+	{@const notes = notesTagged(vault.entries, tag.slug)}
+	<section class="tag-section" aria-labelledby="tag-{tag.slug}">
+		<h2 id="tag-{tag.slug}"><a class="sv-tag" href={tag.href}>{tag.title}</a></h2>
+		<p class="summary">
+			{count(notes.length, 'note')} with this tag.{#if notes.length > SHOWN_PER_TAG}{' '}Showing the first {SHOWN_PER_TAG}.{/if}
+		</p>
+		<PageList notes={notes.slice(0, SHOWN_PER_TAG)} {tagHref} />
+	</section>
+{/each}
+
+<style>
+	.tag-section {
+		margin-block-start: var(--sv-space-7);
+	}
+
+	h2 {
+		margin: 0;
+	}
+
+	h2 .sv-tag {
+		font-size: var(--sv-step-2);
+	}
+
+	.summary {
+		margin: var(--sv-space-3) 0 var(--sv-space-2);
+		color: var(--sv-text);
+	}
+</style>

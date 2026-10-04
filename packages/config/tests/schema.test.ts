@@ -37,6 +37,19 @@ describe("SvartzConfigSchema", () => {
     expect(Either.isRight(result)).toBe(true);
   });
 
+  it("keeps theme-specific settings for the theme to validate", () => {
+    const theme = {
+      base: "@svartz/theme-minimal",
+      routes: { tags: "topics" },
+      footer: { links: { GitHub: "https://github.com/example" } },
+    };
+    const result = decode(SvartzConfigSchema, {
+      version: "1.0.0",
+      vaults: [{ id: "main", path: "vault", target: { type: "static" }, theme }],
+    });
+    expect(Either.isRight(result) && result.right.vaults[0]?.theme).toEqual(theme);
+  });
+
   it("decodes a minimal config (only required fields)", () => {
     const result = decode(SvartzConfigSchema, {
       version: "1.0.0",

@@ -4,8 +4,8 @@ import { definePlugin, type RawLink } from "@svartz/core";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
 import { createAssetResolver } from "./internal/asset-references";
 import { alternateNames } from "./internal/routes";
-import { extractSectionMarkdown } from "./internal/parse";
-import { transformInlineTags } from "./transform-ofm";
+import { extractSectionMarkdown, findWikilinkSpans, type PositionedLink } from "./internal/parse";
+import { transformMarkdown } from "./transform-ofm";
 
 const EMBED_REGEX = /!\[\[([^\]]+)\]\]/g;
 const IMAGE_EXTENSIONS = new Set([
@@ -201,7 +201,20 @@ export const transformEmbeds = definePlugin(() => ({
           );
         });
 
-        const tagged = transformInlineTags(expanded, sourceSlug, tagsRoute);
+        // The target's raw source skipped link resolution and the OFM transforms; apply both here.
+        // Spans come from parsed Markdown, so code, escapes, and raw HTML keep their wikilink text.
+        const linkHtml = (link: PositionedLink) => {
+          const label = escapeHtml(link.label ?? link.target);
+          const assetPath = resolveAsset(noteBySlug.get(targetSlug)!, link.target);
+          if (assetPath) return `<a href="${relativeHref(sourceSlug, `/${assetPath}`)}">${label}</a>`;
+          const resolved = resolveLink(link, slugMap, allSlugs, ctx.config.linkResolution, targetSlug);
+          return resolved ? `<a href="${relativeNoteHref(sourceSlug, resolved, link.section)}">${label}</a>` : label;
+        };
+        const linked = findWikilinkSpans(expanded).reduceRight(
+          (markdown, link) => markdown.slice(0, link.start) + linkHtml(link) + markdown.slice(link.end),
+          expanded,
+        );
+        const tagged = transformMarkdown(linked, sourceSlug, tagsRoute, false);
         for (const tag of tagged.tags) hostTags.add(tag);
 
         return [

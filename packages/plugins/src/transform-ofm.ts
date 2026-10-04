@@ -183,7 +183,8 @@ function remarkMermaid() {
   };
 }
 
-function transformMarkdown(markdown: string, sourceSlug: string, tagsRoute: string, executable: boolean): { content: string; tags: string[] } {
+/** Comments, highlights, callout markers, inline tags, and Svelte-safe escaping for one Markdown body. */
+export function transformMarkdown(markdown: string, sourceSlug: string, tagsRoute: string, executable: boolean): { content: string; tags: string[] } {
   const store = createSegmentStore(markdown);
   const protectedCode = protectCode(markdown, store, executable);
   const normalizedComments = normalizeComments(protectedCode);

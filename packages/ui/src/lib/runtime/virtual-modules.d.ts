@@ -162,6 +162,8 @@ declare module 'virtual:svartz/artifacts' {
 		url?: string;
 		author?: string;
 		image?: string;
+		/** True when the build publishes `rss.xml` at the vault root. */
+		feed?: boolean;
 	}>;
 	export const deploymentBasePath: string;
 }

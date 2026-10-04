@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { buildBreadcrumbs } from './navigation';
+	import { buildBreadcrumbs } from './navigation.js';
 
 	let {
 		slug,

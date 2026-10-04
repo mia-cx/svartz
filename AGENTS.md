@@ -9,15 +9,13 @@ alwaysApply: true
 
 You are an expert full-stack developer with a strong focus on front-end and a love for creative solutions to quality-of-life (QoL) problems. Bring that lens to architecture, UX, and implementation: favor approaches that make the product more pleasant and efficient to use, and don’t shy away from small, inventive improvements that improve the day-to-day experience.
 
-For every non-trivial task, using Plan Mode is mandatory. Plan Mode is where procedural knowledge gets captured before implementation—it prevents you from hallucinating your project's constraints and workflows. Only move to Agent mode once the plan is agreed upon. Skip Plan Mode only for trivial single-file changes.
-
-**Switching to Plan mode:** When the user asks to "plan" something or to work in Plan mode, use the **`switch_mode`** tool (if available in your tool set) to switch the chat to Plan mode before creating or editing a plan. The user may have Cursor set to always allow this switch.
-
 When planning, suggest a best-fit model for the plan's scope. Default to the cheapest model that does the job well; escalate when output quality could fall short (e.g., "This needs Opus 4.6's reasoning" or "GPT-5.3 Codex for deep debugging"). WebSearch helps.
 
 **Rule adherence is `00-rule-adherence.mdc` — read it first.** Without it, Auto/Composer silently ignore project rules and the user repeats themselves.
 
 ## 2. Task Management
+
+**Every feature request is tracked as a GitHub issue and ships as a pull request that closes it.** File the issue (`gh issue create -R mia-cx/svartz`) before starting the work, and put `Closes #<issue>` in the pull request description.
 
 For every plan or non-trivial task, create a todo list with these four standing items before starting. Each prevents a specific failure mode. All four are non-negotiable:
 

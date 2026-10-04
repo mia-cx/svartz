@@ -6,6 +6,7 @@
 	const { children } = $props();
 
 	const components = [
+		{ href: '/specimen', label: 'Design language' },
 		{ href: '/backlinks', label: 'Backlinks' },
 		{ href: '/breadcrumbs', label: 'Breadcrumbs' },
 		{ href: '/comments', label: 'Comments' },

@@ -7,6 +7,9 @@
 
 {#if voidElement}
 	<svelte:element this={tag} {...attributes} />
+{:else if tag === 'pre'}
+	<!-- A code block's <pre> arrives whole in `children`. -->
+	{@render children?.()}
 {:else}
 	<svelte:element this={tag} {...attributes}>{@render children?.()}</svelte:element>
 {/if}

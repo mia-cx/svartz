@@ -1,426 +1,469 @@
+<!--
+	Minimal: Quartz's layout in the Svartz design language. Left: site name,
+	search, colour mode, reader mode, explorer. Centre: breadcrumbs, title,
+	meta, tags, note. Right: graph, contents, backlinks. List pages keep the
+	right column empty so the reading column never moves.
+-->
 <script lang="ts">
-	import type { Snippet } from 'svelte';
-	import type { VaultView } from '@svartz/core';
+	import '@svartz/ui/base.css';
+	import '@svartz/ui/prose.css';
+	import { afterNavigate } from '$app/navigation';
+	import { page } from '$app/state';
+	import BookOpen from '@lucide/svelte/icons/book-open';
+	import Menu from '@lucide/svelte/icons/menu';
+	import X from '@lucide/svelte/icons/x';
 	import {
-		Backlinks,
-		Breadcrumbs,
+		ColorModeToggle,
 		Comments,
-		FileTrie,
-		GraphPanel,
-		NoteHeader,
-		RecentNotes,
-		SearchBox,
-		TableOfContents
+		formatDate,
+		isoDate,
+		LinkPreviews,
+		pageCrumbs,
+		readingTime,
+		SearchDialog,
+		tagHrefFor,
+		themeSettings,
+		type ThemePageProps
 	} from '@svartz/ui';
+	import Backlinks from '../components/Backlinks.svelte';
+	import Explorer from '../components/Explorer.svelte';
+	import Graph from '../components/Graph.svelte';
+	import Toc from '../components/Toc.svelte';
 
-	type CommentsConfig = {
-		enabled?: boolean;
-		repo?: string;
-		repoId?: string;
-		category?: string;
-		categoryId?: string;
-		mapping?: 'url' | 'title' | 'og:title' | 'specific' | 'number' | 'pathname';
-		term?: string;
-		strict?: boolean;
-		reactionsEnabled?: boolean;
-		inputPosition?: 'top' | 'bottom';
-		lang?: string;
-		lightTheme?: string;
-		darkTheme?: string;
-	};
+	let { children, entry, vault, site, match, themeConfig, searchIndex, searchOptions }: ThemePageProps = $props();
 
-	type RecentNotesConfig = {
-		enabled?: boolean;
-		limit?: number;
-		showTags?: boolean;
-		linkToMore?: string;
-	};
+	const config = $derived(themeSettings(themeConfig));
+	const homeHref = $derived(`${vault.routes.mountPath}/`);
+	const currentHref = $derived(page.url.pathname);
+	const noteLayout = $derived(Boolean(entry));
+	const crumbs = $derived(pageCrumbs(vault, entry, match));
+	const tagHref = $derived(tagHrefFor(vault));
+	const backlinks = $derived(entry ? (vault.note(entry.slug)?.backlinks ?? []) : []);
+	const date = $derived(entry ? (entry.modifiedAt ?? entry.publishedAt ?? entry.createdAt) : undefined);
+	// Notes only: list pages and 404s must not open discussions.
+	const comments = $derived(entry?.page.comments ? config.comments : undefined);
 
-	/** Theme-level config passed from the vault's svartz.config → virtual:svartz/artifacts → here. */
-	type MinimalThemeConfig = {
-		comments?: CommentsConfig;
-		recentNotes?: RecentNotesConfig;
-	};
-
-	type TocEntry = { depth: number; text: string; slug: string };
-	type Entry = {
-		slug: string;
-		href?: string;
-		page?: { toc: boolean; comments: boolean };
-		path?: string;
-		title: string;
-		description?: string;
-		createdAt?: Date;
-		modifiedAt?: Date;
-		tags?: readonly string[];
-		toc?: readonly TocEntry[];
-		wordCount?: number;
-	};
-
-	type Index = {
-		entries: readonly Entry[];
-		backlinks: Record<string, readonly string[]>;
-		graph: Record<string, readonly string[]>;
-	};
-
-	let {
-		children,
-		entry,
-		index = { entries: [], backlinks: {}, graph: {} },
-		backlinks = {},
-		match,
-		searchDocuments = [],
-		searchIndex,
-		searchOptions = { fields: [], storeFields: [], idField: 'id' },
-		vault,
-		themeConfig = {}
-	}: {
-		children?: Snippet;
-		entry?: Entry;
-		index?: Index;
-		backlinks?: Record<string, readonly string[]>;
-		graph?: Record<string, readonly string[]>;
-		match?: { pathname?: string; params?: { slug?: string } };
-		searchDocuments?: readonly {
-			id: string;
-			slug: string;
-			href?: string;
-			title: string;
-			description?: string;
-			content?: string;
-			tags?: readonly string[];
-		}[];
-		searchIndex?: unknown;
-		searchOptions?: { fields: string[]; storeFields: string[]; idField: string };
-		vault?: VaultView;
-		themeConfig?: Record<string, unknown>;
-	} = $props();
-
-	const cfg = $derived(themeConfig as MinimalThemeConfig);
-
-	const commentsEnabled = $derived(
-		!!entry &&
-			!!cfg.comments?.repo &&
-			!!cfg.comments?.repoId &&
-			!!cfg.comments?.category &&
-			!!cfg.comments?.categoryId &&
-			cfg.comments?.enabled !== false &&
-			entry?.page?.comments !== false
-	);
-
-	const recentNotesEnabled = $derived(cfg.recentNotes?.enabled !== false);
-
-	function pathnameToSlug(pathname: string | undefined): string | undefined {
-		if (!pathname || pathname === '/') return 'index';
-		return pathname.replace(/^\/+|\/+$/g, '');
-	}
-
-	const breadcrumbSlug = $derived(entry?.slug ?? pathnameToSlug(match?.params?.slug));
-	const visibleEntries = $derived(vault?.entries ?? index.entries);
-	const homeHref = $derived(vault?.routes.mountPath ? `${vault.routes.mountPath}/` : '/');
+	let reader = $state(false);
+	let drawer = $state(false);
+	afterNavigate(() => (drawer = false));
 </script>
 
-<a
-	class="skip-link"
-	href="#main-content"
-	tabindex="0"
-	aria-label="Skip to main content"
-	onkeydown={(event) => {
-		if (event.key !== ' ') return;
-		event.preventDefault();
-		event.currentTarget.click();
-	}}
->Skip to content</a>
-<div class="shell">
-	<aside class="left-sidebar" aria-label="Site navigation">
-		<SearchBox searchDocuments={vault?.search ?? searchDocuments} {searchIndex} {searchOptions} />
-		<FileTrie
-			entries={visibleEntries}
-			folders={vault?.folders ?? []}
-			currentSlug={breadcrumbSlug}
-		/>
+<a class="sv-skip-link" href="#content">Skip to content</a>
+
+<div class="minimal" data-layout={noteLayout ? 'note' : 'list'} data-reader={reader ? '' : undefined}>
+	<aside class="left" aria-label="Site">
+		<div class="masthead">
+			<button
+				class="sv-icon-button menu"
+				type="button"
+				aria-expanded={drawer}
+				aria-controls="explorer-panel"
+				aria-label={drawer ? 'Close the explorer' : 'Open the explorer'}
+				onclick={() => (drawer = !drawer)}
+			>
+				{#if drawer}<X aria-hidden="true" />{:else}<Menu aria-hidden="true" />{/if}
+			</button>
+			<a class="sv-wordmark" href={homeHref}>{site.title}</a>
+		</div>
+		<div class="tools">
+			<SearchDialog documents={vault.search} {searchIndex} {searchOptions} />
+			<ColorModeToggle />
+			<button
+				class="sv-icon-button reader-toggle"
+				type="button"
+				aria-pressed={reader}
+				aria-label="Reader mode"
+				onclick={() => (reader = !reader)}
+			>
+				<BookOpen aria-hidden="true" />
+			</button>
+		</div>
+		<div class="explorer-panel" id="explorer-panel" data-open={drawer ? '' : undefined}>
+			<Explorer entries={vault.entries} folders={vault.folders} {currentHref} />
+		</div>
 	</aside>
 
-	<main class="content-column" id="main-content" tabindex="-1">
-		<Breadcrumbs slug={breadcrumbSlug} entries={visibleEntries} {homeHref} folders={vault?.folders} />
-		{#if entry}
-			<NoteHeader {entry} tags={vault?.tags} />
+	<main class="center" id="content" tabindex="-1">
+		{#if crumbs.length > 0}
+			<nav class="crumbs" aria-label="Breadcrumbs">
+				<ol>
+					{#each crumbs as crumb, index (crumb.href)}
+						<li>
+							{#if index === crumbs.length - 1}<span aria-current="page">{crumb.title}</span>{:else}<a
+									href={crumb.href}>{crumb.title}</a
+								>{/if}
+						</li>
+					{/each}
+				</ol>
+			</nav>
 		{/if}
-		<section class="page-body">
-			{@render children?.()}
-		</section>
-		{#if commentsEnabled}
-			<Comments
-				repo={cfg.comments!.repo!}
-				repoId={cfg.comments!.repoId!}
-				category={cfg.comments!.category!}
-				categoryId={cfg.comments!.categoryId!}
-				mapping={cfg.comments!.mapping}
-				term={cfg.comments!.term}
-				strict={cfg.comments!.strict}
-				reactionsEnabled={cfg.comments!.reactionsEnabled}
-				inputPosition={cfg.comments!.inputPosition}
-				lang={cfg.comments!.lang}
-				lightTheme={cfg.comments!.lightTheme}
-				darkTheme={cfg.comments!.darkTheme}
-			/>
+		<div data-sv-preview>
+			{#if entry}
+				<header class="note-head">
+					<h1>{entry.title}</h1>
+					{#if date || entry.readingTimeMinutes}
+						<p class="meta sv-label">
+							{#if date}<time datetime={isoDate(date)}>{formatDate(date)}</time>{/if}
+							<span>{readingTime(entry.readingTimeMinutes)}</span>
+						</p>
+					{/if}
+					{#if entry.tags.length > 0}
+						<ul class="tags" aria-label="Tags">
+							{#each entry.tags as tag (tag)}
+								<li><a class="sv-tag" href={tagHref(tag)}>{tag}</a></li>
+							{/each}
+						</ul>
+					{/if}
+				</header>
+				<article class="sv-prose">{@render children?.()}</article>
+			{:else}
+				{@render children?.()}
+			{/if}
+		</div>
+		{#if comments}
+			<Comments {...comments} />
 		{/if}
 	</main>
 
-	<aside class="right-sidebar" aria-label="Related content">
-		<TableOfContents items={entry?.page?.toc === false ? [] : entry?.toc} />
+	<aside class="right" aria-label="Related">
 		{#if entry}
-			<GraphPanel currentSlug={entry.slug} entries={visibleEntries} graph={vault?.graph ?? graph} />
-		{/if}
-		{#if recentNotesEnabled}
-			<RecentNotes
-				entries={visibleEntries}
-				tags={vault?.tags ?? []}
-				limit={cfg.recentNotes?.limit ?? 5}
-				showTags={cfg.recentNotes?.showTags ?? true}
-				linkToMore={cfg.recentNotes?.linkToMore ?? vault?.routes.feed[0] ?? '/feed/'}
+			<Graph
+				input={{ notes: vault.entries, links: vault.graph, tagHref }}
+				center={entry.slug}
 			/>
+			{#if entry.page.toc}<div class="toc"><Toc items={entry.toc} /></div>{/if}
+			<Backlinks notes={backlinks} />
 		{/if}
-		<Backlinks currentSlug={entry?.slug} entries={visibleEntries} {backlinks} />
 	</aside>
+
+	<footer class="footer">
+		<p>
+			{[site.title, site.author].filter(Boolean).join(' · ')}{' · '}Published with
+			<a href="https://github.com/mia-cx/svartz">Svartz</a>
+		</p>
+		{#if config.footerLinks.length > 0}
+			<ul>
+				{#each config.footerLinks as link (link.href)}
+					<li><a href={link.href}>{link.label}</a></li>
+				{/each}
+			</ul>
+		{/if}
+	</footer>
 </div>
 
+<LinkPreviews />
+
 <style>
-	:global(body) {
-		--page-bg: oklch(0.985 0 0);
-		--page-fg: oklch(0.21 0.006 285);
-		--page-border: oklch(0.92 0.004 286);
-		--page-link: oklch(0.49 0.26 294);
-		--page-quote-bg: oklch(0.967 0.001 286);
-		--page-callout-border: oklch(0.87 0.07 294);
-		--page-warning: oklch(0.47 0.13 48);
-		--page-code-bg: oklch(0.21 0.006 285);
-		--page-code-fg: oklch(0.985 0 0);
-		background: var(--page-bg);
-		color: var(--page-fg);
+	:global(:root) {
+		--sv-density: 1;
+		--sv-ratio: 1.2;
+		--sv-measure: 44rem;
 	}
 
-	@media (prefers-color-scheme: dark) {
-		:global(body) {
-			--page-bg: oklch(0.21 0.006 285);
-			--page-fg: oklch(0.985 0 0);
-			--page-border: oklch(0.37 0.013 285);
-			--page-link: oklch(0.77 0.14 294);
-			--page-quote-bg: oklch(0.274 0.006 286);
-			--page-callout-border: oklch(0.48 0.09 294);
-			--page-warning: oklch(0.8 0.1 75);
-			--page-code-bg: oklch(0.274 0.006 286);
-		}
-	}
-
-	.skip-link {
-		position: fixed;
-		top: 0.75rem;
-		left: 0.75rem;
-		z-index: 50;
-		transform: translateY(-200%);
-		border-radius: 0.5rem;
-		background: oklch(0.984 0.003 247);
-		color: oklch(0.208 0.042 266);
-		padding: 0.6rem 0.85rem;
-		font-weight: 600;
-	}
-
-	.skip-link:focus {
-		transform: translateY(0);
-	}
-
-	.shell {
+	.minimal {
+		--side: 16rem;
+		/* Quartz's top spacing: all three columns start 6rem down. */
+		--top: 6rem;
 		display: grid;
-		grid-template-areas: 'left content right';
-		grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr) minmax(14rem, 17rem);
-		align-items: start;
-		gap: clamp(1rem, 2vw, 2rem);
-		max-width: 96rem;
-		margin: 0 auto;
-		padding: clamp(1rem, 2vw, 1.5rem);
+		grid-template-columns: var(--side) minmax(0, 1fr) var(--side);
+		grid-template-areas:
+			'left center right'
+			'left footer right';
+		grid-template-rows: 1fr auto;
+		column-gap: clamp(var(--sv-space-5), 3vw, var(--sv-space-7));
+		max-inline-size: 92rem;
+		min-block-size: 100dvh;
+		margin-inline: auto;
+		padding-inline: var(--sv-space-5);
 	}
 
-	.left-sidebar,
-	.right-sidebar,
-	.content-column {
-		display: grid;
-		align-content: start;
-		gap: 1.25rem;
-	}
-
-	.left-sidebar,
-	.right-sidebar {
+	.left,
+	.right {
 		position: sticky;
-		top: 1rem;
-		max-height: calc(100vh - 2rem);
-		overflow: auto;
+		inset-block-start: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--sv-space-5);
+		align-self: start;
+		max-block-size: 100dvh;
+		padding-block: var(--top) var(--sv-space-5);
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		scrollbar-width: thin;
+		transition: opacity var(--sv-duration) var(--sv-ease);
 	}
 
-	.left-sidebar {
+	.left {
 		grid-area: left;
+		z-index: var(--sv-z-sticky);
 	}
 
-	.content-column {
-		grid-area: content;
-		width: min(100%, 52rem);
-		min-width: 0;
-		justify-self: center;
-	}
-
-	.right-sidebar {
+	.right {
 		grid-area: right;
 	}
 
-	.page-body {
-		min-width: 0;
-		padding: clamp(0.25rem, 1vw, 0.75rem) 0;
+	[data-reader] .left,
+	[data-reader] .right {
+		opacity: 0.08;
 	}
 
-	.page-body :global(h1),
-	.page-body :global(h2),
-	.page-body :global(h3),
-	.page-body :global(h4) {
-		line-height: 1.2;
-		font-weight: 700;
-		letter-spacing: -0.02em;
+	[data-reader] .left:is(:hover, :focus-within),
+	[data-reader] .right:is(:hover, :focus-within) {
+		opacity: 1;
+	}
+
+	.masthead {
+		display: flex;
+		align-items: center;
+		gap: var(--sv-space-2);
+	}
+
+	.masthead .sv-wordmark {
+		font-size: var(--sv-step-2);
 		text-wrap: balance;
 	}
 
-	.page-body :global(h1) {
-		margin: 0 0 1.25rem;
-		font-size: clamp(1.8rem, 4vw, 2.35rem);
+	.menu {
+		display: none;
 	}
 
-	.page-body :global(h2) {
-		margin: 2.75rem 0 0.9rem;
-		font-size: clamp(1.4rem, 3vw, 1.75rem);
+	.tools {
+		display: flex;
+		align-items: center;
+		gap: var(--sv-space-1);
 	}
 
-	.page-body :global(h3) {
-		margin: 2rem 0 0.7rem;
-		font-size: 1.2rem;
+	.tools :global(.sv-search-trigger[data-variant='field']) {
+		flex: 1;
+		min-inline-size: 0;
 	}
 
-	.page-body :global(h4) {
-		margin: 1.5rem 0 0.5rem;
-		font-size: 1rem;
+	.reader-toggle[aria-pressed='true'] {
+		background: var(--sv-surface);
+		color: var(--sv-ink);
 	}
 
-	.page-body :global(p),
-	.page-body :global(ul),
-	.page-body :global(ol) {
-		margin: 0.85rem 0;
+	.center {
+		grid-area: center;
+		min-inline-size: 0;
+		padding-block: var(--top) var(--sv-space-6);
+		outline: none;
 	}
 
-	.page-body :global(ul),
-	.page-body :global(ol) {
-		padding-left: 1.4rem;
+	.center > * {
+		max-inline-size: var(--sv-measure);
+		margin-inline: auto;
 	}
 
-	.page-body :global(ul) {
-		list-style: disc;
+	.crumbs ol {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--sv-space-1);
+		margin: 0 0 var(--sv-space-3);
+		padding: 0;
+		list-style: none;
+		font-size: var(--sv-step--1);
 	}
 
-	.page-body :global(ol) {
-		list-style: decimal;
+	.crumbs li:not(:last-child)::after {
+		content: '/';
+		margin-inline-start: var(--sv-space-1);
+		color: var(--sv-rule-strong);
 	}
 
-	.page-body :global(li) {
-		margin: 0.35rem 0;
-		padding-left: 0.15rem;
+	.crumbs a {
+		color: var(--sv-muted);
+		text-decoration: none;
 	}
 
-	.page-body :global(hr) {
-		margin: 2.5rem 0;
-		border: 0;
-		border-top: 1px solid var(--page-border);
+	.crumbs a:hover {
+		color: var(--sv-accent-text);
 	}
 
-	.page-body :global(a) {
-		color: var(--page-link);
+	.crumbs [aria-current] {
+		color: var(--sv-ink);
 	}
 
-	.page-body :global(pre) {
-		max-width: 100%;
-		overflow: auto;
-		padding: 1rem;
-		border-radius: 0.75rem;
-		background: var(--page-code-bg);
-		color: var(--page-code-fg);
+	.note-head {
+		margin-block-end: var(--sv-space-6);
 	}
 
-	.page-body :global(blockquote) {
-		margin: 1rem 0;
-		padding: 0.85rem 1rem;
-		border-left: 3px solid oklch(0.606 0.25 293);
-		background: var(--page-quote-bg);
+	.note-head h1 {
+		margin: 0;
+		color: var(--sv-ink);
+		font-family: var(--sv-font-sans);
+		font-size: var(--sv-step-5);
+		font-weight: 700;
+		line-height: 1.05;
+		text-wrap: balance;
 	}
 
-	.page-body :global(blockquote:has(.callout-marker)) {
-		border: 1px solid var(--page-callout-border);
-		border-left: 3px solid oklch(0.606 0.25 293);
-		border-radius: 0.6rem;
+	.meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--sv-space-3);
+		margin: var(--sv-space-3) 0 0;
 	}
 
-	.page-body :global(.callout-marker + strong) {
-		display: inline-block;
-		margin-bottom: 0.35rem;
-		color: var(--page-link);
+	.tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--sv-space-1);
+		margin: var(--sv-space-3) 0 0;
+		padding: 0;
+		list-style: none;
 	}
 
-	.page-body :global(.callout-marker[data-callout='warning'] + strong),
-	.page-body :global(.callout-marker[data-callout='caution'] + strong) {
-		color: var(--page-warning);
+	.footer {
+		grid-area: footer;
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--sv-space-2) var(--sv-space-5);
+		justify-content: space-between;
+		inline-size: 100%;
+		max-inline-size: var(--sv-measure);
+		margin-inline: auto;
+		padding-block: var(--sv-space-5) var(--sv-space-7);
+		border-block-start: var(--sv-rule-width) solid var(--sv-rule);
+		color: var(--sv-muted);
+		font-size: var(--sv-step--1);
 	}
 
-	.page-body :global(mark) {
-		background: oklch(0.84 0.18 95 / 0.18);
-		color: inherit;
+	.footer p {
+		margin: 0;
 	}
 
-	@media (max-width: 82rem) {
-		.shell {
+	.footer ul {
+		display: flex;
+		gap: var(--sv-space-4);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.footer a {
+		color: var(--sv-text);
+		text-decoration-color: var(--sv-rule-strong);
+		text-underline-offset: 0.2em;
+	}
+
+	.footer a:hover {
+		color: var(--sv-accent-text);
+	}
+
+	/* Tablet: the right column moves under the note; contents hide, as in Quartz. */
+	@media (max-width: 75rem) {
+		.minimal {
+			--side: 15rem;
+			grid-template-columns: var(--side) minmax(0, 1fr);
 			grid-template-areas:
-				'left content'
-				'right content';
-			grid-template-columns: minmax(13rem, 15rem) minmax(0, 1fr);
+				'left center'
+				'left right'
+				'left footer';
+			grid-template-rows: auto auto 1fr;
 		}
 
-		.right-sidebar {
+		.right {
 			position: static;
-			top: auto;
-			max-height: none;
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+			align-items: start;
+			inline-size: 100%;
+			max-inline-size: var(--sv-measure);
+			max-block-size: none;
+			margin-inline: auto;
+			padding-block: 0 var(--sv-space-6);
+			overflow: visible;
+		}
+
+		.right:empty {
+			display: none;
+		}
+
+		.toc {
+			display: none;
 		}
 	}
 
-	@media (max-width: 62rem) {
-		.shell {
-			grid-template-areas:
-				'left'
-				'content'
-				'right';
+	/* Phone: the left column becomes a sticky bar; the explorer becomes a drawer. */
+	@media (max-width: 50rem) {
+		.minimal {
 			grid-template-columns: minmax(0, 1fr);
-			padding: clamp(0.75rem, 3vw, 1.25rem);
+			grid-template-areas: 'left' 'center' 'right' 'footer';
+			grid-template-rows: auto;
+			padding-inline: var(--sv-space-4);
 		}
 
-		.page-body {
-			border: 0;
-			border-radius: 0;
-			background: transparent;
+		.left {
+			flex-direction: row;
+			flex-wrap: wrap;
+			align-items: center;
+			justify-content: space-between;
+			gap: var(--sv-space-2);
+			max-block-size: none;
+			margin-inline: calc(-1 * var(--sv-space-4));
+			padding: var(--sv-space-2) var(--sv-space-3);
+			overflow: visible;
+			border-block-end: var(--sv-rule-width) solid var(--sv-rule);
+			background: var(--sv-paper);
+		}
+
+		.menu {
+			display: inline-grid;
+		}
+
+		.masthead {
+			flex: 1;
+			min-inline-size: 0;
+		}
+
+		.masthead .sv-wordmark {
+			overflow: hidden;
+			font-size: var(--sv-step-1);
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.tools :global(.sv-search-trigger[data-variant='field']) {
+			flex: none;
+			inline-size: 2.25rem;
 			padding: 0;
+			justify-content: center;
+			border-color: transparent;
 		}
 
-		.left-sidebar,
-		.right-sidebar {
-			position: static;
-			max-height: none;
-			border-top: 1px solid var(--page-border);
-			padding-top: 1.25rem;
+		.tools :global(.sv-search-trigger-label),
+		.tools :global(.sv-search-trigger-keys),
+		.reader-toggle {
+			display: none;
 		}
 
-		.left-sidebar {
-			max-height: min(30vh, 16rem);
+		.explorer-panel {
+			position: fixed;
+			inset: var(--sv-drawer-top, 3.3rem) 0 0;
+			z-index: var(--sv-z-drawer);
+			padding: var(--sv-space-4) var(--sv-space-5) var(--sv-space-7);
+			overflow-y: auto;
+			background: var(--sv-paper);
+			translate: -100% 0;
+			visibility: hidden;
+			transition:
+				translate var(--sv-duration-slow) var(--sv-ease),
+				visibility 0s linear var(--sv-duration-slow);
+		}
+
+		.explorer-panel[data-open] {
+			translate: 0 0;
+			visibility: visible;
+			transition: translate var(--sv-duration-slow) var(--sv-ease);
+		}
+
+		.center {
+			padding-block-start: var(--sv-space-5);
+		}
+
+		.note-head h1 {
+			font-size: var(--sv-step-4);
 		}
 	}
 </style>

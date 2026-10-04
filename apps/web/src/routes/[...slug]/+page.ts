@@ -8,8 +8,8 @@ export const load = async ({ url }) => {
   const pathname = appPath.endsWith('/') ? appPath : `${appPath}/`;
   const destination = routes.redirects[pathname];
   if (destination) redirect(308, `${base}${destination}`);
-  if (!routes.all.includes(pathname)) error(404);
   await prepareHostVault(pathname);
+  if (!routes.all.includes(pathname)) error(404);
   return { svartzStylesheets: hostStylesheets(pathname).map((file) => `${assets}/${file}`) };
 };
 

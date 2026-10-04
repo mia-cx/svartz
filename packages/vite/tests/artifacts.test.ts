@@ -112,6 +112,15 @@ describe("@svartz/vite artifact helpers", () => {
     expect(source).not.toContain("/home/mia/private/icon.svg");
   });
 
+  it("tells themes whether the build published an RSS feed", () => {
+    const rss = { key: "assets/rss.xml", path: "/out/assets/rss.xml", type: "asset", pluginId: "core:emit-discovery", contents: "" } as const;
+    const site = { title: "Notes", url: "https://example.com" };
+    expect(createArtifactsVirtualModuleSource([rss], "/index.ts", "/search.ts", {}, site))
+      .toContain('export const siteConfig = {"title":"Notes","url":"https://example.com","feed":true};');
+    expect(createArtifactsVirtualModuleSource([], "/index.ts", "/search.ts", {}, site))
+      .toContain('export const siteConfig = {"title":"Notes","url":"https://example.com"};');
+  });
+
   it("imports only resources contributed by the current build", () => {
     const source = createArtifactsVirtualModuleSource(
       [],

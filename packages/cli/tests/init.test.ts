@@ -477,6 +477,29 @@ export const entries: EntryGenerator = async () => routes.all
   expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
   expect(await readFile(catchall, "utf8")).toContain("await prepareHostVault(pathname)");
 
+  const notFoundBeforePrepare = `import type { EntryGenerator } from './$types';
+import { error, redirect } from '@sveltejs/kit';
+import { assets, base } from '$app/paths';
+import { hostStylesheets, prepareHostVault, routes } from 'virtual:svartz/host';
+
+export const load = async ({ url }) => {
+  const appPath = base ? url.pathname.slice(base.length) || '/' : url.pathname;
+  const pathname = appPath.endsWith('/') ? appPath : \`\${appPath}/\`;
+  const destination = routes.redirects[pathname];
+  if (destination) redirect(308, \`\${base}\${destination}\`);
+  if (!routes.all.includes(pathname)) error(404);
+  await prepareHostVault(pathname);
+  return { svartzStylesheets: hostStylesheets(pathname).map((file) => \`\${assets}/\${file}\`) };
+};
+
+export const entries: EntryGenerator = async () => routes.all
+  .map((pathname) => ({ slug: pathname.replace(/^\\/+|\\/+$/g, '') }));
+`;
+  await writeFile(catchall, notFoundBeforePrepare);
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
+  expect(await readFile(catchall, "utf8"))
+    .toContain("await prepareHostVault(pathname);\n  if (!routes.all.includes(pathname)) error(404);");
+
   const custom = "export const load = () => ({ custom: true });\n";
   await writeFile(catchall, custom);
   expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("already-configured");
@@ -501,7 +524,12 @@ it("upgrades generated host routes to link SSR styles without changing custom ro
     .replace("  import type { PageData } from './$types';\n", "")
     .replace("  let { data }: { data: PageData } = $props();\n", "")
     .replace(/\n<svelte:head>[\s\S]*?<\/svelte:head>\n/, ""));
+  // The loader as shipped before styles: it raised the 404 before preparing the theme.
   await writeFile(loadPath, load
+    .replace(
+      "  await prepareHostVault(pathname);\n  if (!routes.all.includes(pathname)) error(404);\n",
+      "  if (!routes.all.includes(pathname)) error(404);\n  await prepareHostVault(pathname);\n",
+    )
     .replace("{ assets, base }", "{ base }")
     .replace("hostStylesheets, ", "")
     .replace(/  return \{ svartzStylesheets:.*\n/, ""));
