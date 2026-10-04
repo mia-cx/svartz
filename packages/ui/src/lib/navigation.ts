@@ -1,7 +1,7 @@
 export interface UiIndexEntry {
 	readonly slug: string;
 	readonly href?: string;
-	/** Vault-relative source path. Finds a folder's `index.md` whatever slug it published under. */
+	/** Vault-relative source path. Finds a folder's `index.md` or `_index.md` whatever its published slug. */
 	readonly path?: string;
 	readonly title: string;
 }
@@ -44,7 +44,7 @@ export function titleFromSlugSegment(segment: string): string {
 	return segment.replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-const INDEX_FILE = /(?:^|[\\/])index\.[^\\/]+$/i;
+const INDEX_FILE = /(?:^|[\\/])_?index\.[^\\/]+$/i;
 
 /** The folder holding `folder`, or `undefined` at the vault root. */
 const parentFolder = (folder: string) => (folder.includes('/') ? folder.slice(0, folder.lastIndexOf('/')) : undefined);
@@ -52,7 +52,7 @@ const parentFolder = (folder: string) => (folder.includes('/') ? folder.slice(0,
 export interface FolderLayout<T> {
 	/** The folder the note's file sits in, or `undefined` at the vault root. */
 	folderOf(slug: string): string | undefined;
-	/** The folder's own note, its `index.md`. */
+	/** The folder's own note, its `index.md` or `_index.md`. */
 	noteOf(folder: string): T | undefined;
 }
 

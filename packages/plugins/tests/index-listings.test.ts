@@ -36,11 +36,16 @@ it("indexes ancestor folders and unique tags from published files", () => {
   expect(ctx.index?.routes.notes).toContain("/blog/guides/");
 });
 
-it("lists physical folder members after canonical and host route collisions", () => {
+it.each([
+  ["index.md", false],
+  ["index.md", true],
+  ["_index.md", false],
+  ["_index.md", true],
+])("lists physical folder members for %s (root collision: %s)", (filename, rootCollision) => {
   for (const reservedRoutes of [new Set<string>(), new Set(["guides"])]) {
     const files = [
-      { path: "guides.md", slug: "guides", extension: ".md", content: "# Root guide", frontmatter: { title: "Root guide" } },
-      { path: "Guides/index.md", slug: "guides", extension: ".md", content: "# Folder landing", frontmatter: { title: "Field guides" } },
+      ...(rootCollision ? [{ path: "guides.md", slug: "guides", extension: ".md", content: "# Root guide", frontmatter: { title: "Root guide" } }] : []),
+      { path: `Guides/${filename}`, slug: "guides", extension: ".md", content: "# Folder landing", frontmatter: { title: "Field guides" } },
       { path: "Guides/deep.md", slug: "guides/deep", extension: ".md", content: "# Deep guide" },
     ];
     allocateRoutes(files, reservedRoutes);
@@ -56,10 +61,10 @@ it("lists physical folder members after canonical and host route collisions", ()
     indexContent().indexContent!.run(ctx);
 
     const folder = ctx.index!.folders.find((item) => item.slug === "guides")!;
-    const landingSlug = files.find((file) => file.path === "Guides/index.md")!.slug;
-    const rootSlug = files.find((file) => file.path === "guides.md")!.slug;
+    const landingSlug = files.find((file) => file.path === `Guides/${filename}`)!.slug;
+    const rootSlug = files.find((file) => file.path === "guides.md")?.slug;
     expect(folder.noteSlugs).toEqual([landingSlug, "guides/deep"].sort());
-    expect(folder.noteSlugs).not.toContain(rootSlug);
+    if (rootSlug) expect(folder.noteSlugs).not.toContain(rootSlug);
     expect(folder.noteCount).toBe(2);
     // The folder note's title renames the folder; the root note's doesn't.
     expect(folder.title).toBe("Field guides");

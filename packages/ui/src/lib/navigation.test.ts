@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildBreadcrumbs, buildExplorerTree, folderBreadcrumbs, folderLayout, openFolderIds } from './navigation.js';
+import { folderContents, topLevelSections } from './listing.js';
 
 const note = (slug: string, path: string, title = slug) => ({ slug, path, title, href: `/${slug}/` });
 const folder = (slug: string, title: string, noteSlugs: string[]) => ({
@@ -20,6 +21,31 @@ const collided = [
 const collidedFolders = [folder('guides', 'Field guides', ['guides-2', 'guides/setup'])];
 
 describe('folderLayout', () => {
+	it.each(['guides', 'guides-2'])('recognizes _index.md published as %s', (slug) => {
+		const landing = note(slug, 'Guides/_index.md', 'Field guides');
+		const entries = [
+			...(slug === 'guides-2' ? [note('guides', 'guides.md', 'Root guide')] : []),
+			landing,
+			note('guides/setup', 'Guides/setup.md', 'Setup')
+		];
+		const folders = [folder('guides', 'Field guides', [slug, 'guides/setup'])];
+		expect(folderLayout(entries, folders).noteOf('guides')).toBe(landing);
+		const tree = buildExplorerTree(entries, folders);
+		expect(tree[0]?.href).toBe(landing.href);
+		expect(tree[0]?.children.map((entry) => entry.id)).toEqual(['note:guides/setup']);
+		expect(buildBreadcrumbs(slug, entries, '/', folders)).toEqual([
+			{ title: 'Home', href: '/' },
+			{ title: 'Field guides', href: landing.href }
+		]);
+		expect(folderContents('guides', entries, folders).notes.map((entry) => entry.slug)).toEqual(['guides/setup']);
+		expect(topLevelSections(entries, folders).find((section) => section.slug === 'guides')).toMatchObject({
+			slug: 'guides',
+			title: 'Field guides',
+			href: landing.href,
+			entries: [entries.at(-1)]
+		});
+	});
+
 	it('places notes by file, whatever slug they published under', () => {
 		const layout = folderLayout(collided, collidedFolders);
 		expect(layout.folderOf('guides-2')).toBe('guides');

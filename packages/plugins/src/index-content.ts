@@ -37,8 +37,8 @@ function folderSlugsFromPath(path: string): string[] {
   return segments.map((_, index) => segments.slice(0, index + 1).join("/"));
 }
 
-/** A folder's own note: `guides/index.md` names and introduces `guides`. */
-const INDEX_FILE = /(?:^|[\\/])index\.[^\\/]+$/i;
+/** A folder's own note: `guides/index.md` or `guides/_index.md` names and introduces `guides`. */
+const INDEX_FILE = /(?:^|[\\/])_?index\.[^\\/]+$/i;
 
 function folderTitle(slug: string): string {
   return slug
