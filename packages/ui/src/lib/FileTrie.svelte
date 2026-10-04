@@ -1,7 +1,8 @@
 <script lang="ts">
 	import {
 		buildExplorerTree,
-		ancestorFolderIdsForSlug,
+		folderLayout,
+		openFolderIds,
 		type ExplorerNode,
 		type UiIndexEntry,
 		type UiFolderEntry
@@ -19,7 +20,9 @@
 	} = $props();
 	const tree = $derived(buildExplorerTree(entries, folders));
 
-	const forceOpenIds = $derived(ancestorFolderIdsForSlug(currentSlug));
+	const forceOpenIds = $derived(
+		openFolderIds(currentSlug === undefined ? undefined : folderLayout(entries, folders).folderOf(currentSlug))
+	);
 	let storedOpenIds = $state<string[]>(explorerOpenIds.get());
 	$effect(() => {
 		const unsub = explorerOpenIds.subscribe((v) => {

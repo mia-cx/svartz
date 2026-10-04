@@ -98,25 +98,29 @@ describe('apiNav', () => {
 	const note = (slug: string, properties: Record<string, unknown> = {}) => ({
 		slug,
 		title: slug.split('/').at(-1)!,
+		path: `${slug}.md`,
 		href: `/${slug}/`,
 		properties
 	});
+	/** The index's folders, each listing the notes whose files sit inside it. */
+	const foldersOf = (notes: readonly { slug: string; path: string }[], ...folders: [slug: string, title: string][]) =>
+		folders.map(([slug, title]) => ({
+			slug,
+			title,
+			href: `/folders/${slug}/`,
+			noteSlugs: notes.filter((item) => item.path.startsWith(`${slug}/`)).map((item) => item.slug)
+		}));
 
 	it('puts guides first, then resources with models before operations in path and method order', () => {
-		const nav = apiNav(
-			[
-				note('index'),
-				note('guides/authentication'),
-				note('pets/delete-pet', { operation: { protocol: 'rest', method: 'delete', path: '/pets/{id}' } }),
-				note('pets/list-pets', { operation: { protocol: 'rest', method: 'get', path: '/pets' } }),
-				note('pets/get-pet', { operation: { protocol: 'rest', method: 'get', path: '/pets/{id}' } }),
-				note('pets/pet', { model: { name: 'Pet', schema: { type: 'object' } } })
-			],
-			[
-				{ slug: 'guides', title: 'Guides', href: '/folders/guides/' },
-				{ slug: 'pets', title: 'Pets', href: '/folders/pets/' }
-			]
-		);
+		const notes = [
+			note('index'),
+			note('guides/authentication'),
+			note('pets/delete-pet', { operation: { protocol: 'rest', method: 'delete', path: '/pets/{id}' } }),
+			note('pets/list-pets', { operation: { protocol: 'rest', method: 'get', path: '/pets' } }),
+			note('pets/get-pet', { operation: { protocol: 'rest', method: 'get', path: '/pets/{id}' } }),
+			note('pets/pet', { model: { name: 'Pet', schema: { type: 'object' } } })
+		];
+		const nav = apiNav(notes, foldersOf(notes, ['guides', 'Guides'], ['pets', 'Pets']));
 		expect(nav.map((section) => [section.title, section.entries.map((entry) => entry.slug.split('/')[1])])).toEqual([
 			['Guides', ['authentication']],
 			['Pets', ['pet', 'list-pets', 'get-pet', 'delete-pet']]
@@ -124,13 +128,12 @@ describe('apiNav', () => {
 	});
 
 	it('names and links a section with its folder note, and leaves that note out of the list', () => {
-		const nav = apiNav(
-			[
-				{ ...note('graphql'), title: 'GraphQL' },
-				note('graphql/pet', { operation: { protocol: 'graphql', kind: 'query', name: 'pet' } })
-			],
-			[{ slug: 'graphql', title: 'Graphql', href: '/folders/graphql/' }]
-		);
+		const notes = [
+			{ ...note('graphql'), title: 'GraphQL', path: 'graphql/index.md' },
+			note('graphql/pet', { operation: { protocol: 'graphql', kind: 'query', name: 'pet' } })
+		];
+		// The index titles a folder after its folder note.
+		const nav = apiNav(notes, foldersOf(notes, ['graphql', 'GraphQL']));
 		expect(nav.map((section) => [section.slug, section.title, section.href, section.entries.length])).toEqual([
 			['graphql', 'GraphQL', '/graphql/', 1]
 		]);

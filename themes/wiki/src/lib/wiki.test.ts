@@ -105,9 +105,9 @@ describe('sectionMenu', () => {
 });
 
 describe('inFolder', () => {
-	it("matches a folder's note and everything under it, however deep", () => {
+	it('matches the folder and every folder under it, however deep', () => {
 		expect(inFolder('folder:characters', 'characters')).toBe(true);
-		expect(inFolder('folder:characters', 'characters/lamplighters/wardens/ada')).toBe(true);
+		expect(inFolder('folder:characters', 'characters/lamplighters/wardens')).toBe(true);
 		expect(inFolder('folder:characters', 'characters-old/ada')).toBe(false);
 		expect(inFolder('folder:characters', undefined)).toBe(false);
 	});

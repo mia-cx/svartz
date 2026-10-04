@@ -39,8 +39,8 @@ it("indexes ancestor folders and unique tags from published files", () => {
 it("lists physical folder members after canonical and host route collisions", () => {
   for (const reservedRoutes of [new Set<string>(), new Set(["guides"])]) {
     const files = [
-      { path: "guides.md", slug: "guides", extension: ".md", content: "# Root guide" },
-      { path: "Guides/index.md", slug: "guides", extension: ".md", content: "# Folder landing" },
+      { path: "guides.md", slug: "guides", extension: ".md", content: "# Root guide", frontmatter: { title: "Root guide" } },
+      { path: "Guides/index.md", slug: "guides", extension: ".md", content: "# Folder landing", frontmatter: { title: "Field guides" } },
       { path: "Guides/deep.md", slug: "guides/deep", extension: ".md", content: "# Deep guide" },
     ];
     allocateRoutes(files, reservedRoutes);
@@ -61,6 +61,8 @@ it("lists physical folder members after canonical and host route collisions", ()
     expect(folder.noteSlugs).toEqual([landingSlug, "guides/deep"].sort());
     expect(folder.noteSlugs).not.toContain(rootSlug);
     expect(folder.noteCount).toBe(2);
+    // The folder note's title renames the folder; the root note's doesn't.
+    expect(folder.title).toBe("Field guides");
   }
 });
 

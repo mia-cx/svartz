@@ -37,6 +37,9 @@ function folderSlugsFromPath(path: string): string[] {
   return segments.map((_, index) => segments.slice(0, index + 1).join("/"));
 }
 
+/** A folder's own note: `guides/index.md` names and introduces `guides`. */
+const INDEX_FILE = /(?:^|[\\/])index\.[^\\/]+$/i;
+
 function folderTitle(slug: string): string {
   return slug
     .split("/")
@@ -101,6 +104,7 @@ export const indexContent = definePlugin(() => ({
       const search: SearchDocument[] = [];
       const tagCounts = new Map<string, number>();
       const folderMembers = new Map<string, string[]>();
+      const folderTitles = new Map<string, string>();
       const noteRouteSet = new Set<string>();
       const publicAssetPaths = ctx.meta.get("svartz:publicAssetPaths") as ReadonlySet<string> | undefined;
       const assetRecords = ctx.files
@@ -231,10 +235,16 @@ export const indexContent = definePlugin(() => ({
         }
 
         if (!file.protection?.hidden) {
-          for (const folderSlug of folderSlugsFromPath(file.path)) {
+          const folderSlugs = folderSlugsFromPath(file.path);
+          for (const folderSlug of folderSlugs) {
             const members = folderMembers.get(folderSlug) ?? [];
             members.push(file.slug);
             folderMembers.set(folderSlug, members);
+          }
+          // The folder note's frontmatter title renames its folder.
+          const own = folderSlugs.at(-1);
+          if (own && INDEX_FILE.test(file.path) && typeof fmTitle === "string" && fmTitle.length > 0) {
+            folderTitles.set(own, fmTitle);
           }
         }
 
@@ -296,7 +306,7 @@ export const indexContent = definePlugin(() => ({
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([slug, noteSlugs]) => ({
           slug,
-          title: folderTitle(slug),
+          title: folderTitles.get(slug) ?? folderTitle(slug),
           noteCount: noteSlugs.length,
           noteSlugs: noteSlugs.sort(),
           href: routeHref(`${routeConfig.folders}/${slug}`, mountPath),

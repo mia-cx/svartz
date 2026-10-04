@@ -5,10 +5,10 @@ import { pageCrumbs } from './crumbs.js';
 const vault = {
 	routes: { mountPath: '/notes' },
 	entries: [
-		{ slug: 'index', title: 'Home', href: '/notes/' },
-		{ slug: 'log/day-1', title: 'Day 1', href: '/notes/log/day-1/' }
+		{ slug: 'index', title: 'Home', path: 'index.md', href: '/notes/' },
+		{ slug: 'log/day-1', title: 'Day 1', path: 'log/day-1.md', href: '/notes/log/day-1/' }
 	],
-	folders: [{ slug: 'log', title: 'Log', noteCount: 1, href: '/notes/folders/log/' }],
+	folders: [{ slug: 'log', title: 'Log', noteCount: 1, noteSlugs: ['log/day-1'], href: '/notes/folders/log/' }],
 	tags: [{ slug: 'weather', title: 'weather', noteCount: 2, href: '/notes/tags/weather/' }]
 } as unknown as VaultView;
 

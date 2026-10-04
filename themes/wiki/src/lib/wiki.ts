@@ -146,11 +146,11 @@ export function sectionMenu(
 }
 
 /**
- * Whether the page `slug` is a menu folder's note or sits anywhere inside it
- * (`folder:characters` holds `characters/lamplighters/mirelle-ashford`). Pages past
- * the dropdown limit or deeper than a flyout still count.
+ * Whether the current page's folder is a menu folder or sits anywhere inside it
+ * (`folder:characters` holds `characters/lamplighters`). Pages past the dropdown
+ * limit or deeper than a flyout still count.
  */
-export function inFolder(folderId: string, slug: string | undefined): boolean {
+export function inFolder(folderId: string, current: string | undefined): boolean {
 	const folder = folderId.replace(/^folder:/, '');
-	return slug !== undefined && (slug === folder || slug.startsWith(`${folder}/`));
+	return current !== undefined && (current === folder || current.startsWith(`${folder}/`));
 }

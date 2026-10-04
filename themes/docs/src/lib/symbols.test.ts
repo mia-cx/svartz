@@ -72,9 +72,20 @@ describe('grouping', () => {
 	const entry = (slug: string, kind?: string) => ({
 		slug,
 		title: slug.split('/').at(-1)!,
+		path: `${slug}.md`,
 		href: `/${slug}/`,
 		properties: kind ? { symbol: { kind, name: slug.split('/').at(-1) } } : {}
 	});
+	/** `folder/index.md`; its title is also the folder's, as the index records it. */
+	const folderNote = (folder: string, title: string) => ({ ...entry(folder), title, path: `${folder}/index.md` });
+	/** The index's folders, each listing the entries whose files sit inside it. */
+	const foldersOf = (entries: readonly { slug: string; path: string }[], ...folders: [slug: string, title: string][]) =>
+		folders.map(([slug, title]) => ({
+			slug,
+			title,
+			href: `/folders/${slug}/`,
+			noteSlugs: entries.filter((item) => item.path.startsWith(`${slug}/`)).map((item) => item.slug)
+		}));
 
 	it('groups a module’s symbols by kind in reference order', () => {
 		const groups = groupByKind([entry('core/b', 'function'), entry('core/A', 'class'), entry('core/a', 'function'), entry('core/guide')]);
@@ -85,17 +96,14 @@ describe('grouping', () => {
 	});
 
 	it('builds sidebar sections: guides first, then one section per module', () => {
-		const nav = symbolNav([
+		const entries = [
 			entry('index'),
 			entry('guides/start'),
 			entry('core/defineTheme', 'function'),
 			entry('core/SvartzTheme', 'interface'),
 			entry('vite/withSvartzHost', 'function')
-		], [
-			{ slug: 'guides', title: 'Guides', href: '/folders/guides/' },
-			{ slug: 'core', title: 'core', href: '/folders/core/' },
-			{ slug: 'vite', title: 'vite', href: '/folders/vite/' }
-		]);
+		];
+		const nav = symbolNav(entries, foldersOf(entries, ['guides', 'Guides'], ['core', 'core'], ['vite', 'vite']));
 		expect(nav.map((section) => [section.title, section.symbols, section.entries.length])).toEqual([
 			['Guides', false, 1],
 			['core', true, 2],
@@ -104,9 +112,8 @@ describe('grouping', () => {
 	});
 
 	it('sorts the root section first even when a folder note is titled Overview', () => {
-		const nav = symbolNav([{ ...entry('guides'), title: 'Overview' }, entry('guides/start'), entry('about')], [
-			{ slug: 'guides', title: 'guides', href: '/folders/guides/' }
-		]);
+		const entries = [folderNote('guides', 'Overview'), entry('guides/start'), entry('about')];
+		const nav = symbolNav(entries, foldersOf(entries, ['guides', 'Overview']));
 		expect(nav.map((section) => [section.slug, section.title])).toEqual([
 			['', 'Overview'],
 			['guides', 'Overview']
@@ -114,10 +121,8 @@ describe('grouping', () => {
 	});
 
 	it('names and links a module with its folder note, and keeps its guides', () => {
-		const nav = symbolNav(
-			[{ ...entry('core'), title: 'Core API' }, entry('core/defineTheme', 'function'), entry('core/migration')],
-			[{ slug: 'core', title: 'core', href: '/folders/core/' }]
-		);
+		const entries = [folderNote('core', 'Core API'), entry('core/defineTheme', 'function'), entry('core/migration')];
+		const nav = symbolNav(entries, foldersOf(entries, ['core', 'Core API']));
 		expect(nav.map((section) => [section.title, section.href, section.pages.map((page) => page.title)])).toEqual([
 			['Core API', '/core/', ['migration']]
 		]);

@@ -1,6 +1,9 @@
+import { folderLayout } from './navigation.js';
+
 interface Listable {
 	readonly slug: string;
 	readonly title: string;
+	readonly path?: string;
 	readonly tags: readonly string[];
 	// Artifacts carry ISO strings; tests and hosts may pass Dates.
 	readonly modifiedAt?: Date | string;
@@ -10,11 +13,13 @@ interface Listable {
 
 interface Folder {
 	readonly slug: string;
+	readonly noteSlugs: readonly string[];
 }
 
 interface Linked {
 	readonly slug: string;
 	readonly title: string;
+	readonly path?: string;
 	readonly href: string;
 }
 
@@ -41,18 +46,20 @@ export function newestFirst<T extends Listable>(entries: readonly T[]): T[] {
 
 /**
  * Every note under a folder, nested ones included, plus its direct subfolders.
- * The folder's own note (`log/index.md`, published as `log`) is its page, not an item.
+ * The folder's own note (`log/index.md`) is its page, not an item.
  */
 export function folderContents<T extends Listable, F extends Folder>(
 	slug: string,
 	entries: readonly T[],
 	folders: readonly F[]
 ): { notes: T[]; folders: F[] } {
+	const members = new Set(folders.find((folder) => folder.slug === slug)?.noteSlugs);
+	const own = folderLayout(entries, folders).noteOf(slug);
 	const prefix = `${slug}/`;
 	const isDirect = (candidate: string) =>
 		candidate.startsWith(prefix) && !candidate.slice(prefix.length).includes('/');
 	return {
-		notes: newestFirst(entries.filter((entry) => entry.slug.startsWith(prefix))),
+		notes: newestFirst(entries.filter((entry) => members.has(entry.slug) && entry !== own)),
 		folders: folders.filter((folder) => isDirect(folder.slug))
 	};
 }
@@ -60,7 +67,7 @@ export function folderContents<T extends Listable, F extends Folder>(
 export interface FolderSection<T> {
 	/** The top-level folder, or `""` for notes at the vault root. */
 	readonly slug: string;
-	/** The folder note's title, else the folder's. `""` for the root. */
+	/** The folder's title (its `index.md` can rename it). `""` for the root. */
 	readonly title: string;
 	/** The folder note, else the generated folder page. */
 	readonly href?: string;
@@ -69,31 +76,27 @@ export interface FolderSection<T> {
 
 /**
  * Notes grouped by top-level folder, in first-seen order, without the home note.
- * A folder note (`guides/index.md`, published as `guides`) names and links its
- * section instead of listing in it; a folder with only its note is an empty section.
+ * A folder note (`guides/index.md`) links its section instead of listing in it;
+ * a folder with only its note is an empty section.
  */
 export function topLevelSections<T extends Linked>(
 	entries: readonly T[],
-	folders: readonly Linked[]
+	folders: readonly (Linked & Folder)[]
 ): FolderSection<T>[] {
-	const folderNotes = new Map<string, T>();
+	const layout = folderLayout(entries, folders);
 	const sections = new Map<string, T[]>();
 	for (const entry of entries) {
 		if (entry.slug === 'index') continue;
-		const nested = entry.slug.includes('/');
-		if (!nested && folders.some((folder) => folder.slug === entry.slug)) {
-			folderNotes.set(entry.slug, entry);
-			// Holds the section's place even if the folder has no other notes.
-			if (!sections.has(entry.slug)) sections.set(entry.slug, []);
-			continue;
-		}
-		const key = nested ? entry.slug.split('/')[0]! : '';
-		sections.set(key, [...(sections.get(key) ?? []), entry]);
+		const key = layout.folderOf(entry.slug)?.split('/')[0] ?? '';
+		// The folder note holds its section's place even if the folder has no other notes.
+		const grouped = sections.get(key) ?? [];
+		sections.set(key, grouped);
+		if (!key || layout.noteOf(key) !== entry) grouped.push(entry);
 	}
 	return [...sections].map(([slug, grouped]) => {
-		const note = folderNotes.get(slug);
+		const note = slug ? layout.noteOf(slug) : undefined;
 		const folder = slug ? folders.find((candidate) => candidate.slug === slug) : undefined;
-		return { slug, title: note?.title ?? folder?.title ?? slug, href: note?.href ?? folder?.href, entries: grouped };
+		return { slug, title: folder?.title ?? slug, href: note?.href ?? folder?.href, entries: grouped };
 	});
 }
 

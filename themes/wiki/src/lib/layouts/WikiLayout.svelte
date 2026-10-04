@@ -18,6 +18,7 @@
 		Comments,
 		count,
 		DescText,
+		folderLayout,
 		formatDate,
 		isoDate,
 		LinkPreviews,
@@ -59,7 +60,14 @@
 	const comments = $derived(entry?.page.comments ? settings.comments : undefined);
 	const menu = $derived(sectionMenu(buildExplorerTree(vault.entries, vault.folders), vault.folders));
 	// A note page, or a folder page, marks its section in the bar and the drawer.
-	const currentSlug = $derived(entry?.slug ?? (match?.route.id === 'folder' ? match.params.slug : undefined));
+	// The folder the page belongs to, which highlights its section in the menu.
+	const currentFolder = $derived(
+		entry
+			? folderLayout(vault.entries, vault.folders).folderOf(entry.slug)
+			: match?.route.id === 'folder'
+				? match.params.slug
+				: undefined
+	);
 
 	const portal = $derived([
 		{ label: 'Main page', href: homeHref },
@@ -100,14 +108,14 @@
 	<a class="sv-wordmark" href={homeHref}>{site.title}</a>
 	<div class="search"><SearchDialog documents={vault.search} {searchIndex} {searchOptions} /></div>
 	<ColorModeToggle />
-	{#if menu.length > 0}<div class="section-bar"><SectionBar {menu} currentPath={page.url.pathname} {currentSlug} /></div>{/if}
+	{#if menu.length > 0}<div class="section-bar"><SectionBar {menu} currentPath={page.url.pathname} {currentFolder} /></div>{/if}
 	</div>
 </header>
 
 <div class="wiki">
 	<aside class="rail" id="wiki-rail" data-open={drawer ? '' : undefined} aria-label="Site">
 		{#if menu.length > 0}
-			<div class="drawer-only"><DrawerMenu {menu} currentPath={page.url.pathname} {currentSlug} bind:trail={drawerTrail} /></div>
+			<div class="drawer-only"><DrawerMenu {menu} currentPath={page.url.pathname} {currentFolder} bind:trail={drawerTrail} /></div>
 		{/if}
 		<div class="rail-root" class:drilled={drawerTrail.length > 0}>
 		<nav class="portal" aria-labelledby="portal-heading">
