@@ -17,7 +17,8 @@
 	const PAGE_SIZE = 9;
 
 	let tag = $state<string>();
-	let shown = $state(PAGE_SIZE);
+	// Every post until mount, so static HTML lists them all; then a page at a time.
+	let shown = $state(Infinity);
 
 	const tags = $derived(
 		[...new Set(posts.flatMap((post) => post.tags))].sort((left, right) => left.localeCompare(right))
@@ -35,6 +36,7 @@
 	}
 
 	onMount(() => {
+		shown = PAGE_SIZE;
 		const initial = new URL(location.href).searchParams.get('tag');
 		if (initial && tags.includes(initial)) tag = initial;
 	});
