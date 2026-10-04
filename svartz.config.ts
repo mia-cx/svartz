@@ -1,4 +1,5 @@
 import { defineConfig } from "@svartz/config";
+import { presentation } from "@svartz/plugins";
 
 export default defineConfig({
   version: "1.0.0",
@@ -21,6 +22,8 @@ export default defineConfig({
       // Kitchen-sink vault: every OFM feature a theme must render.
       id: "showcase",
       path: "vaults/showcase",
+      // Press P on a note to present it; reference/slides is a demo deck.
+      plugins: [presentation()],
       target: {
         type: "static",
       },
