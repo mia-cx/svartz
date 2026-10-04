@@ -1,4 +1,4 @@
-import { isRecord, topLevelSections } from '@svartz/ui';
+import { isRecord, topLevelSections, type UiFolderEntry } from '@svartz/ui';
 
 type Properties = Readonly<Record<string, unknown>>;
 
@@ -304,12 +304,12 @@ function navRank(entry: NavEntry): [number, string, number] {
 
 /**
  * The sidebar: one section per top-level folder, guides before resources.
- * A folder note (`graphql/index.md`, published as `graphql`) names and links
- * its section: `GraphQL`, not the slug's `Graphql`.
+ * A folder note (`graphql/index.md`) names and links its section: `GraphQL`,
+ * not the slug's `Graphql`.
  */
 export function apiNav<T extends NavEntry>(
 	entries: readonly T[],
-	folders: readonly { readonly slug: string; readonly title: string; readonly href: string }[]
+	folders: readonly Pick<UiFolderEntry, 'slug' | 'title' | 'href' | 'noteSlugs' | 'noteSlug'>[]
 ): ApiNavSection<T>[] {
 	const compare = (left: T, right: T) => {
 		const [leftGroup, leftKey, leftOrder] = navRank(left);

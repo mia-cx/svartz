@@ -1,5 +1,5 @@
 import type { IndexEntry, VaultView } from '@svartz/core';
-import { buildBreadcrumbs, type Breadcrumb } from './navigation.js';
+import { buildBreadcrumbs, folderBreadcrumbs, type Breadcrumb } from './navigation.js';
 import type { ThemeRouteMatch } from './runtime/theme-props.js';
 
 /** The URL of a tag's page, including the mount path, for tags the index knows or not. */
@@ -30,7 +30,7 @@ export function pageCrumbs(
 	}
 	const id = match?.route.id;
 	const slug = match?.params.slug;
-	if (id === 'folder' && slug) return buildBreadcrumbs(slug, vault.entries, home, vault.folders);
+	if (id === 'folder' && slug) return folderBreadcrumbs(slug, vault.entries, home, vault.folders);
 	const title = id ? titles[id] : undefined;
 	if (!title) return [];
 

@@ -24,7 +24,7 @@ it("indexes ancestor folders and unique tags from published files", () => {
 
   indexContent().indexContent!.run(ctx);
   expect(ctx.index?.folders).toEqual([
-    { slug: "guides", title: "Guides", noteCount: 3, noteSlugs: ["guides", "guides/deep/one", "guides/deep/two"], href: "/blog/folders/guides/" },
+    { slug: "guides", title: "Guides", noteCount: 3, noteSlugs: ["guides", "guides/deep/one", "guides/deep/two"], noteSlug: "guides", href: "/blog/folders/guides/" },
     { slug: "guides/deep", title: "Deep", noteCount: 2, noteSlugs: ["guides/deep/one", "guides/deep/two"], href: "/blog/folders/guides/deep/" },
   ]);
   expect(ctx.index?.tags).toEqual([
@@ -36,11 +36,16 @@ it("indexes ancestor folders and unique tags from published files", () => {
   expect(ctx.index?.routes.notes).toContain("/blog/guides/");
 });
 
-it("lists physical folder members after canonical and host route collisions", () => {
+it.each([
+  ["index.md", false],
+  ["index.md", true],
+  ["_index.md", false],
+  ["_index.md", true],
+])("lists physical folder members for %s (root collision: %s)", (filename, rootCollision) => {
   for (const reservedRoutes of [new Set<string>(), new Set(["guides"])]) {
     const files = [
-      { path: "guides.md", slug: "guides", extension: ".md", content: "# Root guide" },
-      { path: "Guides/index.md", slug: "guides", extension: ".md", content: "# Folder landing" },
+      ...(rootCollision ? [{ path: "guides.md", slug: "guides", extension: ".md", content: "# Root guide", frontmatter: { title: "Root guide" } }] : []),
+      { path: `Guides/${filename}`, slug: "guides", extension: ".md", content: "# Folder landing", frontmatter: { title: "Field guides" } },
       { path: "Guides/deep.md", slug: "guides/deep", extension: ".md", content: "# Deep guide" },
     ];
     allocateRoutes(files, reservedRoutes);
@@ -56,11 +61,39 @@ it("lists physical folder members after canonical and host route collisions", ()
     indexContent().indexContent!.run(ctx);
 
     const folder = ctx.index!.folders.find((item) => item.slug === "guides")!;
-    const landingSlug = files.find((file) => file.path === "Guides/index.md")!.slug;
-    const rootSlug = files.find((file) => file.path === "guides.md")!.slug;
+    const landingSlug = files.find((file) => file.path === `Guides/${filename}`)!.slug;
+    const rootSlug = files.find((file) => file.path === "guides.md")?.slug;
     expect(folder.noteSlugs).toEqual([landingSlug, "guides/deep"].sort());
-    expect(folder.noteSlugs).not.toContain(rootSlug);
+    if (rootSlug) expect(folder.noteSlugs).not.toContain(rootSlug);
     expect(folder.noteCount).toBe(2);
+    expect(folder.noteSlug).toBe(landingSlug);
+    // The folder note's title renames the folder; the root note's doesn't.
+    expect(folder.title).toBe("Field guides");
+  }
+});
+
+it("names the index file that kept the folder's URL as the folder note", () => {
+  const files = [
+    { path: "Guides/index.md", slug: "guides", extension: ".md", content: "# Landing", frontmatter: { title: "Field guides" } },
+    { path: "Guides/index.mdx", slug: "guides", extension: ".mdx", content: "# Other", frontmatter: { title: "Other" } },
+  ];
+  allocateRoutes(files, new Set());
+  // Whichever file the index reads first, the one holding `guides` wins.
+  for (const ordered of [files, [...files].reverse()]) {
+    const ctx = {
+      config: {
+        id: "blog", mountPath: "/blog", theme: { base: "minimal" },
+        frontmatter: { titleField: "title", tagsField: "tags", aliasesField: "aliases", descriptionField: "description", createdAtField: "created_at", updatedAtField: "updated_at", publishedField: "published_at" },
+        discovery: { dateSources: ["filesystem"] },
+      } as ResolvedConfig,
+      files: ordered,
+      meta: new Map(),
+    } as unknown as PluginContext;
+    indexContent().indexContent!.run(ctx);
+    const folder = ctx.index!.folders.find((item) => item.slug === "guides")!;
+    const canonical = files.find((file) => file.slug === "guides")!;
+    expect(folder.noteSlug).toBe("guides");
+    expect(folder.title).toBe(canonical.frontmatter.title);
   }
 });
 

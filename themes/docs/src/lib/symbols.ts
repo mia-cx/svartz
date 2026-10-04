@@ -1,4 +1,4 @@
-import { isRecord, topLevelSections } from '@svartz/ui';
+import { isRecord, topLevelSections, type UiFolderEntry } from '@svartz/ui';
 
 type Properties = Readonly<Record<string, unknown>>;
 
@@ -200,11 +200,11 @@ const isPageKind = (kind: SymbolKind | undefined) => (PAGE_KINDS as readonly (Sy
 /**
  * The sidebar: one section per top-level folder, guides before modules. Notes
  * at the vault root (other than the home note) form an Overview section. A
- * folder note (`core/index.md`, published as `core`) names and links its module.
+ * folder note (`core/index.md`) names and links its module.
  */
 export function symbolNav<T extends NavEntry>(
 	entries: readonly T[],
-	folders: readonly { readonly slug: string; readonly title: string; readonly href: string }[]
+	folders: readonly Pick<UiFolderEntry, 'slug' | 'title' | 'href' | 'noteSlugs' | 'noteSlug'>[]
 ): NavSection<T>[] {
 	return topLevelSections(entries, folders)
 		.map((section): NavSection<T> => {
