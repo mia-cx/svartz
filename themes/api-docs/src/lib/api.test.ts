@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { apiNav, exampleFromSchema, graphqlQuery, readModel, readOperation, readSchema, requestSnippets } from './api.js';
+import {
+	apiNav,
+	exampleFromSchema,
+	graphqlQuery,
+	readModel,
+	readOperation,
+	readSchema,
+	requestSnippets,
+	schemaLabel
+} from './api.js';
 
 const petSchema = {
 	type: 'object',
@@ -27,6 +36,13 @@ describe('readSchema', () => {
 		expect(schema.properties?.[2]?.schema.enum).toEqual(['available', 'adopted']);
 		expect(schema.properties?.[3]?.schema.items?.type).toBe('string');
 		expect(schema.properties?.[4]?.schema.ref).toBe('Owner');
+	});
+
+	it('keeps numeric and boolean enum values typed', () => {
+		const schema = readSchema({ type: 'integer', enum: [0, 1] })!;
+		expect(schema.enum).toEqual([0, 1]);
+		expect(schemaLabel(schema)).toBe('0 | 1');
+		expect(exampleFromSchema(readSchema({ enum: [true, false] })!, {})).toBe(true);
 	});
 });
 
@@ -181,6 +197,25 @@ describe('requestSnippets', () => {
 			"'https://api.example.com/pets/{petId}?limit={limit}'"
 		);
 	});
+
+	it('encodes apostrophes in URL examples and keeps body strings intact in Python', () => {
+		const operation = readOperation({
+			operation: {
+				protocol: 'rest',
+				method: 'post',
+				path: '/authors/{name}',
+				parameters: [{ name: 'name', in: 'path', type: 'string', required: true, example: "O'Reilly" }],
+				requestBody: { example: { note: 'true story', ok: true, gone: null } }
+			}
+		});
+		if (operation?.protocol !== 'rest') throw new Error('expected a REST operation');
+		const snippets = requestSnippets(operation, 'https://api.example.com', {});
+		expect(snippets.curl).toContain("curl -X POST 'https://api.example.com/authors/O%27Reilly'");
+		expect(snippets.javascript).toContain("fetch('https://api.example.com/authors/O%27Reilly'");
+		expect(snippets.python).toContain('"note": "true story"');
+		expect(snippets.python).toContain('"ok": True');
+		expect(snippets.python).toContain('"gone": None');
+	});
 });
 
 describe('graphqlQuery', () => {
@@ -200,5 +235,13 @@ describe('graphqlQuery', () => {
 		expect(graphqlQuery(operation)).toBe(
 			'mutation ($petId: ID!, $note: String) {\n  adoptPet(petId: $petId, note: $note) {\n    id\n  }\n}'
 		);
+	});
+
+	it('selects no fields from a scalar result', () => {
+		const operation = readOperation({
+			operation: { protocol: 'graphql', kind: 'mutation', name: 'deletePet', returns: 'Boolean!', args: [] }
+		});
+		if (operation?.protocol !== 'graphql') throw new Error('expected a GraphQL operation');
+		expect(graphqlQuery(operation)).toBe('mutation {\n  deletePet\n}');
 	});
 });

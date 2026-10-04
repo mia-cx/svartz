@@ -6,6 +6,8 @@ const text = (value: unknown) => (typeof value === 'string' && value.trim() ? va
 const scalarText = (value: unknown) =>
 	typeof value === 'number' || typeof value === 'boolean' ? String(value) : text(value);
 const records = (value: unknown) => (Array.isArray(value) ? value.filter(isRecord) : []);
+const isScalar = (value: unknown): value is string | number | boolean =>
+	typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 
 // --- Schemas ---------------------------------------------------------------
 
@@ -17,7 +19,8 @@ export interface SchemaNode {
 	readonly type?: string;
 	readonly format?: string;
 	readonly description?: string;
-	readonly enum?: readonly string[];
+	/** Values keep their JSON type: `enum: [0, 1]` stays numeric. */
+	readonly enum?: readonly (string | number | boolean)[];
 	readonly example?: unknown;
 	readonly nullable?: boolean;
 	readonly ref?: string;
@@ -49,7 +52,7 @@ export function readSchema(raw: unknown): SchemaNode | undefined {
 		type: text(raw.type),
 		format: text(raw.format),
 		description: text(raw.description),
-		enum: Array.isArray(raw.enum) ? raw.enum.map(scalarText).filter((item) => item !== undefined) : undefined,
+		enum: Array.isArray(raw.enum) ? raw.enum.filter(isScalar) : undefined,
 		example: raw.example,
 		nullable: raw.nullable === true,
 		ref,
@@ -351,6 +354,12 @@ export const SNIPPET_LANGUAGES: readonly { readonly id: SnippetLanguage; readonl
 	{ id: 'python', label: 'Python' }
 ];
 
+const PYTHON_KEYWORDS: Readonly<Record<string, string>> = { true: 'True', false: 'False', null: 'None' };
+
+/** JSON as a Python literal. String tokens match first, so `"true story"` keeps its text. */
+const pythonLiteral = (json: string) =>
+	json.replace(/"(?:[^"\\]|\\.)*"|\b(?:true|false|null)\b/g, (token) => PYTHON_KEYWORDS[token] ?? token);
+
 /** A request example body: the operation's example, else one generated from its schema. */
 export function requestBodyExample(operation: RestOperation, models: Readonly<Record<string, SchemaNode>>): unknown {
 	const body = operation.requestBody;
@@ -365,9 +374,12 @@ export function requestSnippets(
 	models: Readonly<Record<string, SchemaNode>>
 ): Record<SnippetLanguage, string> {
 	const valueOf = (parameter: ApiParameter) => parameter.example ?? `{${parameter.name}}`;
-	// Placeholders stay readable (`{petId}`), so only real examples are encoded.
+	// Placeholders stay readable (`{petId}`), so only real examples are encoded. Encoding
+	// covers `'` too, since the URL lands inside single-quoted shell and JavaScript strings.
 	const urlValue = (parameter: ApiParameter) =>
-		parameter.example === undefined ? valueOf(parameter) : encodeURIComponent(parameter.example);
+		parameter.example === undefined
+			? valueOf(parameter)
+			: encodeURIComponent(parameter.example).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 	const path = operation.parameters
 		.filter((parameter) => parameter.in === 'path')
 		.reduce((current, parameter) => current.replace(`{${parameter.name}}`, urlValue(parameter)), operation.path);
@@ -420,7 +432,7 @@ export function requestSnippets(
 		`response = requests.${method.toLowerCase()}(`,
 		`    "${url}",`,
 		...(pyHeaders.length ? ['    headers={', pyHeaders.map((line) => `    ${line}`).join(',\n'), '    },'] : []),
-		...(json ? [`    json=${json.replace(/\n/g, '\n    ').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False').replace(/\bnull\b/g, 'None')},`] : []),
+		...(json ? [`    json=${pythonLiteral(json).replace(/\n/g, '\n    ')},`] : []),
 		')',
 		'data = response.json()'
 	].join('\n');
@@ -428,11 +440,16 @@ export function requestSnippets(
 	return { curl, javascript, python };
 }
 
+const GRAPHQL_SCALARS = new Set(['Int', 'Float', 'String', 'Boolean', 'ID']);
+
 /** The note's example query, else one that declares each argument as a variable. */
 export function graphqlQuery(operation: GraphqlOperation): string {
 	if (operation.example?.query) return operation.example.query;
 	const { args } = operation;
 	const variables = args.length ? ` (${args.map((arg) => `$${arg.name}: ${arg.type}`).join(', ')})` : '';
 	const call = args.length ? `(${args.map((arg) => `${arg.name}: $${arg.name}`).join(', ')})` : '';
-	return `${operation.kind}${variables} {\n  ${operation.name}${call} {\n    id\n  }\n}`;
+	// GraphQL rejects a selection set on a scalar result.
+	const returned = operation.returns?.replace(/[[\]!]/g, '');
+	const selection = returned && GRAPHQL_SCALARS.has(returned) ? '' : ' {\n    id\n  }';
+	return `${operation.kind}${variables} {\n  ${operation.name}${call}${selection}\n}`;
 }
