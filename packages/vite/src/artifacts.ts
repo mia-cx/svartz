@@ -86,7 +86,10 @@ function createArtifactsVirtualModuleSource(
   const resourceUrls = browserResources.flatMap((resource, index) =>
     resource.kind === "asset" ? [`  ${JSON.stringify(resource.id)}: browserAsset${index},`] : [],
   ).join("\n");
-  const { favicon: _faviconSource, ...publicSiteConfig } = siteConfig;
+  const { favicon: _faviconSource, ...authoredSiteConfig } = siteConfig;
+  // Themes link the feed only when discovery emitted it; `discovery.feed.enabled: false` skips it.
+  const feed = artifacts.some((artifact) => artifact.key === "assets/rss.xml");
+  const publicSiteConfig = feed ? { ...authoredSiteConfig, feed } : authoredSiteConfig;
   const bridgeLoaders = protectedBridgeModules.map((module) =>
     `  ${JSON.stringify(module.id)}: () => import(${JSON.stringify(module.path)}),`,
   ).join("\n");

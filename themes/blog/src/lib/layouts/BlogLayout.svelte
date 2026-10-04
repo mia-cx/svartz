@@ -52,7 +52,7 @@
 	const neighbours = $derived(post ? adjacentPosts(post, posts) : {});
 	const related = $derived(post ? relatedPosts(post, posts) : []);
 	const comments = $derived(post?.page.comments ? settings.comments : undefined);
-	const rss = $derived(site.url ? `${mount}/rss.xml` : undefined);
+	const rss = $derived(site.feed ? `${mount}/rss.xml` : undefined);
 
 	let menu = $state(false);
 	afterNavigate(() => (menu = false));
