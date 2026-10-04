@@ -12,6 +12,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import {
 		ColorModeToggle,
+		Comments,
 		count,
 		DescText,
 		LinkPreviews,
@@ -39,6 +40,7 @@
 	const operation = $derived(entry ? readOperation(entry.properties) : undefined);
 	const model = $derived(entry ? readModel(entry.properties) : undefined);
 	const sections = $derived(apiNav(vault.entries, vault.folders));
+	const comments = $derived(entry?.page.comments ? settings.comments : undefined);
 
 	let drawer = $state(false);
 	afterNavigate(() => (drawer = false));
@@ -128,6 +130,8 @@
 		{:else}
 			<div class="single">{@render children?.()}</div>
 		{/if}
+
+		{#if comments}<div class="single"><Comments {...comments} /></div>{/if}
 
 		<footer class="page-foot">
 			<p>{site.title}{' · '}Published with <a href="https://github.com/mia-cx/svartz">Svartz</a></p>
