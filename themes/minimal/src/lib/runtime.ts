@@ -10,13 +10,14 @@ import FolderListPage from './pages/FolderListPage.svelte';
 import FolderPage from './pages/FolderPage.svelte';
 import NotFoundPage from './pages/NotFoundPage.svelte';
 import TagListPage from './pages/TagListPage.svelte';
+import TagPage from './pages/TagPage.svelte';
 
+// Every page is eager: a lazy page sharing modules with eager ones stalls the Vite build (#62).
 const modules: MinimalThemeModules = {
 	siteLayout: { default: SiteLayout },
-	// Eager: a lazy page sharing modules with eager ones stalls the Vite build (#62).
 	notFoundPage: { default: NotFoundPage },
 	tagListPage: { default: TagListPage },
-	tagPage: () => import('./pages/TagPage.svelte'),
+	tagPage: { default: TagPage },
 	folderListPage: { default: FolderListPage },
 	folderPage: { default: FolderPage },
 	feedPage: { default: FeedPage },
