@@ -49,4 +49,14 @@ describe("note embeds", () => {
     expect(source.content).toContain("```md\n[[dew-point]]\n```");
     expect(source.content).toContain('<a href="../attachments/diagram.svg">the diagram</a>');
   });
+
+  it("leaves escaped wikilinks and raw HTML attributes alone", () => {
+    const source = note("guide.md", "![[sensors]]");
+    const target = note("sensors.md", 'Type \\[[dew-point]] to link.\n\n<span title="[[dew-point]]">hover</span>');
+    transformEmbeds().transformEmbeds!.run(context([source, target, note("dew-point.md", "Dew.")]));
+
+    expect(source.content).toContain("\\[[dew-point]]");
+    expect(source.content).toContain('<span title="[[dew-point]]">hover</span>');
+    expect(source.content).not.toContain('href="dew-point/"');
+  });
 });
