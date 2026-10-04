@@ -46,7 +46,7 @@
 	const isFrontNote = $derived(entry?.slug === 'index');
 	const post = $derived(entry && !isFrontNote ? entry : undefined);
 	const meta = $derived(post ? readPost(post.properties, post.description) : undefined);
-	const cover = $derived(meta?.cover ? assetHref(vault, meta.cover) : undefined);
+	const cover = $derived(post && meta?.cover ? assetHref(vault, post, meta.cover) : undefined);
 	const date = $derived(post ? postDate(post) : undefined);
 	const posts = $derived(blogPosts(vault.entries));
 	const neighbours = $derived(post ? adjacentPosts(post, posts) : {});

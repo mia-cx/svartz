@@ -50,7 +50,7 @@
 	const infoboxImageName = $derived(
 		infobox?.image ?? (typeof entry?.properties.image === 'string' ? entry.properties.image : undefined)
 	);
-	const infoboxImage = $derived(infoboxImageName ? assetHref(vault, infoboxImageName) : undefined);
+	const infoboxImage = $derived(entry && infoboxImageName ? assetHref(vault, entry, infoboxImageName) : undefined);
 	const hatnote = $derived(entry ? readHatnote(entry.properties) : undefined);
 	const edited = $derived(entry ? noteDate(entry) : undefined);
 	const linksHere = $derived(entry ? (vault.note(entry.slug)?.backlinks ?? []) : []);

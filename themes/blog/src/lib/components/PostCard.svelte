@@ -7,7 +7,7 @@
 	let { post, vault, featured = false }: { post: IndexEntry; vault: VaultView; featured?: boolean } = $props();
 
 	const meta = $derived(readPost(post.properties, post.description));
-	const cover = $derived(meta.cover ? assetHref(vault, meta.cover) : undefined);
+	const cover = $derived(meta.cover ? assetHref(vault, post, meta.cover) : undefined);
 	const date = $derived(postDate(post));
 </script>
 
