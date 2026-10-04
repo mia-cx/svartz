@@ -11,17 +11,24 @@
 
 	let {
 		entries = [],
-		folders = [],
+		folders,
 		currentSlug
 	}: {
 		entries?: readonly UiIndexEntry[];
-		folders?: readonly UiFolderEntry[];
+		/** The index's folders. They place notes in the tree; without them every note sits at the root. */
+		folders: readonly UiFolderEntry[];
+		/** The page being viewed: a note's slug, or a folder's slug on its folder page. */
 		currentSlug?: string;
 	} = $props();
 	const tree = $derived(buildExplorerTree(entries, folders));
 
+	// Open the current note's folder, or the current folder page's own folder.
 	const forceOpenIds = $derived(
-		openFolderIds(currentSlug === undefined ? undefined : folderLayout(entries, folders).folderOf(currentSlug))
+		openFolderIds(
+			currentSlug !== undefined && entries.some((entry) => entry.slug === currentSlug)
+				? folderLayout(entries, folders).folderOf(currentSlug)
+				: currentSlug
+		)
 	);
 	let storedOpenIds = $state<string[]>(explorerOpenIds.get());
 	$effect(() => {

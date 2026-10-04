@@ -204,7 +204,7 @@ const isPageKind = (kind: SymbolKind | undefined) => (PAGE_KINDS as readonly (Sy
  */
 export function symbolNav<T extends NavEntry>(
 	entries: readonly T[],
-	folders: readonly Pick<UiFolderEntry, 'slug' | 'title' | 'href' | 'noteSlugs'>[]
+	folders: readonly Pick<UiFolderEntry, 'slug' | 'title' | 'href' | 'noteSlugs' | 'noteSlug'>[]
 ): NavSection<T>[] {
 	return topLevelSections(entries, folders)
 		.map((section): NavSection<T> => {

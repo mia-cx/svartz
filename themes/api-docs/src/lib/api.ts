@@ -309,7 +309,7 @@ function navRank(entry: NavEntry): [number, string, number] {
  */
 export function apiNav<T extends NavEntry>(
 	entries: readonly T[],
-	folders: readonly Pick<UiFolderEntry, 'slug' | 'title' | 'href' | 'noteSlugs'>[]
+	folders: readonly Pick<UiFolderEntry, 'slug' | 'title' | 'href' | 'noteSlugs' | 'noteSlug'>[]
 ): ApiNavSection<T>[] {
 	const compare = (left: T, right: T) => {
 		const [leftGroup, leftKey, leftOrder] = navRank(left);

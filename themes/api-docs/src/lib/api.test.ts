@@ -108,7 +108,8 @@ describe('apiNav', () => {
 			slug,
 			title,
 			href: `/folders/${slug}/`,
-			noteSlugs: notes.filter((item) => item.path.startsWith(`${slug}/`)).map((item) => item.slug)
+			noteSlugs: notes.filter((item) => item.path.startsWith(`${slug}/`)).map((item) => item.slug),
+			noteSlug: notes.find((item) => item.path === `${slug}/index.md`)?.slug
 		}));
 
 	it('puts guides first, then resources with models before operations in path and method order', () => {

@@ -1,7 +1,6 @@
 export interface UiIndexEntry {
 	readonly slug: string;
 	readonly href?: string;
-	/** Vault-relative source path. Finds a folder's `index.md` or `_index.md` whatever its published slug. */
 	readonly path?: string;
 	readonly title: string;
 }
@@ -13,6 +12,8 @@ export interface UiFolderEntry {
 	readonly noteCount: number;
 	/** Final slugs of the published notes physically inside the folder, nested ones included. */
 	readonly noteSlugs: readonly string[];
+	/** Slug of the folder note (`index.md` or `_index.md`), which a URL collision may have suffixed. */
+	readonly noteSlug?: string;
 	readonly href: string;
 }
 
@@ -44,8 +45,6 @@ export function titleFromSlugSegment(segment: string): string {
 	return segment.replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-const INDEX_FILE = /(?:^|[\\/])_?index\.[^\\/]+$/i;
-
 /** The folder holding `folder`, or `undefined` at the vault root. */
 const parentFolder = (folder: string) => (folder.includes('/') ? folder.slice(0, folder.lastIndexOf('/')) : undefined);
 
@@ -63,21 +62,18 @@ export interface FolderLayout<T> {
  */
 export function folderLayout<T extends UiIndexEntry>(
 	entries: readonly T[],
-	folders: readonly Pick<UiFolderEntry, 'slug' | 'noteSlugs'>[]
+	folders: readonly Pick<UiFolderEntry, 'slug' | 'noteSlugs' | 'noteSlug'>[]
 ): FolderLayout<T> {
+	const bySlug = new Map(entries.map((entry) => [entry.slug, entry]));
 	const homes = new Map<string, string>();
+	const notes = new Map<string, T>();
 	for (const folder of folders) {
 		for (const slug of folder.noteSlugs) {
 			// Every ancestor lists the note too; the longest slug is the folder it sits in.
 			if (folder.slug.length > (homes.get(slug)?.length ?? -1)) homes.set(slug, folder.slug);
 		}
-	}
-	const notes = new Map<string, T>();
-	for (const entry of entries) {
-		const folder = homes.get(entry.slug);
-		// Locked notes publish without a path, so only their slug can place them.
-		const isIndex = entry.path ? INDEX_FILE.test(entry.path) : entry.slug === folder;
-		if (folder !== undefined && isIndex) notes.set(folder, entry);
+		const note = folder.noteSlug === undefined ? undefined : bySlug.get(folder.noteSlug);
+		if (note) notes.set(folder.slug, note);
 	}
 	return { folderOf: (slug) => homes.get(slug), noteOf: (folder) => notes.get(folder) };
 }
@@ -89,7 +85,7 @@ export function openFolderIds(folder: string | undefined): string[] {
 	return ids;
 }
 
-type CrumbFolder = Pick<UiFolderEntry, 'slug' | 'title' | 'href' | 'noteSlugs'>;
+type CrumbFolder = Pick<UiFolderEntry, 'slug' | 'title' | 'href' | 'noteSlugs' | 'noteSlug'>;
 
 /** A crumb per folder down to `folder`, linking its folder note when it has one, else its folder page. */
 function folderTrail(
@@ -112,7 +108,7 @@ const withSlash = (href: string) => (href.endsWith('/') ? href : `${href}/`);
 
 /**
  * Home, each folder the note sits in, then the note. A folder note ends its own
- * folder's trail instead of repeating it. A slug missing from `entries` falls back
+ * folder's trail instead of repeating it. A slug no folder record places falls back
  * to its own segments.
  */
 export function buildBreadcrumbs(
@@ -126,7 +122,8 @@ export function buildBreadcrumbs(
 
 	const layout = folderLayout(entries, folders);
 	const entry = entries.find((candidate) => candidate.slug === slug);
-	const folder = entry ? layout.folderOf(slug) : parentFolder(slug);
+	// Slugs only gain a `/` from folders, so a root note's slug never places it in one.
+	const folder = layout.folderOf(slug) ?? parentFolder(slug);
 	const trail = [home, ...folderTrail(folder, layout, folders, withSlash(homeHref))];
 	if (entry && folder !== undefined && layout.noteOf(folder) === entry) return trail;
 	return [

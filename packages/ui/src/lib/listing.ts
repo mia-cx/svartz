@@ -14,6 +14,7 @@ interface Listable {
 interface Folder {
 	readonly slug: string;
 	readonly noteSlugs: readonly string[];
+	readonly noteSlug?: string;
 }
 
 interface Linked {

@@ -159,6 +159,8 @@ interface FolderIndexEntry {
   readonly noteCount: number;
   /** Canonical slugs of published notes physically inside this folder. */
   readonly noteSlugs: readonly string[];
+  /** Slug of the folder note (`index.md` or `_index.md`), which a URL collision may have suffixed. */
+  readonly noteSlug?: string;
   readonly href: string;
 }
 

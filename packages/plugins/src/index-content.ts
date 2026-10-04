@@ -104,7 +104,7 @@ export const indexContent = definePlugin(() => ({
       const search: SearchDocument[] = [];
       const tagCounts = new Map<string, number>();
       const folderMembers = new Map<string, string[]>();
-      const folderTitles = new Map<string, string>();
+      const folderNotes = new Map<string, { slug: string; title?: string }>();
       const noteRouteSet = new Set<string>();
       const publicAssetPaths = ctx.meta.get("svartz:publicAssetPaths") as ReadonlySet<string> | undefined;
       const assetRecords = ctx.files
@@ -241,10 +241,11 @@ export const indexContent = definePlugin(() => ({
             members.push(file.slug);
             folderMembers.set(folderSlug, members);
           }
-          // The folder note's frontmatter title renames its folder.
+          // A folder note names its folder. When two (`index.md`, `index.mdx`) share
+          // one, the one that kept the folder's URL wins.
           const own = folderSlugs.at(-1);
-          if (own && INDEX_FILE.test(file.path) && typeof fmTitle === "string" && fmTitle.length > 0) {
-            folderTitles.set(own, fmTitle);
+          if (own && INDEX_FILE.test(file.path) && (file.slug === own || !folderNotes.has(own))) {
+            folderNotes.set(own, { slug: file.slug, title: typeof fmTitle === "string" && fmTitle.length > 0 ? fmTitle : undefined });
           }
         }
 
@@ -306,9 +307,10 @@ export const indexContent = definePlugin(() => ({
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([slug, noteSlugs]) => ({
           slug,
-          title: folderTitles.get(slug) ?? folderTitle(slug),
+          title: folderNotes.get(slug)?.title ?? folderTitle(slug),
           noteCount: noteSlugs.length,
           noteSlugs: noteSlugs.sort(),
+          noteSlug: folderNotes.get(slug)?.slug,
           href: routeHref(`${routeConfig.folders}/${slug}`, mountPath),
         }));
 

@@ -11,11 +11,12 @@ const note = (slug: string, date?: string, tags: string[] = []) => ({
 });
 /** `folder/index.md`, published under `slug` (a suffix when another file took the folder's URL). */
 const folderNote = (folder: string, slug: string, title: string) => ({ ...note(slug), title, path: `${folder}/index.md` });
-const folder = (slug: string, title: string, noteSlugs: string[]) => ({
+const folder = (slug: string, title: string, noteSlugs: string[], noteSlug?: string) => ({
 	slug,
 	title,
 	noteCount: noteSlugs.length,
 	noteSlugs,
+	noteSlug,
 	href: `/folders/${slug}/`
 });
 
@@ -29,7 +30,7 @@ describe('listing helpers', () => {
 		// The root `log.md` took the folder's URL; it isn't in the folder.
 		const entries = [note('log'), folderNote('log', 'log-2', 'Log'), note('log/day-1'), note('log/2026/day-2'), note('other/x')];
 		const folders = [
-			folder('log', 'Log', ['log-2', 'log/day-1', 'log/2026/day-2']),
+			folder('log', 'Log', ['log-2', 'log/day-1', 'log/2026/day-2'], 'log-2'),
 			folder('log/2026', '2026', ['log/2026/day-2']),
 			folder('log/2026/q3', 'Q3', [])
 		];
@@ -59,7 +60,7 @@ describe('listing helpers', () => {
 			note('index')
 		];
 		const folders = [
-			folder('graphql', 'GraphQL', ['graphql-2', 'graphql/pet', 'graphql/types/pet-type']),
+			folder('graphql', 'GraphQL', ['graphql-2', 'graphql/pet', 'graphql/types/pet-type'], 'graphql-2'),
 			folder('graphql/types', 'Types', ['graphql/types/pet-type']),
 			folder('pets', 'Pets', ['pets/list'])
 		];
@@ -73,7 +74,7 @@ describe('listing helpers', () => {
 	});
 
 	it('keeps a folder note whose folder has nothing else, as an empty section', () => {
-		const sections = topLevelSections([folderNote('core', 'core', 'Core')], [folder('core', 'Core', ['core'])]);
+		const sections = topLevelSections([folderNote('core', 'core', 'Core')], [folder('core', 'Core', ['core'], 'core')]);
 		expect(sections.map((section) => [section.slug, section.title, section.href, section.entries.length])).toEqual([
 			['core', 'Core', '/core/', 0]
 		]);

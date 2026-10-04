@@ -84,7 +84,8 @@ describe('grouping', () => {
 			slug,
 			title,
 			href: `/folders/${slug}/`,
-			noteSlugs: entries.filter((item) => item.path.startsWith(`${slug}/`)).map((item) => item.slug)
+			noteSlugs: entries.filter((item) => item.path.startsWith(`${slug}/`)).map((item) => item.slug),
+			noteSlug: entries.find((item) => item.path === `${slug}/index.md`)?.slug
 		}));
 
 	it('groups a module’s symbols by kind in reference order', () => {

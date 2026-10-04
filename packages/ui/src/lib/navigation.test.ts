@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { buildBreadcrumbs, buildExplorerTree, folderBreadcrumbs, folderLayout, openFolderIds } from './navigation.js';
-import { folderContents, topLevelSections } from './listing.js';
 
 const note = (slug: string, path: string, title = slug) => ({ slug, path, title, href: `/${slug}/` });
-const folder = (slug: string, title: string, noteSlugs: string[]) => ({
+const folder = (slug: string, title: string, noteSlugs: string[], noteSlug?: string) => ({
 	slug,
 	title,
 	noteCount: noteSlugs.length,
 	noteSlugs,
+	noteSlug,
 	href: `/folders/${slug}/`
 });
 
@@ -18,34 +18,9 @@ const collided = [
 	note('guides-2', 'guides/index.md', 'Field guides'),
 	note('guides/setup', 'guides/setup.md', 'Setup')
 ];
-const collidedFolders = [folder('guides', 'Field guides', ['guides-2', 'guides/setup'])];
+const collidedFolders = [folder('guides', 'Field guides', ['guides-2', 'guides/setup'], 'guides-2')];
 
 describe('folderLayout', () => {
-	it.each(['guides', 'guides-2'])('recognizes _index.md published as %s', (slug) => {
-		const landing = note(slug, 'Guides/_index.md', 'Field guides');
-		const entries = [
-			...(slug === 'guides-2' ? [note('guides', 'guides.md', 'Root guide')] : []),
-			landing,
-			note('guides/setup', 'Guides/setup.md', 'Setup')
-		];
-		const folders = [folder('guides', 'Field guides', [slug, 'guides/setup'])];
-		expect(folderLayout(entries, folders).noteOf('guides')).toBe(landing);
-		const tree = buildExplorerTree(entries, folders);
-		expect(tree[0]?.href).toBe(landing.href);
-		expect(tree[0]?.children.map((entry) => entry.id)).toEqual(['note:guides/setup']);
-		expect(buildBreadcrumbs(slug, entries, '/', folders)).toEqual([
-			{ title: 'Home', href: '/' },
-			{ title: 'Field guides', href: landing.href }
-		]);
-		expect(folderContents('guides', entries, folders).notes.map((entry) => entry.slug)).toEqual(['guides/setup']);
-		expect(topLevelSections(entries, folders).find((section) => section.slug === 'guides')).toMatchObject({
-			slug: 'guides',
-			title: 'Field guides',
-			href: landing.href,
-			entries: [entries.at(-1)]
-		});
-	});
-
 	it('places notes by file, whatever slug they published under', () => {
 		const layout = folderLayout(collided, collidedFolders);
 		expect(layout.folderOf('guides-2')).toBe('guides');
@@ -61,9 +36,10 @@ describe('folderLayout', () => {
 		expect(layout.folderOf('a/b/c')).toBe('a/b');
 	});
 
-	it('falls back to the slug for a locked note, which publishes without a path', () => {
-		const layout = folderLayout([note('vault', '')], [folder('vault', 'Vault', ['vault'])]);
-		expect(layout.noteOf('vault')?.slug).toBe('vault');
+	it('finds a locked folder note under a suffixed slug, though it publishes without a path', () => {
+		const entries = [note('guides', 'guides.md', 'Root guide'), note('guides-2', '', 'Field guides')];
+		const layout = folderLayout(entries, [folder('guides', 'Field guides', ['guides-2'], 'guides-2')]);
+		expect(layout.noteOf('guides')).toBe(entries[1]);
 	});
 });
 
@@ -108,7 +84,7 @@ describe('breadcrumbs', () => {
 	it('walks the folders a note sits in, linking folder notes', () => {
 		const entries = [...collided, note('guides/deep/first-run', 'guides/deep/first-run.md', 'First run')];
 		const folders = [
-			folder('guides', 'Field guides', ['guides-2', 'guides/setup', 'guides/deep/first-run']),
+			folder('guides', 'Field guides', ['guides-2', 'guides/setup', 'guides/deep/first-run'], 'guides-2'),
 			folder('guides/deep', 'Deep', ['guides/deep/first-run'])
 		];
 		expect(buildBreadcrumbs('guides/deep/first-run', entries, '/', folders)).toEqual([
@@ -143,6 +119,11 @@ describe('breadcrumbs', () => {
 			{ title: 'Docs', href: '/site/docs/' },
 			{ title: 'Guides', href: '/site/docs/guides/' },
 			{ title: 'Setup', href: '/site/docs/guides/setup/' }
+		]);
+		expect(buildBreadcrumbs('docs/setup', [note('docs/setup', 'docs/setup.md', 'Setup')]).map((crumb) => crumb.title)).toEqual([
+			'Home',
+			'Docs',
+			'Setup'
 		]);
 	});
 });
