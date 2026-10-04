@@ -273,6 +273,8 @@ describe("svartz CLI", () => {
         if (!browser) throw new Error("Chromium CDP did not become ready");
         try {
           const page = await browser.contexts()[0]!.newPage();
+          // Desktop width: on phones the minimal theme moves the explorer into a closed drawer.
+          await page.setViewportSize({ width: 1280, height: 800 });
           const cdp = await page.context().newCDPSession(page);
           await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
           const errors: string[] = [];
