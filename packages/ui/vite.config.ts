@@ -1,10 +1,19 @@
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import tailwindcss from '@tailwindcss/vite';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import { sveltekit } from '@sveltejs/kit/vite';
 
+const isVitest = Boolean(process.env.VITEST);
+const testHostModulePath = fileURLToPath(
+	new URL('./src/lib/runtime/testing/host.ts', import.meta.url)
+);
+
 export default defineConfig({
+	resolve: {
+		alias: isVitest ? { 'virtual:svartz/host': testHostModulePath } : {}
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit(),
