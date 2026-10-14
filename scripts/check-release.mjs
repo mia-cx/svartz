@@ -308,6 +308,8 @@ try {
     assert.equal(await command('tar', ['-xOf', archive, 'package/LICENSE'], root), licenseText,
       `${name} archive license text`);
     const published = JSON.parse(await command('tar', ['-xOf', archive, 'package/package.json'], root));
+    assert.equal(published.repository?.url, 'https://github.com/mia-cx/svartz.git', `${name} packed repository.url`);
+    assert.equal(published.repository?.directory, directory, `${name} packed repository.directory`);
     for (const [dependency, range] of Object.entries(manifest.dependencies ?? {})) {
       if (!dependency.startsWith('@svartz/')) continue;
       assert(range.startsWith('workspace:'), `${name} has an unexpected ${dependency} source range`);

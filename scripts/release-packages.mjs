@@ -6,9 +6,9 @@ export const BASE_BRANCH = 'sveltekit-rewrite';
 // Dependencies first. The CLI must never point at packages that have not been published.
 export const RELEASE_PACKAGES = [
   ['@svartz/core', 'packages/core'],
-  ['@svartz/ui', 'packages/ui'],
   ['@svartz/plugins', 'packages/plugins'],
   ['@svartz/config', 'packages/config'],
+  ['@svartz/ui', 'packages/ui'],
   ['@svartz/theme-minimal', 'themes/minimal'],
   ['@svartz/theme-wiki', 'themes/wiki'],
   ['@svartz/theme-blog', 'themes/blog'],
@@ -24,6 +24,9 @@ export function readReleasePackages(root = process.cwd()) {
     const manifest = JSON.parse(readFileSync(join(root, directory, 'package.json'), 'utf8'));
     assert.equal(manifest.name, name);
     assert.ok(!manifest.private, `${name} must be public`);
+    // npm provenance names repository.url; directory keeps it honest per package.
+    assert.equal(manifest.repository?.url, 'https://github.com/mia-cx/svartz.git', `${name} repository.url`);
+    assert.equal(manifest.repository?.directory, directory, `${name} repository.directory`);
     assert.match(manifest.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
     return { name, directory, version: manifest.version };
   });

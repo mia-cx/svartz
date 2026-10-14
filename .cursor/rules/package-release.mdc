@@ -17,6 +17,7 @@ alwaysApply: false
 - The CLI's Vite dependency is a peer. A Vite 8 host must resolve its own Vite 8 through the packed CLI. `@svartz/vite` also peers on the host's Svelte Vite plugin: v6 for Vite 7, v7 for Vite 8. Exercise protected SVX in the packed Vite 8 host. Tailwind scans `dist` in packed theme/UI packages and their runtime dependency or component-library peer packages, never dev-only tooling.
 - Type-check generated routes in the packed host with the `@svartz/vite/virtual-modules` reference. The older UI reference has a narrower runtime index and does not type-check host discovery helpers.
 - All eleven public packages use MCX v1.0. Keep the repository `LICENSE` in each package root and verify its packed text.
+- Every public package declares `repository` with `url` `https://github.com/mia-cx/svartz.git` and its own `directory`; npm provenance requires the URL, and the packed manifest is checked.
 - Before changing versioning or workflows, read `docs/releasing.md` for bootstrap, OIDC setup, and release authorization.
 - Theme manifest package versions follow Changesets. Keep their v1 contract versions separate.
 - Release checks must accept later fixed-group versions and build the packed Vite 8 Cloudflare host, including Worker and mounted note output.

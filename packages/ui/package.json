@@ -27,6 +27,11 @@
 		"!dist/**/*.test.*",
 		"!dist/**/*.spec.*"
 	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/mia-cx/svartz.git",
+		"directory": "packages/ui"
+	},
 	"sideEffects": [
 		"**/*.css"
 	],

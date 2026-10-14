@@ -6,8 +6,8 @@ All public archives include the repository LICENSE and use MCX v1.0.
 
 Publish in this dependency order:
 
-1. `@svartz/core`, then `@svartz/ui`.
-2. `@svartz/plugins`, then `@svartz/config`.
+1. `@svartz/core`.
+2. `@svartz/plugins`, `@svartz/config`, then `@svartz/ui`.
 3. `@svartz/theme-minimal`, `@svartz/theme-wiki`, `@svartz/theme-blog`, `@svartz/theme-docs`, then `@svartz/theme-api-docs`.
 4. `@svartz/vite`, then `svartz`.
 
@@ -114,6 +114,9 @@ Set `retry_release_commit` to the full 40-character release merge SHA.
 The workflow checks ancestry, release PR identity, pending notes, and current package versions.
 It validates again before publishing.
 A newer release blocks replay of an older version.
+A retry only works while the branch head is still the release commit.
+npm provenance records the workflow head, so if commits landed after the release, the publish workflow fails closed.
+Publish a new patch release with a changeset instead of retrying.
 Existing package tags must point to the same commit.
 Existing GitHub releases are skipped.
 

@@ -49,6 +49,8 @@ export async function publishRelease(names, { bootstrap = false } = {}) {
         const manifest = JSON.parse(execFileSync('tar', ['-xOf', archive, 'package/package.json'], { encoding: 'utf8' }));
         assert.equal(manifest.name, name);
         assert.equal(manifest.version, version);
+        assert.equal(manifest.repository?.url, 'https://github.com/mia-cx/svartz.git', `${name} packed repository.url`);
+        assert.equal(manifest.repository?.directory, directory, `${name} packed repository.directory`);
         for (const group of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
           for (const range of Object.values(manifest[group] ?? {})) {
             assert.ok(!range.startsWith('workspace:'), 'Archive contains an unresolved workspace range');
