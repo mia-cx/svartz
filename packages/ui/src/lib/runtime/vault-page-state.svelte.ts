@@ -144,7 +144,7 @@ export class VaultPageState {
 	);
 }
 
-/** Mount the vault's browser-only resources (search, protected bridges) while rendered. */
+/** Mount the vault's plugin browser scripts while rendered. */
 export function useBrowserResources(input: () => {
 	artifacts: ArtifactsModule;
 	pathname: string;
