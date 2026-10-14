@@ -34,40 +34,49 @@ An existing host can use `vite.config.ts`, `.mts`, `.cts`, `.js`, `.mjs`, or `.c
 
 `SvartzRuntimePage` draws the whole theme page. To keep your own layout, render only the note body with `SvartzNoteContent` from `@svartz/ui/runtime`. Read the title, properties, dates and backlinks from the [published vault view](vault-view.md).
 
-`SvartzNoteContent` takes two props:
+`SvartzNoteContent` takes three props:
 
 - `pathname` is the app pathname without SvelteKit's deployment base. Pass the same value you gave `prepareHostVault`.
+- `stylesheets` is required. It lists the note's CSS links. Compute it with `noteStylesheets(pathname)` in `load`.
 - `contentComponents` is optional. It overrides the theme's callout, code block, image, link and embed components.
 
-The body uses the theme's content components plus your overrides. A protected note shows the same unlock form as the theme page. The component links the shared and note-specific CSS for the note in `<svelte:head>`, so your route needs no stylesheet code. It renders no layout, header, table of contents or backlinks. For a pathname that is not a published note it renders nothing. Your `load` decides on the 404.
+The body uses the theme's content components plus your overrides. A protected note shows the same unlock form as the theme page. The component renders the shared and note-specific CSS links in `<svelte:head>` while a note renders. Compute them in `load`, not in the page: the registry knows a note's CSS only on the server, and page data carries the server list through hydration. On client navigation the list is empty and the CSS loads with the note's module. It renders no layout, header, table of contents or backlinks. For a pathname that is not a published note it renders nothing. Your `load` decides on the 404.
 
 This route serves the `work` vault, mounted at `/work`, inside the host's own design. Canonical note URLs end with a slash, such as `/work/maelstrom/`. The route sets `trailingSlash` to match, and `load` adds the slash before it looks up the vault.
 
 ```ts
 // src/routes/work/[...slug]/+page.ts
-import { error } from '@sveltejs/kit';
-import { base } from '$app/paths';
+import { error, redirect } from '@sveltejs/kit';
+import { noteStylesheets } from '@svartz/ui/runtime';
 import { prepareHostVault, vaults } from 'virtual:svartz/host';
 import type { EntryGenerator, PageLoad } from './$types';
 
 export const prerender = true;
 export const trailingSlash = 'always';
 
+const work = vaults.find((vault) => vault.id === 'work')!;
+const { notes, redirects } = work.artifacts.index.routes;
+
 export const load: PageLoad = async ({ url }) => {
-  const appPath = base ? url.pathname.slice(base.length) || '/' : url.pathname;
+  const appPath = url.pathname.slice(work.basePath.length) || '/';
   const pathname = appPath.endsWith('/') ? appPath : `${appPath}/`;
+  const destination = redirects[pathname];
+  if (destination) redirect(308, `${work.basePath}${destination}`);
+  if (!notes.includes(pathname)) error(404, 'Note not found');
   const vault = await prepareHostVault(pathname);
-  const note = vault?.artifacts.vault.note(url.pathname);
-  if (!note) error(404, 'Note not found');
-  return { pathname, entry: note.entry, backlinks: note.backlinks };
+  const note = vault?.artifacts.vault.note(`${work.basePath}${pathname}`);
+  return {
+    pathname,
+    stylesheets: noteStylesheets(pathname),
+    entry: note?.entry,
+    backlinks: note?.backlinks ?? []
+  };
 };
 
-export const entries: EntryGenerator = () => {
-  const work = vaults.find((vault) => vault.id === 'work');
-  return (work?.artifacts.index.entries ?? []).map((entry) => ({
-    slug: entry.href.slice('/work/'.length, -1)
+export const entries: EntryGenerator = () =>
+  [...notes, ...Object.keys(redirects)].map((pathname) => ({
+    slug: pathname.slice('/work/'.length, -1)
   }));
-};
 ```
 
 ```svelte
@@ -81,12 +90,12 @@ export const entries: EntryGenerator = () => {
   let { data }: PageProps = $props();
 </script>
 
-<svelte:head><title>{data.entry.title}</title></svelte:head>
+<svelte:head><title>{data.entry?.title ?? 'Protected note'}</title></svelte:head>
 
 <SiteHeader />
 <article>
-  <h1>{data.entry.title}</h1>
-  <SvartzNoteContent pathname={data.pathname} />
+  {#if data.entry}<h1>{data.entry.title}</h1>{/if}
+  <SvartzNoteContent pathname={data.pathname} stylesheets={data.stylesheets} />
   {#if data.backlinks.length > 0}
     <h2>Linked from</h2>
     <ul>
@@ -98,4 +107,4 @@ export const entries: EntryGenerator = () => {
 </article>
 ```
 
-`vault.note()` takes the full URL path, so it matches hrefs that include the deployment base. The `entries` generator reads the vault metadata in `vaults`, which needs no runtime code. Index hrefs there include the mount path but not the deployment base. The route takes priority over the Svartz catchall for every URL under `/work`. Import `virtual:svartz/tailwind-sources.css` once in the host, as the generated catchall does, so theme content classes get their styles. Add `/// <reference types="@svartz/ui/virtual-modules" />` to `src/app.d.ts` for the `virtual:svartz/host` types.
+`work.basePath` is the absolute deployment base, SvelteKit's `kit.paths.base`, so the route slices the URL with it instead of `$app/paths.base`, which can be relative during SSR. `routes.notes` includes hidden protected notes. Those have no `vault.note()` entry until unlock, so the page shows no title for them. `vault.note()` matches hrefs that include the deployment base. Redirects follow the vault's alias redirects like the generated catchall. The `entries` generator reads route metadata in `vaults`, which needs no runtime code. The route takes priority over the Svartz catchall for every URL under `/work`. Import `virtual:svartz/tailwind-sources.css` once in the host, as the generated catchall does, so theme content classes get their styles. Add `/// <reference types="@svartz/vite/virtual-modules" />` to `src/app.d.ts`, the declarations the CLI template uses.
