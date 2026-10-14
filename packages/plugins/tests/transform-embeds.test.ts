@@ -39,6 +39,23 @@ describe("note embeds", () => {
     expect(source.content).not.toContain("Not embedded");
   });
 
+  it("resolves an embed by physical basename when frontmatter slugs change the URLs", () => {
+    const alpha = note("a/Setup Notes.md", "Alpha body.");
+    alpha.frontmatter = { slug: "alpha" };
+    alpha.slug = "a/alpha";
+    const beta = note("b/Setup Notes.md", "Beta body.");
+    beta.frontmatter = { slug: "beta" };
+    beta.slug = "b/beta";
+    const host = note("a/host.md", "![[Setup Notes]]");
+    const ctx = context([host, alpha, beta]);
+    ctx.config.linkResolution = "closest";
+    transformEmbeds().transformEmbeds!.run(ctx);
+
+    expect(host.content).toContain('data-embed="a/alpha"');
+    expect(host.content).toContain("Alpha body.");
+    expect(host.content).not.toContain("Beta body.");
+  });
+
   it("leaves wikilinks in code alone and links attachments", () => {
     const source = note("guide.md", "![[sensors]]");
     const target = note("sensors.md", "Write `[[dew-point]]` to link. See [[diagram.svg|the diagram]].\n\n```md\n[[dew-point]]\n```");

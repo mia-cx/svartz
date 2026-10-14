@@ -184,6 +184,7 @@ export const transformEmbeds = definePlugin(() => ({
             allSlugs,
             ctx.config.linkResolution,
             targetSlug,
+            noteFiles,
           );
 
           if (!resolvedTarget) {
@@ -207,7 +208,7 @@ export const transformEmbeds = definePlugin(() => ({
           const label = escapeHtml(link.label ?? link.target);
           const assetPath = resolveAsset(noteBySlug.get(targetSlug)!, link.target);
           if (assetPath) return `<a href="${relativeHref(sourceSlug, `/${assetPath}`)}">${label}</a>`;
-          const resolved = resolveLink(link, slugMap, allSlugs, ctx.config.linkResolution, targetSlug);
+          const resolved = resolveLink(link, slugMap, allSlugs, ctx.config.linkResolution, targetSlug, noteFiles);
           return resolved ? `<a href="${relativeNoteHref(sourceSlug, resolved, link.section)}">${label}</a>` : label;
         };
         const linked = findWikilinkSpans(expanded).reduceRight(
@@ -248,6 +249,7 @@ export const transformEmbeds = definePlugin(() => ({
             allSlugs,
             ctx.config.linkResolution,
             file.slug,
+            noteFiles,
           );
 
           if (!resolvedTarget) {

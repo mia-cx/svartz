@@ -75,6 +75,12 @@ describe("canonical route allocation", () => {
     },
   );
 
+  it.each([".", "..", "..."])("rejects dot-only slug %s", (slug) => {
+    const file = note("guides/setup.md");
+    file.frontmatter = { slug };
+    expect(() => allocateRoutes([file])).toThrow("Invalid slug in guides/setup.md: dot segments are not allowed.");
+  });
+
   it.each([
     "index.md", "index.mdx", "index.svx", "_index.md", "_index.mdx", "_index.svx",
     "guides/index.md", "guides/index.mdx", "guides/_index.md", "guides/_index.mdx", "guides/Index?.md",
