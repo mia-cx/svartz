@@ -14,12 +14,12 @@
 	let {
 		menu,
 		currentPath,
-		currentSlug,
+		currentFolder,
 		trail = $bindable([])
 	}: {
 		menu: readonly MenuFolder[];
 		currentPath: string;
-		currentSlug: string | undefined;
+		currentFolder: string | undefined;
 		trail?: MenuFolder[];
 	} = $props();
 
@@ -49,7 +49,7 @@
 </script>
 
 {#snippet folderRow(target: MenuFolder)}
-	<button class="row" class:current={inFolder(target.id, currentSlug)} type="button" data-folder={target.id} onclick={() => open(target)}>
+	<button class="row" class:current={inFolder(target.id, currentFolder)} type="button" data-folder={target.id} onclick={() => open(target)}>
 		<span>{target.title}</span>
 		<ChevronRight aria-hidden="true" />
 	</button>

@@ -171,7 +171,8 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   expect(await readFile(path.join(root, ".svartz/vaults/notes/artifacts/pages/about-2.svelte"), "utf8"))
     .toContain("Vault about body");
   const notesIndex = await readFile(path.join(root, ".svartz/vaults/notes/artifacts/index.ts"), "utf8");
-  expect(notesIndex).toContain('"slug": "guides", "title": "Guides", "noteCount": 2');
+  // The folder note's title renames its folder.
+  expect(notesIndex).toContain('"slug": "guides", "title": "Guides landing", "noteCount": 2');
   expect(notesIndex).toContain('"slug": "guides/deep", "title": "Deep", "noteCount": 1');
   expect(notesIndex).toContain('"slug": "guides", "title": "guides", "noteCount": 2');
   expect(notesIndex).not.toContain("Hidden guide");

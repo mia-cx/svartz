@@ -58,7 +58,9 @@ Configure the theme for a vault with `theme: { base: '@example/theme' }`. `base`
 - Pass `svartzSyntax()` from `@svartz/ui/syntax` in `pluginPreset` from `index.ts` only. It replaces `core:transform-syntax` with the Svartz code colours and pulls rehype, so it stays out of browser code.
 - Type layouts and pages with `ThemePageProps`. `vault` carries the index, tags, folders, and search documents with deployment URLs.
 
-Themes can only use the routes the pipeline builds: notes, `/tags`, `/tags/:slug`, `/folders`, `/folders/:slug`, `/feed`, and `/`. Read the prefixes from `theme.routes` in the vault config, as the pipeline does. A folder note (`guides/index.md`) publishes as `guides`, the same slug as its folder.
+Themes can only use the routes the pipeline builds: notes, `/tags`, `/tags/:slug`, `/folders`, `/folders/:slug`, `/feed`, and `/`. Read the prefixes from `theme.routes` in the vault config, as the pipeline does.
+
+Don't work out folders from slugs. A folder note (`guides/index.md`) usually publishes as `guides`, but if a root `guides.md` takes that URL, it publishes as `guides-2`. Each folder lists its notes in `noteSlugs` and names its folder note in `noteSlug`, and its `title` is the folder note's frontmatter title when it has one. `folderLayout(entries, folders)` from `@svartz/ui` gives each note's folder and each folder's note.
 
 ## Notes and browser resources
 

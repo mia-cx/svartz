@@ -43,13 +43,16 @@ export {
 } from './search.js';
 export { explorerOpenIds } from './stores.js';
 export {
-	ancestorFolderIdsForSlug,
 	buildBreadcrumbs,
 	buildExplorerTree,
+	folderBreadcrumbs,
+	folderLayout,
+	openFolderIds,
 	slugToHref,
 	titleFromSlugSegment,
 	type Breadcrumb,
 	type ExplorerNode,
+	type FolderLayout,
 	type UiFolderEntry,
 	type UiIndexEntry,
 	type UiTagEntry

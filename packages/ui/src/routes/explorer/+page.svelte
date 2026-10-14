@@ -2,17 +2,23 @@
 	import FileTrie from '$lib/FileTrie.svelte';
 
 	const entries = [
-		{ slug: 'index', path: 'index', title: 'Home' },
-		{ slug: 'getting-started', path: 'getting-started', title: 'Getting Started' },
-		{ slug: 'docs/overview', path: 'docs/overview', title: 'Overview' },
-		{ slug: 'docs/installation', path: 'docs/installation', title: 'Installation' },
-		{ slug: 'docs/guides/quickstart', path: 'docs/guides/quickstart', title: 'Quickstart' },
-		{ slug: 'docs/guides/configuration', path: 'docs/guides/configuration', title: 'Configuration' },
-		{ slug: 'api/reference', path: 'api/reference', title: 'API Reference' }
+		{ slug: 'index', path: 'index.md', title: 'Home' },
+		{ slug: 'getting-started', path: 'getting-started.md', title: 'Getting Started' },
+		{ slug: 'docs/overview', path: 'docs/overview.md', title: 'Overview' },
+		{ slug: 'docs/installation', path: 'docs/installation.md', title: 'Installation' },
+		{ slug: 'docs/guides/quickstart', path: 'docs/guides/quickstart.md', title: 'Quickstart' },
+		{ slug: 'docs/guides/configuration', path: 'docs/guides/configuration.md', title: 'Configuration' },
+		{ slug: 'api/reference', path: 'api/reference.md', title: 'API Reference' }
 	];
+	const folder = (slug: string, title: string) => {
+		const noteSlugs = entries.map((entry) => entry.slug).filter((note) => note.startsWith(`${slug}/`));
+		return { slug, title, noteCount: noteSlugs.length, noteSlugs, href: `/folders/${slug}/` };
+	};
+	const folders = [folder('docs', 'Docs'), folder('docs/guides', 'Guides'), folder('api', 'Api')];
 
 	const props = [
-		{ name: 'entries', type: 'UiIndexEntry[]', description: 'Flat list of all notes. The tree structure is derived from the slug segments.' }
+		{ name: 'entries', type: 'UiIndexEntry[]', description: 'Flat list of all notes.' },
+		{ name: 'folders', type: 'UiFolderEntry[]', description: "The index's folders. Each lists the notes inside it, which places notes in the tree." }
 	];
 </script>
 
@@ -23,7 +29,7 @@
 	</div>
 	<h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">FileTrie</h1>
 	<p class="mt-3 text-base text-zinc-600 dark:text-zinc-400">
-		A recursive file-tree explorer built from a flat list of entry slugs. Folders are collapsed by
+		A recursive file-tree explorer built from the index's notes and folders. Folders are collapsed by
 		default and toggled with a chevron button. Click any note to navigate.
 	</p>
 
@@ -34,7 +40,7 @@
 			class="rounded-lg border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/50"
 		>
 			<div class="max-w-xs">
-				<FileTrie {entries} />
+				<FileTrie {entries} {folders} />
 			</div>
 		</div>
 	</div>

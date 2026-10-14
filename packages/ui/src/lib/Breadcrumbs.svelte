@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { buildBreadcrumbs } from './navigation.js';
+	import { buildBreadcrumbs, type UiFolderEntry, type UiIndexEntry } from './navigation.js';
 
 	let {
 		slug,
@@ -8,9 +8,9 @@
 		folders = []
 	}: {
 		slug?: string;
-		entries?: readonly { slug: string; path?: string; title: string; href?: string }[];
+		entries?: readonly UiIndexEntry[];
 		homeHref?: string;
-		folders?: readonly { slug: string; href: string }[];
+		folders?: readonly UiFolderEntry[];
 	} = $props();
 	const items = $derived(buildBreadcrumbs(slug, entries, homeHref, folders));
 </script>

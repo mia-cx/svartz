@@ -1,7 +1,9 @@
 <script lang="ts">
 	import {
 		buildExplorerTree,
-		ancestorFolderIdsForSlug,
+		folderLayout,
+		openFolderIds,
+		slugToHref,
 		type ExplorerNode,
 		type UiIndexEntry,
 		type UiFolderEntry
@@ -10,16 +12,24 @@
 
 	let {
 		entries = [],
-		folders = [],
-		currentSlug
+		folders,
+		currentHref
 	}: {
 		entries?: readonly UiIndexEntry[];
-		folders?: readonly UiFolderEntry[];
-		currentSlug?: string;
+		/** The index's folders. They place notes in the tree; without them every note sits at the root. */
+		folders: readonly UiFolderEntry[];
+		/** The page being viewed. A root `guides.md` and the `guides` folder share a slug, never an href. */
+		currentHref?: string;
 	} = $props();
 	const tree = $derived(buildExplorerTree(entries, folders));
 
-	const forceOpenIds = $derived(ancestorFolderIdsForSlug(currentSlug));
+	// On a folder page that folder opens; on a note, the folders it sits in.
+	const forceOpenIds = $derived.by(() => {
+		const page = folders.find((folder) => folder.href === currentHref)?.slug;
+		if (page !== undefined) return openFolderIds(page);
+		const note = entries.find((entry) => (entry.href ?? slugToHref(entry.slug)) === currentHref);
+		return openFolderIds(note && folderLayout(entries, folders).folderOf(note.slug));
+	});
 	let storedOpenIds = $state<string[]>(explorerOpenIds.get());
 	$effect(() => {
 		const unsub = explorerOpenIds.subscribe((v) => {

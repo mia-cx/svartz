@@ -7,9 +7,10 @@
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import {
-		ancestorFolderIdsForSlug,
 		buildExplorerTree,
 		explorerOpenIds,
+		folderLayout,
+		openFolderIds,
 		type ExplorerNode,
 		type UiFolderEntry,
 		type UiIndexEntry
@@ -30,8 +31,11 @@
 	const tree = $derived(buildExplorerTree(entries, folders));
 	const currentSlug = $derived(entries.find((entry) => entry.href === currentHref)?.slug);
 	// On a folder page, that folder opens too.
-	const currentFolder = $derived(folders.find((folder) => folder.href === currentHref)?.slug);
-	const forcedOpen = $derived(new Set(ancestorFolderIdsForSlug(currentFolder ?? currentSlug)));
+	const currentFolder = $derived(
+		folders.find((folder) => folder.href === currentHref)?.slug ??
+			(currentSlug === undefined ? undefined : folderLayout(entries, folders).folderOf(currentSlug))
+	);
+	const forcedOpen = $derived(new Set(openFolderIds(currentFolder)));
 
 	let expanded = $state(true);
 	let stored = $state<readonly string[]>([]);

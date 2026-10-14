@@ -15,12 +15,12 @@
 	let {
 		menu,
 		currentPath,
-		currentSlug
+		currentFolder
 	}: {
 		menu: readonly MenuFolder[];
 		currentPath: string;
-		/** The page's note or folder slug, for highlighting its section. */
-		currentSlug: string | undefined;
+		/** The folder the page belongs to, for highlighting its section. */
+		currentFolder: string | undefined;
 	} = $props();
 
 	let nav = $state<HTMLElement>();
@@ -88,7 +88,7 @@
 			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 			<li
 				class="top"
-				class:current={inFolder(folder.id, currentSlug)}
+				class:current={inFolder(folder.id, currentFolder)}
 				onpointerenter={(event) => withMouse(event, () => (open = folder.id))}
 				onpointerleave={(event) => withMouse(event, closeTop)}
 				onfocusout={(event) => closeOnFocusOut(event, closeTop)}
