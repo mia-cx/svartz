@@ -25,8 +25,21 @@ export function routeHref(slug: string, mountPath = ""): string {
   return `${mountPath}/${path}${path ? "/" : ""}`;
 }
 
-function naturalSlug(file: ProcessedFile): string {
-  return routeSlug(fileToSlug(file.path));
+function requestedSlug(file: ProcessedFile): string {
+  const source = fileToSlug(file.path);
+  if (!file.frontmatter || !("slug" in file.frontmatter)) return routeSlug(source);
+
+  const value = file.frontmatter.slug;
+  if (typeof value !== "string" || !value.trim() || value.includes("/")) {
+    throw new Error(`Invalid slug in ${file.path}: expected a non-empty string without "/".`);
+  }
+  const segment = normalizeSlugSegment(value);
+  if (!segment) throw new Error(`Invalid slug in ${file.path}: normalizes to empty.`);
+  if (source === "index" || source.endsWith("/index")) {
+    throw new Error(`Invalid slug in ${file.path}: folder notes cannot set slug.`);
+  }
+  const parent = source.slice(0, source.lastIndexOf("/") + 1);
+  return routeSlug(`${parent}${segment}`);
 }
 
 function exactName(file: ProcessedFile, slug: string): boolean {
@@ -34,46 +47,57 @@ function exactName(file: ProcessedFile, slug: string): boolean {
   return sourceStem === slug;
 }
 
-/** Assign canonical slugs after publication filtering, before links or artifacts. */
+/** Assign canonical slugs before links, giving explicit slugs priority over filenames. */
 export function allocateRoutes(
   files: readonly ProcessedFile[],
   reservedPaths: ReadonlySet<string> = new Set(),
 ): void {
   const groups = new Map<string, ProcessedFile[]>();
+  const explicitClaims = new Map<string, ProcessedFile>();
   for (const file of files) {
     if (!isNote(file)) continue;
-    const natural = naturalSlug(file);
-    const group = groups.get(natural) ?? [];
+    const slug = requestedSlug(file);
+    if (file.frontmatter && "slug" in file.frontmatter) {
+      const existing = explicitClaims.get(slug);
+      if (existing) {
+        throw new Error(`Conflicting slug "${slug}" in ${existing.path} and ${file.path}.`);
+      }
+      explicitClaims.set(slug, file);
+    }
+    const group = groups.get(slug) ?? [];
     group.push(file);
-    groups.set(natural, group);
+    groups.set(slug, group);
   }
 
-  const naturalSlugs = new Set(groups.keys());
+  const claimedSlugs = new Set(groups.keys());
   const allocated = new Set<string>();
-  const losers: ProcessedFile[] = [];
+  const losers: { file: ProcessedFile; slug: string }[] = [];
   const reserved = new Set([...reservedPaths].map((path) => path.replace(/^\/+|\/+$/g, "")));
 
-  for (const natural of [...groups.keys()].sort()) {
-    const group = groups.get(natural)!.sort((left, right) =>
-      Number(exactName(right, natural)) - Number(exactName(left, natural)) ||
+  for (const slug of [...groups.keys()].sort()) {
+    const explicit = explicitClaims.get(slug);
+    const group = groups.get(slug)!.sort((left, right) =>
+      Number(right === explicit) - Number(left === explicit) ||
+      Number(exactName(right, slug)) - Number(exactName(left, slug)) ||
       left.path.localeCompare(right.path),
     );
-    if (reserved.has(natural === "index" ? "" : natural)) {
-      losers.push(...group);
+    if (reserved.has(slug === "index" ? "" : slug)) {
+      losers.push(...group.map((file) => ({ file, slug })));
       continue;
     }
-    group[0]!.slug = natural;
-    allocated.add(natural);
-    losers.push(...group.slice(1));
+    group[0]!.slug = slug;
+    allocated.add(slug);
+    losers.push(...group.slice(1).map((file) => ({ file, slug })));
   }
 
-  for (const file of losers.sort((left, right) =>
-    naturalSlug(left).localeCompare(naturalSlug(right)) || left.path.localeCompare(right.path),
+  for (const { file, slug } of losers.sort((left, right) =>
+    left.slug.localeCompare(right.slug) ||
+    Number(right.file === explicitClaims.get(right.slug)) - Number(left.file === explicitClaims.get(left.slug)) ||
+    left.file.path.localeCompare(right.file.path),
   )) {
-    const natural = naturalSlug(file);
     for (let suffix = 2; ; suffix++) {
-      const candidate = `${natural === "index" ? "index" : natural}-${suffix}`;
-      if (naturalSlugs.has(candidate) || allocated.has(candidate) || reserved.has(candidate)) continue;
+      const candidate = `${slug}-${suffix}`;
+      if (claimedSlugs.has(candidate) || allocated.has(candidate) || reserved.has(candidate)) continue;
       file.slug = candidate;
       allocated.add(candidate);
       break;

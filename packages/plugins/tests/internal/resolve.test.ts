@@ -40,6 +40,22 @@ describe("buildSlugMap", () => {
     expect(map["greeting"]).toBe("notes/hello");
   });
 
+  it("keeps physical basenames after explicit slug allocation", () => {
+    const map = buildSlugMap([{ slug: "guides/setup", path: "guides/Setup Notes.md" }]);
+    expect(map["setup notes"]).toBe("guides/setup");
+    expect(map["setup-notes"]).toBe("guides/setup");
+  });
+
+  it("keeps root authored names ahead of another note's basename", () => {
+    const entries = [
+      { slug: "root", path: "setup.md" },
+      { slug: "guides/setup", path: "guides/other.md" },
+    ];
+    for (const order of [entries, [...entries].reverse()]) {
+      expect(buildSlugMap(order).setup).toBe("root");
+    }
+  });
+
   it("keeps the canonical winner for duplicate authored stems", () => {
     const entries = [
       { slug: "foo", path: "foo.md" },
@@ -161,5 +177,22 @@ describe("resolveLink", () => {
     const r2 = resolveLink(makeLink("item"), map, slugs, "shallowest", "c/other");
     expect(r1).toBe(r2);
     expect(r1).toBe("a/item");
+  });
+
+  it("resolves ambiguous physical basenames after explicit slug allocation", () => {
+    const sources = [
+      { slug: "guides/setup", path: "guides/Setup Notes.md" },
+      { slug: "notes/install", path: "notes/Setup Notes.md" },
+    ];
+    for (const order of [sources, [...sources].reverse()]) {
+      const map = buildSlugMap(order);
+      const slugs = order.map((entry) => entry.slug);
+      expect(resolveLink(makeLink("Setup Notes"), map, slugs, "closest", "notes/start", order))
+        .toBe("notes/install");
+      expect(resolveLink(makeLink("Setup Notes"), map, slugs, "shallowest", "notes/start", order))
+        .toBe("guides/setup");
+      expect(resolveLink(makeLink("Setup Notes"), map, slugs, "absolute", "notes/start", order))
+        .toBeNull();
+    }
   });
 });
