@@ -1,4 +1,5 @@
 import type { Component } from 'svelte';
+import { browser } from '$app/environment';
 import CalloutNote from './CalloutNote.svelte';
 import LockedNote from './LockedNote.svelte';
 import PlainNote from './PlainNote.svelte';
@@ -192,7 +193,7 @@ function noteArtifactKey(pathname: string) {
 }
 
 export function hostStylesheets(pathname: string): string[] {
-	if (!findHostVault(pathname)) return [];
+	if (browser || !findHostVault(pathname)) return [];
 	const key = noteArtifactKey(pathname);
 	return ['_app/immutable/assets/shared.css', ...(key ? (noteStyles[key] ?? []) : [])];
 }
