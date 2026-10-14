@@ -1,15 +1,14 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
-	import { createVaultEntryView, type ProtectedGroupPayload } from '@svartz/core';
-	import { base } from '$app/paths';
-	import { browser } from '$app/environment';
-	import ProtectedNote from './ProtectedNote.svelte';
+	import PageBody from './PageBody.svelte';
 	import { themeTokenCss } from '../theme-tokens.js';
-	import type { ProtectedNoteReference } from './protected-client.js';
 	import {
-		resolveContentComponents,
-		type ContentComponentOverrides
-	} from './content-components.js';
+		artifactKeyToSlug,
+		useBrowserResources,
+		VaultPageState,
+		type PageModule
+	} from './vault-page-state.svelte.js';
+	import type { ContentComponentOverrides } from './content-components.js';
 	type ThemeModule = typeof import('virtual:svartz/theme');
 	type ArtifactsModule = typeof import('virtual:svartz/artifacts');
 	let {
@@ -23,81 +22,41 @@
 		artifacts: ArtifactsModule;
 		contentComponents?: ContentComponentOverrides;
 	} = $props();
-	let unlockedGroups = $state<ReadonlyMap<string, ProtectedGroupPayload>>(new Map());
-	const discovery = $derived(runtimeArtifacts.createUnlockedVault([...unlockedGroups.values()]));
-	const vault = $derived(discovery.vault);
-	function revealGroup(id: string, payload: ProtectedGroupPayload): void {
-		unlockedGroups = new Map([...unlockedGroups, [id, payload]]);
-	}
-	function hideGroup(id: string): void {
-		const next = new Map(unlockedGroups);
-		next.delete(id);
-		unlockedGroups = next;
-	}
-	const theme = $derived(runtimeTheme.theme);
-	const contentComponents = $derived(
-		resolveContentComponents(
-			hostContentComponents,
-			theme.components as Parameters<typeof resolveContentComponents>[1]
-		)
-	);
-	const resolveRuntimeRoute = $derived(runtimeTheme.resolveRuntimeRoute);
-	const assets = $derived(runtimeArtifacts.assets);
-	const backlinks = $derived(discovery.index.backlinks);
-	const folders = $derived(vault.folders);
-	const getNoteArtifact = $derived(runtimeArtifacts.getNoteArtifact);
-	const graph = $derived(discovery.index.graph);
-	const hasNoteArtifact = $derived(runtimeArtifacts.hasNoteArtifact);
-	const index = $derived(discovery.index);
-	const routes = $derived(runtimeArtifacts.routes);
-	const search = $derived(discovery.index.search);
-	const searchDocuments = $derived(discovery.searchDocuments);
-	const searchIndex = $derived(discovery.searchIndex);
-	const searchOptions = $derived(runtimeArtifacts.searchOptions);
+
 	const siteConfig = $derived(runtimeArtifacts.siteConfig);
 	const deploymentBasePath = $derived(runtimeArtifacts.deploymentBasePath);
-	const tags = $derived(vault.tags);
-	const themeConfig = $derived(runtimeArtifacts.themeConfig);
+	const activePathname = $derived(pathname);
+	const appPathname = $derived(
+		deploymentBasePath && activePathname.startsWith(`${deploymentBasePath}/`)
+			? activePathname.slice(deploymentBasePath.length)
+			: activePathname === deploymentBasePath
+				? '/'
+				: activePathname
+	);
+
+	const state = new VaultPageState(() => ({
+		appPathname,
+		runtimeTheme,
+		artifacts: runtimeArtifacts,
+		contentComponents: hostContentComponents
+	}));
+	useBrowserResources(() => ({ artifacts: runtimeArtifacts, pathname }));
+
+	const theme = $derived(state.theme);
+	const index = $derived(state.index);
+	const entry = $derived(state.entry);
+	const runtimeRoute = $derived(state.runtimeRoute);
 	// The vault's `theme.tokens`, above the theme's own tokens and the Svartz defaults.
-	const tokenCss = $derived(themeTokenCss(themeConfig?.tokens));
-	$effect(() => {
-		if (!browser) return;
-		let released = false;
-		let dispose: (() => void) | undefined;
-		void runtimeArtifacts
-			.mountBrowserResources(pathname)
-			.then((cleanup) => {
-				if (released) cleanup();
-				else dispose = cleanup;
-			})
-			.catch((error: unknown) =>
-				console.error('[svartz:web] browser resource mount failed', error)
-			);
-		return () => {
-			released = true;
-			dispose?.();
-		};
-	});
+	const tokenCss = $derived(themeTokenCss(runtimeArtifacts.themeConfig?.tokens));
 
-	type ComponentModule = { default: Component<any>; svartzProtected?: ProtectedNoteReference };
 	type ThemeComponentReference =
-		| (() => Promise<ComponentModule>)
+		| (() => Promise<PageModule>)
 		| { readonly default: Component<any> };
-	type RuntimeRouteMatch = ReturnType<typeof resolveRuntimeRoute>;
-
-	function normalizeSlug(currentPathname: string): string | undefined {
-		if (currentPathname === '/') return undefined;
-		return currentPathname.replace(/^\/+|\/+$/g, '');
-	}
-
-	function artifactKeyToSlug(artifactKey: string | undefined): string | undefined {
-		if (!artifactKey) return undefined;
-		return artifactKey.replace(/^pages\//, '').replace(/\.svelte$/, '');
-	}
+	type RuntimeRouteMatch = ReturnType<ThemeModule['resolveRuntimeRoute']>;
 
 	function resolveComponentModule(
 		reference: ThemeComponentReference | undefined
-	): ComponentModule | undefined {
+	): PageModule | undefined {
 		if (!reference) return undefined;
 		if (typeof reference === 'function') {
 			throw new Error(
@@ -119,7 +78,7 @@
 		return theme.layouts.defaultPage;
 	}
 
-	function resolvePageModule(match: RuntimeRouteMatch): ComponentModule | undefined {
+	function resolvePageModule(match: RuntimeRouteMatch): PageModule | undefined {
 		if (!match) {
 			return resolveComponentModule(theme.layouts.notFoundPage);
 		}
@@ -128,12 +87,12 @@
 			return resolveComponentModule(match.route.component);
 		}
 
-		if (match.artifactKey && hasNoteArtifact(match.artifactKey)) {
-			return getNoteArtifact(match.artifactKey);
+		if (state.noteModule) {
+			return state.noteModule;
 		}
 
 		const slug = artifactKeyToSlug(match.artifactKey);
-		if (slug && folders.some((folder) => folder.slug === slug)) {
+		if (slug && state.themeProps.folders.some((folder) => folder.slug === slug)) {
 			const folderRoute = theme.routes.find((route) => route.id === 'folder');
 			return resolveComponentModule(folderRoute?.component);
 		}
@@ -160,57 +119,6 @@
 		return new URL(value, new URL(activePathname, origin)).href;
 	}
 
-	const activePathname = $derived(pathname);
-	const appPathname = $derived(
-		deploymentBasePath && activePathname.startsWith(`${deploymentBasePath}/`)
-			? activePathname.slice(deploymentBasePath.length)
-			: activePathname === deploymentBasePath
-				? '/'
-				: activePathname
-	);
-	const vaultPathname = $derived(
-		routes.mountPath && appPathname.startsWith(`${routes.mountPath}/`)
-			? appPathname.slice(routes.mountPath.length)
-			: appPathname === routes.mountPath
-				? '/'
-				: appPathname
-	);
-	const canonicalEntry = $derived(
-		index.entries.find(
-			(candidate) =>
-				candidate.href === (appPathname.endsWith('/') ? appPathname : `${appPathname}/`)
-		)
-	);
-
-	const runtimeRoute = $derived.by(() => {
-		const match = resolveRuntimeRoute({
-			pathname: vaultPathname,
-			slug: normalizeSlug(vaultPathname)
-		});
-		if (!canonicalEntry || match?.route.id === 'note') return match;
-		const noteRoute = theme.routes.find((route) => route.id === 'note');
-		return noteRoute
-			? {
-					route: noteRoute,
-					pathname: vaultPathname,
-					params: { slug: canonicalEntry.slug },
-					layoutSlot: noteRoute.layoutSlot,
-					artifactKey: `pages/${canonicalEntry.slug}.svelte`
-				}
-			: match;
-	});
-
-	const entry = $derived.by(() => {
-		const slug = artifactKeyToSlug(runtimeRoute?.artifactKey);
-		if (!slug) return undefined;
-		const listed = vault.entries.find((candidate) => candidate.slug === slug);
-		if (listed) return listed;
-		const hidden = [...unlockedGroups.values()]
-			.flatMap((group) => group.entries)
-			.find((candidate) => candidate.slug === slug);
-		return hidden ? createVaultEntryView(hidden, base) : undefined;
-	});
-
 	const pageTitle = $derived(entry?.title ?? siteConfig.title);
 	const documentTitle = $derived(
 		entry && entry.title !== siteConfig.title
@@ -228,8 +136,6 @@
 	const layoutModule = $derived(resolveComponentModule(resolveLayoutReference(runtimeRoute)));
 	const pageModule = $derived(resolvePageModule(runtimeRoute));
 	const LayoutComponent = $derived(layoutModule?.default);
-	const PageComponent = $derived(pageModule?.default);
-	const protection = $derived(pageModule?.svartzProtected);
 </script>
 
 <svelte:head>
@@ -270,76 +176,11 @@
 		/>{/if}
 </svelte:head>
 
-{#if LayoutComponent && PageComponent}
+{#if LayoutComponent && pageModule}
 	<!-- Clarity must never record a note body, including content decrypted after hydration. -->
 	<div data-clarity-mask="true" style="display: contents">
-		<LayoutComponent
-			{assets}
-			{theme}
-			{themeConfig}
-			site={siteConfig}
-			route={runtimeRoute?.route}
-			match={runtimeRoute}
-			{entry}
-			{index}
-			{vault}
-			{graph}
-			{backlinks}
-			{folders}
-			{routes}
-			{search}
-			{searchDocuments}
-			{searchIndex}
-			{searchOptions}
-			{tags}
-		>
-			{#if protection}
-				{#key `${protection.payloadId}:${protection.slug}`}
-					<ProtectedNote
-						{protection}
-						loadBridgeUrls={runtimeArtifacts.loadProtectedBridgeUrls}
-						onUnlocked={revealGroup}
-						onLocked={hideGroup}
-						{contentComponents}
-						{assets}
-						{themeConfig}
-						site={siteConfig}
-						route={runtimeRoute?.route}
-						match={runtimeRoute}
-						{entry}
-						{index}
-						{vault}
-						{graph}
-						{backlinks}
-						{folders}
-						{routes}
-						{search}
-						{searchDocuments}
-						{searchIndex}
-						{searchOptions}
-						{tags}
-					/>
-				{/key}
-			{:else}<PageComponent
-					{contentComponents}
-					{assets}
-					{themeConfig}
-					site={siteConfig}
-					route={runtimeRoute?.route}
-					match={runtimeRoute}
-					{entry}
-					{index}
-					{vault}
-					{graph}
-					{backlinks}
-					{folders}
-					{routes}
-					{search}
-					{searchDocuments}
-					{searchIndex}
-					{searchOptions}
-					{tags}
-				/>{/if}
+		<LayoutComponent {...state.themeProps} {theme}>
+			<PageBody {state} module={pageModule} />
 		</LayoutComponent>
 	</div>
 {:else}
