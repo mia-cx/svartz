@@ -32,37 +32,25 @@ The workflow caches npm's package cache through `setup-node`. It installs depend
 
 ## This repository's pnpm workspace
 
-The Svartz source repo uses pnpm and Turbo. Its CI needs browser binaries for the UI tests. Use this workflow for the repository itself, not for a scaffolded site:
+The Svartz source repo uses the real [Workspace CI workflow](../.github/workflows/ci.yml).
+It runs on PRs and pushes to `sveltekit-rewrite`.
+Its actions are pinned to commit SHAs.
+Node reads `24.20.0` from `.node-version`.
+pnpm reads its version from the root `packageManager` field.
 
-```yaml
-name: Workspace CI
-on:
-  pull_request:
-  push:
-    branches: [sveltekit-rewrite]
+CI installs with `pnpm i --frozen-lockfile` and caches the pnpm store.
+It installs Playwright Chromium for `@svartz/ui`.
+It runs `pnpm test:release`, `pnpm build`, and `pnpm test`.
+The Changeset check requires a note for public source changes, or the `no changeset` label.
+Label changes rerun that check.
 
-permissions:
-  contents: read
+The [Release validation workflow](../.github/workflows/release-validation.yml) checks release PRs and merged release commits.
+It also runs `pnpm release:check`, including packed static and Cloudflare hosts.
+It supports manual validation of a full commit SHA.
+Publication runs only after merged-release validation succeeds.
+See [releasing](releasing.md) for bootstrap, trusted publishers, and retries.
 
-jobs:
-  workspace:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: pnpm
-      - uses: actions/cache@v5
-        with:
-          path: .turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: ${{ runner.os }}-turbo-
-      - run: pnpm i --frozen-lockfile
-      - run: pnpm --filter @svartz/ui exec playwright install --with-deps chromium
-      - run: pnpm build
-      - run: pnpm test
-```
+The repository workflow is separate from the scaffolded site's example above.
 
-`setup-node` caches the pnpm store. The second cache saves Turbo results under a new key for each commit and restores an earlier result when available. Do not cache `node_modules` or reuse one constant Turbo cache key. [GitHub's cache reference](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching) says existing cache contents cannot be updated. Deployment of the official docs vault is tracked separately in [issue #1](https://github.com/mia-cx/svartz/issues/1); neither example deploys a site.
+Deployment of the official docs vault is tracked separately in [issue #1](https://github.com/mia-cx/svartz/issues/1).
+These workflows do not deploy a site.

@@ -3,15 +3,20 @@ description: Pack and publish Svartz workspace packages without leaking workspac
 globs:
   - packages/*/package.json
   - themes/*/package.json
-  - scripts/check-release.mjs
+  - scripts/*release*.mjs
+  - .github/workflows/*release*.yml
+  - .github/workflows/package-publish.yml
 alwaysApply: false
 ---
 
 # Package release
 
-- Pack and publish public packages with pnpm. It converts `workspace:` dependencies to npm-compatible version ranges. `npm pack` leaves the workspace specs in the archives.
+- Pack public packages with pnpm. It converts `workspace:` dependencies to npm-compatible ranges. Publish the exact tarballs with npm. `npm pack` leaves workspace specs unresolved.
 - Keep every public package at the same v1 version. Publish dependencies before `svartz`, because `npx svartz@latest init` installs the others from npm.
 - Validate the packed archives in a temporary project outside the monorepo. Source imports and workspace symlinks hide missing package files and dependency declarations.
 - The CLI's Vite dependency is a peer. A Vite 8 host must resolve its own Vite 8 through the packed CLI. `@svartz/vite` also peers on the host's Svelte Vite plugin: v6 for Vite 7, v7 for Vite 8. Exercise protected SVX in the packed Vite 8 host. Tailwind scans `dist` in packed theme/UI packages and their runtime dependency or component-library peer packages, never dev-only tooling.
 - Type-check generated routes in the packed host with the `@svartz/vite/virtual-modules` reference. The older UI reference has a narrower runtime index and does not type-check host discovery helpers.
-- The seven public packages use MCX v1.0. Keep a copy of the repository `LICENSE` in each package root and verify the text inside every packed archive.
+- All eleven public packages use MCX v1.0. Keep the repository `LICENSE` in each package root and verify its packed text.
+- Before changing versioning or workflows, read `docs/releasing.md` for bootstrap, OIDC setup, and release authorization.
+- Theme manifest package versions follow Changesets. Keep their v1 contract versions separate.
+- Release checks must accept later fixed-group versions and build the packed Vite 8 Cloudflare host, including Worker and mounted note output.
