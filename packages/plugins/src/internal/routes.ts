@@ -35,6 +35,7 @@ function requestedSlug(file: ProcessedFile): string {
   }
   const segment = normalizeSlugSegment(value);
   if (!segment) throw new Error(`Invalid slug in ${file.path}: normalizes to empty.`);
+  if (segment === "index") throw new Error(`Invalid slug in ${file.path}: "index" names the folder, not a note.`);
   if (source === "index" || source.endsWith("/index")) {
     throw new Error(`Invalid slug in ${file.path}: folder notes cannot set slug.`);
   }

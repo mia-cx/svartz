@@ -100,11 +100,10 @@ describe("canonical route allocation", () => {
     expect(files.map((file) => file.slug)).toEqual(["guides/setup", "notes/setup"]);
   });
 
-  it("detects explicit collisions after index URL normalization", () => {
-    const files = [note("first.md"), note("guides/second.md")];
-    files[0]!.frontmatter = { slug: "guides" };
-    files[1]!.frontmatter = { slug: "index" };
-    expect(() => allocateRoutes(files)).toThrow('Conflicting slug "guides" in first.md and guides/second.md.');
+  it.each(["index", "Index"])("rejects slug %s, which would claim the folder URL", (slug) => {
+    const file = note("guides/second.md");
+    file.frontmatter = { slug };
+    expect(() => allocateRoutes([file])).toThrow('Invalid slug in guides/second.md: "index" names the folder, not a note.');
   });
 
   it.each([false, true])("gives explicit slugs priority over exact filenames (reversed: %s)", (reverse) => {
