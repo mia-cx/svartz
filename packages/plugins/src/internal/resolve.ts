@@ -93,14 +93,20 @@ export const buildSlugMap = (
   }
 
   // A literal authored filename wins over a normalized slug when names collide.
+  // The normalized physical path keys the same way, so [[b/setup-notes]] still
+  // names b/Setup Notes.md after a frontmatter slug changes its URL.
   for (const entry of entries) {
     if (!entry.path) continue;
     const stem = entry.path.replace(/\.(md|mdx|svx)$/i, "").toLowerCase();
-    const sameStem = authoredStems.get(stem) ?? [];
-    sameStem.push(entry);
-    authoredStems.set(stem, sameStem);
+    const normalizedPath = fileToSlug(entry.path);
+    for (const key of new Set([stem, normalizedPath])) {
+      const sameStem = authoredStems.get(key) ?? [];
+      sameStem.push(entry);
+      authoredStems.set(key, sameStem);
+    }
     map[entry.path.toLowerCase()] = entry.slug;
     authoredNames.add(stem);
+    authoredNames.add(normalizedPath);
     authoredNames.add(entry.path.toLowerCase());
   }
 

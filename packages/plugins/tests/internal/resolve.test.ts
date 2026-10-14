@@ -195,4 +195,31 @@ describe("resolveLink", () => {
         .toBeNull();
     }
   });
+
+  it("resolves full physical paths after a frontmatter slug changes the URL", () => {
+    const sources = [
+      { slug: "a/setup", path: "a/Setup Notes.md" },
+      { slug: "b/install", path: "b/Setup Notes.md" },
+    ];
+    for (const order of [sources, [...sources].reverse()]) {
+      const map = buildSlugMap(order);
+      const slugs = order.map((entry) => entry.slug);
+      for (const target of ["b/setup-notes", "b/Setup Notes"]) {
+        expect(resolveLink(makeLink(target), map, slugs, "closest", "a/start", order)).toBe("b/install");
+        expect(resolveLink(makeLink(target), map, slugs, "absolute", "a/start", order)).toBe("b/install");
+      }
+    }
+  });
+
+  it("lets a physical path win over another note's allocated slug", () => {
+    // x/foo.md sets slug: bar -> x/bar; x/bar.md loses its natural URL -> x/bar-2.
+    const sources = [
+      { slug: "x/bar", path: "x/foo.md" },
+      { slug: "x/bar-2", path: "x/bar.md" },
+    ];
+    const map = buildSlugMap(sources);
+    const slugs = sources.map((entry) => entry.slug);
+    expect(resolveLink(makeLink("x/bar"), map, slugs, "closest", "a/start", sources)).toBe("x/bar-2");
+    expect(resolveLink(makeLink("x/foo"), map, slugs, "closest", "a/start", sources)).toBe("x/bar");
+  });
 });

@@ -30,8 +30,8 @@ function requestedSlug(file: ProcessedFile): string {
   if (!file.frontmatter || !("slug" in file.frontmatter)) return routeSlug(source);
 
   const value = file.frontmatter.slug;
-  if (typeof value !== "string" || !value.trim() || value.includes("/")) {
-    throw new Error(`Invalid slug in ${file.path}: expected a non-empty string without "/".`);
+  if (typeof value !== "string" || !value.trim() || value.includes("/") || value.includes("\\")) {
+    throw new Error(`Invalid slug in ${file.path}: expected a non-empty string without "/" or "\\".`);
   }
   const segment = normalizeSlugSegment(value);
   if (!segment) throw new Error(`Invalid slug in ${file.path}: normalizes to empty.`);

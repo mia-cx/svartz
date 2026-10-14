@@ -64,7 +64,7 @@ describe("canonical route allocation", () => {
     expect(file.slug).toBe("guides-and-tips/deep-notes/setup");
   });
 
-  it.each([null, undefined, false, 42, {}, [], "", " \t", "?#", "/", "a/b", "/a", "a/"]
+  it.each([null, undefined, false, 42, {}, [], "", " \t", "?#", "/", "a/b", "/a", "a/", "foo\\bar", "foo\\.."]
     .map((slug) => ({ slug })))(
     "rejects invalid slug $slug with the note path",
     ({ slug }) => {
