@@ -15,6 +15,11 @@
 		"dist",
 		"!dist/**/*.test.*"
 	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/mia-cx/svartz.git",
+		"directory": "themes/wiki"
+	},
 	"sideEffects": [
 		"**/*.css"
 	],

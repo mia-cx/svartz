@@ -1,0 +1,33 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [
+    [
+      "@svartz/core",
+      "@svartz/plugins",
+      "@svartz/config",
+      "@svartz/ui",
+      "@svartz/theme-minimal",
+      "@svartz/theme-wiki",
+      "@svartz/theme-blog",
+      "@svartz/theme-docs",
+      "@svartz/theme-api-docs",
+      "@svartz/vite",
+      "svartz"
+    ]
+  ],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "sveltekit-rewrite",
+  "updateInternalDependencies": "patch",
+  "ignore": [
+    "svartz-monorepo",
+    "@svartz/web",
+    "@jackyzha0/quartz"
+  ],
+  "privatePackages": {
+    "version": false,
+    "tag": false
+  }
+}

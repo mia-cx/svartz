@@ -1,8 +1,13 @@
 # Next steps for v1
 
-1. Finish the UI work in [#21](https://github.com/mia-cx/svartz/issues/21) on its separate branch. Backend changes through [#70](https://github.com/mia-cx/svartz/pull/70) are already pushed for that branch to consume.
-2. Review and merge the backend stack from [#16](https://github.com/mia-cx/svartz/pull/16) upward, preserving each PR's base until its parent merges. Rebase the finished UI branch onto the integrated backend before merging it.
-3. Run the [#17](https://github.com/mia-cx/svartz/issues/17) acceptance pass on the integrated branch: serial workspace checks, public-URL sitemap and metadata, 404 and asset output, mounted host routes, browser hydration, and packed npm consumers.
-4. Plan npm publication and deployment once the integrated v1 branch is green. Package release preparation is in [#20](https://github.com/mia-cx/svartz/issues/20); no public publish or production deployment has happened.
+The backend stack #16 through #70 and the theme stack #168 through #172 are merged into `sveltekit-rewrite`.
 
-The previous Markdown, embed, watch, and CLI checklist is obsolete. Their backend work is represented by the PR stack and its linked issues; use those issues for remaining review findings.
+1. Finish [#173](https://github.com/mia-cx/svartz/issues/173), which makes the slug property control note URLs.
+2. Finish [#174](https://github.com/mia-cx/svartz/issues/174), which embeds a note body in a host-owned page.
+3. Review [#175](https://github.com/mia-cx/svartz/issues/175), which adds Changesets, workspace CI, and trusted npm publication.
+4. Run the [#17](https://github.com/mia-cx/svartz/issues/17) acceptance pass on the integrated branch.
+5. Complete the [one-time npm setup](docs/releasing.md#one-time-setup) before the first automated release.
+
+The acceptance pass covers workspace checks, public URL metadata, 404 and asset output, mounted routes, hydration, and packed consumers.
+npm publication and production deployment remain separate actions.
+No v1 package has been published or deployed.

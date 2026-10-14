@@ -39,9 +39,14 @@
     "svartz:dev:showcase-api": "svartz dev --vault showcase-api",
     "svartz:preview:showcase-api": "svartz preview --vault showcase-api",
     "svartz:dev": "turbo run svartz:dev:docs svartz:dev:showcase svartz:dev:showcase-wiki svartz:dev:showcase-blog svartz:dev:showcase-docs svartz:dev:showcase-api",
-    "svartz:preview": "turbo run svartz:preview:docs svartz:preview:showcase svartz:preview:showcase-wiki svartz:preview:showcase-blog svartz:preview:showcase-docs svartz:preview:showcase-api"
+    "svartz:preview": "turbo run svartz:preview:docs svartz:preview:showcase svartz:preview:showcase-wiki svartz:preview:showcase-blog svartz:preview:showcase-docs svartz:preview:showcase-api",
+    "changeset": "changeset",
+    "release:version": "changeset version && node scripts/release-version.mjs && pnpm install --lockfile-only --ignore-scripts",
+    "release:bootstrap": "node scripts/release-publish.mjs bootstrap",
+    "test:release": "node --test scripts/release-*.test.mjs scripts/check-changesets.test.mjs scripts/changelog-section.test.mjs"
   },
   "devDependencies": {
+    "@changesets/cli": "3.0.3",
     "@svartz/config": "workspace:^",
     "@svartz/core": "workspace:^",
     "@svartz/plugins": "workspace:^",
