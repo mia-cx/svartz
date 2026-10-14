@@ -40,6 +40,12 @@ test('release packages reject missing or wrong repository metadata', () => {
   })), /repository\.directory/);
 });
 
+test('release packages stay on the 1.x line', () => {
+  assert.throws(() => readReleasePackages(fixture((manifest) => {
+    manifest.version = '2.0.0';
+  })), /must stay on 1\.x/);
+});
+
 test('every internal dependency publishes before its dependent', () => {
   const order = new Map(RELEASE_PACKAGES.map(([name], index) => [name, index]));
   for (const [name, directory] of RELEASE_PACKAGES) {

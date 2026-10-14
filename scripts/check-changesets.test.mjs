@@ -22,9 +22,15 @@ test('parseChangeset splits frontmatter from the note', () => {
 	assert.equal(body, 'A note worth releasing.');
 });
 
-test('validateChangeset accepts both released packages and every bump kind', () => {
+test('validateChangeset accepts released packages with patch or minor bumps', () => {
 	validateChangeset(valid, 'x.md');
-	validateChangeset(`---\n@svartz/ui: major\n---\nShip it.\n`, 'x.md');
+});
+
+test('validateChangeset rejects major bumps while releases stay on 1.x', () => {
+	assert.throws(
+		() => validateChangeset(`---\n'@svartz/ui': major\n---\nShip it.\n`, 'bad.md'),
+		/do not take major bumps/
+	);
 });
 
 test('validateChangeset rejects malformed files', () => {
@@ -52,14 +58,17 @@ test('changedChangesets keeps .changeset markdown but not README or config', () 
 	);
 });
 
-test('isUserFacing covers only public source and the CLI template', () => {
+test('isUserFacing covers public source, types, manifests, and the CLI template', () => {
   for (const file of ['packages/core/src/index.ts', 'packages/ui/src/lib/Button.svelte',
-    'packages/cli/src/init.ts', 'packages/cli/template/gitignore', 'themes/wiki/src/lib/index.ts']) {
+    'packages/cli/src/init.ts', 'packages/cli/template/gitignore', 'themes/wiki/src/lib/index.ts',
+    'packages/vite/types/virtual-modules.d.ts', 'themes/wiki/types/index.d.ts',
+    'packages/ui/package.json', 'themes/wiki/package.json']) {
     assert.ok(isUserFacing(file), file);
   }
   for (const file of ['apps/web/src/routes/+page.svelte', 'packages/reference/src/index.ts',
-    'packages/private/src/index.ts', '.github/workflows/ci.yml', 'docs/releasing.md',
-    'packages/core/tests/index.test.ts', 'themes/wiki/package.json']) {
+    'packages/reference/package.json', 'packages/private/src/index.ts', '.github/workflows/ci.yml',
+    'docs/releasing.md', 'packages/core/tests/index.test.ts', 'packages/core/package.json.md',
+    'themes/wiki/package.json5']) {
     assert.ok(!isUserFacing(file), file);
   }
 });

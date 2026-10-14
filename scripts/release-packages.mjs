@@ -28,6 +28,7 @@ export function readReleasePackages(root = process.cwd()) {
     assert.equal(manifest.repository?.url, 'https://github.com/mia-cx/svartz.git', `${name} repository.url`);
     assert.equal(manifest.repository?.directory, directory, `${name} repository.directory`);
     assert.match(manifest.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+    assert.equal(manifest.version.split('.')[0], '1', `${name} must stay on 1.x`);
     return { name, directory, version: manifest.version };
   });
   assert.equal(new Set(packages.map(({ version }) => version)).size, 1, 'Public versions must match');

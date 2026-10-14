@@ -89,6 +89,7 @@ pnpm release:bootstrap
 ```
 
 Bootstrap requires every public version to be `1.0.0`.
+It refuses a dirty working tree or a checkout whose HEAD is not the merged `sveltekit-rewrite` head.
 It runs `release:check`, packs with pnpm, and publishes through the maintainer's npm login.
 It skips identical published versions, so an interrupted bootstrap can resume.
 It creates no tags or GitHub releases.

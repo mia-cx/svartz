@@ -5,10 +5,18 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { alreadyPublished } from './release-registry.mjs';
-import { readReleasePackages } from './release-packages.mjs';
+import { BASE_BRANCH, readReleasePackages } from './release-packages.mjs';
 
 const run = (file, args, cwd = process.cwd()) =>
   execFileSync(file, args, { cwd, stdio: 'inherit' });
+
+/** Bootstrap writes the registry; refuse a dirty tree or a checkout that is not the merged head. */
+export function requireCleanReleaseCheckout(git) {
+  assert.equal(git('status', '--porcelain'), '', 'Bootstrap requires a clean working tree');
+  git('fetch', '--no-tags', 'origin', BASE_BRANCH);
+  assert.equal(git('rev-parse', 'HEAD'), git('rev-parse', `origin/${BASE_BRANCH}`),
+    `Bootstrap requires HEAD to be the merged origin/${BASE_BRANCH} commit`);
+}
 
 /** Publish in dependency order; identical versions are safe to retry, different archives fail closed. */
 export async function publishArchives(packages, { pack, published, publish }) {
@@ -31,6 +39,7 @@ export async function publishRelease(names, { bootstrap = false } = {}) {
   for (const name of names) assert.ok(packages.some((pkg) => pkg.name === name), `Unknown package ${name}`);
   if (bootstrap) {
     assert.ok(packages.every(({ version }) => version === '1.0.0'), 'Bootstrap is only for 1.0.0');
+    requireCleanReleaseCheckout((...args) => execFileSync('git', args, { encoding: 'utf8' }).trim());
     run('pnpm', ['release:check']);
   }
   const temporary = await mkdtemp(join(tmpdir(), 'svartz-publish-'));

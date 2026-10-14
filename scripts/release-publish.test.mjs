@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { publishArchives } from './release-publish.mjs';
+import { publishArchives, requireCleanReleaseCheckout } from './release-publish.mjs';
 import { RELEASE_PACKAGES, readReleasePackages } from './release-packages.mjs';
 
 test('publication is sequential, dependencies precede the CLI, and retries skip identical versions', async () => {
@@ -33,4 +33,18 @@ test('a failed registry or publish step stops before dependents', async () => {
     }), /registry mismatch|publish failed/);
     assert.deepEqual(events, ['@svartz/core']);
   }
+});
+
+test('bootstrap requires a clean checkout on the merged base head', () => {
+  const sha = 'a'.repeat(40);
+  const git = (status, head = sha, remote = sha) => (...args) => {
+    if (args[0] === 'status') return status;
+    if (args[0] === 'rev-parse') return args[1] === 'HEAD' ? head : remote;
+    return '';
+  };
+  requireCleanReleaseCheckout(git(''));
+  assert.throws(() => requireCleanReleaseCheckout(git(' M packages/core/src/index.ts')),
+    /clean working tree/);
+  assert.throws(() => requireCleanReleaseCheckout(git('', sha, 'b'.repeat(40))),
+    /origin\/sveltekit-rewrite/);
 });

@@ -28,6 +28,9 @@ jobs:
     if: github.repository == 'mia-cx/svartz' && github.ref == 'refs/heads/sveltekit-rewrite'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       release: ${{ steps.plan.outputs.release }}
       publish: ${{ steps.plan.outputs.publish }}
@@ -124,3 +127,4 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      pull-requests: read

@@ -37,7 +37,7 @@ jobs:
 
   changeset:
     name: Changeset
-    if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/sveltekit-rewrite'
+    if: github.event_name == 'pull_request' && (github.head_ref != 'changeset-release/sveltekit-rewrite' || github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

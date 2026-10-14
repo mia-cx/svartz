@@ -10,7 +10,11 @@ export const RELEASE_PACKAGES = new Set(packages.map(([name]) => name));
 
 /** Paths whose changes always ship to users, so they need a recorded release note. */
 export const USER_FACING = [
-  ...packages.map(([, directory]) => new RegExp(`^${directory}/src/`)),
+  ...packages.flatMap(([, directory]) => [
+    new RegExp(`^${directory}/src/`),
+    new RegExp(`^${directory}/types/`),
+    new RegExp(`^${directory}/package\\.json$`),
+  ]),
   /^packages\/cli\/template\//,
 ];
 
@@ -32,6 +36,10 @@ export function validateChangeset(content, path = 'changeset.md') {
 		return match;
 	});
 	assert.ok(declarations.length > 0, `${path}: declare a patch, minor, or major bump`);
+	for (const [, name, bump] of declarations) {
+		assert.notEqual(bump, 'major',
+			`${path}: Svartz v1 releases do not take major bumps; a 2.0 release needs a deliberate change to this check`);
+	}
 	for (const [, name] of declarations) {
 		assert.ok(
 			RELEASE_PACKAGES.has(name),

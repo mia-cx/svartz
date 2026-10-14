@@ -28,6 +28,7 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      pull-requests: read
     env:
       SVARTZ_RELEASE_SHA: ${{ inputs.sha }}
       SVARTZ_RELEASE_RETRY: 'true'
