@@ -1,0 +1,77 @@
+/*
+ * Presentation mode from `presentation()` in @svartz/plugins. Colours and type
+ * come from the Svartz tokens, with system fallbacks for other themes. A slide
+ * is a 1280×720 canvas scaled to fit the screen.
+ */
+.svartz-slides {
+	position: fixed;
+	inset: 0;
+	z-index: 2147483000;
+	overflow: hidden;
+	background: var(--sv-paper, Canvas);
+	color: var(--sv-text, CanvasText);
+}
+
+.svartz-slides:focus {
+	outline: none;
+}
+
+/* Centred by position, not grid: a canvas wider than a phone would overflow grid alignment. */
+.svartz-slides-stage {
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	inline-size: 1280px;
+	block-size: 720px;
+	translate: -50% -50%;
+	scale: var(--svartz-slide-scale, 1);
+}
+
+/*
+ * The slide scrolls when its content is taller than the canvas. `safe center`
+ * centres short slides without pushing a tall slide's top out of reach.
+ */
+.svartz-slides .svartz-slide {
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	justify-content: safe center;
+	block-size: 100%;
+	padding: 64px 96px;
+	overflow: auto;
+}
+
+/* Presentation type: the prose scale from a larger base, so headings keep their steps.
+   The body stays in block flow, so the prose margins collapse as they do in the note. */
+.svartz-slides .svartz-slide-body {
+	--sv-text-base: 1.75rem;
+	--sv-step--1: calc(var(--sv-text-base) / var(--sv-ratio, 1.2));
+	--sv-step-0: var(--sv-text-base);
+	--sv-step-1: calc(var(--sv-text-base) * var(--sv-ratio, 1.2));
+	--sv-step-2: calc(var(--sv-text-base) * pow(var(--sv-ratio, 1.2), 2));
+	--sv-step-3: calc(var(--sv-text-base) * pow(var(--sv-ratio, 1.2), 3));
+	--sv-step-4: calc(var(--sv-text-base) * pow(var(--sv-ratio, 1.2), 4));
+	flex: none;
+	max-inline-size: none;
+	margin: 0;
+	font-size: var(--sv-step-0, 1.75rem);
+}
+
+.svartz-slides .svartz-slide-body > :first-child {
+	margin-block-start: 0;
+}
+
+.svartz-slides .svartz-slide-body > :last-child {
+	margin-block-end: 0;
+}
+
+.svartz-slides-counter {
+	position: absolute;
+	inset-block-end: 16px;
+	inset-inline-end: 24px;
+	margin: 0;
+	color: var(--sv-muted, GrayText);
+	font-family: var(--sv-font-sans, system-ui, sans-serif);
+	font-size: 0.8rem;
+	font-variant-numeric: tabular-nums;
+}

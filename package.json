@@ -44,6 +44,7 @@
   "devDependencies": {
     "@svartz/config": "workspace:^",
     "@svartz/core": "workspace:^",
+    "@svartz/plugins": "workspace:^",
     "@svartz/theme-api-docs": "workspace:^",
     "@svartz/theme-blog": "workspace:^",
     "@svartz/theme-docs": "workspace:^",

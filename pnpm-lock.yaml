@@ -14,6 +14,9 @@ importers:
       '@svartz/core':
         specifier: workspace:^
         version: link:packages/core
+      '@svartz/plugins':
+        specifier: workspace:^
+        version: link:packages/plugins
       '@svartz/theme-api-docs':
         specifier: workspace:^
         version: link:themes/api-docs
