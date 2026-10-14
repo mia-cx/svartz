@@ -12,9 +12,7 @@
         "*.config.js",
         "*.config.ts",
         "vite.config.ts",
-        "vite.theme-css.config.ts",
         "svelte.config.js",
-        "tailwind.config.js",
         "tsconfig.json",
         "package.json"
       ],
@@ -67,7 +65,12 @@
     },
     "//#svartz:build": {
       "dependsOn": [
-        "//#svartz:build:docs"
+        "//#svartz:build:docs",
+        "//#svartz:build:showcase",
+        "//#svartz:build:showcase-wiki",
+        "//#svartz:build:showcase-blog",
+        "//#svartz:build:showcase-docs",
+        "//#svartz:build:showcase-api"
       ]
     },
     "//#svartz:build:docs": {
@@ -90,6 +93,126 @@
     "//#svartz:preview:docs": {
       "dependsOn": [
         "//#svartz:build:docs"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:build:showcase": {
+      "inputs": [
+        "apps/web/**",
+        "package.json",
+        "pnpm-lock.yaml",
+        "svartz.config.*",
+        ".svartzrc.*",
+        "vaults/showcase/**"
+      ],
+      "outputs": [
+        ".svartz/vaults/showcase/dist/**"
+      ]
+    },
+    "//#svartz:dev:showcase": {
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:preview:showcase": {
+      "dependsOn": [
+        "//#svartz:build:showcase"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:build:showcase-wiki": {
+      "inputs": [
+        "apps/web/**",
+        "package.json",
+        "pnpm-lock.yaml",
+        "svartz.config.*",
+        ".svartzrc.*",
+        "vaults/showcase-wiki/**"
+      ],
+      "outputs": [
+        ".svartz/vaults/showcase-wiki/dist/**"
+      ]
+    },
+    "//#svartz:dev:showcase-wiki": {
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:preview:showcase-wiki": {
+      "dependsOn": [
+        "//#svartz:build:showcase-wiki"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:build:showcase-blog": {
+      "inputs": [
+        "apps/web/**",
+        "package.json",
+        "pnpm-lock.yaml",
+        "svartz.config.*",
+        ".svartzrc.*",
+        "vaults/showcase-blog/**"
+      ],
+      "outputs": [
+        ".svartz/vaults/showcase-blog/dist/**"
+      ]
+    },
+    "//#svartz:dev:showcase-blog": {
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:preview:showcase-blog": {
+      "dependsOn": [
+        "//#svartz:build:showcase-blog"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:build:showcase-docs": {
+      "inputs": [
+        "apps/web/**",
+        "package.json",
+        "pnpm-lock.yaml",
+        "svartz.config.*",
+        ".svartzrc.*",
+        "vaults/showcase-docs/**"
+      ],
+      "outputs": [
+        ".svartz/vaults/showcase-docs/dist/**"
+      ]
+    },
+    "//#svartz:dev:showcase-docs": {
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:preview:showcase-docs": {
+      "dependsOn": [
+        "//#svartz:build:showcase-docs"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:build:showcase-api": {
+      "inputs": [
+        "apps/web/**",
+        "package.json",
+        "pnpm-lock.yaml",
+        "svartz.config.*",
+        ".svartzrc.*",
+        "vaults/showcase-api/**"
+      ],
+      "outputs": [
+        ".svartz/vaults/showcase-api/dist/**"
+      ]
+    },
+    "//#svartz:dev:showcase-api": {
+      "cache": false,
+      "persistent": true
+    },
+    "//#svartz:preview:showcase-api": {
+      "dependsOn": [
+        "//#svartz:build:showcase-api"
       ],
       "cache": false,
       "persistent": true

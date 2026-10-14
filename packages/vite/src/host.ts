@@ -140,6 +140,9 @@ export function withSvartzHost(config: UserConfigExport): UserConfigExport {
       optimizeDeps: {
         exclude: ["@svartz/ui", "@svartz/ui/runtime", "@svartz/theme-minimal"],
       },
+      // Svelte component libraries @svartz/ui uses. A host that links @svartz/ui
+      // from a workspace never lists them, so SSR would try to import raw .svelte.
+      ssr: { noExternal: ["@lucide/svelte"] },
       resolve: {
         alias: {
           ...(process.env.SVARTZ_THEME_SOURCE_ID && process.env.SVARTZ_THEME_SOURCE_PATH

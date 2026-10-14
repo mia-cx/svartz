@@ -61,18 +61,25 @@ const AnalyticsConfigSchema = Schema.Union(
   Schema.Struct({ provider: Schema.Literal("rybbit"), siteId: NonEmptyStringSchema, host: Schema.optional(HttpUrlSchema) }),
 );
 
+/**
+ * Shared keys are checked here. Anything else is the theme's own setting
+ * (routes, footer, infobox defaults…) and passes through for the theme to validate.
+ */
 const VaultThemeConfigSchema = Schema.Union(
   Schema.String,
-  Schema.Struct({
-    base: Schema.String,
-    comments: Schema.optional(GiscusConfigSchema),
-    recentNotes: Schema.optional(Schema.Struct({
-      enabled: Schema.optional(Schema.Boolean),
-      limit: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.positive())),
-      showTags: Schema.optional(Schema.Boolean),
-      linkToMore: Schema.optional(Schema.String),
-    })),
-  }).pipe(Schema.extend(TailwindThemeConfigSchema)),
+  Schema.Struct(
+    {
+      base: Schema.String,
+      comments: Schema.optional(GiscusConfigSchema),
+      recentNotes: Schema.optional(Schema.Struct({
+        enabled: Schema.optional(Schema.Boolean),
+        limit: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.positive())),
+        showTags: Schema.optional(Schema.Boolean),
+        linkToMore: Schema.optional(Schema.String),
+      })),
+    },
+    Schema.Record({ key: Schema.String, value: Schema.Unknown }),
+  ).pipe(Schema.extend(TailwindThemeConfigSchema)),
 );
 
 const FrontmatterFieldsSchema = Schema.Struct({

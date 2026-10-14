@@ -273,15 +273,17 @@ describe("svartz CLI", () => {
         if (!browser) throw new Error("Chromium CDP did not become ready");
         try {
           const page = await browser.contexts()[0]!.newPage();
+          // Desktop width: on phones the minimal theme moves the explorer into a closed drawer.
+          await page.setViewportSize({ width: 1280, height: 800 });
           const cdp = await page.context().newCDPSession(page);
           await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
           const errors: string[] = [];
           page.on("pageerror", (error) => errors.push(error.message));
           page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
           await page.goto(`http://127.0.0.1:${address.port}/tags/guides/`);
-          await page.getByRole("heading", { name: "#Guides" }).waitFor();
-          await page.getByRole("button", { name: "Open search (Ctrl+K)" }).click();
-          await page.getByRole("searchbox", { name: "Search notes" }).waitFor();
+          await page.getByRole("heading", { level: 1, name: "guides" }).waitFor();
+          await page.getByRole("button", { name: /^Search/ }).click();
+          await page.getByRole("combobox", { name: "Search notes" }).waitFor();
           expect(errors).toEqual([]);
           await page.goto(`http://127.0.0.1:${address.port}/`);
           await page.locator("pre.svartz-mermaid svg").waitFor({ timeout: 10_000 });

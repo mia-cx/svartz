@@ -1,5 +1,5 @@
 import { getCompilerContributions, type PluginContext } from "@svartz/core";
-import type { Root } from "hast";
+import type { Element, Root } from "hast";
 import { toHtml } from "hast-util-to-html";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeRaw from "rehype-raw";
@@ -43,12 +43,26 @@ function resolveSrcset(value: string, baseUrl: string): string {
   return candidates.join(", ");
 }
 
+/**
+ * rehype-raw rebuilds the tree and drops `data`, including a code fence's meta
+ * (`title="…" {2-4}`). Keep it as the `metastring` property rehype-pretty-code reads.
+ */
+function preserveCodeMeta() {
+  return (tree: Root) => {
+    visit(tree, "element", (node: Element) => {
+      const meta = (node.data as { meta?: string } | undefined)?.meta;
+      if (node.tagName === "code" && meta) node.properties.metastring = meta;
+    });
+  };
+}
+
 function createMarkdownProcessor(ctx: PluginContext) {
   const compiler = getCompilerContributions(ctx);
   return unified()
     .use(remarkParse)
     .use({ plugins: compiler.remarkPlugins })
     .use(remarkRehype, { allowDangerousHtml: true })
+    .use(preserveCodeMeta)
     .use(rehypeRaw)
     .use(rehypeSlug)
     .use(rehypeAutolinkHeadings, {

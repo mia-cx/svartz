@@ -36,6 +36,8 @@ interface ResolvedSiteConfig {
   readonly author?: string;
   readonly image?: string;
   readonly favicon?: string;
+  /** Set by the build, never authored: true when it publishes `rss.xml` at the vault root. */
+  readonly feed?: boolean;
 }
 
 /** Public analytics settings shipped to the browser only when selected by a consumer. */

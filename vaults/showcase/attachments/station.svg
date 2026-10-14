@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" viewBox="0 0 720 360" font-family="sans-serif" font-size="15">
+  <rect width="720" height="360" fill="#f3f1ec"/>
+  <rect x="330" y="120" width="16" height="220" fill="#7d7468"/>
+  <g fill="#ffffff" stroke="#b9b1a4">
+    <rect x="286" y="40" width="104" height="10" rx="4"/>
+    <rect x="286" y="56" width="104" height="10" rx="4"/>
+    <rect x="286" y="72" width="104" height="10" rx="4"/>
+    <rect x="286" y="88" width="104" height="10" rx="4"/>
+  </g>
+  <rect x="300" y="150" width="76" height="56" rx="6" fill="#3c3730"/>
+  <rect x="410" y="100" width="130" height="70" fill="#2f4f6f" transform="rotate(-18 475 135)"/>
+  <g fill="#3c3730">
+    <text x="410" y="60">Radiation shield: SHT45, BMP390</text>
+    <text x="400" y="200">Dry box: board and battery</text>
+    <text x="560" y="130">Solar panel</text>
+  </g>
+</svg>

@@ -68,7 +68,7 @@ export const extractFrontmatter = (
   }
 };
 
-type PositionedLink = RawLink & { start: number; end: number };
+export type PositionedLink = RawLink & { start: number; end: number };
 
 function isRoamMarker(markdown: string, start: number, end: number, target: string): boolean {
   if (target === ">" && /^(?:\s|$)/.test(markdown.slice(end))) return true;
@@ -116,6 +116,10 @@ function collectLinkSpans(markdown: string, roamReserved = false): PositionedLin
   });
   return links;
 }
+
+/** Authored wikilinks with source spans; excludes code, embeds, escaped text, and raw HTML. */
+export const findWikilinkSpans = (markdown: string): PositionedLink[] =>
+  collectLinkSpans(markdown).filter((link) => link.type === "wikilink");
 
 export const extractRawLinks = (markdown: string, roamReserved = false): RawLink[] =>
   collectLinkSpans(markdown, roamReserved).map(({ start: _start, end: _end, ...link }) => link);

@@ -1,0 +1,138 @@
+/*
+ * Svartz design tokens. Every first-party theme imports this file and may only
+ * change the dial tokens (density, ratio, measure). See DESIGN.md.
+ *
+ * Colour mode: `color-scheme` drives every `light-dark()` pair. The OS decides
+ * by default; the colour-mode script pins `.light` or `.dark` on <html>.
+ */
+/* mCX's reading faces (github.com/mia-cx/obsidian-theme-mcx): Archivo, and Monaspace Argon for code. */
+@import '@fontsource-variable/archivo/wght.css';
+@import '@fontsource-variable/archivo/wght-italic.css';
+@import '@fontsource/monaspace-argon/400.css';
+@import '@fontsource/monaspace-argon/600.css';
+
+:root {
+	color-scheme: light dark;
+
+	/* Dials: themes set these, nothing else. */
+	--sv-density: 1;
+	--sv-ratio: 1.2;
+	--sv-measure: 42rem;
+
+	/* Type: Archivo everywhere; weight and width carry hierarchy. Code is Monaspace Argon. */
+	--sv-font-sans: 'Archivo Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--sv-font-mono: 'Monaspace Argon', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+	--sv-text-base: 1.0625rem;
+	--sv-leading: 1.65;
+	--sv-leading-tight: 1.15;
+	--sv-step--2: calc(var(--sv-text-base) / pow(var(--sv-ratio), 2));
+	--sv-step--1: calc(var(--sv-text-base) / var(--sv-ratio));
+	--sv-step-0: var(--sv-text-base);
+	--sv-step-1: calc(var(--sv-text-base) * var(--sv-ratio));
+	--sv-step-2: calc(var(--sv-text-base) * pow(var(--sv-ratio), 2));
+	--sv-step-3: calc(var(--sv-text-base) * pow(var(--sv-ratio), 3));
+	--sv-step-4: calc(var(--sv-text-base) * pow(var(--sv-ratio), 4));
+	--sv-step-5: calc(var(--sv-text-base) * pow(var(--sv-ratio), 5));
+	/* The label voice, mCX's overline: small Archivo capitals for metadata, kinds, methods, callout titles. */
+	--sv-label-size: 0.7rem;
+
+	/* Space: a 4px grid scaled by density. */
+	--sv-space-1: calc(0.25rem * var(--sv-density));
+	--sv-space-2: calc(0.5rem * var(--sv-density));
+	--sv-space-3: calc(0.75rem * var(--sv-density));
+	--sv-space-4: calc(1rem * var(--sv-density));
+	--sv-space-5: calc(1.5rem * var(--sv-density));
+	--sv-space-6: calc(2rem * var(--sv-density));
+	--sv-space-7: calc(3rem * var(--sv-density));
+	--sv-space-8: calc(4.5rem * var(--sv-density));
+
+	/* Shape */
+	--sv-radius-s: 3px;
+	--sv-radius-m: 6px;
+	--sv-radius-l: 10px;
+	--sv-radius-pill: 999px;
+	--sv-rule-width: 1px;
+	--sv-focus-width: 2px;
+	--sv-focus-offset: 2px;
+
+	/* Motion */
+	--sv-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+	--sv-duration-fast: 120ms;
+	--sv-duration: 200ms;
+	--sv-duration-slow: 320ms;
+
+	/* Layers */
+	--sv-z-sticky: 10;
+	--sv-z-drawer: 40;
+	--sv-z-popover: 60;
+	--sv-z-modal: 80;
+
+	/* Neutrals: warm paper and ink. Hue 80, very low chroma. */
+	--sv-paper: light-dark(oklch(0.985 0.004 80), oklch(0.155 0.005 80));
+	--sv-surface: light-dark(oklch(0.962 0.006 80), oklch(0.195 0.006 80));
+	--sv-sunken: light-dark(oklch(0.94 0.007 80), oklch(0.13 0.005 80));
+	--sv-rule: light-dark(oklch(0.895 0.008 80), oklch(0.275 0.008 80));
+	--sv-rule-strong: light-dark(oklch(0.8 0.01 80), oklch(0.36 0.01 80));
+	--sv-muted: light-dark(oklch(0.52 0.012 80), oklch(0.67 0.012 80));
+	--sv-text: light-dark(oklch(0.3 0.01 80), oklch(0.86 0.008 80));
+	--sv-ink: light-dark(oklch(0.17 0.01 80), oklch(0.965 0.005 80));
+
+	/* Accent: editor's vermilion. `-text` is the AA-safe foreground on paper. */
+	--sv-accent: light-dark(oklch(0.6 0.2 33), oklch(0.7 0.17 36));
+	/* Derived from --sv-accent, so overriding the accent (theme.tokens.accent) carries its shades. */
+	--sv-accent-text: light-dark(
+		oklch(from var(--sv-accent) calc(l - 0.1) calc(c * 0.9) h),
+		oklch(from var(--sv-accent) calc(l + 0.06) calc(c * 0.88) h)
+	);
+	--sv-accent-soft: light-dark(
+		color-mix(in oklch, var(--sv-accent) 10%, transparent),
+		color-mix(in oklch, var(--sv-accent) 14%, transparent)
+	);
+	--sv-on-accent: light-dark(oklch(0.99 0.004 80), oklch(0.155 0.005 80));
+	--sv-mark: light-dark(oklch(0.93 0.13 98 / 0.75), oklch(0.62 0.12 98 / 0.45));
+	--sv-selection: light-dark(
+		color-mix(in oklch, var(--sv-accent) 20%, transparent),
+		color-mix(in oklch, var(--sv-accent) 30%, transparent)
+	);
+	--sv-scrim: light-dark(oklch(0.17 0.01 80 / 0.28), oklch(0 0 0 / 0.55));
+	--sv-shadow-color: light-dark(oklch(0.17 0.01 80 / 0.16), oklch(0 0 0 / 0.5));
+	--sv-shadow: 0 1px 2px var(--sv-shadow-color), 0 12px 32px -8px var(--sv-shadow-color);
+
+	/* Signal hues. Callouts, HTTP methods, and symbol kinds pick one. */
+	--sv-hue-blue: 252;
+	--sv-hue-cyan: 215;
+	--sv-hue-teal: 180;
+	--sv-hue-green: 150;
+	--sv-hue-amber: 78;
+	--sv-hue-orange: 52;
+	--sv-hue-red: 25;
+	--sv-hue-violet: 300;
+}
+
+:root.light {
+	color-scheme: light;
+}
+
+:root.dark {
+	color-scheme: dark;
+}
+
+/* A signal colour: set --sv-hue on the element, then read --sv-signal(-soft). */
+[data-sv-signal] {
+	--sv-signal: light-dark(
+		oklch(0.53 0.15 var(--sv-hue, var(--sv-hue-blue))),
+		oklch(0.76 0.12 var(--sv-hue, var(--sv-hue-blue)))
+	);
+	--sv-signal-soft: light-dark(
+		oklch(0.53 0.15 var(--sv-hue, var(--sv-hue-blue)) / 0.08),
+		oklch(0.76 0.12 var(--sv-hue, var(--sv-hue-blue)) / 0.11)
+	);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--sv-duration-fast: 0ms;
+		--sv-duration: 0ms;
+		--sv-duration-slow: 0ms;
+	}
+}

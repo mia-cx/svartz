@@ -1,4 +1,5 @@
 import { mdsvex } from 'mdsvex';
+import { COLOR_MODE_SCRIPT_HASH } from '@svartz/ui/color-mode';
 import adapterAuto from "@sveltejs/adapter-auto";
 import adapterCloudflare from "@sveltejs/adapter-cloudflare";
 import adapterNode from "@sveltejs/adapter-node";
@@ -37,7 +38,8 @@ const config = {
 		adapter: resolveAdapter(targetType),
 		csp: {
 			directives: {
-				'script-src': ['self', 'blob:'],
+				// Themes pin the reader's colour mode with an inline script before first paint.
+				'script-src': ['self', 'blob:', COLOR_MODE_SCRIPT_HASH],
 				'style-src': ['self', 'blob:', 'unsafe-inline']
 			}
 		},

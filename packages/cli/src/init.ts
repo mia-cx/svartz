@@ -467,7 +467,13 @@ const initProjectEffect = (
             "utf8",
           ),
       );
-      const previousStyledCatchallLoad = catchallLoadTemplate
+      // Older templates raised the 404 before preparing the theme the error page renders.
+      const prepareThen404 = "  await prepareHostVault(pathname);\n  if (!routes.all.includes(pathname)) error(404);\n";
+      const previousOrderedCatchallLoad = catchallLoadTemplate.replace(
+        prepareThen404,
+        "  if (!routes.all.includes(pathname)) error(404);\n  await prepareHostVault(pathname);\n",
+      );
+      const previousStyledCatchallLoad = previousOrderedCatchallLoad
         .replace("import { assets, base }", "import { base }")
         .replace("import { hostStylesheets, prepareHostVault, routes }", "import { prepareHostVault, routes }")
         .replace("  return { svartzStylesheets: hostStylesheets(pathname).map((file) => `${assets}/${file}`) };\n", "");
@@ -480,7 +486,7 @@ const initProjectEffect = (
           readFile(catchallLoadPath, "utf8"),
         ) : undefined;
       const migrateCatchall = existingCatchallLoad !== undefined &&
-        [previousStyledCatchallLoad, previousCatchallLoad].includes(existingCatchallLoad);
+        [previousOrderedCatchallLoad, previousStyledCatchallLoad, previousCatchallLoad].includes(existingCatchallLoad);
       const compatibleCatchallLoad = migrateCatchall || existingCatchallLoad === catchallLoadTemplate;
       const catchallPageUpdate =
         compatibleCatchallLoad && [previousStyledCatchallPage, previousCatchallPage].includes(existingCatchallPage ?? "")
