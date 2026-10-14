@@ -7,10 +7,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { readReleasePackages } from './release-packages.mjs';
 
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
 const licenseText = await readFile(path.join(root, 'LICENSE'), 'utf8');
+const releaseVersion = readReleasePackages(root)[0].version;
 const packages = [
   ['@svartz/core', 'packages/core', ['dist/index.js', 'dist/index.d.ts']],
   ['@svartz/plugins', 'packages/plugins', ['dist/index.js', 'dist/index.d.ts']],
@@ -113,7 +115,7 @@ async function checkFresh(project, launcher, archives) {
     'for (const plugin of [citations(), hardLineBreaks(), oxHugoFlavoredMarkdown(), roamFlavoredMarkdown()]) {',
     "  if (!plugin.id) throw new Error('Packed optional plugin export is invalid');",
     '}',
-    "if (minimalTheme().version !== '1.0.0') throw new Error('Packed minimal theme has a stale manifest version');",
+    `if (minimalTheme().version !== '${releaseVersion}') throw new Error('Packed minimal theme has a stale manifest version');`,
   ].join('\n')], project);
   await command('npm', ['run', 'build'], project);
   const html = await readFile(path.join(project, '.svartz/vaults/notes/dist/index.html'), 'utf8');
@@ -135,7 +137,7 @@ async function checkStyledHostCss(project) {
     return readFile(file, 'utf8');
   }))).join('\n');
   assert.match(css, /#11175b/, 'The rendered note must link its compiled CSS without JavaScript');
-  assert.match(css, /\.skip-link/, 'The rendered note must link its lazy layout CSS without JavaScript');
+  assert.match(css, /\.minimal\b/, 'The rendered note must link its lazy layout CSS without JavaScript');
 }
 
 async function checkHost(project, launcher, archives) {
@@ -224,11 +226,26 @@ async function checkHost(project, launcher, archives) {
   const sourcesPath = path.join(project, '.svartz/vaults/notes/tailwind-sources.css');
   const tailwindSources = await readFile(sourcesPath, 'utf8');
   const sourceGlobs = [...tailwindSources.matchAll(/@source "([^"]+)"/g)].map((match) => match[1]);
-  assert.equal(sourceGlobs.length, 2, 'Packed host must scan only the theme and UI package');
+  const themeManifest = JSON.parse(await readFile(path.join(project, 'node_modules/@svartz/theme-minimal/package.json'), 'utf8'));
+  const runtimePackages = new Set([
+    themeManifest.name,
+    ...Object.keys(themeManifest.dependencies ?? {}),
+    ...Object.keys(themeManifest.peerDependencies ?? {}).filter((name) =>
+      name !== 'svelte' && name !== 'vite' && !name.startsWith('@sveltejs/')),
+  ]);
+  const scannedPackages = new Set();
   for (const sourceGlob of sourceGlobs) {
-    assert(sourceGlob.includes('/dist/'), `Packed package source must use dist: ${sourceGlob}`);
-    await stat(path.resolve(path.dirname(sourcesPath), sourceGlob.split('/**/')[0]));
+    const sourceRoot = path.resolve(path.dirname(sourcesPath), sourceGlob.split('/**/')[0]);
+    await stat(sourceRoot);
+    const scanned = JSON.parse(await readFile(path.join(path.dirname(sourceRoot), 'package.json'), 'utf8'));
+    assert(runtimePackages.has(scanned.name), `Tailwind must not scan dev-only tooling: ${scanned.name}`);
+    if (archives.has(scanned.name)) {
+      assert.equal(path.basename(sourceRoot), 'dist', `Packed Svartz source must use dist: ${sourceGlob}`);
+    }
+    scannedPackages.add(scanned.name);
   }
+  assert(scannedPackages.has('@svartz/theme-minimal'), 'Tailwind must scan the packed theme');
+  assert(scannedPackages.has('@svartz/ui'), 'Tailwind must scan packed UI components');
   assert.match(await readFile(path.join(project, 'src/routes/+page.svelte'), 'utf8'), /Portfolio home/);
   assert.match(await readFile(path.join(project, 'build/check.html'), 'utf8'), /Published notes: 3/);
   assert.match(await readFile(path.join(project, 'build/notes.html'), 'utf8'), /Welcome/);
@@ -251,6 +268,15 @@ async function checkHost(project, launcher, archives) {
   await checkStyledHostCss(project);
   await checkDev(project, '/site/notes/', 'Welcome');
   console.log('Packed Vite 8 host: integration, types, static build, and dev passed.');
+
+  // Reuse the packed Vite 8 consumer with its adapter changed to the production host's adapter.
+  await command('npm', ['install', '--save-dev', '@sveltejs/adapter-cloudflare@^7', '--no-audit', '--no-fund'], project);
+  await write(project, 'svelte.config.js', "import adapter from '@sveltejs/adapter-cloudflare';\nexport default { kit: { adapter: adapter() } };\n");
+  await command('npm', ['run', 'svartz:build'], project);
+  await stat(path.join(project, '.svelte-kit/cloudflare/_worker.js'));
+  const mountedNote = await readFile(path.join(project, '.svelte-kit/cloudflare/notes.html'), 'utf8');
+  assert.match(mountedNote, /Welcome/);
+  console.log('Packed Cloudflare Vite 8 host: Worker and prerendered mounted note passed.');
 }
 
 const temporary = await mkdtemp(path.join(os.tmpdir(), 'svartz-release-'));
@@ -258,7 +284,7 @@ try {
   const archives = new Map();
   for (const [name, directory, required] of packages) {
     const manifest = JSON.parse(await readFile(path.join(root, directory, 'package.json'), 'utf8'));
-    assert.equal(manifest.version, '1.0.0', `${name} version`);
+    assert.equal(manifest.version, releaseVersion, `${name} version`);
     assert.equal(manifest.publishConfig?.access, 'public', `${name} visibility`);
     assert.equal(manifest.license, 'SEE LICENSE IN LICENSE', `${name} license metadata`);
     assert.equal(await readFile(path.join(root, directory, 'LICENSE'), 'utf8'), licenseText, `${name} license text`);
@@ -285,11 +311,11 @@ try {
     for (const [dependency, range] of Object.entries(manifest.dependencies ?? {})) {
       if (!dependency.startsWith('@svartz/')) continue;
       assert(range.startsWith('workspace:'), `${name} has an unexpected ${dependency} source range`);
-      assert.match(published.dependencies[dependency], /^\^?1\.0\.0$/, `${name} did not resolve ${dependency}`);
+      assert(['^' + releaseVersion, releaseVersion].includes(published.dependencies[dependency]), `${name} did not resolve ${dependency}`);
     }
     archives.set(name, archive);
   }
-  console.log('Seven public archives: runtime files and package boundaries passed.');
+  console.log('Eleven public archives: runtime files and package boundaries passed.');
 
   const launcher = path.join(temporary, 'launcher');
   await mkdir(launcher);

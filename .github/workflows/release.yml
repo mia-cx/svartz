@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    branches: [sveltekit-rewrite]
+  workflow_dispatch:
+    inputs:
+      retry_release_commit:
+        description: Retry publication for this full release merge commit SHA
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  # Each merge keeps its own run. An ordinary push must never replace a release.
+  group: svartz-release-${{ inputs.retry_release_commit || github.sha }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  plan:
+    if: github.repository == 'mia-cx/svartz' && github.ref == 'refs/heads/sveltekit-rewrite'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      publish: ${{ steps.plan.outputs.publish }}
+      pending: ${{ steps.plan.outputs.pending }}
+      sha: ${{ steps.target.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Resolve the release commit
+        id: target
+        env:
+          RETRY_SHA: ${{ inputs.retry_release_commit }}
+        run: |
+          if [ -z "$RETRY_SHA" ]; then
+            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            exit
+          fi
+          if ! [[ "$RETRY_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo 'retry_release_commit must be a full commit SHA' >&2
+            exit 1
+          fi
+          git cat-file -e "$RETRY_SHA^{commit}"
+          git merge-base --is-ancestor "$RETRY_SHA" origin/sveltekit-rewrite
+          git checkout --detach "$RETRY_SHA"
+          echo "sha=$RETRY_SHA" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm i --frozen-lockfile
+      - run: pnpm test:release
+      - name: Identify a release merge and changed public versions
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SVARTZ_RELEASE_SHA: ${{ steps.target.outputs.sha }}
+          SVARTZ_RELEASE_RETRY: ${{ inputs.retry_release_commit != '' && 'true' || '' }}
+          RETRY_SHA: ${{ inputs.retry_release_commit }}
+        run: |
+          plan="$(gh api "repos/$GITHUB_REPOSITORY/commits/$SVARTZ_RELEASE_SHA/pulls" --paginate --slurp | node scripts/release-plan.mjs)"
+          printf '%s\n' "$plan"
+          if [ -n "$RETRY_SHA" ]; then
+            test "$(printf '%s\n' "$plan" | grep '^release=')" = release=true
+            node scripts/release-plan.mjs current
+          fi
+
+  release-pr:
+    needs: plan
+    if: needs.plan.outputs.pending == 'true' && inputs.retry_release_commit == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: svartz-release-pr
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: sveltekit-rewrite
+          fetch-depth: 0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm i --frozen-lockfile
+      - name: Open or update the release pull request
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2
+        with:
+          version-script: pnpm release:version
+          commit-message: 'chore(release): version packages'
+          pr-title: 'chore(release): version packages'
+          pr-base-branch: sveltekit-rewrite
+          create-github-releases: false
+          push-git-tags: false
+
+  validation:
+    needs: plan
+    if: needs.plan.outputs.publish == 'true'
+    uses: ./.github/workflows/release-validation.yml
+    with:
+      sha: ${{ needs.plan.outputs.sha }}
+
+  publish:
+    needs: [plan, validation]
+    if: needs.plan.outputs.publish == 'true' && needs.validation.result == 'success'
+    uses: ./.github/workflows/package-publish.yml
+    with:
+      sha: ${{ needs.plan.outputs.sha }}
+    permissions:
+      contents: write
+      id-token: write
