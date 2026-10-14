@@ -37,17 +37,31 @@ An existing host can use `vite.config.ts`, `.mts`, `.cts`, `.js`, `.mjs`, or `.c
 `SvartzNoteContent` takes three props:
 
 - `pathname` is the app pathname without SvelteKit's deployment base. Pass the same value you gave `prepareHostVault`.
-- `stylesheets` is required. It lists the note's CSS links. Compute it with `noteStylesheets(pathname)` in `load`.
+- `stylesheets` is required. It lists the note's CSS links. Compute it with `noteStylesheets(pathname)` in the route's server `load` (`+page.server.ts`).
 - `contentComponents` is optional. It overrides the theme's callout, code block, image, link and embed components.
 
-The body uses the theme's content components plus your overrides. A protected note shows the same unlock form as the theme page. The component renders the shared and note-specific CSS links in `<svelte:head>` while a note renders. Compute them in `load`, not in the page: the registry knows a note's CSS only on the server, and page data carries the server list through hydration. On client navigation the list is empty and the CSS loads with the note's module. It renders no layout, header, table of contents or backlinks. For a pathname that is not a published note it renders nothing. Your `load` decides on the 404.
+The body uses the theme's content components plus your overrides. A protected note shows the same unlock form as the theme page. The component renders the shared and note-specific CSS links in `<svelte:head>` while a note renders. Compute them in a server `load`, not in the universal `load` or the page: the registry knows a note's CSS only on the server, a universal `load` reruns during hydration and would pass an empty list, and server `load` data is serialized into the page. On client navigation the list is empty and Vite loads the note CSS with its module. It renders no layout, header, table of contents or backlinks. For a pathname that is not a published note it renders nothing. Your `load` decides on the 404.
 
 This route serves the `work` vault, mounted at `/work`, inside the host's own design. Canonical note URLs end with a slash, such as `/work/maelstrom/`. The route sets `trailingSlash` to match, and `load` adds the slash before it looks up the vault.
 
 ```ts
+// src/routes/work/[...slug]/+page.server.ts
+import { noteStylesheets } from '@svartz/ui/runtime';
+import { vaults } from 'virtual:svartz/host';
+import type { PageServerLoad } from './$types';
+
+const work = vaults.find((vault) => vault.id === 'work')!;
+
+export const load: PageServerLoad = ({ url }) => {
+  const appPath = url.pathname.slice(work.basePath.length) || '/';
+  const pathname = appPath.endsWith('/') ? appPath : `${appPath}/`;
+  return { stylesheets: noteStylesheets(pathname) };
+};
+```
+
+```ts
 // src/routes/work/[...slug]/+page.ts
 import { error, redirect } from '@sveltejs/kit';
-import { noteStylesheets } from '@svartz/ui/runtime';
 import { prepareHostVault, vaults } from 'virtual:svartz/host';
 import type { EntryGenerator, PageLoad } from './$types';
 
@@ -57,7 +71,7 @@ export const trailingSlash = 'always';
 const work = vaults.find((vault) => vault.id === 'work')!;
 const { notes, redirects } = work.artifacts.index.routes;
 
-export const load: PageLoad = async ({ url }) => {
+export const load: PageLoad = async ({ url, data }) => {
   const appPath = url.pathname.slice(work.basePath.length) || '/';
   const pathname = appPath.endsWith('/') ? appPath : `${appPath}/`;
   const destination = redirects[pathname];
@@ -66,8 +80,8 @@ export const load: PageLoad = async ({ url }) => {
   const vault = await prepareHostVault(pathname);
   const note = vault?.artifacts.vault.note(`${work.basePath}${pathname}`);
   return {
+    ...data,
     pathname,
-    stylesheets: noteStylesheets(pathname),
     entry: note?.entry,
     backlinks: note?.backlinks ?? []
   };
