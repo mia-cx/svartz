@@ -1,7 +1,7 @@
 /**
  * core:resolve-links — resolve raw wikilinks/markdown links to canonical slugs.
  *
- * Precondition: discoverFiles has produced stable slugs for all files.
+ * Precondition: allocateRoutes has assigned final slugs to published files.
  * Derives allSlugs from ctx.files.map(f => f.slug).
  *
  * Postcondition: every ProcessedFile has `links` containing resolved slug strings.
@@ -173,6 +173,7 @@ export const resolveLinks = definePlugin(() => ({
             allSlugs,
             strategy,
             file.slug,
+            noteFiles,
           );
           if (target !== null) {
             resolved.add(target);

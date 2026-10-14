@@ -30,6 +30,7 @@ export const resolveLink = (
   allSlugs: readonly string[],
   strategy: LinkResolutionStrategy,
   sourceSlug: string,
+  sources: readonly { slug: string; path: string }[] = [],
 ): string | null => {
   const target = link.target.trim();
   if (!target) return null;
@@ -46,9 +47,12 @@ export const resolveLink = (
   const baseName = normalized.split("/").pop();
   if (!baseName) return null;
 
-  const candidates = allSlugs.filter(
-    (slug) => slug.split("/").pop() === baseName,
-  );
+  // A frontmatter slug changes the URL, but wikilinks still name physical files.
+  const candidates = [...new Set([
+    ...allSlugs.filter((slug) => slug.split("/").pop() === baseName),
+    ...sources.filter((entry) => fileToSlug(entry.path).split("/").pop() === baseName)
+      .map((entry) => entry.slug),
+  ])];
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0]!;
 
@@ -68,7 +72,7 @@ export const resolveLink = (
 };
 
 /**
- * Build a slug resolution map from all files' slugs and aliases.
+ * Build a resolution map from allocated slugs, physical filenames, and aliases.
  * Alias collisions are excluded. Duplicate authored stems prefer their canonical winner,
  * then the first authored path when another filename owns the natural route.
  */
@@ -89,14 +93,20 @@ export const buildSlugMap = (
   }
 
   // A literal authored filename wins over a normalized slug when names collide.
+  // The normalized physical path keys the same way, so [[b/setup-notes]] still
+  // names b/Setup Notes.md after a frontmatter slug changes its URL.
   for (const entry of entries) {
     if (!entry.path) continue;
     const stem = entry.path.replace(/\.(md|mdx|svx)$/i, "").toLowerCase();
-    const sameStem = authoredStems.get(stem) ?? [];
-    sameStem.push(entry);
-    authoredStems.set(stem, sameStem);
+    const normalizedPath = fileToSlug(entry.path);
+    for (const key of new Set([stem, normalizedPath])) {
+      const sameStem = authoredStems.get(key) ?? [];
+      sameStem.push(entry);
+      authoredStems.set(key, sameStem);
+    }
     map[entry.path.toLowerCase()] = entry.slug;
     authoredNames.add(stem);
+    authoredNames.add(normalizedPath);
     authoredNames.add(entry.path.toLowerCase());
   }
 
@@ -107,14 +117,20 @@ export const buildSlugMap = (
   }
 
   for (const entry of entries) {
-    const baseName = entry.slug.split("/").pop();
-    if (baseName && baseName !== entry.slug) {
+    const sourceStem = entry.path?.replace(/\.(md|mdx|svx)$/i, "");
+    const basenames = new Set([
+      entry.slug.split("/").pop(),
+      sourceStem?.split("/").pop(),
+      entry.path ? fileToSlug(entry.path).split("/").pop() : undefined,
+    ]);
+    for (const baseName of basenames) {
+      if (!baseName || baseName === entry.slug) continue;
       const normalized = baseName.toLowerCase();
       if (ambiguousBasenames.has(normalized)) continue;
       if (map[normalized] === undefined) {
         map[normalized] = entry.slug;
       } else if (map[normalized] !== entry.slug) {
-        if (!canonicalSlugs.has(normalized)) {
+        if (!canonicalSlugs.has(normalized) && !authoredNames.has(normalized)) {
           delete map[normalized];
         }
         ambiguousBasenames.add(normalized);
