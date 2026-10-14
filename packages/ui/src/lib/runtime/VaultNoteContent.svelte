@@ -23,10 +23,11 @@
 		artifacts,
 		contentComponents
 	}));
-	useBrowserResources(() => ({
-		artifacts,
-		pathname: `${artifacts.deploymentBasePath}${appPathname}`
-	}));
+	useBrowserResources(() =>
+		state.noteModule
+			? { artifacts, pathname: `${artifacts.deploymentBasePath}${appPathname}` }
+			: undefined
+	);
 </script>
 
 <svelte:head>

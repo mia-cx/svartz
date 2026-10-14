@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import SvartzNoteContent from './SvartzNoteContent.svelte';
 import { noteStylesheets } from './note-stylesheets.js';
 import { lockProtectedGroup } from './protected-client.js';
+import { artifacts } from './testing/host';
 import HostCallout from './testing/HostCallout.svelte';
 
 const groupId = 'vault:work:group:fixture';
@@ -12,6 +13,7 @@ const groupId = 'vault:work:group:fixture';
 afterEach(() => {
 	lockProtectedGroup(groupId);
 	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
 });
 
 it('renders a plain note body without the theme layout', async () => {
@@ -95,6 +97,20 @@ it('renders the decrypted note body after unlocking', async () => {
 	await expect.element(page.getByRole('button', { name: 'Lock note' })).toBeVisible();
 	expect(page.getByLabelText('Password').query()).toBeNull();
 	await expect.element(page.getByText('Unlocked body')).toBeVisible();
+});
+
+it('mounts browser resources only while a note renders', async () => {
+	const mount = vi.spyOn(artifacts, 'mountBrowserResources');
+	const nonNote = render(SvartzNoteContent, {
+		pathname: '/work/tags/demo/',
+		stylesheets: []
+	});
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	expect(mount).not.toHaveBeenCalled();
+	nonNote.unmount();
+
+	render(SvartzNoteContent, { pathname: '/work/plain/', stylesheets: [] });
+	await expect.poll(() => mount.mock.calls).toEqual([['/work/plain/']]);
 });
 
 it('renders nothing for non-note pathnames', async () => {

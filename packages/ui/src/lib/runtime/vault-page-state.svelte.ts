@@ -144,14 +144,15 @@ export class VaultPageState {
 	);
 }
 
-/** Mount the vault's plugin browser scripts while rendered. */
-export function useBrowserResources(input: () => {
-	artifacts: ArtifactsModule;
-	pathname: string;
-}): void {
+/** Mount the vault's plugin browser scripts while rendered. Returning `undefined` mounts nothing. */
+export function useBrowserResources(
+	input: () => { artifacts: ArtifactsModule; pathname: string } | undefined
+): void {
 	$effect(() => {
 		if (!browser) return;
-		const { artifacts, pathname } = input();
+		const resources = input();
+		if (!resources) return;
+		const { artifacts, pathname } = resources;
 		let released = false;
 		let dispose: (() => void) | undefined;
 		void artifacts
