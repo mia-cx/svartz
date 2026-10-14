@@ -37,7 +37,7 @@
 
 {#if state.noteModule}
 	<!-- Clarity must never record a note body, including content decrypted after hydration. -->
-	<div data-clarity-mask="true" style="display: contents">
+	<div class="sv-prose" data-sv-preview data-clarity-mask="true">
 		<PageBody {state} module={state.noteModule} />
 	</div>
 {/if}

@@ -23,6 +23,16 @@ it('renders a plain note body without the theme layout', async () => {
 	}
 });
 
+it('marks the note body for prose styles and previews', async () => {
+	const { container } = render(SvartzNoteContent, {
+		pathname: '/work/plain/',
+		stylesheets: []
+	});
+	await expect.element(page.getByText('Plain body')).toBeVisible();
+	const body = container.querySelector('.sv-prose[data-sv-preview][data-clarity-mask="true"]');
+	expect(body?.textContent).toContain('Plain body');
+});
+
 it('uses theme content components and lets host overrides win their slot', async () => {
 	const theme = render(SvartzNoteContent, { pathname: '/work/callouts/', stylesheets: [] });
 	await expect.element(page.getByText('Callout body')).toBeVisible();

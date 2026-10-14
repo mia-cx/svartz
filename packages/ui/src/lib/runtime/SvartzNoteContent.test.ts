@@ -9,6 +9,8 @@ describe('SvartzNoteContent SSR', () => {
 			props: { pathname: '/work/plain/', stylesheets: [] }
 		});
 		expect(body).toContain('Plain body');
+		expect(body).toContain('class="sv-prose"');
+		expect(body).toContain('data-sv-preview');
 		expect(body).not.toContain('THEME LAYOUT');
 	});
 
