@@ -25,7 +25,7 @@ export const load = async ({ url }) => {
 };
 ```
 
-The generated catchall already does this. A custom route that renders `SvartzRuntimePage` needs the same call. It resolves lazy theme pages before SSR and hydration.
+The generated catchall already does this. A custom route that renders `SvartzRuntimePage` needs the same call. It resolves lazy theme pages before SSR and hydration. To render only a note body inside your own layout, use `SvartzNoteContent`. See [host vaults](../../docs/host-vaults.md#render-a-note-inside-your-own-page).
 
 Theme route components can use lazy imports, including pages that import `@svartz/ui`:
 
