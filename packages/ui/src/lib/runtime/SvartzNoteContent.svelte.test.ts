@@ -133,7 +133,7 @@ it('renders nothing for non-note pathnames', async () => {
 it('links the stylesheets its route computed in load', async () => {
 	// Production `hostStylesheets` is empty in the browser; page data carries the SSR
 	// list through hydration, which is why the component takes it as a prop.
-	expect(noteStylesheets('/work/callouts/')).toEqual([]);
+	expect(await noteStylesheets('/work/callouts/')).toEqual([]);
 
 	render(SvartzNoteContent, {
 		pathname: '/work/callouts/',

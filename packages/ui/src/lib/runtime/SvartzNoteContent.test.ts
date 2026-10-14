@@ -14,11 +14,11 @@ describe('SvartzNoteContent SSR', () => {
 		expect(body).not.toContain('THEME LAYOUT');
 	});
 
-	it('emits the stylesheet links its route computed in load', () => {
+	it('emits the stylesheet links its route computed in load', async () => {
 		const { head, body } = render(SvartzNoteContent, {
 			props: {
 				pathname: '/work/callouts/',
-				stylesheets: noteStylesheets('/work/callouts/')
+				stylesheets: await noteStylesheets('/work/callouts/')
 			}
 		});
 		expect(body).toContain('Callout body');
@@ -26,8 +26,8 @@ describe('SvartzNoteContent SSR', () => {
 		expect(head).toContain('/_app/immutable/assets/callouts.css');
 	});
 
-	it('computes stylesheets for a pathname without a trailing slash', () => {
-		expect(noteStylesheets('/work/callouts')).toEqual([
+	it('computes stylesheets for a pathname without a trailing slash', async () => {
+		expect(await noteStylesheets('/work/callouts')).toEqual([
 			'/_app/immutable/assets/shared.css',
 			'/_app/immutable/assets/callouts.css'
 		]);

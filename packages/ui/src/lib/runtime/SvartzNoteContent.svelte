@@ -1,9 +1,10 @@
 <!-- @component
 Renders one published note's body inside a host-owned page. The route's universal
 `load` must have awaited `prepareHostVault(pathname)` first. `stylesheets` comes
-from `noteStylesheets(pathname)` in the route's server `load` (`+page.server.ts`)
-so the SSR links survive hydration; a universal `load` reruns in the browser where
-the registry is empty. For a pathname that is not a published note (or a vault
+from `await noteStylesheets(pathname)` in the route's server `load` (`+page.server.ts`);
+the helper prepares the vault itself, and only serialized server data keeps the
+SSR links because a universal `load` reruns in the browser where the registry is
+empty. For a pathname that is not a published note (or a vault
 that was not prepared) it renders nothing.
 -->
 <script lang="ts">
