@@ -1,6 +1,6 @@
 {
   "name": "@svartz/vite",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publishConfig": { "access": "public" },
   "files": ["dist", "types"],
   "engines": { "node": "^20.19.0 || >=22.12.0" },

@@ -51,7 +51,7 @@ export function createApiDocsTheme(modules: ApiDocsThemeModules, config?: ApiDoc
 		id: '@svartz/theme-api-docs',
 		displayName: 'Svartz API Docs',
 		description: 'REST and GraphQL reference docs: operations, schemas, and request examples.',
-		version: '1.0.0',
+		version: '1.0.1',
 		contractVersion: '1.0.0',
 		socialImage: svartzSocialImage,
 		faviconSvg: SVARTZ_MARK_SVG,

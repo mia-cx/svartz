@@ -50,7 +50,7 @@ export function createBlogTheme(modules: BlogThemeModules, config?: BlogThemeCon
 		id: '@svartz/theme-blog',
 		displayName: 'Svartz Blog',
 		description: 'A blog: a post grid with tag filters, an archive, and long-form reading.',
-		version: '1.0.0',
+		version: '1.0.1',
 		contractVersion: '1.0.0',
 		socialImage: svartzSocialImage,
 		faviconSvg: SVARTZ_MARK_SVG,
