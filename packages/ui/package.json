@@ -72,6 +72,11 @@
 			"import": "./dist/syntax.js",
 			"default": "./dist/syntax.js"
 		},
+		"./agent-markdown": {
+			"types": "./dist/agent-markdown.d.ts",
+			"import": "./dist/agent-markdown.js",
+			"default": "./dist/agent-markdown.js"
+		},
 		"./prose.css": "./dist/styles/prose.css"
 	},
 	"peerDependencies": {
