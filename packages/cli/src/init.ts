@@ -204,8 +204,6 @@ function freshManifest(root: string): Manifest {
       "@sveltejs/adapter-static": "^3.0.10",
       "@sveltejs/kit": "^2.50.2",
       "@sveltejs/vite-plugin-svelte": "^6.2.4",
-      "@tailwindcss/forms": "^0.5.11",
-      "@tailwindcss/typography": "^0.5.19",
       "@tailwindcss/vite": "^4.1.18",
       mdsvex: "^0.12.6",
       svelte: "^5.51.0",
@@ -226,14 +224,8 @@ function integrateManifest(manifest: Manifest): Manifest {
     if (!manifest.dependencies?.[name] && !devDependencies[name])
       devDependencies[name] = "latest";
   }
-  for (const [name, version] of Object.entries({
-    "@tailwindcss/forms": "^0.5.11",
-    "@tailwindcss/typography": "^0.5.19",
-    tailwindcss: "^4.2.2",
-  })) {
-    if (!manifest.dependencies?.[name] && !devDependencies[name])
-      devDependencies[name] = version;
-  }
+  if (!manifest.dependencies?.tailwindcss && !devDependencies.tailwindcss)
+    devDependencies.tailwindcss = "^4.2.2";
   return { ...manifest, scripts, devDependencies };
 }
 

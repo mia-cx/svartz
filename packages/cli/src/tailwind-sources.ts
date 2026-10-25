@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import type { ResolvedConfig } from "@svartz/config";
 import { getGeneratedHostRegistryPath, getVaultBuildRoot, resolveThemePackageRoot } from "@svartz/vite";
@@ -61,13 +62,20 @@ function getTailwindSourceGlobs(appRoot: string, vault: ResolvedConfig): string[
   return dedupePaths(sourceGlobs.map((glob) => path.resolve(glob)));
 }
 
+// The CLI owns these plugins, so a host never lists them. Paths resolve from this
+// package because strict installs (pnpm) hide them from the host's own node_modules.
+const require = createRequire(import.meta.url);
+const HOST_TAILWIND_PLUGINS = ["@tailwindcss/forms", "@tailwindcss/typography"].map((name) => require.resolve(name));
+
 function createTailwindSourcesCss(sourceGlobs: readonly string[], cssFilePath: string, hostApp = false): string {
   const cssDirectory = path.dirname(cssFilePath);
   const lines = [
     "/* Generated per-vault by svartz CLI. Tailwind scans the resolved theme and its component-library deps. */",
     ...(hostApp ? ["@import 'tailwindcss';"] : []),
     ...sourceGlobs.map((sourceGlob) => `@source "${toRelativeGlob(cssDirectory, sourceGlob)}";`),
-    ...(hostApp ? ["@plugin '@tailwindcss/forms';", "@plugin '@tailwindcss/typography';"] : []),
+    ...(hostApp
+      ? HOST_TAILWIND_PLUGINS.map((plugin) => `@plugin "${toRelativeGlob(cssDirectory, plugin)}";`)
+      : []),
     "",
   ];
   return lines.join("\n");

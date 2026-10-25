@@ -3,6 +3,7 @@
  * Deterministic tie-break: shared depth -> path depth -> lexicographic.
  */
 
+import { posix } from "node:path";
 import type { RawLink, LinkResolutionStrategy } from "@svartz/core";
 import { fileToSlug } from "./slug";
 import { routeSlug } from "./routes";
@@ -24,6 +25,33 @@ const sharedDepth = (a: string, b: string): number => {
 const byPathDepth = (a: string, b: string) =>
   a.split("/").length - b.split("/").length;
 
+const decodePath = (path: string): string => {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+};
+
+/**
+ * Markdown links name a file path, like a browser would: relative to the linking
+ * note's physical folder, or to the vault root with a leading slash.
+ */
+const resolveMarkdownPath = (
+  target: string,
+  slugMap: Record<string, string>,
+  sourceSlug: string,
+  sources: readonly { slug: string; path: string }[],
+): string | undefined => {
+  const path = decodePath(target).replaceAll("\\", "/");
+  const sourcePath = sources.find((entry) => entry.slug === sourceSlug)?.path ?? sourceSlug;
+  const vaultPath = path.startsWith("/")
+    ? posix.normalize(path).slice(1)
+    : posix.join(posix.dirname(sourcePath), path);
+  if (vaultPath.startsWith("../")) return;
+  return slugMap[vaultPath.toLowerCase()] ?? slugMap[fileToSlug(vaultPath)];
+};
+
 export const resolveLink = (
   link: RawLink,
   slugMap: Record<string, string>,
@@ -34,6 +62,11 @@ export const resolveLink = (
 ): string | null => {
   const target = link.target.trim();
   if (!target) return null;
+
+  if (link.type === "markdown") {
+    const resolved = resolveMarkdownPath(target, slugMap, sourceSlug, sources);
+    if (resolved !== undefined) return resolved;
+  }
 
   const authored = slugMap[target.toLowerCase()];
   if (authored !== undefined) return authored;

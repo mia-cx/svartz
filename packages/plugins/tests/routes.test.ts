@@ -355,4 +355,47 @@ describe("canonical route allocation", () => {
     expect(links.content).toContain("[private](private.md)");
     expect(links.links).toEqual(["target"]);
   });
+
+  it("resolves Markdown link paths against the linking note's folder", () => {
+    const ctx = context([
+      note("index.md", "Home"),
+      note("moderation.md", "Root moderation"),
+      note("reference/public-api/index.md", "Public API"),
+      note("reference/public-api/moderation.md", "Public moderation"),
+      note("reference/public-api/Getting Started.md", "Start here"),
+      note("getting-started.md", "Root start"),
+      note("reference/public-api/reading.md", [
+        "[index](index.md)",
+        "[binding](./index.md#binding-example)",
+        "[encoded](Getting%20Started.md)",
+        "[parent](../internal-api/moderation.md)",
+        "[root](/moderation.md)",
+        "[[moderation]]",
+      ].join("\n")),
+      note("reference/internal-api/index.md", "Internal API"),
+      note("reference/internal-api/moderation.md", "Internal moderation"),
+    ]);
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    allocateRoutesPlugin().allocateRoutes!.run(ctx);
+    resolveLinks().resolveLinks!.run(ctx);
+    const reading = ctx.files.find((file) => file.path === "reference/public-api/reading.md")!;
+    expect(reading.content).toContain('<a href="../">index</a>');
+    expect(reading.content).toContain('<a href="../#binding-example">binding</a>');
+    expect(reading.content).toContain('<a href="../getting-started/">encoded</a>');
+    expect(reading.content).toContain('<a href="../../internal-api/moderation/">parent</a>');
+    expect(reading.content).toContain('<a href="../../../moderation/">root</a>');
+    // Wikilinks keep vault-wide resolution, where the root note owns its authored name.
+    expect(reading.content).toContain('<a href="../../../moderation/">moderation</a>');
+  });
+
+  it("resolves Markdown link paths from the physical folder after a frontmatter slug moves the note", () => {
+    const moved = note("guides/setup.md", "[next](next.md)");
+    moved.content = "---\nslug: start\n---\n[next](next.md)";
+    const ctx = context([moved, note("guides/next.md", "Guide next"), note("next.md", "Root next")]);
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    allocateRoutesPlugin().allocateRoutes!.run(ctx);
+    resolveLinks().resolveLinks!.run(ctx);
+    expect(moved.slug).toBe("guides/start");
+    expect(moved.content).toContain('<a href="../next/">next</a>');
+  });
 });
