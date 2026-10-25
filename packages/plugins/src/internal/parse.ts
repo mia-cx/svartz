@@ -117,6 +117,9 @@ function collectLinkSpans(markdown: string, roamReserved = false): PositionedLin
   return links;
 }
 
+/** Authored wikilinks and Markdown links with source spans; excludes code, embeds, escaped text, and raw HTML. */
+export const findLinkSpans = (markdown: string): PositionedLink[] => collectLinkSpans(markdown);
+
 /** Authored wikilinks with source spans; excludes code, embeds, escaped text, and raw HTML. */
 export const findWikilinkSpans = (markdown: string): PositionedLink[] =>
   collectLinkSpans(markdown).filter((link) => link.type === "wikilink");

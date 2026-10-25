@@ -28,6 +28,7 @@ export function createVaultEntryView(entry: IndexEntry, basePath = ""): IndexEnt
     ...entry,
     href: withBase(entry.href),
     socialImage: entry.socialImage?.startsWith("/") ? withBase(entry.socialImage) : entry.socialImage,
+    ...(entry.markdownHref ? { markdownHref: withBase(entry.markdownHref) } : {}),
     links: entry.links.map((link) => ({
       ...link,
       href: link.href?.startsWith("/") ? withBase(link.href) : link.href,

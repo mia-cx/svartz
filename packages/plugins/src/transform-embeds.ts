@@ -8,7 +8,7 @@ import { extractSectionMarkdown, findWikilinkSpans, type PositionedLink } from "
 import { transformMarkdown } from "./transform-ofm";
 
 const EMBED_REGEX = /!\[\[([^\]]+)\]\]/g;
-const IMAGE_EXTENSIONS = new Set([
+export const IMAGE_EXTENSIONS = new Set([
   ".png",
   ".jpg",
   ".jpeg",
@@ -68,7 +68,7 @@ function escapeHtml(value: string): string {
   })[character]!);
 }
 
-function splitEmbedInner(inner: string): {
+export function splitEmbedInner(inner: string): {
   target: string;
   section?: string;
   alias?: string;

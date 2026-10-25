@@ -65,6 +65,8 @@ interface ResolvedDiscoveryConfig {
   };
   readonly sitemap: { readonly enabled: boolean };
   readonly socialImages: { readonly enabled: boolean };
+  /** A Markdown copy of each public page plus `llms.txt`, for LLM agents. */
+  readonly llms: { readonly enabled: boolean };
   readonly favicon: { readonly enabled: boolean };
   readonly dateSources: readonly DateSource[];
 }
@@ -257,6 +259,8 @@ interface IndexEntry {
   readonly aliases: readonly string[];
   readonly description?: string;
   readonly socialImage?: string;
+  /** The page's Markdown copy for LLM agents; absent when the vault disables it or the note is protected. */
+  readonly markdownHref?: string;
   readonly content: string;
   readonly links: readonly IndexLink[];
   readonly toc: readonly TocEntry[];
