@@ -2,7 +2,7 @@
 	"name": "@svartz/theme-wiki",
 	"version": "1.0.1",
 	"description": "A Svartz theme for wikis: infoboxes, categories, recent changes, and references.",
-	"license": "SEE LICENSE IN LICENSE",
+	"license": "LicenseRef-MCX-1.0",
 	"publishConfig": { "access": "public" },
 	"engines": { "node": "^20.19.0 || >=22.12.0" },
 	"scripts": {

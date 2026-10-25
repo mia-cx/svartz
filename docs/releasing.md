@@ -2,7 +2,7 @@
 
 Svartz ships eleven public npm packages in one fixed Changesets version group.
 Private workspace packages receive no version bumps or release tags.
-All public archives include the repository LICENSE and use MCX v1.0.
+All public archives include the repository LICENSE and declare it as `LicenseRef-MCX-1.0`, the SPDX form for a custom license.
 
 Publish in this dependency order:
 

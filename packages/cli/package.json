@@ -35,7 +35,7 @@
     "sveltekit",
     "digital-garden"
   ],
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "LicenseRef-MCX-1.0",
   "peerDependencies": {
     "tailwindcss": "^4.0.0",
     "vite": "^7.0.0 || ^8.0.0"

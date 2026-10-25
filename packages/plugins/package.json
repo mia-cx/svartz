@@ -43,7 +43,7 @@
     "url": "https://github.com/mia-cx/svartz.git",
     "directory": "packages/plugins"
   },
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "LicenseRef-MCX-1.0",
   "dependencies": {
     "@humanwhocodes/ico-to-png": "^1.1.0",
     "@svartz/core": "workspace:*",

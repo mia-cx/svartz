@@ -286,7 +286,7 @@ try {
     const manifest = JSON.parse(await readFile(path.join(root, directory, 'package.json'), 'utf8'));
     assert.equal(manifest.version, releaseVersion, `${name} version`);
     assert.equal(manifest.publishConfig?.access, 'public', `${name} visibility`);
-    assert.equal(manifest.license, 'SEE LICENSE IN LICENSE', `${name} license metadata`);
+    assert.equal(manifest.license, 'LicenseRef-MCX-1.0', `${name} license metadata`);
     assert.equal(await readFile(path.join(root, directory, 'LICENSE'), 'utf8'), licenseText, `${name} license text`);
     const output = await command('pnpm', ['pack', '--json', '--pack-destination', temporary], path.join(root, directory));
     // The UI and theme prepack scripts print before pnpm's JSON report.
