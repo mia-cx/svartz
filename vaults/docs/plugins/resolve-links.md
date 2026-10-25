@@ -1,97 +1,21 @@
-# Plugin: Resolve Links
+# Resolve links
 
-Core pipeline plugin for wikilink resolution (stub).
+`resolveLinks()` provides `core:resolve-links` in the `resolveLinks` stage. It rewrites each published note's wikilinks and Markdown links to relative route hrefs, records the targets in `file.links` for backlinks, and fills `file.linkTargets`. The hook is fatal: a failure stops the build.
 
-## Overview
+## Wikilinks
 
-**Plugin ID:** `core:resolve-links`  
-**Stage:** `resolveLinks`  
-**Enforce:** `default`  
-**Fatal:** `false`
+`[[target]]` names a note anywhere in the vault. An exact path, filename, or alias wins. Otherwise the vault's `linkResolution` strategy picks among notes with the same basename:
 
-Placeholder for wikilink resolution. Currently a stub; custom themes and plugins can hook here to resolve wikilinks to final slugs.
+- `closest` prefers the note sharing the most folders with the linking note.
+- `shallowest` prefers the note nearest the vault root.
+- `absolute` resolves only exact paths, filenames, and aliases.
 
-## Function Signature
+Ties break by path depth, then alphabetically. An unresolved wikilink renders as a disabled link.
 
-```typescript
-/**
- * Create a placeholder for wikilink resolution.
- *
- * @description
- * Stub plugin for the resolveLinks stage. The runner dispatches
- * file changes here in dev mode for hot reload. Custom themes
- * and plugins can add resolvers by hooking this stage.
- *
- * Currently: no-op (intentional stub for future extension)
- *
- * @returns Plugin for resolveLinks stage
- *
- * @example
- * ```ts
- * const plugin = resolveLinks();
- * // Currently: no-op
- * // Future: custom themes can add resolvers here
- * ```
- */
-export function resolveLinks(): SvartzPlugin {
-  return definePlugin(() => ({
-    id: "core:resolve-links",
-    resolveLinks: (ctx) => {
-      // Stub: theme/consumer plugins can hook here to resolve wikilinks
-    }
-  }));
-}
-```
+## Markdown links
 
-## Stage Purpose
+`[label](path.md)` names a file path, as a browser would. Svartz resolves it against the linking note's folder first, so `[API](index.md)` in `reference/api/reading.md` opens `reference/api/index.md`. `../` climbs from that folder. A leading `/` starts at the vault root. Percent-encoded names such as `Getting%20Started.md` decode first. The folder is the note's physical folder, even when a frontmatter `slug` moves its URL.
 
-The `resolveLinks` stage is reserved for:
-1. Resolving wikilinks to their canonical slugs
-2. Building link graph and backlinks
-3. Validating link targets
-4. Handling link cycles or conflicts
+When no file exists at that path, the link falls back to wikilink resolution. A link that still resolves nowhere stays as authored. A `#fragment` carries over as the heading anchor on the target page.
 
-## Current State
-
-**Status:** Intentional stub (not implemented yet)
-
-**Why?**
-- Link resolution strategies depend on theme requirements
-- Different themes may use different resolution algorithms
-- Consumers (Vite plugin, CLI) can add custom resolvers
-
-## Future Extension
-
-Custom themes can add resolvers:
-
-```typescript
-import { definePlugin } from "@svartz/core";
-
-export const customLinkResolver = definePlugin(() => ({
-  id: "custom:resolve-links",
-  resolveLinks: (ctx) => {
-    ctx.files.forEach(file => {
-      // Custom link resolution logic
-      if (file.links) {
-        file.links = file.links.map(link => ({
-          ...link,
-          resolved: resolveWikilink(link.target, ctx.files)
-        }));
-      }
-    });
-  }
-}));
-```
-
-## Integration
-
-- **Precondition:** All previous stages complete
-- **Postcondition:** Links resolved (currently: no-op)
-- **Depends on:** All previous stages
-- **Depended by:** `emitArtifacts` (for backlinks)
-
-## See Also
-
-- [[contracts/plugin-contract]] — Plugin system contract
-- [[plugins/overview]] — All core plugins overview
-- [[plugins/emit-artifacts]] — Follows this stage
+Disable the plugin with `{ id: "core:resolve-links", disabled: true }` or replace the same ID. See [[contracts/plugin-contract]].

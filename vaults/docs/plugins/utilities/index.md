@@ -14,7 +14,7 @@ Reference for utility functions and internal modules used across `@svartz/plugin
 - **[[plugins/utilities/ignore]]** — Gitignore and include/exclude pattern matching
 - **[[plugins/utilities/datetime]]** — ISO timestamp parsing and formatting
 - **[[plugins/utilities/parse]]** — YAML frontmatter extraction and parsing
-- **[[plugins/utilities/resolve]]** — Wikilink parsing and resolution helpers
+- **[[plugins/utilities/resolve]]** — Link resolution helpers
 
 ## See Also
 
