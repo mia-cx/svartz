@@ -137,12 +137,17 @@ function serializeNode(node: RootContent | ElementContent, insideCode = false): 
   return wrapLiteral(safeElement, children);
 }
 
+// rehype-pretty-code makes a code block's <pre> focusable so keyboards can scroll it.
+// That is correct for a scroll region, but Svelte flags every one.
+const FOCUSABLE_PRE_IGNORE = "<!-- svelte-ignore a11y_no_noninteractive_tabindex -->";
+
 /** The element's own tags as literal markup around already-serialized children. */
 function wrapLiteral(element: Element, children: string): string {
   const shell = toHtml({ ...element, children: [{ type: "text", value: MARKER }] });
   const markerAt = shell.indexOf(MARKER);
   if (markerAt < 0) return escapeSvelte(toHtml(element));
-  return escapeSvelte(shell.slice(0, markerAt)) + children + escapeSvelte(shell.slice(markerAt + MARKER.length));
+  const ignore = element.tagName === "pre" && element.properties.tabindex !== undefined ? FOCUSABLE_PRE_IGNORE : "";
+  return ignore + escapeSvelte(shell.slice(0, markerAt)) + children + escapeSvelte(shell.slice(markerAt + MARKER.length));
 }
 
 /** Compile parsed, inert Markdown into Svelte markup with overridable content slots. */

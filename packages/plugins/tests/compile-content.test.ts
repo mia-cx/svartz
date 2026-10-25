@@ -29,7 +29,14 @@ describe("code blocks", () => {
     expect(content).toContain("<pre");
 
     const plain = compileContent(await renderMarkdownTree(ctx, "```\n  indented\n```"));
-    expect(plain).toMatch(/<contentComponents\.codeBlock [^>]*"tag":"pre"[^>]*><pre/);
+    expect(plain).toMatch(/<contentComponents\.codeBlock [^>]*"tag":"pre"[^>]*>(?:<!--[^>]*-->)?<pre/);
+  });
+
+  it("keeps the scrollable <pre> focusable without a Svelte a11y warning", async () => {
+    const content = compileContent(await renderMarkdownTree(withSyntax(), "```ts\nconst a = 1;\n```"));
+    expect(content).toContain('<pre tabindex="0"');
+    const { warnings } = compile(`<script>let { contentComponents } = $props();</script>${content}`, { generate: "server" });
+    expect(warnings.map((warning) => warning.code)).toEqual([]);
   });
 });
 
