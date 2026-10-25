@@ -1,4 +1,5 @@
 import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,6 +10,7 @@ import {
   getTailwindSourceGlobs,
 } from "../src/tailwind-sources";
 
+const require = createRequire(import.meta.url);
 const tempDirs: string[] = [];
 
 function createConfig(themeBase: string): ResolvedConfig {
@@ -118,7 +120,10 @@ describe("tailwind source generation", () => {
     );
     expect(css).toContain("@import 'tailwindcss';");
     expect(css).toContain('@source "../../node_modules/@svartz/ui/dist/**/*.svelte";');
-    expect(css).toContain("@plugin '@tailwindcss/typography';");
+    // The CLI's own copies, so strict installs need nothing from the host.
+    const plugins = [...css.matchAll(/@plugin "([^"]+)";/g)].map((match) =>
+      path.resolve("/workspace/.svartz/host", match[1]!));
+    expect(plugins).toEqual([require.resolve("@tailwindcss/forms"), require.resolve("@tailwindcss/typography")]);
   });
 
   it("uses the vault build root for the generated css file", () => {
