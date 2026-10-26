@@ -34,3 +34,7 @@ Theme route components can use lazy imports, including pages that import `@svart
 ```
 
 Add `/// <reference types="@svartz/ui/virtual-modules" />` to `src/app.d.ts` when the shell imports `virtual:svartz/*` directly. The CLI injects these modules during build and dev. Route files and the SvelteKit adapter stay in the consuming app.
+
+## Reference themes
+
+`@svartz/ui/reference/runtime` is the shell behind `@svartz/theme-api-docs` and `@svartz/theme-mcp-docs`: the layout, the filterable sidebar, schema trees, code panels, and `referenceTheme`, which binds page renderers to the shell. `@svartz/ui/reference` is its build-time manifest for a theme's Node entry. [Reference themes](../../docs/reference-themes.md) shows how to combine renderers in one site.

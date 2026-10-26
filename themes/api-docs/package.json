@@ -44,7 +44,6 @@
 		"svelte": "^5.0.0"
 	},
 	"dependencies": {
-		"@lucide/svelte": "^1.48.0",
 		"@svartz/core": "workspace:*",
 		"@svartz/ui": "workspace:*"
 	},

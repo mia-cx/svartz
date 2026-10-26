@@ -13,6 +13,7 @@
       "@svartz/theme-blog",
       "@svartz/theme-docs",
       "@svartz/theme-api-docs",
+      "@svartz/theme-mcp-docs",
       "@svartz/vite",
       "svartz"
     ]
@@ -24,6 +25,7 @@
   "ignore": [
     "svartz-monorepo",
     "@svartz/web",
+    "@svartz/showcase-reference-theme",
     "@jackyzha0/quartz"
   ],
   "privatePackages": {

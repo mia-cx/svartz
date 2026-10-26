@@ -23,6 +23,7 @@ const packages = [
   ['@svartz/theme-blog', 'themes/blog', ['dist/index.js', 'dist/runtime.js']],
   ['@svartz/theme-docs', 'themes/docs', ['dist/index.js', 'dist/runtime.js']],
   ['@svartz/theme-api-docs', 'themes/api-docs', ['dist/index.js', 'dist/runtime.js']],
+  ['@svartz/theme-mcp-docs', 'themes/mcp-docs', ['dist/index.js', 'dist/runtime.js']],
   ['@svartz/vite', 'packages/vite', ['dist/index.js', 'dist/host.js', 'dist/discovery.js', 'types/virtual-modules.d.ts']],
   ['svartz', 'packages/cli', ['dist/index.js', 'template/vault/index.md', 'template/gitignore']],
 ];
@@ -317,7 +318,7 @@ try {
     }
     archives.set(name, archive);
   }
-  console.log('Eleven public archives: runtime files and package boundaries passed.');
+  console.log(`${archives.size} public archives: runtime files and package boundaries passed.`);
 
   const launcher = path.join(temporary, 'launcher');
   await mkdir(launcher);

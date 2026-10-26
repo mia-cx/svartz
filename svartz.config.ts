@@ -88,5 +88,23 @@ export default defineConfig({
         description: "A Svartz showcase for the API docs theme.",
       },
     },
+    {
+      // Showcase for composed reference themes: guides, HTTP, GraphQL, and MCP tools in one site, under /docs.
+      id: "showcase-reference",
+      path: "vaults/showcase-reference",
+      target: { type: "static", basePath: "/docs" },
+      theme: {
+        base: "./themes/showcase-reference",
+        version: "v2",
+        baseUrl: "https://api.harbour.example/v2",
+        graphqlEndpoint: "https://api.harbour.example/graphql",
+        routes: { folders: "reference" },
+        nav: { Status: "https://status.harbour.example" },
+      },
+      site: {
+        title: "Harbour developer docs",
+        description: "A Svartz showcase for composing the API and MCP docs themes.",
+      },
+    },
   ],
 });

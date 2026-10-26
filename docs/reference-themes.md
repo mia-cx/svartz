@@ -1,0 +1,154 @@
+# Reference themes: API and MCP docs in one site
+
+`@svartz/theme-api-docs` and `@svartz/theme-mcp-docs` are presets of one reference shell from `@svartz/ui`. The shell owns the top bar, search, the filterable sidebar, page actions, the examples column, and the design tokens. Each preset adds renderers: REST, GraphQL, and schema pages for API docs; MCP tool and schema pages for MCP docs.
+
+Use a preset when a site documents one kind of interface. Combine renderers when one site documents several, such as guides, HTTP endpoints, and MCP tools.
+
+## Use a preset
+
+```ts
+// svartz.config.ts
+theme: {
+  base: '@svartz/theme-mcp-docs',
+  baseUrl: 'https://relay.example',   // joined to tool endpoints written as paths
+  routes: { folders: 'reference' },
+  nav: { Status: 'https://status.example.com' },
+}
+```
+
+Both presets read `tokens`, `routes`, `version`, `nav`, `footer.links`, and `comments`. The API preset also reads `baseUrl` and `graphqlEndpoint` for its request examples.
+
+## Combine renderers
+
+Write a directory theme beside your config. It needs a package manifest and two entries. The build entry is the same for every reference theme. The runtime entry lists the renderers.
+
+```json
+// theme/package.json
+{
+  "name": "@acme/docs-theme",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./index.js", "./runtime": "./runtime.js" }
+}
+```
+
+```js
+// theme/index.js
+import { referenceTheme } from '@svartz/ui/reference';
+
+export default (config) => referenceTheme({ id: '@acme/docs-theme' }, config);
+```
+
+```js
+// theme/runtime.js
+import { apiRenderers } from '@svartz/theme-api-docs/runtime';
+import { mcpRenderers } from '@svartz/theme-mcp-docs/runtime';
+import { referenceTheme } from '@svartz/ui/reference/runtime';
+
+export default (config) =>
+  referenceTheme({ id: '@acme/docs-theme', renderers: [...apiRenderers, ...mcpRenderers] }, config);
+```
+
+```ts
+// svartz.config.ts
+theme: { base: './theme', baseUrl: 'https://api.example.com', tokens: { accent: 'var(--brand)' } }
+```
+
+Install `@svartz/ui`, `@svartz/theme-api-docs`, and `@svartz/theme-mcp-docs`. Both presets list the shared schema renderer; listing a renderer twice is fine. The [mixed showcase](../themes/showcase-reference) composes its theme this way and serves under `/docs`.
+
+## How a page picks its renderer
+
+A page names what it documents in its frontmatter:
+
+| Metadata | Renderer |
+| --- | --- |
+| `operation.protocol: rest`, or `operation` without a protocol | REST endpoint |
+| `operation.protocol: graphql` | GraphQL operation |
+| `operation.protocol: mcp` | MCP tool |
+| `model` | Shared schema |
+| neither | Guide: the page's Markdown in a reading column |
+
+The build fails with the page's path and the reason when:
+
+- a page has both `operation` and `model`;
+- no renderer handles its `operation.protocol`, for example a REST page in an MCP-only site;
+- its renderer can't read the metadata, such as a REST operation without a `path`.
+
+Two different renderers for one protocol also fail, naming the theme and the protocol. Keep one of them.
+
+## Metadata every reference page can use
+
+```yaml
+source:                                  # "Defined in" links
+  - https://github.com/acme/api/blob/main/src/routes/pets.ts#L48-L71    # shows src/routes/pets.ts:48–71
+  - { label: OpenAPI document, href: https://api.example.com/openapi.json }
+operation:
+  auth: { scheme: bearer, description: A dashboard token., scopes: [pets:read] }   # or just: auth: bearer
+```
+
+Schemas are a JSON Schema subset. Fields show their type, whether they're required, `default`, `enum` or `const` values, length and range limits, `pattern`, and `description`. `additionalProperties` reads as a map, and `type: [string, "null"]` as nullable. A `$ref` names a `model` page, and `#/$defs/Pet` or `#/components/schemas/Pet` also resolve to `Pet`.
+
+## MCP tools
+
+```yaml
+title: Find pets
+description: Search adoptable pets by species and status.
+operation:
+  protocol: mcp
+  kind: tool                       # resource and prompt pages are reserved for a later release
+  name: find_pets
+  title: Find pets                 # optional display name; also read from annotations.title
+  endpoint: /mcp                   # the server's HTTP endpoint; a path joins the theme's baseUrl
+  auth: { scheme: bearer, description: A token with `pets:read`. }
+  inputSchema:
+    type: object
+    properties:
+      species: { type: string, enum: [dog, cat] }
+      limit: { type: integer, minimum: 1, maximum: 50, default: 10 }
+  outputSchema:                    # optional: the shape of structuredContent
+    type: object
+    properties: { pets: { type: array, items: { $ref: Pet } } }
+  annotations: { readOnlyHint: true, openWorldHint: false }
+  examples:
+    - title: Available dogs
+      arguments: { species: dog }
+      result: { structuredContent: { pets: [] } }
+    - title: Limit too high
+      arguments: { limit: 500 }
+      result: { isError: true, content: [{ type: text, text: limit must be at most 50. }] }
+    - title: Misspelled tool name
+      arguments: {}
+      error: { code: -32602, message: "Unknown tool: find_pet" }
+```
+
+Each example shows the JSON-RPC `tools/call` request and the response. A `result` is a tool result, and `isError: true` marks a tool that ran and failed. An `error` is a JSON-RPC error: the server rejected the request and no tool ran. Results pass `content` blocks through as written, including images, audio, and resource links. A result with only `structuredContent` also gets it as a JSON text block, as the MCP spec asks servers to send. A tool without examples gets one request built from its input schema.
+
+Annotations show as the hints the server declares. They are not security guarantees.
+
+## Markdown copies
+
+Each page's `.md` copy and `llms.txt` entry carry its frontmatter, so agents read the same operation, tool, and schema metadata as people.
+
+## Write a renderer
+
+A renderer reads one kind of metadata and renders it. Its components can use the shell's `EndpointBar`, `AuthSummary`, `ReferenceSection`, `SchemaTree`, and `CodePanel`.
+
+```ts
+import { defineRenderer } from '@svartz/ui/reference/runtime';
+
+export const webhookRenderer = defineRenderer({
+  id: 'webhook',                                     // operation.protocol: webhook
+  read: (properties) => readWebhook(properties.operation), // return undefined, or throw with a reason, for bad metadata
+  nav: (hook) => ({ badge: { label: 'HOOK', hue: 'orange' }, label: hook.event, sort: [1, hook.event, 0] }),
+  page: WebhookPage,         // receives { data, context, children }; render children after the header
+  examples: WebhookExamples, // optional; receives { data, context }
+});
+```
+
+Import runtime code from `@svartz/ui/reference/runtime`. The bare `@svartz/ui/reference` entry loads the build's syntax plugin, so it is only for a theme's `index.js`.
+
+## Upgrading
+
+**From `@svartz/theme-api-docs` 1.0:** pages and config keep working. The sidebar now labels endpoints by path beside a method badge, gains a filter, and groups nested folders. Parameters accept `default`, `enum`, or a `schema`. `operation.auth` also accepts `{ scheme, description, scopes }`, so `RestOperation.auth` is now an object rather than a string. A page whose `operation` or `model` metadata can't be read now fails the build instead of rendering as a guide.
+
+**From the minimal theme:** give each endpoint page `operation` metadata with `method` and `path`, and each tool page `operation` metadata with `protocol: mcp`, a `name`, and an `inputSchema`. Move "Sources:" lines into `source`. Then point `theme.base` at a preset, or at a directory theme that combines them. Pages without that metadata keep rendering as guides.

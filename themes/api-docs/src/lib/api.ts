@@ -1,4 +1,13 @@
-import { isRecord, topLevelSections, type UiFolderEntry } from '@svartz/ui';
+import { isRecord } from '@svartz/ui';
+import {
+	exampleFromSchema,
+	readAuth,
+	readSchema,
+	type ReferenceAuth,
+	type ReferenceBadge,
+	type ReferenceHue,
+	type SchemaNode
+} from '@svartz/ui/reference/runtime';
 
 type Properties = Readonly<Record<string, unknown>>;
 
@@ -6,129 +15,34 @@ const text = (value: unknown) => (typeof value === 'string' && value.trim() ? va
 const scalarText = (value: unknown) =>
 	typeof value === 'number' || typeof value === 'boolean' ? String(value) : text(value);
 const records = (value: unknown) => (Array.isArray(value) ? value.filter(isRecord) : []);
-const isScalar = (value: unknown): value is string | number | boolean =>
-	typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 
-// --- Schemas ---------------------------------------------------------------
-
-/**
- * The JSON Schema subset the theme renders. `$ref` names another note's model
- * (`$ref: Pet`), so an OpenAPI plugin maps `#/components/schemas/Pet` to `Pet`.
- */
-export interface SchemaNode {
-	readonly type?: string;
-	readonly format?: string;
-	readonly description?: string;
-	/** Values keep their JSON type: `enum: [0, 1]` stays numeric. */
-	readonly enum?: readonly (string | number | boolean)[];
-	readonly example?: unknown;
-	readonly nullable?: boolean;
-	readonly ref?: string;
-	readonly items?: SchemaNode;
-	readonly properties?: readonly SchemaProperty[];
-	readonly oneOf?: readonly SchemaNode[];
-	readonly anyOf?: readonly SchemaNode[];
-}
-
-export interface SchemaProperty {
-	readonly name: string;
-	readonly required: boolean;
-	readonly schema: SchemaNode;
-}
-
-export function readSchema(raw: unknown): SchemaNode | undefined {
-	if (!isRecord(raw)) return undefined;
-	const ref = text(raw.$ref)?.split('/').at(-1);
-	const required = Array.isArray(raw.required) ? raw.required.filter((name) => typeof name === 'string') : [];
-	const properties = isRecord(raw.properties)
-		? Object.entries(raw.properties).flatMap(([name, value]): SchemaProperty[] => {
-				const schema = readSchema(value);
-				return schema ? [{ name, required: required.includes(name), schema }] : [];
-			})
-		: undefined;
-	const variants = (value: unknown) =>
-		Array.isArray(value) ? value.map(readSchema).filter((node) => node !== undefined) : undefined;
-	return {
-		type: text(raw.type),
-		format: text(raw.format),
-		description: text(raw.description),
-		enum: Array.isArray(raw.enum) ? raw.enum.filter(isScalar) : undefined,
-		example: raw.example,
-		nullable: raw.nullable === true,
-		ref,
-		items: readSchema(raw.items),
-		properties,
-		oneOf: variants(raw.oneOf),
-		anyOf: variants(raw.anyOf)
-	};
-}
-
-/** How a schema reads in one line: `string (uuid)`, `Pet[]`, `"a" | "b"`. */
-export function schemaLabel(schema: SchemaNode): string {
-	if (schema.ref) return schema.ref;
-	if (schema.enum?.length) return schema.enum.map((value) => JSON.stringify(value)).join(' | ');
-	if (schema.type === 'array') return `${schema.items ? schemaLabel(schema.items) : 'unknown'}[]`;
-	const variants = schema.oneOf ?? schema.anyOf;
-	if (variants?.length) return variants.map(schemaLabel).join(' | ');
-	const base = schema.type ?? (schema.properties ? 'object' : 'any');
-	return `${base}${schema.format ? ` (${schema.format})` : ''}${schema.nullable ? ' | null' : ''}`;
-}
-
-const FORMAT_EXAMPLES: Record<string, string> = {
-	uuid: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
-	email: 'user@example.com',
-	'date-time': '2026-09-24T12:00:00Z',
-	date: '2026-09-24',
-	uri: 'https://example.com',
-	url: 'https://example.com'
-};
-
-/** A representative value for a schema: its example, then its first enum value, then a placeholder by type. */
-export function exampleFromSchema(
-	schema: SchemaNode,
-	models: Readonly<Record<string, SchemaNode>>,
-	seen: ReadonlySet<string> = new Set()
-): unknown {
-	if (schema.example !== undefined) return schema.example;
-	if (schema.ref) {
-		const model = models[schema.ref];
-		return model && !seen.has(schema.ref) ? exampleFromSchema(model, models, new Set([...seen, schema.ref])) : {};
-	}
-	if (schema.enum?.length) return schema.enum[0];
-	const variant = schema.oneOf?.[0] ?? schema.anyOf?.[0];
-	if (variant) return exampleFromSchema(variant, models, seen);
-	switch (schema.type) {
-		case 'array':
-			return schema.items ? [exampleFromSchema(schema.items, models, seen)] : [];
-		case 'integer':
-		case 'number':
-			return 0;
-		case 'boolean':
-			return true;
-		case 'string':
-			return (schema.format && FORMAT_EXAMPLES[schema.format]) ?? 'string';
-		default:
-			return Object.fromEntries(
-				(schema.properties ?? []).map((property) => [property.name, exampleFromSchema(property.schema, models, seen)])
-			);
-	}
-}
+export { exampleFromSchema, readModel, readSchema, schemaLabel, type SchemaNode, type SchemaProperty } from '@svartz/ui/reference/runtime';
 
 // --- Operations ------------------------------------------------------------
 
+/** Each method's badge hue, after Swagger UI's: GET blue, POST green, DELETE red. */
 export const HTTP_METHODS = {
-	GET: 'green',
-	POST: 'blue',
-	PUT: 'amber',
-	PATCH: 'violet',
+	GET: 'blue',
+	POST: 'green',
+	PUT: 'orange',
+	PATCH: 'teal',
 	DELETE: 'red',
-	HEAD: 'cyan',
+	HEAD: 'violet',
 	OPTIONS: 'cyan'
-} as const;
+} as const satisfies Record<string, ReferenceHue>;
 
 export type HttpMethod = keyof typeof HTTP_METHODS;
-export const GRAPHQL_KINDS = { query: 'green', mutation: 'blue', subscription: 'violet' } as const;
+export const GRAPHQL_KINDS = { query: 'green', mutation: 'blue', subscription: 'violet' } as const satisfies Record<string, ReferenceHue>;
 export type GraphqlKind = keyof typeof GRAPHQL_KINDS;
+
+/** Sidebar badges fit eight characters, so `subscription` shortens there. */
+const GRAPHQL_NAV_LABELS: Record<GraphqlKind, string> = { query: 'QUERY', mutation: 'MUTATION', subscription: 'SUB' };
+
+export const methodBadge = (method: HttpMethod): ReferenceBadge => ({ label: method, hue: HTTP_METHODS[method] });
+export const graphqlBadge = (kind: GraphqlKind, nav = false): ReferenceBadge => ({
+	label: nav ? GRAPHQL_NAV_LABELS[kind] : kind.toUpperCase(),
+	hue: GRAPHQL_KINDS[kind]
+});
 
 export interface ApiParameter {
 	readonly name: string;
@@ -137,6 +51,8 @@ export interface ApiParameter {
 	readonly required: boolean;
 	readonly description?: string;
 	readonly example?: string;
+	/** The parameter's value schema: its `schema`, else one built from `type`, `enum`, and `default`. */
+	readonly schema: SchemaNode;
 }
 
 export interface ApiResponse {
@@ -150,7 +66,7 @@ export interface RestOperation {
 	readonly protocol: 'rest';
 	readonly method: HttpMethod;
 	readonly path: string;
-	readonly auth?: string;
+	readonly auth?: ReferenceAuth;
 	readonly parameters: readonly ApiParameter[];
 	readonly requestBody?: { readonly contentType: string; readonly schema?: SchemaNode; readonly example?: unknown };
 	readonly responses: readonly ApiResponse[];
@@ -161,12 +77,14 @@ export interface GraphqlArgument {
 	readonly type: string;
 	readonly required: boolean;
 	readonly description?: string;
+	readonly default?: unknown;
 }
 
 export interface GraphqlOperation {
 	readonly protocol: 'graphql';
 	readonly kind: GraphqlKind;
 	readonly name: string;
+	readonly auth?: ReferenceAuth;
 	readonly args: readonly GraphqlArgument[];
 	readonly returns?: string;
 	readonly example?: { readonly query?: string; readonly variables?: unknown; readonly response?: unknown };
@@ -209,27 +127,32 @@ function readResponses(raw: unknown): ApiResponse[] {
 		.sort((left, right) => left.status.localeCompare(right.status));
 }
 
+function readParameter(parameter: Properties): ApiParameter[] {
+	const name = text(parameter.name);
+	if (!name) return [];
+	const location = LOCATIONS.find((candidate) => candidate === parameter.in) ?? 'query';
+	const type = text(parameter.type);
+	const description = text(parameter.description);
+	const schema = readSchema(
+		isRecord(parameter.schema) ? parameter.schema : { type, enum: parameter.enum, default: parameter.default, example: parameter.example }
+	)!;
+	return [{
+		name,
+		in: location,
+		type: type ?? schema.type,
+		required: location === 'path' || parameter.required === true,
+		description,
+		example: scalarText(parameter.example ?? schema.example),
+		schema: { ...schema, description: description ?? schema.description }
+	}];
+}
+
+/** A REST or GraphQL operation from a page's `operation` metadata, or `undefined` when it isn't one. */
 export function readOperation(properties: Properties): ApiOperation | undefined {
 	const raw = properties.operation;
 	if (!isRecord(raw)) return undefined;
-	if (raw.protocol === 'graphql') {
-		const kind = text(raw.kind) as GraphqlKind | undefined;
-		const name = text(raw.name);
-		if (!kind || !(kind in GRAPHQL_KINDS) || !name) return undefined;
-		const example = isRecord(raw.example) ? raw.example : undefined;
-		return {
-			protocol: 'graphql',
-			kind,
-			name,
-			args: records(raw.args).flatMap((arg): GraphqlArgument[] => {
-				const argName = text(arg.name);
-				const type = text(arg.type);
-				return argName && type ? [{ name: argName, type, required: arg.required === true, description: text(arg.description) }] : [];
-			}),
-			returns: text(raw.returns),
-			example: example && { query: text(example.query), variables: example.variables, response: example.response }
-		};
-	}
+	if (raw.protocol === 'graphql') return readGraphql(raw);
+	if (raw.protocol !== undefined && raw.protocol !== 'rest') return undefined;
 	const method = text(raw.method)?.toUpperCase();
 	const path = text(raw.path);
 	if (!method || !(method in HTTP_METHODS) || !path) return undefined;
@@ -238,21 +161,8 @@ export function readOperation(properties: Properties): ApiOperation | undefined 
 		protocol: 'rest',
 		method: method as HttpMethod,
 		path,
-		auth: text(raw.auth),
-		parameters: records(raw.parameters).flatMap((parameter): ApiParameter[] => {
-			const name = text(parameter.name);
-			const location = LOCATIONS.find((candidate) => candidate === parameter.in) ?? 'query';
-			return name
-				? [{
-						name,
-						in: location,
-						type: text(parameter.type),
-						required: location === 'path' || parameter.required === true,
-						description: text(parameter.description),
-						example: scalarText(parameter.example)
-					}]
-				: [];
-		}),
+		auth: readAuth(raw.auth),
+		parameters: records(raw.parameters).flatMap(readParameter),
 		requestBody: body && {
 			contentType: text(body.contentType) ?? 'application/json',
 			schema: readSchema(body.schema),
@@ -262,81 +172,39 @@ export function readOperation(properties: Properties): ApiOperation | undefined 
 	};
 }
 
-/** A model note: `model: { name: Pet, schema: {…} }`. */
-export function readModel(properties: Properties): { name: string; schema: SchemaNode } | undefined {
-	const raw = properties.model;
-	if (!isRecord(raw)) return undefined;
+function readGraphql(raw: Properties): GraphqlOperation | undefined {
+	const kind = text(raw.kind) as GraphqlKind | undefined;
 	const name = text(raw.name);
-	const schema = readSchema(raw.schema);
-	return name && schema ? { name, schema } : undefined;
-}
-
-// --- Navigation --------------------------------------------------------------
-
-interface NavEntry {
-	readonly slug: string;
-	readonly title: string;
-	readonly href: string;
-	readonly properties: Properties;
-}
-
-export interface ApiNavSection<T> {
-	/** The top-level folder, or `""` for loose notes. */
-	readonly slug: string;
-	readonly title: string;
-	readonly href?: string;
-	/** A resource (models and operations) rather than a folder of guides. */
-	readonly reference: boolean;
-	readonly entries: T[];
-}
-
-const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
-const METHOD_ORDER = Object.keys(HTTP_METHODS);
-
-/** Sort key: models, then operations by path and method, then guides by title. */
-function navRank(entry: NavEntry): [number, string, number] {
-	if (readModel(entry.properties)) return [0, entry.title, 0];
-	const operation = readOperation(entry.properties);
-	if (operation?.protocol === 'rest') return [1, operation.path, METHOD_ORDER.indexOf(operation.method)];
-	if (operation) return [1, operation.name, Object.keys(GRAPHQL_KINDS).indexOf(operation.kind)];
-	return [2, entry.title, 0];
-}
-
-/**
- * The sidebar: one section per top-level folder, guides before resources.
- * A folder note (`graphql/index.md`) names and links its section: `GraphQL`,
- * not the slug's `Graphql`.
- */
-export function apiNav<T extends NavEntry>(
-	entries: readonly T[],
-	folders: readonly Pick<UiFolderEntry, 'slug' | 'title' | 'href' | 'noteSlugs' | 'noteSlug'>[]
-): ApiNavSection<T>[] {
-	const compare = (left: T, right: T) => {
-		const [leftGroup, leftKey, leftOrder] = navRank(left);
-		const [rightGroup, rightKey, rightOrder] = navRank(right);
-		return leftGroup - rightGroup || collator.compare(leftKey, rightKey) || leftOrder - rightOrder;
+	if (!kind || !(kind in GRAPHQL_KINDS) || !name) return undefined;
+	const example = isRecord(raw.example) ? raw.example : undefined;
+	return {
+		protocol: 'graphql',
+		kind,
+		name,
+		auth: readAuth(raw.auth),
+		args: records(raw.args).flatMap((arg): GraphqlArgument[] => {
+			const argName = text(arg.name);
+			const type = text(arg.type);
+			return argName && type
+				? [{ name: argName, type, required: arg.required === true || type.endsWith('!'), description: text(arg.description), default: arg.default }]
+				: [];
+		}),
+		returns: text(raw.returns),
+		example: example && { query: text(example.query), variables: example.variables, response: example.response }
 	};
-	return topLevelSections(entries, folders)
-		.map(
-			(section): ApiNavSection<T> => ({
-				...section,
-				title: section.slug ? section.title : 'Overview',
-				reference: section.entries.some((entry) => navRank(entry)[0] < 2),
-				entries: [...section.entries].sort(compare)
-			})
-		)
-		.sort((left, right) => Number(left.reference) - Number(right.reference) || collator.compare(left.title, right.title));
 }
 
-/** Every model schema in the vault, by name, for `$ref` resolution and example generation. */
-export function modelSchemas(entries: readonly NavEntry[]): Record<string, SchemaNode> {
-	return Object.fromEntries(
-		entries.flatMap((entry) => {
-			const model = readModel(entry.properties);
-			return model ? [[model.name, model.schema]] : [];
-		})
-	);
-}
+/** The schema a field list renders for parameters or arguments. */
+export const fieldsSchema = (fields: readonly { name: string; required: boolean; schema: SchemaNode }[]): SchemaNode => ({
+	type: 'object',
+	properties: fields.map(({ name, required, schema }) => ({ name, required, schema }))
+});
+
+/** A GraphQL argument as a schema field: its GraphQL type reads as written (`ID!`). */
+export const argumentSchema = (arg: GraphqlArgument): SchemaNode => ({ type: arg.type, description: arg.description, default: arg.default });
+
+/** A GraphQL type's named type, without list and non-null marks: `[Pet!]!` → `Pet`. */
+export const namedType = (type: string) => type.replace(/\[\[|\]\]/g, '').replace(/[[\]!]/g, '');
 
 // --- Examples ----------------------------------------------------------------
 
@@ -361,17 +229,24 @@ const pythonLiteral = (json: string) =>
 	json.replace(/"(?:[^"\\]|\\.)*"|\b(?:true|false|null)\b/g, (token) => PYTHON_KEYWORDS[token] ?? token);
 
 /** A request example body: the operation's example, else one generated from its schema. */
-export function requestBodyExample(operation: RestOperation, models: Readonly<Record<string, SchemaNode>>): unknown {
+export function requestBodyExample(operation: RestOperation, schemas: Readonly<Record<string, SchemaNode>>): unknown {
 	const body = operation.requestBody;
 	if (!body) return undefined;
-	return body.example ?? (body.schema ? exampleFromSchema(body.schema, models) : undefined);
+	if (body.example !== undefined) return body.example;
+	return body.schema ? exampleFromSchema(body.schema, schemas) : undefined;
+}
+
+/** The credential header a scheme sends: bearer tokens unless the scheme is `none` or `basic`. */
+function authHeader(auth: ReferenceAuth | undefined): SnippetHeader[] {
+	if (!auth || auth.scheme === 'none') return [];
+	return [auth.scheme === 'basic' ? { name: 'Authorization', value: 'Basic ', variable: 'CREDENTIALS' } : { name: 'Authorization', value: 'Bearer ', variable: 'TOKEN' }];
 }
 
 /** Copyable requests for a REST operation, with example values in the URL and body. */
 export function requestSnippets(
 	operation: RestOperation,
 	baseUrl: string,
-	models: Readonly<Record<string, SchemaNode>>
+	schemas: Readonly<Record<string, SchemaNode>>
 ): Record<SnippetLanguage, string> {
 	const valueOf = (parameter: ApiParameter) => parameter.example ?? `{${parameter.name}}`;
 	// Placeholders stay readable (`{petId}`), so only real examples are encoded. Encoding
@@ -390,12 +265,10 @@ export function requestSnippets(
 	const url = `${baseUrl.replace(/\/$/, '')}${path}${query ? `?${query}` : ''}`;
 	// Only the credential is a shell or language variable; every other value is literal.
 	const headers: SnippetHeader[] = [
-		...(operation.auth && operation.auth !== 'none'
-			? [operation.auth === 'basic' ? { name: 'Authorization', value: 'Basic ', variable: 'CREDENTIALS' } : { name: 'Authorization', value: 'Bearer ', variable: 'TOKEN' }]
-			: []),
+		...authHeader(operation.auth),
 		...operation.parameters.filter((parameter) => parameter.in === 'header').map((parameter) => ({ name: parameter.name, value: valueOf(parameter) }))
 	];
-	const body = requestBodyExample(operation, models);
+	const body = requestBodyExample(operation, schemas);
 	if (body !== undefined) headers.push({ name: 'Content-Type', value: operation.requestBody!.contentType });
 	const json = body === undefined ? undefined : JSON.stringify(body, null, 2);
 	const method = operation.method;
@@ -449,7 +322,7 @@ export function graphqlQuery(operation: GraphqlOperation): string {
 	const variables = args.length ? ` (${args.map((arg) => `$${arg.name}: ${arg.type}`).join(', ')})` : '';
 	const call = args.length ? `(${args.map((arg) => `${arg.name}: $${arg.name}`).join(', ')})` : '';
 	// GraphQL rejects a selection set on a scalar result.
-	const returned = operation.returns?.replace(/[[\]!]/g, '');
+	const returned = operation.returns ? namedType(operation.returns) : undefined;
 	const selection = returned && GRAPHQL_SCALARS.has(returned) ? '' : ' {\n    id\n  }';
 	return `${operation.kind}${variables} {\n  ${operation.name}${call}${selection}\n}`;
 }

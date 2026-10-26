@@ -14,6 +14,7 @@ export const RELEASE_PACKAGES = [
   ['@svartz/theme-blog', 'themes/blog'],
   ['@svartz/theme-docs', 'themes/docs'],
   ['@svartz/theme-api-docs', 'themes/api-docs'],
+  ['@svartz/theme-mcp-docs', 'themes/mcp-docs'],
   ['@svartz/vite', 'packages/vite'],
   ['svartz', 'packages/cli'],
 ];

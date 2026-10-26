@@ -1,4 +1,4 @@
-import type { IndexEntry, ResolvedSiteConfig, VaultView } from '@svartz/core';
+import type { IndexEntry, ResolvedSiteConfig, SvartzTheme, VaultView } from '@svartz/core';
 import type { Snippet } from 'svelte';
 import type { SearchOptions } from '../search.js';
 import type { ContentComponents } from './content-components.js';
@@ -25,5 +25,7 @@ export interface ThemePageProps {
 	readonly searchIndex?: unknown;
 	readonly searchOptions?: SearchOptions;
 	readonly contentComponents?: ContentComponents;
+	/** The theme's loaded runtime manifest; layouts only. */
+	readonly theme?: SvartzTheme;
 	readonly children?: Snippet;
 }

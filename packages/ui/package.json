@@ -72,7 +72,18 @@
 			"import": "./dist/syntax.js",
 			"default": "./dist/syntax.js"
 		},
-		"./prose.css": "./dist/styles/prose.css"
+		"./prose.css": "./dist/styles/prose.css",
+		"./reference": {
+			"types": "./dist/reference/index.d.ts",
+			"import": "./dist/reference/index.js",
+			"default": "./dist/reference/index.js"
+		},
+		"./reference/runtime": {
+			"types": "./dist/reference/runtime.d.ts",
+			"svelte": "./dist/reference/runtime.js",
+			"import": "./dist/reference/runtime.js",
+			"default": "./dist/reference/runtime.js"
+		}
 	},
 	"peerDependencies": {
 		"svelte": "^5.0.0"
