@@ -47,7 +47,7 @@ export function createDocsTheme(modules: DocsThemeModules, config?: DocsThemeCon
 		id: '@svartz/theme-docs',
 		displayName: 'Svartz Docs',
 		description: 'Package reference docs: modules, classes, interfaces, functions, and types.',
-		version: '1.1.0',
+		version: '1.1.1',
 		contractVersion: '1.0.0',
 		socialImage: svartzSocialImage,
 		faviconSvg: SVARTZ_MARK_SVG,
