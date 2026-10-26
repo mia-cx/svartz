@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -21,14 +21,15 @@ test('identical archives are skipped; missing packages or versions are publishab
     async () => new Response(null, { status: 404 })), false);
 });
 
-/** A gzipped ustar package archive, as pnpm packs one. */
-function packArchive(packageJson, index = 'export {};\n') {
+/** A gzipped PAX package archive, as pnpm packs one; `links` become symlinks. */
+function packArchive(packageJson, files = { 'index.js': 'export {};\n' }, links = {}) {
   const root = mkdtempSync(join(tmpdir(), 'svartz-registry-'));
   try {
     mkdirSync(join(root, 'package'));
     writeFileSync(join(root, 'package/package.json'), JSON.stringify(packageJson, null, 2));
-    writeFileSync(join(root, 'package/index.js'), index);
-    return execFileSync('tar', ['--format=ustar', '-czf', '-', '-C', root, 'package']);
+    for (const [path, text] of Object.entries(files)) writeFileSync(join(root, 'package', path), text);
+    for (const [path, target] of Object.entries(links)) symlinkSync(target, join(root, 'package', path));
+    return execFileSync('tar', ['--format=pax', '-czf', '-', '-C', root, 'package']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -55,7 +56,7 @@ test('a retry rejects published archives with other differences', async () => {
   const dependencies = { '@svartz/core': '1.1.0', '@svartz/ui': '1.1.0' };
   const tested = packArchive(themeManifest(dependencies));
   for (const published of [
-    packArchive(themeManifest(dependencies), 'export const changed = true;\n'),
+    packArchive(themeManifest(dependencies), { 'index.js': 'export const changed = true;\n' }),
     packArchive(themeManifest({ ...dependencies, '@svartz/ui': '1.0.1' })),
     packArchive(themeManifest(dependencies, { '.': { default: './index.js', svelte: './index.js' } })),
   ]) {
@@ -64,6 +65,18 @@ test('a retry rejects published archives with other differences', async () => {
   const corrupted = registryFor(tested);
   await assert.rejects(alreadyPublished('@svartz/theme-api-docs', '1.1.0', packArchive(themeManifest({})),
     async (url) => url.endsWith('.tgz') ? new Response('truncated') : corrupted(url)), /registry integrity/);
+});
+
+test('a retry compares long file names in full and rejects links', async () => {
+  const [first, second] = [`${'a'.repeat(120)}.js`, `${'z'.repeat(120)}.js`];
+  const manifest = themeManifest({});
+  const tested = packArchive(manifest, { [first]: 'export const a = 1;\n', [second]: 'export const z = 1;\n' });
+  for (const [published, error] of [
+    [packArchive(manifest, { [first]: 'export const a = 2;\n', [second]: 'export const z = 1;\n' }), /differs/],
+    [packArchive(manifest, { [first]: 'export const a = 1;\n' }, { [second]: first }), /Unsupported archive entry/],
+  ]) {
+    await assert.rejects(alreadyPublished('@svartz/theme-api-docs', '1.1.0', tested, registryFor(published)), error);
+  }
 });
 
 test('registry errors, wrong identities, and missing integrity fail closed', async () => {

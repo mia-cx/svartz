@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gunzipSync } from 'node:zlib';
 
 /** A missing version is publishable. Authentication, network, and server failures are errors. */
 export async function registryManifest(name, version, request = fetch) {
@@ -19,23 +19,25 @@ export async function registryManifest(name, version, request = fetch) {
 
 const integrityOf = (bytes) => `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
 const DEPENDENCY_GROUPS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
-const USTAR_BLOCK = 512;
-
-/** Regular files in a gzipped tarball, by path. pnpm packs plain ustar entries. */
+/**
+ * Files in a gzipped tarball, by path. System tar resolves PAX and GNU long names;
+ * links and other special entries fail, since npm packages never contain them.
+ */
 function archiveFiles(tarball) {
-  const tar = gunzipSync(tarball);
-  const files = new Map();
-  for (let offset = 0; offset + USTAR_BLOCK <= tar.length && tar[offset] !== 0;) {
-    const field = (start, length) =>
-      tar.subarray(offset + start, offset + start + length).toString('utf8').replace(/\0[\s\S]*$/, '');
-    const size = Number.parseInt(field(124, 12).trim() || '0', 8);
-    const path = [field(345, 155), field(0, 100)].filter(Boolean).join('/');
-    if (['0', ''].includes(field(156, 1))) {
-      files.set(path, tar.subarray(offset + USTAR_BLOCK, offset + USTAR_BLOCK + size));
+  const root = mkdtempSync(join(tmpdir(), 'svartz-archive-'));
+  try {
+    execFileSync('tar', ['-xzf', '-', '-C', root], { input: tarball, stdio: ['pipe', 'ignore', 'pipe'] });
+    const files = new Map();
+    for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
+      const path = relative(root, join(entry.parentPath, entry.name));
+      if (entry.isDirectory()) continue;
+      assert.ok(entry.isFile(), `Unsupported archive entry ${path}`);
+      files.set(path, readFileSync(join(root, path)));
     }
-    offset += USTAR_BLOCK + Math.ceil(size / USTAR_BLOCK) * USTAR_BLOCK;
+    return files;
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
-  return files;
 }
 
 /**
