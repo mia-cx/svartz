@@ -4,6 +4,7 @@
  * page hides stays out: Obsidian and HTML comments, and `.svx` script and style.
  */
 import GithubSlugger from "github-slugger";
+import matter from "gray-matter";
 import { posix } from "node:path";
 import type { ProcessedFile } from "@svartz/core";
 import remarkParse from "remark-parse";
@@ -68,11 +69,16 @@ function embedReplacements(source: string, links: AgentMarkdownLinks): Replaceme
 const noteLink = (url: string | undefined, label: string): string =>
   url ? `[${escapeLabel(label)}](${url})` : label;
 
-/** One page's Markdown copy: its title as a heading, unless the body opens with one, then the source with links rewritten. */
+/**
+ * One page's Markdown copy: its published properties as YAML front matter, the title
+ * as a heading unless the body opens with one, then the source with links rewritten.
+ * Structured themes (API models, symbol docs) render from those properties, so the
+ * copy keeps them. The index already publishes them, so they reveal nothing new.
+ */
 export function agentMarkdown(
   file: ProcessedFile,
   source: string,
-  title: string,
+  page: { readonly title: string; readonly properties: Readonly<Record<string, unknown>> },
   links: AgentMarkdownLinks,
 ): string {
   const visible = maskHiddenComments(file.extension === ".svx" ? source.replace(SVX_BLOCK, "") : source);
@@ -99,5 +105,8 @@ export function agentMarkdown(
   }
   body = body.replace(/^[ \t]+$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
 
-  return `${/^#\s/.test(body) ? body : `# ${title}\n\n${body}`}`.trim() + "\n";
+  const content = `${/^#\s/.test(body) ? body : `# ${page.title}\n\n${body}`}`.trim();
+  return Object.keys(page.properties).length > 0
+    ? `${matter.stringify("", { ...page.properties }).trim()}\n\n${content}\n`
+    : `${content}\n`;
 }

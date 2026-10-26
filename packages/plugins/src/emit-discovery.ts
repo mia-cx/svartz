@@ -71,7 +71,7 @@ function emitLlms(ctx: PluginContext, base: string | undefined): void {
     const source = file && sources.get(file.path);
     if (!file || source === undefined) continue;
     const url = linkFrom(base, entry.markdownHref);
-    const markdown = agentMarkdown(file, source, entry.title, {
+    const markdown = agentMarkdown(file, source, entry, {
       note(link) {
         const slug = resolveLink({ raw: "", label: undefined, ...link }, slugMap, allSlugs, ctx.config.linkResolution, file.slug, notes);
         const target = slug ? bySlug.get(slug) : undefined;

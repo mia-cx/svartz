@@ -94,6 +94,11 @@ describe("Markdown copies for LLM agents", () => {
   it("writes each public page as Markdown with links to the other copies", async () => {
     const asset = await emit(build(vault()));
     expect(asset("guides/setup.md")).toBe([
+      "---",
+      "title: Setup",
+      "description: Install the CLI.",
+      "---",
+      "",
       "# Setup",
       "",
       "Read [the API](../reference/api.md#auth-flow) and [the next step](next.md).",
@@ -106,10 +111,11 @@ describe("Markdown copies for LLM agents", () => {
       "```",
       "",
     ].join("\n"));
-    expect(asset("guides/next.md")).toBe("# Next steps\n\nDone.\n");
-    expect(asset("index.md")).toBe("# Home\n\nWelcome.\n");
+    // An extracted description joins the published properties too.
+    expect(asset("guides/next.md")).toBe("---\ntitle: Next steps\ndescription: Done.\n---\n\n# Next steps\n\nDone.\n");
+    expect(asset("index.md")).toBe("---\ntitle: Home\ndescription: Welcome.\n---\n\n# Home\n\nWelcome.\n");
     // Svelte script stays out; the authored markup stays in.
-    expect(asset("widget.md")).toBe("# Widget\n\n<Counter />\n");
+    expect(asset("widget.md")).toBe("---\ntitle: Widget\ndescription: A counter.\n---\n\n# Widget\n\n<Counter />\n");
   });
 
   it("indexes every copy in llms.txt and links absolutely when the site has a URL", async () => {
