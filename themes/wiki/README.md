@@ -33,6 +33,14 @@ characters/                  → "Characters" in the bar
 
 Each top-level folder is a bar item that links to its folder note, or to its folder page if it has none. A dropdown shows 12 pages, then links to the rest. Folders deeper than a flyout appear as plain links. Notes at the vault root stay out of the bar. On narrow screens the same tree opens in the menu drawer.
 
+Sections and pages sort by title. To put one first, give it an `order` number: lower comes first, and anything without one follows in title order. A folder takes the `order` of its folder note.
+
+```yaml
+# getting-started/index.md
+title: Getting started
+order: 1
+```
+
 ## Frontmatter
 
 ```yaml
