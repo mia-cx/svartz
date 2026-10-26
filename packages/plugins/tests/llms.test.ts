@@ -194,6 +194,21 @@ describe("Markdown copies for LLM agents", () => {
     ].join("\n"));
   });
 
+  it("keeps a rewritten link's label markup and title, and external reference URLs as authored", async () => {
+    const body = [
+      "---",
+      "title: Links",
+      "description: Both kinds.",
+      "---",
+      '[Run `setup` *first*](setup.md "Install") and [the site][external].',
+      "",
+      "[external]: https://example.com/setup.md#Install",
+    ].join("\n");
+    const asset = await emit(build([file("links.md", body), file("setup.md", "# Setup")]));
+    expect(asset("links.md")).toContain('[Run `setup` *first*](setup.md "Install") and [the site][external].');
+    expect(asset("links.md")).toContain("[external]: https://example.com/setup.md#Install");
+  });
+
   it("keeps code whitespace and leaves host-owned Markdown URLs to the host", async () => {
     const code = "```js\nconst text = `a\n\n\n  \nb`;\n```";
     const properties = "---\ntitle: Snippet\ndescription: Code.\n---\n";

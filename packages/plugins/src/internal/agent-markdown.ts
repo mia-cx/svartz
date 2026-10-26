@@ -46,6 +46,8 @@ const assetUrl = (links: AgentMarkdownLinks, target: string): string | undefined
 
 /** A reference definition's destination, rewritten like an inline link's. Undefined keeps it as authored. */
 function definitionUrl(target: string, links: AgentMarkdownLinks): string | undefined {
+  // External URLs stay as authored, like inline ones; the note resolver's basename fallback would claim them.
+  if (/^[a-z][\w+.-]*:/i.test(target) || target.startsWith("//")) return undefined;
   const asset = assetUrl(links, target);
   if (asset) return asset;
   const [path = "", section] = target.split("#");
@@ -124,11 +126,12 @@ export function agentMarkdown(
     ...findLinkSpans(visible).flatMap((link): Replacement[] => {
       const label = link.label ?? link.target;
       const asset = assetUrl(links, link.section ? `${link.target}#${link.section}` : link.target);
-      if (asset) return [{ start: link.start, end: link.end, text: `[${escapeLabel(label)}](${asset})` }];
-      const url = links.note(link);
-      // An unresolved Markdown link stays as authored; an unresolved wikilink becomes its label, as on the page.
-      if (!url && link.type === "markdown") return [];
-      return [{ start: link.start, end: link.end, text: noteLink(url && `${url}${anchor(link.section)}`, label) }];
+      const note = asset ? undefined : links.note(link);
+      const url = asset ?? (note && `${note}${anchor(link.section)}`);
+      // A Markdown link swaps only its destination, keeping its label markup and title.
+      if (link.destination) return url ? [{ ...link.destination, text: url }] : [];
+      // An unresolved wikilink becomes its label, as on the page.
+      return [{ start: link.start, end: link.end, text: noteLink(url, label) }];
     }),
     ...referenceDefinitionSpans(visible).flatMap(({ start, end, target }): Replacement[] => {
       const url = definitionUrl(target, links);

@@ -68,7 +68,28 @@ export const extractFrontmatter = (
   }
 };
 
-export type PositionedLink = RawLink & { start: number; end: number };
+export type PositionedLink = RawLink & {
+  start: number;
+  end: number;
+  /** A Markdown link's destination span, so a rewrite can keep its label markup and title. */
+  destination?: { start: number; end: number };
+};
+
+/** The destination after a link's `](`: `<…>`, or a run without spaces that balances parentheses. */
+function destinationSpan(markdown: string, from: number): { start: number; end: number } {
+  const start = from + /^[ \t]*(?:\r?\n[ \t]*)?/.exec(markdown.slice(from))![0].length;
+  if (markdown[start] === "<") return { start, end: markdown.indexOf(">", start) + 1 };
+  let depth = 0;
+  let end = start;
+  for (; end < markdown.length; end += 1) {
+    const char = markdown[end]!;
+    if (char === "\\") end += 1;
+    else if (/\s/.test(char) || (char === ")" && depth === 0)) break;
+    else if (char === "(") depth += 1;
+    else if (char === ")") depth -= 1;
+  }
+  return { start, end };
+}
 
 function isRoamMarker(markdown: string, start: number, end: number, target: string): boolean {
   if (target === ">" && /^(?:\s|$)/.test(markdown.slice(end))) return true;
@@ -108,9 +129,12 @@ function collectLinkSpans(markdown: string, roamReserved = false): PositionedLin
     if (node.type !== "link") return;
     if (/^[a-z][\w+.-]*:/i.test(node.url) || node.url.startsWith("//")) return SKIP;
     const [target, section] = node.url.split("#");
+    // The label's last child ends at its `]`, so `](` follows it.
+    const labelEnd = node.children.at(-1)?.position?.end.offset ?? start + 1;
     links.push({
       raw: markdown.slice(start, end), target: target ?? "", section: section || undefined,
       label: toString(node), type: "markdown", start, end,
+      destination: destinationSpan(markdown, labelEnd + 2),
     });
     return SKIP;
   });
