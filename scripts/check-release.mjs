@@ -318,7 +318,7 @@ try {
     }
     archives.set(name, archive);
   }
-  console.log('Eleven public archives: runtime files and package boundaries passed.');
+  console.log(`${archives.size} public archives: runtime files and package boundaries passed.`);
 
   const launcher = path.join(temporary, 'launcher');
   await mkdir(launcher);
