@@ -19,7 +19,7 @@ export default defineConfig({
 | Right | Local graph (the expand button opens the whole vault), contents with scroll tracking, backlinks |
 | Lists | `/tags/`, `/tags/:tag/`, `/folders/`, `/folders/:path/`, `/feed/`, and a 404 page |
 
-The explorer lists folders, then notes, each by title. An `order` number in a note's frontmatter sorts it first, lowest first; a folder takes the `order` of its folder note (`index.md`).
+The explorer lists folders, then notes, each by title. An `order` number in a note's frontmatter sorts it first, lowest first; a folder takes the `order` of its folder note (`index.md` or `_index.md`).
 
 Below 1200px the right column moves under the note and the contents hide. Below 800px the left column becomes a top bar and the explorer a drawer. Internal links show a preview on hover.
 
