@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { count, type ThemePageProps } from '@svartz/ui';
-	import PageTitle from '../components/PageTitle.svelte';
+	import { count } from '../../listing.js';
+	import type { ThemePageProps } from '../../runtime/theme-props.js';
+	import PageTitle from './PageTitle.svelte';
 
 	let { vault }: ThemePageProps = $props();
 </script>

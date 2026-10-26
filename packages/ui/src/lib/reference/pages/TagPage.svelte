@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { count, notesTagged, type ThemePageProps } from '@svartz/ui';
-	import EndpointList from '../components/EndpointList.svelte';
-	import PageTitle from '../components/PageTitle.svelte';
+	import { count, notesTagged } from '../../listing.js';
+	import type { ThemePageProps } from '../../runtime/theme-props.js';
+	import EntryList from './EntryList.svelte';
+	import PageTitle from './PageTitle.svelte';
 
 	let { vault, match }: ThemePageProps = $props();
 
@@ -11,4 +12,4 @@
 </script>
 
 <PageTitle title="#{tag?.title ?? slug}" summary="{count(entries.length, 'page')} tagged." />
-<EndpointList {entries} />
+<EntryList {entries} />

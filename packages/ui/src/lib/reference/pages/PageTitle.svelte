@@ -1,9 +1,9 @@
 <script lang="ts">
-	let { title, summary, mono = false }: { title: string; summary?: string; mono?: boolean } = $props();
+	let { title, summary }: { title: string; summary?: string } = $props();
 </script>
 
 <header class="page-title">
-	<h1 class:mono>{title}</h1>
+	<h1>{title}</h1>
 	{#if summary}<p>{summary}</p>{/if}
 </header>
 
@@ -18,10 +18,6 @@
 		font-size: var(--sv-step-4);
 		font-weight: 700;
 		line-height: 1.1;
-	}
-
-	h1.mono {
-		font-family: var(--sv-font-mono);
 	}
 
 	p {

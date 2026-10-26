@@ -1,12 +1,15 @@
 <!-- Recently updated pages, newest first. -->
 <script lang="ts">
-	import { formatDate, isoDate, newestFirst, noteDate, type ThemePageProps } from '@svartz/ui';
-	import MethodPill from '../components/MethodPill.svelte';
-	import PageTitle from '../components/PageTitle.svelte';
-	import { readOperation } from '../api.js';
+	import { formatDate, isoDate } from '../../format.js';
+	import { newestFirst, noteDate } from '../../listing.js';
+	import type { ThemePageProps } from '../../runtime/theme-props.js';
+	import Badge from '../Badge.svelte';
+	import { getReferenceShell } from '../context.js';
+	import PageTitle from './PageTitle.svelte';
 
 	let { vault }: ThemePageProps = $props();
 
+	const shell = getReferenceShell();
 	const entries = $derived(newestFirst(vault.entries));
 </script>
 
@@ -14,11 +17,11 @@
 <ul class="updates">
 	{#each entries as entry (entry.slug)}
 		{@const date = noteDate(entry)}
-		{@const operation = readOperation(entry.properties)}
+		{@const badge = shell.itemOf(entry)?.badge}
 		<li>
 			{#if date}<time class="sv-label" datetime={isoDate(date)}>{formatDate(date)}</time>{:else}<span></span>{/if}
 			<span class="entry">
-				{#if operation}<MethodPill {operation} compact />{/if}
+				{#if badge}<Badge {badge} fixed />{/if}
 				<a href={entry.href} data-sv-internal>{entry.title}</a>
 			</span>
 		</li>
@@ -43,13 +46,15 @@
 
 	.entry {
 		display: flex;
-		align-items: center;
+		align-items: baseline;
 		gap: var(--sv-space-2);
+		min-inline-size: 0;
 	}
 
 	a {
 		color: var(--sv-ink);
 		font-weight: 600;
 		text-decoration: none;
+		overflow-wrap: anywhere;
 	}
 </style>

@@ -1,11 +1,11 @@
 <script lang="ts">
-	import type { ThemePageProps } from '@svartz/ui';
-	import PageTitle from '../components/PageTitle.svelte';
+	import type { ThemePageProps } from '../../runtime/theme-props.js';
+	import PageTitle from './PageTitle.svelte';
 
 	let { vault }: ThemePageProps = $props();
 </script>
 
-<PageTitle title="Page not found" summary="This endpoint may have moved in a newer version. Try the search, or start from the overview." />
+<PageTitle title="Page not found" summary="This page may have moved in a newer version. Try the search, or start from the overview." />
 <p><a href="{vault.routes.mountPath}/">Back to the overview</a></p>
 
 <style>
