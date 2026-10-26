@@ -58,7 +58,7 @@ import { createVaultChangeEvent } from "./watch";
 import { isHostRouteFile, staticHostRoutes } from "./manual-routes";
 import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath, getGeneratedHostStylesPath, svelteKitBasePath } from "./host-registry";
 import { emitProtectedGroupArtifacts } from "./protected-payload";
-import { recordPublicAssets } from "./public-assets";
+import { clearPublicAssets, recordPublicAssets } from "./public-assets";
 import { writeProtectedBridgeModules, type ProtectedBridgeModule } from "./protected-bridge";
 
 const PIPELINE_STAGES: readonly StageName[] = [
@@ -470,6 +470,7 @@ export {
   getGeneratedHostRegistryPath,
   getGeneratedHostStylesPath,
   svelteKitBasePath,
+  clearPublicAssets,
 };
 export type {
   ResolvedSvartzVirtualModuleId,

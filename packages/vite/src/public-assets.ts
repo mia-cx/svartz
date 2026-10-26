@@ -24,6 +24,11 @@ export function recordPublicAssets(vaultId: string, assets: readonly PublicAsset
   process.env[ENV] = JSON.stringify({ ...recorded(), [vaultId]: assets });
 }
 
+/** Forget every recorded file. The CLI calls this before each build, so one vault's files never ship in the next's. */
+export function clearPublicAssets(): void {
+  delete process.env[ENV];
+}
+
 /** Emit the recorded files in the client build, unless the Svartz plugin there already did. */
 export function publicAssetsPlugin(): Plugin {
   return {

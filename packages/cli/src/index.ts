@@ -25,6 +25,7 @@ import {
   getVaultBuildRoot,
   resolveThemePackageRoot,
   svartz,
+  clearPublicAssets,
 } from "@svartz/vite";
 import {
   build as viteBuild,
@@ -589,6 +590,8 @@ const buildVaults = (
       try: () =>
         withVaultBuildLock(workspace.projectRoot, async () => {
           try {
+            // Standalone vaults build one after another in this process.
+            clearPublicAssets();
             const config = await runEffect(
               createAppConfig(workspace, supportedVaults, "production", "build"),
             );
