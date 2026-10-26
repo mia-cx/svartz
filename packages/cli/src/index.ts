@@ -499,8 +499,8 @@ const createAppConfig = (
         }));
         await writeFile(hostRegistryPath, createHostRegistrySource(vaults));
         if (!hostApp) await writeFile(standalonePluginPath, [
-          `import { hostStylesPlugin } from ${JSON.stringify(import.meta.resolve("@svartz/vite/host"))};`,
-          `export default hostStylesPlugin(${JSON.stringify(styleManifests)});`,
+          `import { hostStylesPlugin, publicAssetsPlugin } from ${JSON.stringify(import.meta.resolve("@svartz/vite/host"))};`,
+          `export default [hostStylesPlugin(${JSON.stringify(styleManifests)}), publicAssetsPlugin()];`,
         ].join("\n"));
       },
       catch: (cause) => cause as Error,

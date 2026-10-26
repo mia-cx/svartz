@@ -58,6 +58,7 @@ import { createVaultChangeEvent } from "./watch";
 import { isHostRouteFile, staticHostRoutes } from "./manual-routes";
 import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath, getGeneratedHostStylesPath, svelteKitBasePath } from "./host-registry";
 import { emitProtectedGroupArtifacts } from "./protected-payload";
+import { recordPublicAssets } from "./public-assets";
 import { writeProtectedBridgeModules, type ProtectedBridgeModule } from "./protected-bridge";
 
 const PIPELINE_STAGES: readonly StageName[] = [
@@ -225,6 +226,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     emittedAssets = new Map(emittedArtifacts
       .filter((artifact) => artifact.type === "asset" && artifact.key.startsWith("assets/"))
       .map((artifact) => [assetOutputPath(artifact), artifact]));
+    recordPublicAssets(context.config.id, [...emittedAssets].map(([fileName, artifact]) => ({ fileName, path: artifact.path })));
 
     await Effect.runPromise(
       Effect.all(
