@@ -16,7 +16,9 @@
 
 	const responseTabs = $derived(
 		operation.responses.flatMap((response): CodeTab[] => {
-			const example = response.example ?? (response.schema ? exampleFromSchema(response.schema, context.schemas) : undefined);
+			// An authored `null` is a real example.
+			const example =
+				response.example !== undefined ? response.example : response.schema ? exampleFromSchema(response.schema, context.schemas) : undefined;
 			return example === undefined ? [] : [{ id: response.status, label: response.status, code: json(example) }];
 		})
 	);

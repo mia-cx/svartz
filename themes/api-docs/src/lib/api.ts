@@ -232,7 +232,8 @@ const pythonLiteral = (json: string) =>
 export function requestBodyExample(operation: RestOperation, schemas: Readonly<Record<string, SchemaNode>>): unknown {
 	const body = operation.requestBody;
 	if (!body) return undefined;
-	return body.example ?? (body.schema ? exampleFromSchema(body.schema, schemas) : undefined);
+	if (body.example !== undefined) return body.example;
+	return body.schema ? exampleFromSchema(body.schema, schemas) : undefined;
 }
 
 /** The credential header a scheme sends: bearer tokens unless the scheme is `none` or `basic`. */

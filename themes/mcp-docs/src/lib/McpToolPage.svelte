@@ -11,7 +11,10 @@
 	const entries = $derived(context.vault.entries);
 	const server = $derived(endpointUrl(tool.endpoint, context.themeConfig));
 	const hints = $derived(declaredHints(tool.annotations));
-	const takesArguments = $derived((tool.inputSchema.properties?.length ?? 0) > 0 || tool.inputSchema.ref !== undefined);
+	const takesArguments = $derived.by(() => {
+		const input = tool.inputSchema;
+		return Boolean(input.properties?.length || input.ref || input.values || input.oneOf?.length || input.anyOf?.length);
+	});
 </script>
 
 <header class="head">
