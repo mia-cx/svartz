@@ -55,7 +55,8 @@ for (const target of ['@svartz/core', '@svartz/theme-wiki']) {
       if (directory.startsWith('themes/')) {
         const source = await readFile(join(fixture, directory, 'src/lib/manifest.ts'), 'utf8');
         assert.ok(source.includes(`version: '${expected}'`));
-        assert.ok(source.includes("contractVersion: '1.0.0'"));
+        // Reference presets take their contract version from @svartz/ui's shell.
+        assert.ok(!source.includes('contractVersion') || source.includes("contractVersion: '1.0.0'"));
       }
     }
     run('git', ['add', '.']);
