@@ -53,18 +53,6 @@ Each vault writes a Markdown copy of every public note beside its page: `/journa
 
 `<mountPath>/llms.txt` lists every copy with its description, in the [llms.txt](https://llmstxt.org/) format. Links are absolute when `site.url` exists, and relative otherwise, so neither file needs a public URL. A manual SvelteKit route at `llms.txt` wins.
 
-Every theme shows two buttons on a note: Copy page puts the copy on the clipboard, and View as Markdown opens it. Each page also links its copy with `<link rel="alternate" type="text/markdown">`.
-
-On a server adapter, `markdownForAgents` answers a page request with the copy when the request asks for Markdown. That happens when the `Accept` header ranks `text/markdown` at least as high as `text/html`, or when the user agent is a known AI agent, such as ClaudeBot or ChatGPT-User. `svartz init` adds it as `src/hooks.server.ts` when the host has no server hooks. Otherwise, compose it with `sequence`:
-
-```ts
-// src/hooks.server.ts
-import { sequence } from '@sveltejs/kit/hooks';
-import { markdownForAgents } from '@svartz/ui/agent-markdown';
-
-export const handle = sequence(markdownForAgents, yourHandle);
-```
-
-A static host serves prerendered HTML without running SvelteKit, so the hook never runs there. Agents still find each copy through the `alternate` link and `llms.txt`.
+Every theme shows two buttons on a note: Copy page puts the copy on the clipboard, and View as Markdown opens it. Each page also links its copy with `<link rel="alternate" type="text/markdown">`, so an agent that reads the page finds the copy.
 
 Turn all of it off with `discovery: { llms: { enabled: false } }`.

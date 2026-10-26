@@ -126,20 +126,6 @@ it("adds configuration to an existing Kit app without changing its routes or bui
     .toContain("virtual:svartz/tailwind-sources.css");
   expect(await readFile(path.join(root, "src/app.d.ts"), "utf8"))
     .toContain('/// <reference types="@svartz/vite/virtual-modules" />');
-  expect(await readFile(path.join(root, "src/hooks.server.ts"), "utf8"))
-    .toContain("export { markdownForAgents as handle } from '@svartz/ui/agent-markdown';");
-});
-
-it("leaves a host's own server hooks alone", async () => {
-  const root = await fixture();
-  await mkdir(path.join(root, "src/routes"), { recursive: true });
-  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
-  await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "host-app", dependencies: { "@sveltejs/kit": "^2.0.0" } }));
-  await writeFile(path.join(root, "src/hooks.server.js"), "export const handle = ({ event, resolve }) => resolve(event);\n");
-  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
-  await expect(access(path.join(root, "src/hooks.server.ts"))).rejects.toThrow();
-  expect(await readFile(path.join(root, "src/hooks.server.js"), "utf8"))
-    .toBe("export const handle = ({ event, resolve }) => resolve(event);\n");
 });
 
 it("upgrades only the previous generated CSS entry and root layout", async () => {

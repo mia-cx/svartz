@@ -570,15 +570,6 @@ const initProjectEffect = (
           );
         }
       }
-      // A host with its own server hooks composes the agent hook itself; see @svartz/ui/agent-markdown.
-      if (![".ts", ".js"].some((extension) => existsSync(path.join(root, "src", `hooks.server${extension}`)))) {
-        const hooks = yield* operation("read server hooks template", () =>
-          readFile(path.join(templateRoot, "src", "hooks.server.ts"), "utf8"),
-        );
-        yield* operation("write host server hooks", () =>
-          writeNewFile(path.join(root, "src", "hooks.server.ts"), hooks),
-        );
-      }
       if (migrateCatchall)
         yield* operation("update host catchall load", () =>
           writeFile(catchallLoadPath, catchallLoadTemplate),
