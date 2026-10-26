@@ -182,8 +182,9 @@ export const indexContent = definePlugin(() => ({
           aliases,
           description,
           // Protected notes never get a plain-text copy; emit-discovery writes one for each href set here.
-          // The encrypted and hidden properties match what the feed and sitemap leave out.
-          ...(ctx.config.discovery?.llms?.enabled && !file.protection && !frontmatter.encrypted && !frontmatter.hidden
+          // The encrypted and hidden properties match what the feed and sitemap leave out, and a host route keeps its URL.
+          ...(ctx.config.discovery?.llms?.enabled && !file.protection && !frontmatter.encrypted && !frontmatter.hidden &&
+            !reservedPaths.has(markdownHref(file.slug).slice(1))
             ? { markdownHref: markdownHref(file.slug, mountPath) }
             : {}),
           content: plainTextContent,

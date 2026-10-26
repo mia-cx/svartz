@@ -151,6 +151,60 @@ describe("Markdown copies for LLM agents", () => {
     expect(ctx.index!.entries.find((entry) => entry.slug === "reference/api")?.markdownHref).toBeUndefined();
   });
 
+  it("rewrites every attachment and reference link for the copy's location", async () => {
+    const landing = [
+      "---",
+      "title: Guides",
+      "description: Start here.",
+      "---",
+      "![Flow][diagram] and [the setup][setup].",
+      "",
+      '<img src="diagram.svg" srcset="diagram.svg 1x, diagram@2x.svg 2x" />',
+      "",
+      "[Manual](manual.pdf#page=3) ![Logo](sprite.svg#logo?v=2)",
+      "",
+      "[diagram]: diagram.svg",
+      "[setup]: <setup.md#Install Steps>",
+    ].join("\n");
+    const asset = await emit(build([
+      file("guides/index.md", landing),
+      file("guides/setup.md", "# Setup"),
+      file("guides/diagram.svg"),
+      file("guides/diagram@2x.svg"),
+      file("guides/manual.pdf"),
+      file("guides/sprite.svg"),
+    ]));
+    expect(asset("guides.md")).toBe([
+      "---",
+      "title: Guides",
+      "description: Start here.",
+      "---",
+      "",
+      "# Guides",
+      "",
+      "![Flow][diagram] and [the setup][setup].",
+      "",
+      '<img src="guides/diagram.svg" srcset="guides/diagram.svg 1x, guides/diagram%402x.svg 2x" />',
+      "",
+      "[Manual](guides/manual.pdf#page=3) ![Logo](guides/sprite.svg#logo?v=2)",
+      "",
+      "[diagram]: guides/diagram.svg",
+      "[setup]: <guides/setup.md#install-steps>",
+      "",
+    ].join("\n"));
+  });
+
+  it("keeps code whitespace and leaves host-owned Markdown URLs to the host", async () => {
+    const code = "```js\nconst text = `a\n\n\n  \nb`;\n```";
+    const properties = "---\ntitle: Snippet\ndescription: Code.\n---\n";
+    const ctx = build([file("snippet.md", `${properties}# Snippet\n\n%%hidden%%\n\n\n${code}`), file("api.md", "# API")]);
+    ctx.meta.set("reservedRoutes", new Set(["api.md"]));
+    const asset = await emit(ctx);
+    expect(asset("snippet.md")).toBe(`${properties}\n# Snippet\n\n${code}\n`);
+    expect(asset("api.md")).toBeUndefined();
+    expect(asset("llms.txt")).not.toContain("api.md");
+  });
+
   it("writes nothing when the vault disables it", async () => {
     const ctx = build(vault(), { enabled: false });
     await emit(ctx);

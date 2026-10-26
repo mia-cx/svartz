@@ -10,7 +10,7 @@ import type { ProcessedFile } from "@svartz/core";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
-import { maskHiddenComments } from "./asset-references";
+import { htmlAssetSpans, maskHiddenComments, referenceDefinitionSpans } from "./asset-references";
 import { findLinkSpans } from "./parse";
 import { IMAGE_EXTENSIONS, splitEmbedInner } from "../transform-embeds";
 
@@ -38,14 +38,38 @@ const anchor = (section: string | undefined): string =>
 
 const escapeLabel = (label: string): string => label.replace(/[[\]]/g, "\\$&");
 
+/** An attachment keeps its authored `?query#fragment` verbatim, such as `manual.pdf#page=3`. Only note sections are heading slugs. */
+const assetUrl = (links: AgentMarkdownLinks, target: string): string | undefined => {
+  const url = links.asset(target);
+  return url && `${url}${/[?#].*$/.exec(target)?.[0] ?? ""}`;
+};
+
+/** A reference definition's destination, rewritten like an inline link's. Undefined keeps it as authored. */
+function definitionUrl(target: string, links: AgentMarkdownLinks): string | undefined {
+  const asset = assetUrl(links, target);
+  if (asset) return asset;
+  const [path = "", section] = target.split("#");
+  const url = links.note({ target: path, section: section || undefined, type: "markdown" });
+  return url && `${url}${anchor(section)}`;
+}
+
 function embedReplacements(source: string, links: AgentMarkdownLinks): Replacement[] {
   const replacements: Replacement[] = [];
   visit(markdownParser.parse(source), (node) => {
     const start = node.position?.start.offset;
     if (start === undefined) return;
     if (node.type === "image") {
-      const url = links.asset(node.url);
+      const url = assetUrl(links, node.url);
       if (url) replacements.push({ start, end: node.position!.end.offset!, text: `![${escapeLabel(node.alt ?? "")}](${url})` });
+      return;
+    }
+    if (node.type === "html") {
+      for (const span of htmlAssetSpans(node.value)) {
+        const url = assetUrl(links, span.target);
+        // A tag inside a blockquote or list loses its markers in `value`, so its offsets may not match the source.
+        if (!url || source.slice(start + span.start, start + span.end) !== span.target) continue;
+        replacements.push({ start: start + span.start, end: start + span.end, text: url });
+      }
       return;
     }
     if (node.type !== "text") return;
@@ -54,7 +78,7 @@ function embedReplacements(source: string, links: AgentMarkdownLinks): Replaceme
       if (source.slice(offset, offset + match[0].length) !== match[0]) continue;
       const { target, section, alias } = splitEmbedInner(match[1]!);
       const label = alias && !IMAGE_SIZE.test(alias) ? alias : undefined;
-      const asset = links.asset(target);
+      const asset = assetUrl(links, section ? `${target}#${section}` : target);
       const text = asset
         ? IMAGE_EXTENSIONS.has(posix.extname(target).toLowerCase())
           ? `![${escapeLabel(label ?? "")}](${asset})`
@@ -68,6 +92,20 @@ function embedReplacements(source: string, links: AgentMarkdownLinks): Replaceme
 
 const noteLink = (url: string | undefined, label: string): string =>
   url ? `[${escapeLabel(label)}](${url})` : label;
+
+/** Drop the blank runs that hidden comments leave behind. Code keeps its whitespace, since it may be data. */
+function tidyOutsideCode(markdown: string): string {
+  const tidy = (text: string) => text.replace(/^[ \t]+\n/gm, "\n").replace(/\n{3,}/g, "\n\n");
+  let tidied = "";
+  let cursor = 0;
+  visit(markdownParser.parse(markdown), "code", (node) => {
+    const start = node.position!.start.offset!;
+    const end = node.position!.end.offset!;
+    tidied += tidy(markdown.slice(cursor, start)) + markdown.slice(start, end);
+    cursor = end;
+  });
+  return (tidied + tidy(markdown.slice(cursor))).replace(/^\n+/, "").trimEnd();
+}
 
 /**
  * One page's Markdown copy: its published properties as YAML front matter, the title
@@ -85,12 +123,16 @@ export function agentMarkdown(
   const replacements: Replacement[] = [
     ...findLinkSpans(visible).flatMap((link): Replacement[] => {
       const label = link.label ?? link.target;
-      const asset = links.asset(link.target);
-      if (asset) return [{ start: link.start, end: link.end, text: `[${escapeLabel(label)}](${asset}${anchor(link.section)})` }];
+      const asset = assetUrl(links, link.section ? `${link.target}#${link.section}` : link.target);
+      if (asset) return [{ start: link.start, end: link.end, text: `[${escapeLabel(label)}](${asset})` }];
       const url = links.note(link);
       // An unresolved Markdown link stays as authored; an unresolved wikilink becomes its label, as on the page.
       if (!url && link.type === "markdown") return [];
       return [{ start: link.start, end: link.end, text: noteLink(url && `${url}${anchor(link.section)}`, label) }];
+    }),
+    ...referenceDefinitionSpans(visible).flatMap(({ start, end, target }): Replacement[] => {
+      const url = definitionUrl(target, links);
+      return url ? [{ start, end, text: url }] : [];
     }),
     ...embedReplacements(visible, links),
   ].sort((left, right) => right.start - left.start);
@@ -103,7 +145,7 @@ export function agentMarkdown(
     body = body.slice(0, start) + text + body.slice(end);
     limit = start;
   }
-  body = body.replace(/^[ \t]+$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+  body = tidyOutsideCode(body);
 
   const content = `${/^#\s/.test(body) ? body : `# ${page.title}\n\n${body}`}`.trim();
   return Object.keys(page.properties).length > 0
