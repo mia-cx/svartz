@@ -24,8 +24,11 @@
 	} = $props();
 
 	const OPEN_DEPTH = 1;
+	// A map lists one `[key: string]` field for its values, so their fields stay a level down.
 	const fieldsOf = (node: SchemaNode): readonly SchemaProperty[] | undefined =>
-		node.properties ?? (node.type === 'array' ? node.items?.properties : undefined) ?? node.values?.properties;
+		node.properties ??
+		(node.type === 'array' ? node.items?.properties : undefined) ??
+		(node.values ? [{ name: '[key: string]', required: false, schema: node.values }] : undefined);
 	// Allowed values list on their own line, so the type stays short.
 	const typeOf = (node: SchemaNode) => (node.enum?.length ? (node.type ?? 'enum') + (node.nullable ? ' | null' : '') : schemaLabel(node));
 	const literal = (value: unknown) => (typeof value === 'string' ? value : JSON.stringify(value));

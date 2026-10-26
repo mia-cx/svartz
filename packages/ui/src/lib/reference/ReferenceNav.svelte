@@ -44,7 +44,8 @@
 		// Enter opens the first match, so filter-then-Enter works like a jump box.
 		if (event.key === 'Enter' && filtering) {
 			event.preventDefault();
-			list?.querySelector<HTMLAnchorElement>('li .link')?.click();
+			// A group's Overview link isn't a match; it stays for context.
+			list?.querySelector<HTMLAnchorElement>('li .link:not(.overview)')?.click();
 		}
 	}
 </script>
@@ -80,7 +81,7 @@
 						>
 							<summary>{group.title}</summary>
 							<ul>
-								{#if group.href}<li><a class="link" href={group.href} aria-current={current(group.href)}><span class="label">Overview</span></a></li>{/if}
+								{#if group.href}<li><a class="link overview" href={group.href} aria-current={current(group.href)}><span class="label">Overview</span></a></li>{/if}
 								{@render links(group.links)}
 							</ul>
 						</details>

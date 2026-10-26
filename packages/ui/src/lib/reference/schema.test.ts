@@ -60,6 +60,10 @@ describe('exampleFromSchema', () => {
 		});
 	});
 
+	it('keeps an authored null example', () => {
+		expect(exampleFromSchema(readSchema({ type: 'string', nullable: true, example: null, examples: ['x'] })!, {})).toBeNull();
+	});
+
 	it('stops at recursive refs', () => {
 		const schemas = { Node: readSchema({ type: 'object', properties: { next: { $ref: 'Node' } } })! };
 		expect(exampleFromSchema(readSchema({ $ref: 'Node' })!, schemas)).toEqual({ next: {} });

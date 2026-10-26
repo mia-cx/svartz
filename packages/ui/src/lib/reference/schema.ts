@@ -76,7 +76,8 @@ export function readSchema(raw: unknown): SchemaNode | undefined {
 		description: text(raw.description),
 		enum: values,
 		default: raw.default,
-		example: raw.example ?? (Array.isArray(raw.examples) ? raw.examples[0] : undefined),
+		// `example: null` is a real example, so only a missing one falls back.
+		example: raw.example !== undefined ? raw.example : Array.isArray(raw.examples) ? raw.examples[0] : undefined,
 		nullable: raw.nullable === true || types.includes('null'),
 		ref,
 		items: readSchema(raw.items),
