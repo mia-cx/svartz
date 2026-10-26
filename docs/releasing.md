@@ -55,7 +55,8 @@ The workflow publishes the exact tarballs in dependency order:
 npm publish <tarball> --access public --provenance --ignore-scripts
 ```
 
-A registry check skips an existing version only when its archive integrity matches.
+A registry check skips an existing version only when npm serves the same archive contents.
+It ignores dependency order in `package.json`, because pnpm 9 writes rewritten `workspace:` ranges in whichever order they resolve.
 Network errors and different archives fail the release.
 Publication creates `<name>@<version>` tags and one GitHub release titled `Svartz <version>`.
 The release uses the `svartz@<version>` tag and combines matching package changelog sections.
