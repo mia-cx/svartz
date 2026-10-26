@@ -1,7 +1,8 @@
 /**
- * Node-safe entry for reference themes: the build manifest, plus the metadata
- * readers renderers share. Components and renderers live in
- * `@svartz/ui/reference/runtime`.
+ * Build-time entry for reference themes: the manifest a theme's Node entry
+ * exports. It loads the build's syntax plugin, so browser code imports from
+ * `@svartz/ui/reference/runtime` instead, which has the shell, renderers, and
+ * metadata readers.
  */
 import type { SvartzTheme, ThemeComponentLoader } from '@svartz/core';
 import { svartzSyntax } from '../syntax.js';
@@ -16,7 +17,7 @@ const content = () => import('../content/index.js') as Promise<Record<string, un
 /**
  * A reference theme's build manifest. Pair it with the runtime `referenceTheme`
  * from `@svartz/ui/reference/runtime`, which adds the renderers; both give the
- * same routes, so either can serve the build.
+ * same routes, so this one needs none.
  *
  * ```js
  * // theme/index.js
@@ -49,4 +50,4 @@ export function referenceTheme(identity: ReferenceThemeIdentity, config?: Refere
 	);
 }
 
-export * from './shared.js';
+export type * from './shared.js';

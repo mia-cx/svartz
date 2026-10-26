@@ -21,7 +21,7 @@ export interface ReferenceNavGroup<T> {
 	readonly slug: string;
 	/** Folder titles below the section, joined: `Public API / Authentication`. */
 	readonly title?: string;
-	/** The folder's own note, else its generated folder page. */
+	/** The folder's own note, when it has one. */
 	readonly href?: string;
 	readonly links: ReferenceNavLink<T>[];
 }
@@ -97,7 +97,7 @@ export function referenceNav<T extends NavEntry>(
 								: nested(slug)
 										.map((_, depth, parts) => titleOf([section.slug, ...parts.slice(0, depth + 1)].filter(Boolean).join('/')))
 										.join(' / '),
-						href: slug === section.slug ? undefined : (layout.noteOf(slug)?.href ?? folders.find((folder) => folder.slug === slug)?.href),
+						href: slug === section.slug ? undefined : layout.noteOf(slug)?.href,
 						links: links.sort(compareLinks)
 					}))
 			};

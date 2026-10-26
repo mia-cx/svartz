@@ -7,6 +7,7 @@
 <script lang="ts">
 	import type { IndexEntry } from '@svartz/core';
 	import Badge from './Badge.svelte';
+	import BreakAfterSlashes from './BreakAfterSlashes.svelte';
 	import { filterReferenceNav, navLinks, type ReferenceNavSection } from './nav.js';
 
 	let {
@@ -39,6 +40,11 @@
 			event.preventDefault();
 			event.stopPropagation();
 			query = '';
+		}
+		// Enter opens the first match, so filter-then-Enter works like a jump box.
+		if (event.key === 'Enter' && filtering) {
+			event.preventDefault();
+			list?.querySelector<HTMLAnchorElement>('li .link')?.click();
 		}
 	}
 </script>
@@ -94,7 +100,7 @@
 		<li>
 			<a class="link" href={entry.href} aria-current={current(entry.href)}>
 				{#if item.badge}<Badge badge={item.badge} fixed />{/if}
-				<span class="label" class:code={item.badge}>{item.label}</span>
+				<span class="label" class:code={item.badge}><BreakAfterSlashes text={item.label} /></span>
 			</a>
 		</li>
 	{/each}

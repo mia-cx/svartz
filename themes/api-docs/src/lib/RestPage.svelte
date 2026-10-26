@@ -93,6 +93,8 @@
 	}
 
 	.status {
+		/* Matches the reference badges: darker in light mode, for small text at 4.5:1. */
+		--sv-signal: light-dark(oklch(0.46 0.13 var(--sv-hue)), oklch(0.78 0.12 var(--sv-hue)));
 		flex: none;
 		min-inline-size: 3em;
 		padding: 0.05em 0.45em;

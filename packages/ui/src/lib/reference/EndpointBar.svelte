@@ -3,6 +3,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import Copy from '@lucide/svelte/icons/copy';
 	import Badge from './Badge.svelte';
+	import BreakAfterSlashes from './BreakAfterSlashes.svelte';
 	import type { ReferenceBadge } from './renderers.js';
 
 	let { badge, code, copyLabel }: { badge: ReferenceBadge; code: string; copyLabel: string } = $props();
@@ -19,7 +20,7 @@
 
 <div class="endpoint">
 	<Badge {badge} />
-	<code>{code}</code>
+	<code><BreakAfterSlashes text={code} /></code>
 	<button class="sv-icon-button" type="button" onclick={copy} aria-label={copied ? 'Copied' : copyLabel}>
 		{#if copied}<Check aria-hidden="true" />{:else}<Copy aria-hidden="true" />{/if}
 	</button>

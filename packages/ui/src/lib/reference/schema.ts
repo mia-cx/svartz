@@ -26,8 +26,10 @@ export interface SchemaNode {
 	readonly values?: SchemaNode;
 	readonly oneOf?: readonly SchemaNode[];
 	readonly anyOf?: readonly SchemaNode[];
-	/** Length, range, and pattern limits in words: `at most 100 characters`. */
+	/** Length and range limits in words: `at most 100 characters`. */
 	readonly constraints?: readonly string[];
+	/** The regular expression a string matches. */
+	readonly pattern?: string;
 }
 
 export interface SchemaProperty {
@@ -44,7 +46,7 @@ const RANGES = [
 
 /** `1–64 characters`, `at most 100 characters`, `at least 0`. */
 function constraintsOf(raw: Readonly<Record<string, unknown>>): string[] {
-	const found = RANGES.flatMap(([minKey, maxKey, unit]) => {
+	return RANGES.flatMap(([minKey, maxKey, unit]) => {
 		const [min, max] = [count(raw[minKey]), count(raw[maxKey])];
 		const noun = (n: number) => (unit ? ` ${unit}${n === 1 ? '' : 's'}` : '');
 		if (min !== undefined && max !== undefined) return [`${min}–${max}${noun(max)}`];
@@ -52,8 +54,6 @@ function constraintsOf(raw: Readonly<Record<string, unknown>>): string[] {
 		if (min !== undefined && !(unit && min === 0)) return [`at least ${min}${noun(min)}`];
 		return [];
 	});
-	const pattern = text(raw.pattern);
-	return pattern ? [...found, `matches \`${pattern}\``] : found;
 }
 
 export function readSchema(raw: unknown): SchemaNode | undefined {
@@ -84,7 +84,8 @@ export function readSchema(raw: unknown): SchemaNode | undefined {
 		values: readSchema(raw.additionalProperties),
 		oneOf: variants(raw.oneOf),
 		anyOf: variants(raw.anyOf),
-		constraints: constraintsOf(raw)
+		constraints: constraintsOf(raw),
+		pattern: text(raw.pattern)
 	};
 }
 

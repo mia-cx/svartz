@@ -2,6 +2,7 @@
 <script lang="ts">
 	import type { IndexEntry } from '@svartz/core';
 	import Badge from '../Badge.svelte';
+	import BreakAfterSlashes from '../BreakAfterSlashes.svelte';
 	import { getReferenceShell } from '../context.js';
 
 	let { entries }: { entries: readonly IndexEntry[] } = $props();
@@ -16,7 +17,7 @@
 			{#if item?.badge}<Badge badge={item.badge} fixed />{:else}<span class="sv-label kind">Guide</span>{/if}
 			<span class="text">
 				<a href={entry.href} data-sv-internal>{entry.title}</a>
-				{#if item && item.label !== entry.title}<code>{item.label}</code>{/if}
+				{#if item && item.label !== entry.title}<code><BreakAfterSlashes text={item.label} /></code>{/if}
 			</span>
 		</li>
 	{/each}
@@ -37,11 +38,13 @@
 		border-block-end: var(--sv-rule-width) solid var(--sv-rule);
 	}
 
+	/* The badge column's width, in the badges' monospace `ch`. */
 	.kind {
 		box-sizing: content-box;
 		flex: none;
 		inline-size: 8ch;
 		padding-inline: 0.3em;
+		font-family: var(--sv-font-mono);
 		font-size: 0.62rem;
 		text-align: center;
 	}

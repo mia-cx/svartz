@@ -7,7 +7,7 @@ import {
 	type ReferenceBadge,
 	type ReferenceHue,
 	type SchemaNode
-} from '@svartz/ui/reference';
+} from '@svartz/ui/reference/runtime';
 
 type Properties = Readonly<Record<string, unknown>>;
 
@@ -16,7 +16,7 @@ const scalarText = (value: unknown) =>
 	typeof value === 'number' || typeof value === 'boolean' ? String(value) : text(value);
 const records = (value: unknown) => (Array.isArray(value) ? value.filter(isRecord) : []);
 
-export { exampleFromSchema, readModel, readSchema, schemaLabel, type SchemaNode, type SchemaProperty } from '@svartz/ui/reference';
+export { exampleFromSchema, readModel, readSchema, schemaLabel, type SchemaNode, type SchemaProperty } from '@svartz/ui/reference/runtime';
 
 // --- Operations ------------------------------------------------------------
 

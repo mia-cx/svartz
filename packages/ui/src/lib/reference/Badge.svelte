@@ -13,7 +13,7 @@
 
 <span
 	class="sv-badge sv-reference-badge"
-	class:fixed
+	class:uniform={fixed}
 	class:neutral={!signal}
 	data-sv-signal={signal ? '' : undefined}
 	style:--sv-hue={signal ? `var(--sv-hue-${badge.hue})` : undefined}>{badge.label}</span
@@ -21,14 +21,16 @@
 
 <style>
 	.sv-reference-badge {
+		/* Darker than the shared signal in light mode: bright hues like teal clip at 0.53, below 4.5:1 for small text. */
+		--sv-signal: light-dark(oklch(0.46 0.13 var(--sv-hue)), oklch(0.78 0.12 var(--sv-hue)));
 		flex: none;
 		justify-content: center;
 		font-family: var(--sv-font-mono);
 		letter-spacing: 0.02em;
 	}
 
-	/* Eight monospace characters: OPTIONS, MUTATION, and SCHEMA all fit. */
-	.fixed {
+	/* Eight monospace characters: OPTIONS, MUTATION, and SCHEMA all fit. Not `.fixed`: Tailwind owns that class. */
+	.uniform {
 		box-sizing: content-box;
 		inline-size: 8ch;
 		padding-inline: 0.3em;

@@ -55,7 +55,7 @@ describe('referenceNav', () => {
 		expect([section?.title, section?.href, labels([section!])[0]?.[1]]).toEqual(['GraphQL', '/graphql/', [['', ['pet']]]]);
 	});
 
-	it('groups nested folders under their section, titled by their path and linked to their folder note', () => {
+	it('groups nested folders under their section, titled by their path and linked only to a folder note', () => {
 		const notes = [
 			note('reference/index.md', undefined, 'Reference'),
 			note('reference/moderation.md'),
@@ -73,9 +73,9 @@ describe('referenceNav', () => {
 		const [section] = referenceNav(notes, folders, (entry) => entry.item);
 		expect(section?.groups.map((group) => [group.title, group.href, group.links.map((link) => link.item.label)])).toEqual([
 			[undefined, undefined, ['moderation']],
-			['MCP', '/folders/reference/mcp/', ['call_operation']],
+			['MCP', undefined, ['call_operation']],
 			['Public API', '/reference/public-api/', []],
-			['Public API / Authentication', '/folders/reference/public-api/auth/', ['/oauth2/token']]
+			['Public API / Authentication', undefined, ['/oauth2/token']]
 		]);
 	});
 });

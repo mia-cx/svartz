@@ -39,13 +39,14 @@
 
 {#snippet details(node: SchemaNode)}
 	{#if node.description}<p class="description"><DescText value={node.description} {entries} /></p>{/if}
-	{#if node.enum?.length || node.default !== undefined || node.constraints?.length}
+	{#if node.enum?.length || node.default !== undefined || node.constraints?.length || node.pattern}
 		<dl class="facts">
 			{#if node.enum?.length}
 				<div><dt>One of</dt><dd>{#each node.enum as value, index (index)}<code>{literal(value)}</code>{/each}</dd></div>
 			{/if}
 			{#if node.default !== undefined}<div><dt>Default</dt><dd><code>{literal(node.default)}</code></dd></div>{/if}
 			{#if node.constraints?.length}<div><dt>Limits</dt><dd>{node.constraints.join(', ')}</dd></div>{/if}
+			{#if node.pattern}<div><dt>Pattern</dt><dd><code>{node.pattern}</code></dd></div>{/if}
 		</dl>
 	{/if}
 {/snippet}

@@ -1,5 +1,5 @@
 import { materializeTheme } from '@svartz/core';
-import { themeRegistry } from '@svartz/ui/reference';
+import { themeRegistry } from '@svartz/ui/reference/runtime';
 import { describe, expect, it } from 'vitest';
 import createNodeTheme from './index.js';
 import createRuntimeTheme from './runtime.js';

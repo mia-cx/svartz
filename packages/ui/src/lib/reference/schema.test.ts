@@ -38,12 +38,10 @@ describe('readSchema', () => {
 		expect(schemaLabel(readSchema(raw)!)).toBe(label);
 	});
 
-	it('describes length, range, and pattern limits in words', () => {
+	it('describes length and range limits in words, and keeps the pattern as written', () => {
 		expect(readSchema({ type: 'string', maxLength: 100 })?.constraints).toEqual(['at most 100 characters']);
-		expect(readSchema({ type: 'string', minLength: 1, maxLength: 64, pattern: '^[a-z]+$' })?.constraints).toEqual([
-			'1–64 characters',
-			'matches `^[a-z]+$`'
-		]);
+		const id = readSchema({ type: 'string', minLength: 1, maxLength: 64, pattern: '^[a-z]+$' });
+		expect([id?.constraints, id?.pattern]).toEqual([['1–64 characters'], '^[a-z]+$']);
 		expect(readSchema({ type: 'integer', minimum: 0 })?.constraints).toEqual(['at least 0']);
 	});
 });
