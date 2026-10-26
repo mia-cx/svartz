@@ -49,7 +49,7 @@ export function createWikiTheme(modules: WikiThemeModules, config?: WikiThemeCon
 		id: '@svartz/theme-wiki',
 		displayName: 'Svartz Wiki',
 		description: 'A wiki: infoboxes, categories, recent changes, and references.',
-		version: '1.0.1',
+		version: '1.1.0',
 		contractVersion: '1.0.0',
 		socialImage: svartzSocialImage,
 		faviconSvg: SVARTZ_MARK_SVG,
