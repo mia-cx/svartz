@@ -1,4 +1,4 @@
-# Feeds and sitemaps
+# Feeds, sitemaps, and llms.txt
 
 Set `site.url` to the public origin and deployment base for each vault. For a site at `https://example.com/site` with a vault mounted at `/journal`, use `site.url: 'https://example.com/site'`. Svartz adds the mount and note path. A production build with an enabled feed or sitemap requires this URL.
 
@@ -46,3 +46,13 @@ export const GET = () => new Response(
 ```
 
 For a combined sitemap, call `renderHostSitemap(vaults, ['journal', 'work'])` in a `sitemap.xml/+server.ts` route. Selected vaults must share one public origin. Both helpers use each vault's published index; vaults outside the selected ID list are never included.
+
+## Markdown for LLM agents
+
+Each vault writes a Markdown copy of every public note beside its page: `/journal/trip/` has `/journal/trip.md`, and the vault home has `/journal/index.md`. A copy holds the note's published properties as YAML front matter, its title, and the authored Markdown. Links point at other copies, and attachments keep their public URLs. Obsidian `%%comments%%`, HTML comments, and `.svx` `<script>` and `<style>` blocks stay out. Protected notes get no copy, and links to them point at their locked page.
+
+`<mountPath>/llms.txt` lists every copy with its description, in the [llms.txt](https://llmstxt.org/) format. Links are absolute when `site.url` exists, and relative otherwise, so neither file needs a public URL. A manual SvelteKit route at `llms.txt` wins.
+
+Every theme shows two buttons on a note: Copy page puts the copy on the clipboard, and View as Markdown opens it. Each page also links its copy with `<link rel="alternate" type="text/markdown">`, so an agent that reads the page finds the copy.
+
+Turn all of it off with `discovery: { llms: { enabled: false } }`.

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { ConfigEnv, UserConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { hostStylesPlugin, withSvartzHost } from "../src/host";
+import { clearPublicAssets, publicAssetsPlugin, recordPublicAssets } from "../src/public-assets";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -77,4 +78,24 @@ it("keeps an existing host Tailwind plugin without adding a second copy", async 
   const config = await wrapped({ command: "build", mode: "production" });
   const plugins = config.plugins?.flat(2) ?? [];
   expect(plugins.filter((plugin) => plugin && typeof plugin === "object" && "name" in plugin && plugin.name === "@tailwindcss/vite:scan")).toHaveLength(1);
+});
+
+it("emits only the files recorded since the last clear", async () => {
+  const root = await mkdtemp(join(tmpdir(), "svartz-public-assets-"));
+  try {
+    await writeFile(join(root, "a.md"), "a");
+    await writeFile(join(root, "b.md"), "b");
+    recordPublicAssets("first", [{ fileName: "first/a.md", path: join(root, "a.md") }]);
+    clearPublicAssets();
+    recordPublicAssets("second", [{ fileName: "second/b.md", path: join(root, "b.md") }]);
+
+    const emitted: string[] = [];
+    const plugin = publicAssetsPlugin();
+    const generateBundle = plugin.generateBundle as (this: unknown, options: unknown, bundle: object) => Promise<void>;
+    await generateBundle.call({ environment: { name: "client" }, emitFile: ({ fileName }: { fileName: string }) => emitted.push(fileName) }, {}, {});
+    expect(emitted).toEqual(["second/b.md"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    clearPublicAssets();
+  }
 });

@@ -25,6 +25,11 @@ export function routeHref(slug: string, mountPath = ""): string {
   return `${mountPath}/${path}${path ? "/" : ""}`;
 }
 
+/** The Markdown copy beside a page: `/notes/a/` has `/notes/a.md`, and a vault home has `<mount>/index.md`. */
+export function markdownHref(slug: string, mountPath = ""): string {
+  return `${mountPath}/${routeSlug(slug)}.md`;
+}
+
 function requestedSlug(file: ProcessedFile): string {
   const source = fileToSlug(file.path);
   if (!file.frontmatter || !("slug" in file.frontmatter)) return routeSlug(source);

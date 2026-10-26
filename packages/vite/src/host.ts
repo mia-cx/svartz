@@ -3,6 +3,9 @@ import { basename, dirname, join } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import { mergeConfig, normalizePath, type Plugin, type PluginOption, type UserConfigExport } from "vite";
 import { HOST_STYLES_PLACEHOLDER } from "./host-registry";
+import { publicAssetsPlugin } from "./public-assets";
+
+export { publicAssetsPlugin };
 
 /** Generated runtime entry points and the CSS manifest for one host vault. */
 export interface HostStyleManifest {
@@ -136,6 +139,7 @@ export function withSvartzHost(config: UserConfigExport): UserConfigExport {
       plugins: [
         ...(await hasTailwindPlugin(original.plugins) ? [] : tailwindcss()),
         ...(styleMap ? [hostStylesPlugin(JSON.parse(styleMap) as HostStyleManifest[])] : []),
+        publicAssetsPlugin(),
       ],
       optimizeDeps: {
         exclude: ["@svartz/ui", "@svartz/ui/runtime", "@svartz/theme-minimal"],

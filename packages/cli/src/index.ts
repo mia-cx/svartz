@@ -25,6 +25,7 @@ import {
   getVaultBuildRoot,
   resolveThemePackageRoot,
   svartz,
+  clearPublicAssets,
 } from "@svartz/vite";
 import {
   build as viteBuild,
@@ -499,8 +500,8 @@ const createAppConfig = (
         }));
         await writeFile(hostRegistryPath, createHostRegistrySource(vaults));
         if (!hostApp) await writeFile(standalonePluginPath, [
-          `import { hostStylesPlugin } from ${JSON.stringify(import.meta.resolve("@svartz/vite/host"))};`,
-          `export default hostStylesPlugin(${JSON.stringify(styleManifests)});`,
+          `import { hostStylesPlugin, publicAssetsPlugin } from ${JSON.stringify(import.meta.resolve("@svartz/vite/host"))};`,
+          `export default [hostStylesPlugin(${JSON.stringify(styleManifests)}), publicAssetsPlugin()];`,
         ].join("\n"));
       },
       catch: (cause) => cause as Error,
@@ -589,6 +590,8 @@ const buildVaults = (
       try: () =>
         withVaultBuildLock(workspace.projectRoot, async () => {
           try {
+            // Standalone vaults build one after another in this process.
+            clearPublicAssets();
             const config = await runEffect(
               createAppConfig(workspace, supportedVaults, "production", "build"),
             );

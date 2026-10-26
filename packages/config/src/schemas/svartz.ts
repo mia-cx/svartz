@@ -118,6 +118,9 @@ const DiscoveryConfigSchema = Schema.Struct({
   socialImages: Schema.optional(Schema.Struct({
     enabled: Schema.optional(Schema.Boolean),
   })),
+  llms: Schema.optional(Schema.Struct({
+    enabled: Schema.optional(Schema.Boolean),
+  })),
   favicon: Schema.optional(Schema.Struct({
     enabled: Schema.optional(Schema.Boolean),
   })),

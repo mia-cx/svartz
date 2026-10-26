@@ -18,6 +18,7 @@
 		formatDate,
 		isoDate,
 		LinkPreviews,
+		PageActions,
 		pageCrumbs,
 		readingTime,
 		SearchDialog,
@@ -114,6 +115,7 @@
 							{/each}
 						</ul>
 					{/if}
+					{#if entry.markdownHref}<PageActions href={entry.markdownHref} />{/if}
 				</header>
 				<article class="sv-prose">{@render children?.()}</article>
 			{:else}

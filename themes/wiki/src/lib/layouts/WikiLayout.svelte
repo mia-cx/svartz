@@ -24,6 +24,7 @@
 		LinkPreviews,
 		newestFirst,
 		noteDate,
+		PageActions,
 		SearchDialog,
 		tagHrefFor,
 		themeSettings,
@@ -139,6 +140,7 @@
 				<header class="article-head" id="top">
 					<h1>{entry.title}</h1>
 					<p class="tagline">From {site.title}</p>
+					{#if entry.markdownHref}<PageActions href={entry.markdownHref} />{/if}
 				</header>
 				{#if hatnote}<p class="hatnote"><DescText value={hatnote} entries={vault.entries} /></p>{/if}
 				<article class="sv-prose wiki-prose">

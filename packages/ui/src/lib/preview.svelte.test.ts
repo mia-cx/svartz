@@ -15,3 +15,13 @@ it('resolves relative links and images against the previewed page', async () => 
 	expect(nodes[0]?.querySelector('a')?.getAttribute('href')).toBe(new URL('/reference/', location.href).href);
 	expect(nodes[0]?.querySelector('img')?.getAttribute('src')).toBe(new URL('/guides/diagram.svg', location.href).href);
 });
+
+it('leaves page controls out of the preview', async () => {
+	const pageUrl = new URL('/guides/controls/', location.href).href;
+	const html = '<main data-sv-preview><h1>Setup</h1><div data-sv-preview-omit><button>Copy page</button></div></main>';
+	vi.stubGlobal('fetch', vi.fn(async () => new Response(html, { headers: { 'content-type': 'text/html' } })));
+
+	const { nodes } = await fetchPreview(pageUrl);
+
+	expect(nodes[0]?.textContent).toBe('Setup');
+});

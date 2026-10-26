@@ -1,7 +1,13 @@
 /** Generate adapter-independent discovery files from the published vault index. */
-import { resolve } from "node:path";
+import { posix, resolve } from "node:path";
 import { definePlugin, type Artifact, type IndexEntry, type PluginContext } from "@svartz/core";
+import { agentMarkdown } from "./internal/agent-markdown";
+import { createAssetResolver } from "./internal/asset-references";
 import { renderMarkdown } from "./internal/render-markdown";
+import { buildSlugMap, resolveLink } from "./internal/resolve";
+import { alternateNames } from "./internal/routes";
+
+const NOTE_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
 
 const xml = (value: string): string => value
   .replaceAll("&", "&amp;")
@@ -14,9 +20,10 @@ const xml = (value: string): string => value
 const absoluteUrl = (base: string, href: string): string =>
   new URL(href.replace(/^\/+/, ""), `${base.replace(/\/+$/, "")}/`).href;
 
-function addAsset(ctx: PluginContext, name: string, contents: string): void {
+function addAsset(ctx: PluginContext, name: string, contents: string, mimeType = "application/xml"): void {
   const publicAssets = ctx.meta.get("svartz:publicAssetPaths") as ReadonlySet<string> | undefined;
-  if (ctx.files.some((file) => file.path === name && (!publicAssets || publicAssets.has(name)))) {
+  // A note's own path (`a.md`) is not a public asset, so its Markdown copy never conflicts with it.
+  if (ctx.files.some((file) => file.path === name && !NOTE_EXTENSIONS.has(file.extension ?? "") && (!publicAssets || publicAssets.has(name)))) {
     throw new Error(`Published vault asset "${name}" conflicts with a generated Svartz discovery file.`);
   }
   const key = `assets/${name}`;
@@ -26,9 +33,76 @@ function addAsset(ctx: PluginContext, name: string, contents: string): void {
     type: "asset",
     pluginId: EMIT_DISCOVERY_ID,
     contents,
-    mimeType: "application/xml",
+    mimeType,
   };
   ctx.artifacts.set(key, artifact);
+}
+
+/** Absolute with `site.url`; otherwise relative to the generated file, so any deployment base works. */
+function linkFrom(base: string | undefined, fromHref: string) {
+  return (href: string): string => {
+    if (base) return absoluteUrl(base, href);
+    const relative = posix.relative(posix.dirname(fromHref), href);
+    return href.endsWith("/") ? `${relative || "."}/` : relative;
+  };
+}
+
+/** Markdown copies of public notes plus the vault's `llms.txt` index. */
+function emitLlms(ctx: PluginContext, base: string | undefined): void {
+  const entries = ctx.index?.entries ?? [];
+  const bySlug = new Map(entries.map((entry) => [entry.slug, entry]));
+  const sources = (ctx.meta.get("sourceBodies") as ReadonlyMap<string, string> | undefined) ?? new Map<string, string>();
+  const notes = ctx.files.filter((file) => NOTE_EXTENSIONS.has(file.extension ?? ""));
+  const slugMap = buildSlugMap(notes.map((file) => ({
+    slug: file.slug,
+    path: file.path,
+    aliases: alternateNames(file.frontmatter, ctx.config.frontmatter.aliasesField),
+  })));
+  const allSlugs = notes.map((file) => file.slug);
+  const publicAssets = ctx.meta.get("svartz:publicAssetPaths") as ReadonlySet<string> | undefined;
+  const resolveAsset = createAssetResolver(ctx.files.filter((file) =>
+    !NOTE_EXTENSIONS.has(file.extension ?? "") && (!publicAssets || publicAssets.has(file.path))));
+  const mountPath = ctx.config.mountPath ?? "";
+  const published = entries.filter((entry): entry is IndexEntry & { markdownHref: string } => Boolean(entry.markdownHref));
+
+  const notesBySlug = new Map(notes.map((file) => [file.slug, file]));
+  for (const entry of published) {
+    const file = notesBySlug.get(entry.slug);
+    const source = file && sources.get(file.path);
+    if (!file || source === undefined) continue;
+    const url = linkFrom(base, entry.markdownHref);
+    const markdown = agentMarkdown(file, source, entry, {
+      note(link) {
+        const slug = resolveLink({ raw: "", label: undefined, ...link }, slugMap, allSlugs, ctx.config.linkResolution, file.slug, notes);
+        const target = slug ? bySlug.get(slug) : undefined;
+        return target && url(target.markdownHref ?? target.href);
+      },
+      asset(target) {
+        const path = resolveAsset(file, target);
+        return path && url(`${mountPath}/${path.split("/").map(encodeURIComponent).join("/")}`);
+      },
+    });
+    addAsset(ctx, entry.markdownHref.slice(mountPath.length + 1), markdown, "text/markdown");
+  }
+
+  const reserved = (ctx.meta.get("reservedRoutes") as ReadonlySet<string> | undefined) ?? new Set();
+  if (reserved.has("llms.txt")) return;
+  const url = linkFrom(base, `${mountPath}/llms.txt`);
+  const { title, description } = ctx.config.site;
+  const pages = [...published]
+    .sort((left, right) => left.href.localeCompare(right.href))
+    .map((entry) => `- [${entry.title}](${url(entry.markdownHref)})${entry.description ? `: ${entry.description.replace(/\n/g, " ")}` : ""}`);
+  addAsset(ctx, "llms.txt", [
+    `# ${title}`,
+    "",
+    ...(description ? [`> ${description}`, ""] : []),
+    "Each page links to a Markdown copy of its content.",
+    "",
+    "## Pages",
+    "",
+    ...pages,
+    "",
+  ].join("\n"), "text/plain");
 }
 
 function sortedEntries(ctx: PluginContext): IndexEntry[] {
@@ -104,9 +178,10 @@ export const emitDiscovery = definePlugin(() => ({
   emitArtifacts: {
     async run(ctx) {
       if (!ctx.index) return;
-      const { feed, sitemap: sitemapConfig } = ctx.config.discovery;
-      if (!feed.enabled && !sitemapConfig.enabled) return;
+      const { feed, sitemap: sitemapConfig, llms } = ctx.config.discovery;
       const base = ctx.config.site.url;
+      if (llms?.enabled) emitLlms(ctx, base);
+      if (!feed.enabled && !sitemapConfig.enabled) return;
       if (!base) {
         if (ctx.meta.get("svartz:mode") === "development") return;
         throw new Error(`Vault "${ctx.config.id}" needs site.url to generate RSS or sitemap in production.`);

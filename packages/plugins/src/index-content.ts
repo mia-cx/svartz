@@ -22,7 +22,7 @@ import type {
 } from "@svartz/core";
 import { countWords, extractDescription, stripMarkdownToText } from "./internal/parse";
 import { normalizeDateTime, publicationOverride } from "./internal/datetime";
-import { allocateRedirects, alternateNames, routeHref } from "./internal/routes";
+import { allocateRedirects, alternateNames, markdownHref, routeHref } from "./internal/routes";
 import { normalizeSlugSegment } from "./internal/slug";
 
 const INDEX_VERSION = "1.0.0";
@@ -181,6 +181,12 @@ export const indexContent = definePlugin(() => ({
           tags,
           aliases,
           description,
+          // Protected notes never get a plain-text copy; emit-discovery writes one for each href set here.
+          // The encrypted and hidden properties match what the feed and sitemap leave out, and a host route keeps its URL.
+          ...(ctx.config.discovery?.llms?.enabled && !file.protection && !frontmatter.encrypted && !frontmatter.hidden &&
+            !reservedPaths.has(markdownHref(file.slug).slice(1))
+            ? { markdownHref: markdownHref(file.slug, mountPath) }
+            : {}),
           content: plainTextContent,
           links,
           toc: file.toc ?? [],

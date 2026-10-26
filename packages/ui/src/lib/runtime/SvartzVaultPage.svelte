@@ -156,6 +156,7 @@
 	{/if}
 	{#if pageDescription}<meta name="description" content={pageDescription} />{/if}
 	{#if canonicalUrl}<link rel="canonical" href={canonicalUrl} />{/if}
+	{#if entry?.markdownHref}<link rel="alternate" type="text/markdown" href={entry.markdownHref} />{/if}
 	<meta property="og:title" content={pageTitle} />
 	{#if pageDescription}<meta property="og:description" content={pageDescription} />{/if}
 	<meta property="og:type" content={entry ? 'article' : 'website'} />

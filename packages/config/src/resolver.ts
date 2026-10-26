@@ -115,6 +115,9 @@ const mergeDiscovery = (
   socialImages: {
     enabled: vault?.socialImages?.enabled ?? defaults?.socialImages?.enabled ?? Boolean(publicUrl),
   },
+  llms: {
+    enabled: vault?.llms?.enabled ?? defaults?.llms?.enabled ?? true,
+  },
   favicon: {
     enabled: vault?.favicon?.enabled ?? defaults?.favicon?.enabled ?? !isHost,
   },

@@ -18,6 +18,7 @@
 		isoDate,
 		LinkPreviews,
 		noteDate,
+		PageActions,
 		pageCrumbs,
 		SearchDialog,
 		themeSettings,
@@ -95,6 +96,7 @@
 						<h1>{entry.title}</h1>
 						{#if entry.description}<p class="summary">{entry.description}</p>{/if}
 					{/if}
+					{#if entry.markdownHref}<PageActions href={entry.markdownHref} />{/if}
 				</header>
 				{#if symbol}
 					<SymbolReference {symbol} entries={vault.entries}>

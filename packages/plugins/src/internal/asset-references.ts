@@ -81,6 +81,28 @@ export function referenceDefinitionSpans(source: string): { start: number; end: 
   return references;
 }
 
+/** URL attributes on media and link tags in one HTML node, offset from the node's start; `srcset` yields each candidate. */
+export function htmlAssetSpans(html: string): { start: number; end: number; target: string }[] {
+  const spans: { start: number; end: number; target: string }[] = [];
+  for (const tag of html.matchAll(HTML_TAG)) {
+    for (const match of tag[0].matchAll(HTML_ASSET)) {
+      const value = match[2]!;
+      // The match ends with the value and its closing quote.
+      const valueStart = tag.index! + match.index! + match[0].length - value.length - 1;
+      if (!/^srcset/i.test(match[0])) {
+        spans.push({ start: valueStart, end: valueStart + value.length, target: value });
+        continue;
+      }
+      // `a.png 1x, b.png 2x`: each URL starts the value or follows a comma.
+      for (const candidate of value.matchAll(/(?:^|,)\s*([^\s,]+)/g)) {
+        const start = valueStart + candidate.index! + candidate[0].length - candidate[1]!.length;
+        spans.push({ start, end: start + candidate[1]!.length, target: candidate[1]! });
+      }
+    }
+  }
+  return spans;
+}
+
 function assetTarget(target: string): string | undefined {
   const path = target.split(/[?#]/, 1)[0]?.trim();
   if (!path || /^(?:[a-z]+:|\/\/)/i.test(path)) return;
@@ -154,15 +176,7 @@ export function referencedAssets(
           resolve(match[1]!.split("|", 1)[0]!.split("#", 1)[0]!);
         }
       } else if (node.type === "html") {
-        for (const tag of node.value.matchAll(HTML_TAG)) {
-          for (const match of tag[0].matchAll(HTML_ASSET)) {
-            if (/\bsrcset\s*=/i.test(match[0])) {
-              for (const candidate of match[2]!.split(",")) resolve(candidate.trim().split(/\s+/, 1)[0]!);
-            } else {
-              resolve(match[2]!);
-            }
-          }
-        }
+        for (const span of htmlAssetSpans(node.value)) resolve(span.target);
       }
     });
   }
