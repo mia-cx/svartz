@@ -1,5 +1,12 @@
 # @svartz/theme-minimal
 
+## 1.1.1
+
+### Patch Changes
+
+- @svartz/core@1.1.1
+  - @svartz/ui@1.1.1
+
 ## 1.1.0
 
 ### Minor Changes
