@@ -1,5 +1,16 @@
 # @svartz/vite
 
+## 1.1.0
+
+### Patch Changes
+
+- 67b759b: Attachments, feeds, and other generated files now reach SvelteKit's client output before prerendering, so a page that links one no longer fails the build with a 404.
+- Updated dependencies [67b759b]
+- Updated dependencies [c2b31c8]
+  - @svartz/plugins@1.1.0
+  - @svartz/core@1.1.0
+  - @svartz/theme-minimal@1.1.0
+
 ## 1.0.1
 
 ### Patch Changes

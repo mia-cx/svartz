@@ -1,6 +1,6 @@
 {
 	"name": "@svartz/theme-blog",
-	"version": "1.0.1",
+	"version": "1.1.0",
 	"description": "A Svartz theme for blogs: a post grid, tag filters, an archive, and long-form reading.",
 	"license": "SEE LICENSE IN LICENSE",
 	"publishConfig": { "access": "public" },
