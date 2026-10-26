@@ -24,7 +24,7 @@ The generated `virtual:svartz/host` module exposes `vaults`, combined `routes`, 
 
 During `svartz dev`, edits to a local workspace theme rebuild that theme package before the host restarts. This keeps package exports pointing at `dist` in sync with source edits.
 
-Each vault can emit its own RSS feed and sitemap. A host can also select vaults for a combined feed or sitemap in a manual SvelteKit route. See [feeds and sitemaps](discovery.md).
+Each vault can emit its own RSS feed and sitemap. A host can also select vaults for a combined feed or sitemap in a manual SvelteKit route. See [feeds, sitemaps, and llms.txt](discovery.md).
 
 When the CLI builds one local workspace theme, its source manifest supplies build plugins and its source path overrides the packaged theme in both SvelteKit build phases. Published themes use their runtime package entry.
 

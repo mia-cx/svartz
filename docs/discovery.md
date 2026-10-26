@@ -1,4 +1,4 @@
-# Feeds and sitemaps
+# Feeds, sitemaps, and llms.txt
 
 Set `site.url` to the public origin and deployment base for each vault. For a site at `https://example.com/site` with a vault mounted at `/journal`, use `site.url: 'https://example.com/site'`. Svartz adds the mount and note path. A production build with an enabled feed or sitemap requires this URL.
 
@@ -46,3 +46,25 @@ export const GET = () => new Response(
 ```
 
 For a combined sitemap, call `renderHostSitemap(vaults, ['journal', 'work'])` in a `sitemap.xml/+server.ts` route. Selected vaults must share one public origin. Both helpers use each vault's published index; vaults outside the selected ID list are never included.
+
+## Markdown for LLM agents
+
+Each vault writes a Markdown copy of every public note beside its page: `/journal/trip/` has `/journal/trip.md`, and the vault home has `/journal/index.md`. A copy holds the note's published properties as YAML front matter, its title, and the authored Markdown. Links point at other copies, and attachments keep their public URLs. Obsidian `%%comments%%`, HTML comments, and `.svx` `<script>` and `<style>` blocks stay out. Protected notes get no copy, and links to them point at their locked page.
+
+`<mountPath>/llms.txt` lists every copy with its description, in the [llms.txt](https://llmstxt.org/) format. Links are absolute when `site.url` exists, and relative otherwise, so neither file needs a public URL. A manual SvelteKit route at `llms.txt` wins.
+
+Every theme shows two buttons on a note: Copy page puts the copy on the clipboard, and View as Markdown opens it. Each page also links its copy with `<link rel="alternate" type="text/markdown">`.
+
+On a server adapter, `markdownForAgents` answers a page request with the copy when the request asks for Markdown. That happens when the `Accept` header ranks `text/markdown` at least as high as `text/html`, or when the user agent is a known AI agent, such as ClaudeBot or ChatGPT-User. `svartz init` adds it as `src/hooks.server.ts` when the host has no server hooks. Otherwise, compose it with `sequence`:
+
+```ts
+// src/hooks.server.ts
+import { sequence } from '@sveltejs/kit/hooks';
+import { markdownForAgents } from '@svartz/ui/agent-markdown';
+
+export const handle = sequence(markdownForAgents, yourHandle);
+```
+
+A static host serves prerendered HTML without running SvelteKit, so the hook never runs there. Agents still find each copy through the `alternate` link and `llms.txt`.
+
+Turn all of it off with `discovery: { llms: { enabled: false } }`.
