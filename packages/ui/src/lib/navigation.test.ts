@@ -58,6 +58,30 @@ describe('explorer tree', () => {
 		expect(tree.map((node) => node.title)).toEqual(['Alpha', 'Zeta', 'Note 9', 'Note 10']);
 	});
 
+	it('sorts by order frontmatter before title, a folder by its folder note', () => {
+		const ordered = (slug: string, path: string, title: string, order: unknown) => ({
+			...note(slug, path, title),
+			properties: { order }
+		});
+		const tree = buildExplorerTree(
+			[
+				ordered('start', 'start/index.md', 'Start here', 1),
+				note('start/install', 'start/install.md', 'Install'),
+				ordered('guides', 'guides/index.md', 'Guides', 2),
+				note('develop/contributing', 'develop/contributing.md', 'Contributing'),
+				note('changelog', 'changelog.md', 'Changelog'),
+				ordered('welcome', 'welcome.md', 'Welcome', 0),
+				ordered('about', 'about.md', 'About', 'first')
+			],
+			[
+				folder('develop', 'Develop', ['develop/contributing']),
+				folder('guides', 'Guides', ['guides'], 'guides'),
+				folder('start', 'Start here', ['start', 'start/install'], 'start')
+			]
+		);
+		expect(tree.map((node) => node.title)).toEqual(['Start here', 'Guides', 'Develop', 'Welcome', 'About', 'Changelog']);
+	});
+
 	it('links a folder to its folder note and keeps a colliding root note out of it', () => {
 		const tree = buildExplorerTree(collided, collidedFolders);
 		expect(tree.map((node) => [node.title, node.href])).toEqual([

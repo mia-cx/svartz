@@ -3,6 +3,8 @@ export interface UiIndexEntry {
 	readonly href?: string;
 	readonly path?: string;
 	readonly title: string;
+	/** Frontmatter. The explorer reads `order` from it. */
+	readonly properties?: Readonly<Record<string, unknown>>;
 }
 
 export interface UiFolderEntry {
@@ -30,6 +32,8 @@ export interface ExplorerNode {
 	readonly href: string;
 	readonly children: readonly ExplorerNode[];
 	readonly isFolder: boolean;
+	/** The note's `order` frontmatter, or for a folder its folder note's. Lower sorts first. */
+	readonly order?: number;
 }
 
 export interface Breadcrumb {
@@ -148,19 +152,29 @@ export function folderBreadcrumbs(
 
 const naturalOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
+/** A note's `order` frontmatter, when it is a finite number. */
+function orderOf(entry: UiIndexEntry | undefined): number | undefined {
+	const order = entry?.properties?.order;
+	return typeof order === 'number' && Number.isFinite(order) ? order : undefined;
+}
+
 function sortExplorerNodes(nodes: ExplorerNode[]): ExplorerNode[] {
 	return nodes
 		.map((node) => ({ ...node, children: sortExplorerNodes([...node.children]) }))
 		.sort(
 			(left, right) =>
-				Number(right.isFolder) - Number(left.isFolder) || naturalOrder.compare(left.title, right.title)
+				Number(right.isFolder) - Number(left.isFolder) ||
+				(left.order ?? Infinity) - (right.order ?? Infinity) ||
+				naturalOrder.compare(left.title, right.title)
 		);
 }
 
 /**
- * The vault as a tree: folders first, then notes, each in natural order. The home
- * note is left out (the site title links home). A folder links its folder note
- * (`guides/index.md`) when one exists, otherwise its generated folder page.
+ * The vault as a tree: folders first, then notes. Each group sorts by `order`
+ * frontmatter, then in natural order by title; a folder takes its folder note's
+ * `order`. The home note is left out (the site title links home). A folder links
+ * its folder note (`guides/index.md`) when one exists, otherwise its generated
+ * folder page.
  */
 export function buildExplorerTree(
 	entries: readonly UiIndexEntry[],
@@ -170,12 +184,14 @@ export function buildExplorerTree(
 	const roots: ExplorerNode[] = [];
 	const nodes = new Map<string, ExplorerNode>();
 	for (const folder of folders) {
+		const folderNote = layout.noteOf(folder.slug);
 		nodes.set(folder.slug, {
 			id: `folder:${folder.slug}`,
 			title: folder.title,
-			href: layout.noteOf(folder.slug)?.href ?? folder.href,
+			href: folderNote?.href ?? folder.href,
 			children: [],
-			isFolder: true
+			isFolder: true,
+			order: orderOf(folderNote)
 		});
 	}
 	// Every ancestor of a non-empty folder is in the index too.
@@ -192,7 +208,8 @@ export function buildExplorerTree(
 			title: entry.title,
 			href: entry.href ?? slugToHref(entry.slug),
 			children: [],
-			isFolder: false
+			isFolder: false,
+			order: orderOf(entry)
 		});
 	}
 
