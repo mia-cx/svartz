@@ -202,9 +202,15 @@ describe("Markdown copies for LLM agents", () => {
       "---",
       '[Run `setup` *first*](setup.md "Install") and [the site][external].',
       "",
+      "",
+      "> > [Quoted](",
+      "> > setup.md)",
+      "",
       "[external]: https://example.com/setup.md#Install",
     ].join("\n");
     const asset = await emit(build([file("links.md", body), file("setup.md", "# Setup")]));
+    // A destination on the next quoted line keeps the line's markers.
+    expect(asset("links.md")).toContain("> > [Quoted](\n> > setup.md)");
     expect(asset("links.md")).toContain('[Run `setup` *first*](setup.md "Install") and [the site][external].');
     expect(asset("links.md")).toContain("[external]: https://example.com/setup.md#Install");
   });

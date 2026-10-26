@@ -77,7 +77,8 @@ export type PositionedLink = RawLink & {
 
 /** The destination after a link's `](`: `<…>`, or a run without spaces that balances parentheses. */
 function destinationSpan(markdown: string, from: number): { start: number; end: number } {
-  const start = from + /^[ \t]*(?:\r?\n[ \t]*)?/.exec(markdown.slice(from))![0].length;
+  // A destination may start on the next line, after that line's blockquote markers.
+  const start = from + /^[ \t]*(?:\r?\n(?:[ \t]*>)*[ \t]*)?/.exec(markdown.slice(from))![0].length;
   if (markdown[start] === "<") return { start, end: markdown.indexOf(">", start) + 1 };
   let depth = 0;
   let end = start;
