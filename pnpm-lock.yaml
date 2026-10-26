@@ -786,9 +786,6 @@ importers:
 
   themes/api-docs:
     dependencies:
-      '@lucide/svelte':
-        specifier: ^1.48.0
-        version: 1.48.0(svelte@5.53.7)
       '@svartz/core':
         specifier: workspace:*
         version: link:../../packages/core

@@ -23,7 +23,7 @@ vaults: [{
 
 | Page | Contents |
 | --- | --- |
-| REST operation | Method and path (copyable), auth, parameters by location, request body schema, responses by status with their schemas, the note's own Markdown. Examples: the request in cURL, JavaScript, and Python (the choice is remembered), and a response per status |
+| REST operation | Method and path (copyable), auth, the note's own Markdown, parameters by location with defaults and allowed values, request body schema, responses by status with their schemas, and "Defined in" source links. Examples: the request in cURL, JavaScript, and Python (the choice is remembered), and a response per status |
 | GraphQL operation | Kind, name, arguments, return type, the note's Markdown. Examples: the endpoint, query, variables, and response |
 | Model | "The X object": the note's Markdown, an attribute tree, and a generated JSON example |
 | Guide | Any other note: plain prose |
@@ -32,7 +32,9 @@ vaults: [{
 | Reference | `/folders/`: every resource and its operations |
 | Recently updated | `/feed/` |
 
-Each top-level folder is one sidebar section. A folder note (`graphql/index.md`) names its section, so `GraphQL` doesn't read as `Graphql`.
+Each top-level folder is one sidebar section, and each folder inside it a group. A folder note (`graphql/index.md`) names its section, so `GraphQL` doesn't read as `Graphql`. Operations list by path beside a fixed-width method badge, and the filter above the sidebar narrows it as you type; Enter opens the first match.
+
+To document HTTP endpoints and MCP tools in one site, combine this theme's `apiRenderers` (from `@svartz/theme-api-docs/runtime`) with `@svartz/theme-mcp-docs`'s. [Reference themes](../../docs/reference-themes.md) shows how.
 
 ## Frontmatter
 
@@ -82,7 +84,9 @@ model:
       shelter: { $ref: Shelter }
 ```
 
-Schemas are a JSON Schema subset: `type`, `format`, `enum`, `example`, `nullable`, `items`, `properties`, `required`, `oneOf`, `anyOf`, and `$ref`. A `$ref` names another note's model; `#/components/schemas/Pet` also resolves to `Pet`. Examples come from `example` values first, then the first `enum` value, then a placeholder by type.
+Schemas are a JSON Schema subset: `type` (a name or a list with `"null"`), `format`, `enum`, `const`, `default`, `example`, `nullable`, `items`, `properties`, `required`, `additionalProperties`, `oneOf`, `anyOf`, `minLength`/`maxLength`, `minimum`/`maximum`, `minItems`/`maxItems`, `pattern`, and `$ref`. A `$ref` names another note's model; `#/components/schemas/Pet` and `#/$defs/Pet` also resolve to `Pet`. Examples come from `example` values first, then `default`, then the first `enum` value, then a placeholder by type.
+
+A parameter takes `type`, `enum`, and `default`, or a full `schema`. `auth` is a scheme (`bearer`, `basic`, `none`, or any label) or `{ scheme, description, scopes }`. A `source` URL, or list of them, adds "Defined in" links; GitHub and GitLab file links read as `path:line`.
 
 Backticks in descriptions render as code, and `[[Note]]` links. The types are exported as `ApiOperation` and `SchemaNode`. An OpenAPI or GraphQL SDL plugin should emit exactly this shape.
 

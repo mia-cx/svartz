@@ -1,6 +1,6 @@
 # Releasing Svartz packages
 
-Svartz ships eleven public npm packages in one fixed Changesets version group.
+Svartz ships twelve public npm packages in one fixed Changesets version group.
 Private workspace packages receive no version bumps or release tags.
 All public archives include the repository LICENSE and use MCX v1.0.
 
@@ -8,7 +8,7 @@ Publish in this dependency order:
 
 1. `@svartz/core`.
 2. `@svartz/plugins`, `@svartz/config`, then `@svartz/ui`.
-3. `@svartz/theme-minimal`, `@svartz/theme-wiki`, `@svartz/theme-blog`, `@svartz/theme-docs`, then `@svartz/theme-api-docs`.
+3. `@svartz/theme-minimal`, `@svartz/theme-wiki`, `@svartz/theme-blog`, `@svartz/theme-docs`, `@svartz/theme-api-docs`, then `@svartz/theme-mcp-docs`.
 4. `@svartz/vite`, then `svartz`.
 
 ## Each implementation PR
@@ -21,7 +21,7 @@ CI requires a changeset for public `packages/*/src/**`, `packages/cli/template/*
 The `no changeset` label exempts changes that need no release note.
 CI still validates added or modified changesets when that label is present.
 
-The fixed group keeps all eleven versions equal.
+The fixed group keeps all twelve versions equal.
 `pnpm release:version` runs Changesets, synchronizes theme versions, and updates the lockfile.
 Theme contract versions remain independent of package versions.
 Changesets is pinned to `3.0.3`.
@@ -72,7 +72,7 @@ Before merging the first version PR, Mia must complete these steps:
 1. Confirm npm ownership of `svartz` and publishing access to the `@svartz` scope.
 2. From a clean, merged `1.0.0` checkout, log in with `npm login` and run the bootstrap below.
 3. Create the GitHub `npm-publish` environment. Allow `sveltekit-rewrite` and choose its approval rules.
-4. Configure a GitHub Actions trusted publisher for each of the eleven packages.
+4. Configure a GitHub Actions trusted publisher for each public package.
 5. Allow GitHub Actions to create pull requests in the repository's Actions settings.
 
 Each npm publisher uses owner `mia-cx`, repository `svartz`, workflow filename `release.yml`, and environment `npm-publish`.
@@ -96,10 +96,26 @@ It creates no tags or GitHub releases.
 Configure trusted publishers after bootstrap creates the packages.
 CI publication uses OIDC and needs no npm token secret.
 
+## Adding a package
+
+A new public package needs an npm package to hang its trusted publisher on before CI can publish it.
+Add it to `RELEASE_PACKAGES`, `scripts/check-release.mjs`, and the Changesets fixed group, at the group's current version.
+Before merging the release PR that first ships it, a maintainer creates the package with an empty placeholder, outside the repository:
+
+```sh
+mkdir placeholder && cd placeholder
+cp ../svartz/LICENSE .
+echo '{ "name": "@svartz/theme-mcp-docs", "version": "0.0.0", "license": "SEE LICENSE IN LICENSE" }' > package.json
+npm publish --access public
+npm deprecate @svartz/theme-mcp-docs@0.0.0 "Placeholder. Install 1.x."
+```
+
+Then configure the package's trusted publisher as above, and merge the release PR. CI's first real version becomes `latest`.
+
 ## Validation and retries
 
 `pnpm test:release` tests release scripts, registry checks, and real Changesets versioning.
-`pnpm release:check` builds and packs all eleven packages outside the monorepo.
+`pnpm release:check` builds and packs every public package outside the monorepo.
 It checks licenses, exports, types, runtime files, and resolved dependency ranges.
 It installs a fresh CLI consumer and builds and serves its static site.
 It checks a mounted Vite 8 host, protected SVX, emitted CSS, and Svelte types.
