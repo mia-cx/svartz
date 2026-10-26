@@ -17,6 +17,7 @@
 		formatDate,
 		isoDate,
 		LinkPreviews,
+		PageActions,
 		readingTime,
 		SearchDialog,
 		tagHrefFor,
@@ -99,6 +100,7 @@
 					{#if date}<time datetime={isoDate(date)}>{formatDate(date)}</time>{/if}
 					<span>{readingTime(post.readingTimeMinutes)}</span>
 				</p>
+				{#if post.markdownHref}<PageActions href={post.markdownHref} />{/if}
 			</header>
 			{#if cover}
 				<figure class="post-cover">
@@ -261,6 +263,10 @@
 		justify-content: center;
 		gap: var(--sv-space-3);
 		margin: var(--sv-space-4) 0 0;
+	}
+
+	.post-head :global(.sv-page-actions) {
+		justify-content: center;
 	}
 
 	.post-cover {

@@ -16,6 +16,7 @@
 		count,
 		DescText,
 		LinkPreviews,
+		PageActions,
 		SearchDialog,
 		themeSettings,
 		type ThemePageProps
@@ -81,6 +82,7 @@
 				<div class="reference" data-sv-preview>
 					<OperationDoc {operation} title={entry.title} {modelHref} entries={vault.entries}>
 						{#if entry.description}<p class="summary"><DescText value={entry.description} entries={vault.entries} /></p>{/if}
+						{#if entry.markdownHref}<PageActions href={entry.markdownHref} />{/if}
 						<div class="sv-prose note-body">{@render children?.()}</div>
 					</OperationDoc>
 				</div>
@@ -95,6 +97,7 @@
 						<p class="sv-label">Model</p>
 						<h1>The <code>{model.name}</code> object</h1>
 						{#if entry.description}<p class="summary"><DescText value={entry.description} entries={vault.entries} /></p>{/if}
+						{#if entry.markdownHref}<PageActions href={entry.markdownHref} />{/if}
 					</header>
 					<div class="sv-prose note-body">{@render children?.()}</div>
 					<section aria-labelledby="attributes">
@@ -111,6 +114,7 @@
 				<header class="head">
 					<h1>{entry.title}</h1>
 					{#if entry.description}<p class="summary"><DescText value={entry.description} entries={vault.entries} /></p>{/if}
+					{#if entry.markdownHref}<PageActions href={entry.markdownHref} />{/if}
 				</header>
 				<div class="sv-prose note-body">{@render children?.()}</div>
 				{#if entry.slug === 'index'}

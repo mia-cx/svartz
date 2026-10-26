@@ -82,6 +82,8 @@ export async function fetchPreview(href: string): Promise<{ nodes: Element[]; sc
 	const nodes = (await pending).map((node) => {
 		const clone = node.cloneNode(true) as Element;
 		for (const element of clone.querySelectorAll('[id]')) element.id = `sv-preview-${element.id}`;
+		// Page controls, such as the Markdown actions, lose their handlers in a clone.
+		for (const element of clone.querySelectorAll('[data-sv-preview-omit]')) element.remove();
 		clone.removeAttribute(PREVIEW_ATTRIBUTE);
 		return clone;
 	});
