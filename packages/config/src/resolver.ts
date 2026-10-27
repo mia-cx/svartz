@@ -52,6 +52,12 @@ const normalizeTheme = (
   return raw;
 };
 
+/** Project-relative themes resolve from the config directory; package ids stay as written. */
+const resolveThemeBase = (base: string, configDir: string): string =>
+  base.startsWith("./") || base.startsWith("../") || base.startsWith(".\\") || base.startsWith("..\\")
+    ? resolve(configDir, base.replaceAll("\\", "/"))
+    : base;
+
 const mergeThemes = (
   defaultTheme: VaultThemeConfig | undefined,
   vaultTheme: VaultThemeConfig | undefined,
@@ -63,10 +69,9 @@ const mergeThemes = (
   };
   return {
     ...theme,
-    base: theme.base.startsWith("./") || theme.base.startsWith("../") ||
-      theme.base.startsWith(".\\") || theme.base.startsWith("..\\")
-      ? resolve(configDir, theme.base.replaceAll("\\", "/"))
-      : theme.base,
+    base: typeof theme.base === "string"
+      ? resolveThemeBase(theme.base, configDir)
+      : theme.base.map((base) => resolveThemeBase(base, configDir)),
   };
 };
 

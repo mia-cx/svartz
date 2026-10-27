@@ -187,6 +187,16 @@ describe("VaultThemeConfigSchema", () => {
     expect(Either.isRight(result)).toBe(true);
   });
 
+  it("accepts a list of themes to compose", () => {
+    const theme = { base: ["@svartz/theme-api-docs", "@svartz/theme-mcp-docs"] };
+    const result = decode(VaultThemeConfigSchema, theme);
+    expect(Either.isRight(result) && result.right).toEqual(theme);
+  });
+
+  it("rejects an empty theme list", () => {
+    expect(Either.isLeft(decode(VaultThemeConfigSchema, { base: [] }))).toBe(true);
+  });
+
   it("rejects object theme without base", () => {
     const result = decode(VaultThemeConfigSchema, {
       colors: { accent: "red" },
