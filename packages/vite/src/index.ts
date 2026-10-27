@@ -302,14 +302,19 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     name: options.exposeVirtualModules === false ? `svartz:vite:${options.config.id}` : "svartz:vite",
     enforce: "post",
     config() {
-      const alias: Record<string, string> = options.exposeVirtualModules === false ? {} : {
-        "virtual:svartz/theme": getGeneratedRuntimeThemeModulePath(options.config),
-        "virtual:svartz/artifacts": getGeneratedRuntimeArtifactsModulePath(options.config),
-      };
-      Object.assign(alias, selectedThemeSources(options.config));
+      const virtualModules = options.exposeVirtualModules === false ? [] : [
+        { find: "virtual:svartz/theme", replacement: getGeneratedRuntimeThemeModulePath(options.config) },
+        { find: "virtual:svartz/artifacts", replacement: getGeneratedRuntimeArtifactsModulePath(options.config) },
+      ];
+      // Exact matches only: a string alias also captures subpaths, so `@svartz/theme-minimal`
+      // would rewrite another listed theme's `@svartz/theme-minimal/runtime` import.
+      const themeSources = Object.entries(selectedThemeSources(options.config)).map(([id, source]) => ({
+        find: new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}$`),
+        replacement: source,
+      }));
       return {
         resolve: {
-          alias,
+          alias: [...virtualModules, ...themeSources],
         },
       };
     },
