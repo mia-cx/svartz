@@ -1,22 +1,19 @@
 <!--
-	The generated part of a symbol page: signatures (tabs for overloads), type
-	parameters, parameters, returns, throws, hierarchy, and members. The note's
-	own Markdown (remarks, examples) renders between `lead` and `members`.
+	A symbol page, the `symbol` renderer's body: the kind badge, name, and
+	since; the summary, page actions, and the note's own Markdown (remarks,
+	examples); then the generated reference: signatures (tabs for overloads),
+	type parameters, parameters, returns, throws, hierarchy, and members.
 -->
 <script lang="ts">
-	import type { IndexEntry } from '@svartz/core';
-	import type { Snippet } from 'svelte';
 	import { DescText } from '@svartz/ui';
+	import type { RendererProps } from '@svartz/theme-minimal/runtime';
 	import KindBadge from './KindBadge.svelte';
 	import TypeText from './TypeText.svelte';
 	import { KIND_HEADINGS, type DocSymbol, type SymbolMember, type SymbolParameter } from '../symbols.js';
 
-	let {
-		symbol,
-		entries,
-		children
-	}: { symbol: DocSymbol; entries: readonly IndexEntry[]; children?: Snippet } = $props();
+	let { shell, data: symbol, children }: RendererProps<DocSymbol> = $props();
 
+	const entries = $derived(shell.vault.entries);
 	// The layout stays mounted across pages, so a chosen tab only counts for its own symbol.
 	// Raw, so `chosen.symbol` stays the same object as the prop rather than a proxy.
 	let chosen = $state.raw<{ symbol: DocSymbol; index: number }>();
@@ -61,6 +58,14 @@
 		</tbody>
 	</table>
 {/snippet}
+
+<header class="symbol-head">
+	<KindBadge kind={symbol.kind} />
+	<h1>{symbol.name}</h1>
+	{#if symbol.since}<span class="sv-label">Since {symbol.since}</span>{/if}
+</header>
+
+{@render children()}
 
 {#if symbol.signatures.length > 0}
 	<div class="signatures">
@@ -123,8 +128,6 @@
 	</section>
 {/if}
 
-{@render children?.()}
-
 {#if symbol.extends.length > 0 || symbol.implements.length > 0}
 	<section aria-labelledby="hierarchy">
 		<h2 id="hierarchy">Hierarchy</h2>
@@ -182,8 +185,26 @@
 		font-weight: 700;
 	}
 
+	.symbol-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--sv-space-3);
+		margin-block-end: var(--sv-space-3);
+	}
+
+	h1 {
+		margin: 0;
+		color: var(--sv-ink);
+		font-family: var(--sv-font-mono);
+		font-size: var(--sv-step-3);
+		font-weight: 700;
+		line-height: 1.1;
+		overflow-wrap: anywhere;
+	}
+
 	.signatures {
-		margin-block-end: var(--sv-space-5);
+		margin-block: var(--sv-space-6) var(--sv-space-5);
 	}
 
 	.overloads {
