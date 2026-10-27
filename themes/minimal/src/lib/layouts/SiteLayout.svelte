@@ -130,16 +130,24 @@
 	const Footer = $derived(primary.regions?.footer ?? SiteFooter);
 	const Frame = $derived(primary.frame ?? ColumnsFrame);
 
-	/** The list page for this route: a folder note's theme's for a folder, else the primary theme's. */
+	/**
+	 * The list page for this route: a folder note's theme's for a folder, else
+	 * the primary theme's. The runtime serves `/` and a folder's own URL
+	 * (`/posts/`) through the note route, as the home note or as the folder's
+	 * page in `children`, so those are recognised by what they show.
+	 */
 	const ListPage = $derived.by(() => {
-		const name = props.match ? LIST_PAGES[props.match.route.id] : undefined;
-		const home = props.match?.route.id === 'home' ? primary.pages?.home : undefined;
-		if (home) return home;
-		if (!name) return undefined;
+		const route = props.match?.route.id;
+		if (route === 'home' || props.entry?.slug === 'index') return primary.pages?.home;
 		const slug = props.match?.params.slug;
-		const theme = name === 'folder' && slug ? folderTheme(composition, folderNotes(slug)) : primary;
-		return theme.pages?.[name] ?? primary.pages?.[name];
+		const folder =
+			route === 'folder' ? slug : route === 'note' && !props.entry && props.vault.folders.some((item) => item.slug === slug) ? slug : undefined;
+		if (folder) return folderTheme(composition, folderNotes(folder)).pages?.folder ?? primary.pages?.folder;
+		const name = route ? LIST_PAGES[route] : undefined;
+		return name ? primary.pages?.[name] : undefined;
 	});
+	/** Plain notes render with their theme's `note`, the primary theme's when no `theme:` names another. */
+	const Note = $derived(props.entry && !choice?.renderer ? (choice?.theme ?? primary).note : undefined);
 	// Notes only: list pages and 404s must not open discussions.
 	const comments = $derived(props.entry?.page.comments ? themeSettings(props.themeConfig).comments : undefined);
 </script>
@@ -150,10 +158,17 @@
 {#snippet pageFoot()}<PageFoot {shell} />{/snippet}
 {#snippet footer()}<Footer {shell} />{/snippet}
 
-{#snippet intro()}
+{#snippet summary()}
 	{#if props.entry?.description}<p class="summary"><DescText value={props.entry.description} entries={props.vault.entries} /></p>{/if}
+{/snippet}
+{#snippet actions()}
 	{#if props.entry?.markdownHref}<PageActions href={props.entry.markdownHref} />{/if}
+{/snippet}
+{#snippet content()}
 	<div class="sv-prose note-body">{@render children?.()}</div>
+{/snippet}
+{#snippet intro()}
+	{@render summary()}{@render actions()}{@render content()}
 {/snippet}
 
 {#snippet body()}
@@ -161,10 +176,9 @@
 		<ListPage {...props} />
 	{:else if props.entry && choice?.renderer}
 		{@const Body = choice.renderer.body}
-		<Body {shell} data={choice.data} entry={props.entry}>{@render intro()}</Body>
-	{:else if props.entry && choice?.theme.note}
-		{@const Note = choice.theme.note}
-		<Note {shell} data={undefined} entry={props.entry}>{@render intro()}</Note>
+		<Body {shell} data={choice.data} entry={props.entry} {summary} {actions} {content}>{@render intro()}</Body>
+	{:else if props.entry && Note}
+		<Note {shell} data={undefined} entry={props.entry} {summary} {actions} {content}>{@render intro()}</Note>
 	{:else if props.entry}
 		<article class="sv-prose">{@render children?.()}</article>
 	{:else}
@@ -176,7 +190,7 @@
 {#snippet aside()}
 	{#if props.entry && choice?.renderer?.aside}
 		{@const RendererAside = choice.renderer.aside}
-		<RendererAside {shell} data={choice.data} entry={props.entry}>{@render intro()}</RendererAside>
+		<RendererAside {shell} data={choice.data} entry={props.entry} {summary} {actions} {content}>{@render intro()}</RendererAside>
 	{:else}
 		<Aside {shell} />
 	{/if}

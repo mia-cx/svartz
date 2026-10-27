@@ -23,6 +23,12 @@ describe('composeThemes', () => {
 		expect(theme.routes.map((route) => route.id)).toEqual(['home', 'tags-index', 'tag', 'feed', 'folders-index', 'folder', 'note']);
 	});
 
+	it("serves the primary theme's own 404 page", () => {
+		const NotFound = (() => null) as never;
+		expect(composeRuntime([{ id: '@svartz/theme-blog', pages: { notFound: NotFound } }]).layouts.notFoundPage).toEqual({ default: NotFound });
+		expect(composeRuntime([api]).layouts.notFoundPage).toEqual(composeRuntime([]).layouts.notFoundPage);
+	});
+
 	it('treats a manifest without a composition as minimal alone', () => {
 		expect(compositionOf(undefined).extensions.map((extension) => extension.id)).toEqual(['@svartz/theme-minimal']);
 	});

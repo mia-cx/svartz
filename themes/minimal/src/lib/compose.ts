@@ -54,7 +54,11 @@ export function composeRuntimeTheme(
 	const components = Object.fromEntries(
 		[...ordered].reverse().flatMap((extension) => Object.entries(extension.components ?? {}).map(([name, component]) => [name, { default: component }]))
 	);
-	const base = createMinimalTheme({ ...modules, components: { ...modules.components, ...components } }, config);
+	const notFound = composition.primary.pages?.notFound;
+	const base = createMinimalTheme(
+		{ ...modules, notFoundPage: notFound ? { default: notFound } : modules.notFoundPage, components: { ...modules.components, ...components } },
+		config
+	);
 	return { ...base, ...identityOf(ordered, identity), hooks: { [COMPOSITION]: composition } };
 }
 

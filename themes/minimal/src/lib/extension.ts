@@ -69,8 +69,14 @@ export interface FrameProps extends RegionProps {
 export interface RendererProps<T> extends RegionProps {
 	readonly data: T;
 	readonly entry: IndexEntry;
-	/** The page's description, page actions, and Markdown body, for the renderer to place under its own header. */
+	/** The page's description, page actions, and Markdown body together, for the renderer to place under its own header. */
 	readonly children: Snippet;
+	/** The parts of `children`, for a renderer that places them apart: the description, */
+	readonly summary: Snippet;
+	/** the Copy page and View as Markdown actions, */
+	readonly actions: Snippet;
+	/** and the page's Markdown. */
+	readonly content: Snippet;
 }
 
 /**
@@ -119,7 +125,7 @@ export interface ThemeChrome {
 export type RegionName = 'header' | 'navigation' | 'pageHead' | 'aside' | 'pageFoot' | 'footer';
 
 /** The list pages a theme can provide; each receives the usual page props. */
-export type ListPageName = 'home' | 'tags' | 'tag' | 'folders' | 'folder' | 'feed';
+export type ListPageName = 'home' | 'tags' | 'tag' | 'folders' | 'folder' | 'feed' | 'notFound';
 
 /**
  * What a theme adds to theme-minimal. Everything is optional: minimal itself is
@@ -138,8 +144,9 @@ export interface ThemeExtension {
 	readonly frame?: Component<FrameProps>;
 	readonly regions?: Partial<Record<RegionName, Component<RegionProps>>>;
 	readonly renderers?: readonly PageRenderer[];
-	/** Renders a plain note the theme's way when `theme:` names this theme and no renderer claims the page. */
+	/** Renders a plain note the theme's way: every unclaimed note for the primary theme, else notes whose `theme:` names this one. */
 	readonly note?: Component<RendererProps<undefined>>;
+	/** List pages; the primary theme's apply, a folder's from its folder note's `theme:`. `notFound` is the primary theme's 404. */
 	readonly pages?: Partial<Record<ListPageName, Component<ThemePageProps>>>;
 	readonly chrome?: ThemeChrome;
 	/** Content components (`callout`, `codeBlock`, …) this theme overrides. */
