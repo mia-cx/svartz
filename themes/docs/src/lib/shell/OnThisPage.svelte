@@ -1,8 +1,15 @@
-<!-- Right-rail contents with the sections on screen marked. -->
+<!--
+	The right column: the page's contents with the sections on screen marked.
+	As the symbol renderer's right column it receives the symbol, and adds the
+	generated sections around the note's own headings.
+-->
 <script lang="ts">
-	import type { TocItem } from '../symbols.js';
+	import type { RegionProps } from '@svartz/theme-minimal/runtime';
+	import { symbolToc, type DocSymbol } from '../symbols.js';
 
-	let { items }: { items: readonly TocItem[] } = $props();
+	let { shell, data }: RegionProps & { data?: DocSymbol } = $props();
+
+	const items = $derived(data ? symbolToc(data, shell.toc) : shell.toc);
 
 	const shallowest = $derived(Math.min(...items.map((item) => item.depth)));
 	let visible = $state<ReadonlySet<string>>(new Set());
