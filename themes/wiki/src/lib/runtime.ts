@@ -2,7 +2,7 @@ import { defineTheme } from '@svartz/core';
 import type { MinimalThemeConfig } from '@svartz/theme-minimal';
 import { composeThemes, definePageRenderer, type ThemeExtension } from '@svartz/theme-minimal/runtime';
 import Article from './components/Article.svelte';
-import { wikiIdentity } from './identity.js';
+import { wikiIdentity } from './manifest.js';
 import AllPagesPage from './pages/AllPagesPage.svelte';
 import CategoryIndexPage from './pages/CategoryIndexPage.svelte';
 import CategoryPage from './pages/CategoryPage.svelte';

@@ -19,5 +19,5 @@ alwaysApply: false
 - All public packages use MCX v1.0. Keep the repository `LICENSE` in each package root and verify its packed text.
 - Every public package declares `repository` with `url` `https://github.com/mia-cx/svartz.git` and its own `directory`; npm provenance requires the URL, and the packed manifest is checked.
 - Before changing versioning or workflows, read `docs/releasing.md` for bootstrap, OIDC setup, and release authorization.
-- Theme manifest package versions follow Changesets. Keep their v1 contract versions separate.
+- Theme manifest package versions follow Changesets. Keep exactly one `version: 'x.y.z',` field in each theme's `src/lib/manifest.ts`, shared by its build and runtime extensions; `scripts/release-version.mjs` synchronizes that path. Keep their v1 contract versions separate.
 - Release checks must accept later fixed-group versions and build the packed Vite 8 Cloudflare host, including Worker and mounted note output.

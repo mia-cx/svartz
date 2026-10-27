@@ -1,6 +1,6 @@
 import { defineTheme } from '@svartz/core';
 import { composeThemes, type MinimalThemeConfig, type ThemeBuildExtension } from '@svartz/theme-minimal';
-import { wikiIdentity } from './identity.js';
+import { wikiIdentity } from './manifest.js';
 
 /** The wiki's Node-safe extension. It adds no build plugins of its own. */
 export const extensions: readonly ThemeBuildExtension[] = [wikiIdentity];
