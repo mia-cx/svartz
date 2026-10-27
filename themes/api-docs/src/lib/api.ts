@@ -300,7 +300,12 @@ function readingPlan(responses: readonly ApiResponse[]): 'redirect' | ReadGroup[
 		const reading = responseBody(response) ?? 'unknown';
 		groups.set(reading, [...(groups.get(reading) ?? []), response.status]);
 	}
-	const exact = (group: ReadGroup) => group.statuses.every((status) => /^\d+$/.test(status));
+	const isExact = (status: string) => /^\d+$/.test(status);
+	// A `2XX` range can still answer 204 or 205, which have no body to read.
+	if (successes.some((response) => !isExact(response.status))) {
+		groups.set('none', [...new Set([...(groups.get('none') ?? []), '204', '205'])]);
+	}
+	const exact = (group: ReadGroup) => group.statuses.every(isExact);
 	return [...groups].map(([reading, statuses]) => ({ reading, statuses })).sort((left, right) => Number(exact(right)) - Number(exact(left)));
 }
 
@@ -425,7 +430,7 @@ export function requestSnippets(
 		// Double quotes only where the shell must expand $TOKEN.
 		...headers.map(({ name, value, variable }) => (variable ? `  -H "${name}: ${value}$${variable}"` : `  -H ${shellQuote(`${name}: ${value}`)}`)),
 		...(json ? [`  -d ${shellQuote(json).replace(/\n/g, '\n  ')}`] : []),
-		...(raw !== undefined ? [`  --data-binary ${shellQuote(raw)}`] : []),
+		...(raw !== undefined ? [`  --data-raw ${shellQuote(raw)}`] : []),
 		...fields.map(([name, value]) => `  ${encoding === 'form' ? '--data-urlencode' : '--form-string'} ${shellQuote(`${name}=${value}`)}`),
 		...(binary ? [`  -o ${outputName(operation.responses)}`] : [])
 	].join(' \\\n');
@@ -447,7 +452,9 @@ export function requestSnippets(
 		...(encoding === 'multipart' ? ['  body: form,'] : []),
 		...(redirect ? ["  redirect: 'manual',"] : []),
 		'});',
-		...(redirect ? ["const location = response.headers.get('location');"] : readJavascript(plan))
+		...(redirect
+			? ['// Browsers hide redirect headers, so run this server-side (Node, Deno, Bun).', "const location = response.headers.get('location');"]
+			: readJavascript(plan))
 	].join('\n');
 
 	const pyHeaders = headers.map(

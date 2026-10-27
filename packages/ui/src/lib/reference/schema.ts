@@ -90,8 +90,6 @@ export function readSchema(raw: unknown): SchemaNode | undefined {
 		return { ...shared, anyOf: nonNull.map((type) => readSchema({ ...raw, ...SHARED_KEYWORDS, type })!) };
 	}
 	const [someOf, someAny] = [oneOf.filter((node) => !isNullType(node)), anyOf.filter((node) => !isNullType(node))];
-	const lone = someOf.length + someAny.length === 1 && !raw.properties && !raw.$ref ? (someOf[0] ?? someAny[0]) : undefined;
-	if (lone) return { ...lone, ...defined(shared) };
 	const required = Array.isArray(raw.required) ? raw.required.filter((name) => typeof name === 'string') : [];
 	const properties = isRecord(raw.properties)
 		? Object.entries(raw.properties).flatMap(([name, value]): SchemaProperty[] => {
@@ -100,7 +98,7 @@ export function readSchema(raw: unknown): SchemaNode | undefined {
 			})
 		: undefined;
 	const values = isScalar(raw.const) ? [raw.const] : Array.isArray(raw.enum) ? raw.enum.filter(isScalar) : undefined;
-	return {
+	const node: SchemaNode = {
 		...shared,
 		type: nonNull[0] ?? (types.length ? 'null' : undefined),
 		format: text(raw.format),
@@ -114,6 +112,16 @@ export function readSchema(raw: unknown): SchemaNode | undefined {
 		discriminator: isRecord(raw.discriminator) ? text(raw.discriminator.propertyName) : undefined,
 		constraints: constraintsOf(raw),
 		pattern: text(raw.pattern)
+	};
+	// A union left with one alternative is that alternative, keeping the keywords written beside the union.
+	const [lone, ...others] = [...someOf, ...someAny];
+	if (!lone || others.length > 0 || node.properties || node.ref) return node;
+	const beside = defined({ ...node, oneOf: undefined, anyOf: undefined, constraints: undefined, nullable: undefined });
+	return {
+		...lone,
+		...beside,
+		nullable: lone.nullable || node.nullable,
+		constraints: [...new Set([...(lone.constraints ?? []), ...(node.constraints ?? [])])]
 	};
 }
 

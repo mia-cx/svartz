@@ -55,6 +55,8 @@ beforeAll(async () => {
 					: json(415, { type });
 			case 'GET /maybe':
 				return url.searchParams.get('empty') === '1' ? response.writeHead(204).end() : json(200, { full: true });
+			case 'POST /echo':
+				return response.writeHead(200, { 'content-type': 'text/plain' }).end(body);
 			case 'GET /authorize':
 				return response.writeHead(302, { location: '/callback?code=c_1' }).end();
 		}
@@ -191,6 +193,33 @@ const CASES: { name: string; op: () => RestOperation; javascript: string; python
 		python: 'data',
 		expected: empty === '1' ? null : { full: true }
 	})),
+	{
+		name: 'a 2XX range answering 204',
+		op: () =>
+			operation({
+				method: 'get',
+				path: '/maybe',
+				parameters: [{ name: 'empty', in: 'query', type: 'string', example: '1' }],
+				responses: { '2XX': { contentType: 'application/json' } }
+			}),
+		javascript: 'data',
+		python: 'data',
+		expected: null
+	},
+	{
+		name: 'a text body starting with @, sent as written',
+		op: () =>
+			operation({
+				method: 'post',
+				path: '/echo',
+				requestBody: { contentType: 'text/plain', example: '@hello' },
+				responses: { 200: { contentType: 'text/plain' } }
+			}),
+		javascript: 'text',
+		python: 'text',
+		expected: '@hello',
+		curl: (output) => expect(output).toBe('@hello')
+	},
 	{
 		name: 'a redirect, reading Location',
 		op: () => operation({ method: 'get', path: '/authorize', responses: { 302: { description: 'To the callback.' } } }),

@@ -108,7 +108,9 @@
 	{/if}
 	{#if branches}
 		<div class="union" class:nested={depth > 0}>
-			<p class="union-label">{body.oneOf ? 'One of the following' : 'Any of the following'}</p>
+			<!-- A root schema or array items have no field row above to carry these. -->
+			{#if depth === 0 || body !== schema}{@render details(body)}{/if}
+			<p class="union-label">{body.oneOf ? 'One of the following' : 'Any of the following'}{body.nullable ? ', or null' : ''}</p>
 			<ul class="tree">
 				{#each branches as node, index (index)}
 					<li>

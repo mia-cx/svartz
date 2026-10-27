@@ -7,7 +7,7 @@ operation:
   name: set_notification
   endpoint: https://mcp.harbour.example/mcp
   auth: { scheme: bearer, description: A dashboard token with `shelter:manage`. }
-  annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false }
+  annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: true }
   inputSchema:
     type: object
     required: [webhook_url]
@@ -15,7 +15,7 @@ operation:
       webhook_url:
         description: "The webhook's https address, or `null` to turn notifications off."
         anyOf:
-          - { type: string, format: uri, maxLength: 2048 }
+          - { type: string, format: uri, pattern: "^https://", maxLength: 2048 }
           - { type: "null" }
   outputSchema: { $ref: Notification }
   examples:

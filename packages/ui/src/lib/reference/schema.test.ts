@@ -51,6 +51,13 @@ describe('readSchema', () => {
 		expect(exampleFromSchema(readSchema({ type: 'null' })!, {})).toBeNull();
 	});
 
+	it('keeps the limits, pattern, and allowed values written beside a folded union', () => {
+		const slug = readSchema({ maxLength: 64, pattern: '^[a-z]+$', anyOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] });
+		expect(slug).toMatchObject({ type: 'string', nullable: true, pattern: '^[a-z]+$', constraints: ['at least 1 character', 'at most 64 characters'] });
+		const pinned = readSchema({ type: 'string', enum: ['allowed'], anyOf: [{ type: 'string' }, { type: 'null' }] })!;
+		expect([pinned.enum, exampleFromSchema(pinned, {})]).toEqual([['allowed'], 'allowed']);
+	});
+
 	it('describes length and range limits in words, and keeps the pattern as written', () => {
 		expect(readSchema({ type: 'string', maxLength: 100 })?.constraints).toEqual(['at most 100 characters']);
 		const id = readSchema({ type: 'string', minLength: 1, maxLength: 64, pattern: '^[a-z]+$' });

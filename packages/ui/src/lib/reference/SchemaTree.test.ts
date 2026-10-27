@@ -85,6 +85,19 @@ describe('unions', () => {
 		expect(text).toMatch(/<a class="type[^"]*" href="\/schemas\/TokenResponse"[^>]*>TokenResponse<\/a>/);
 	});
 
+	it("shows a root union's own description, default, and nullability above its alternatives", () => {
+		const text = renderText({
+			description: 'Where deliveries go.',
+			default: null,
+			oneOf: [
+				{ type: 'object', properties: { kind: { const: 'none' } } },
+				{ type: 'object', properties: { kind: { const: 'webhook' } } },
+				{ type: 'null' }
+			]
+		});
+		expect(text).toMatch(/Where deliveries go\..*Default.*null.*One of the following, or null/s);
+	});
+
 	it('keeps scalar unions on one line', () => {
 		const text = renderText({ type: 'object', properties: { id: { anyOf: [{ type: 'string' }, { type: 'number' }], nullable: true } } });
 		expect(text).toContain('string | number | null');
