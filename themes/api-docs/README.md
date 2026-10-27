@@ -26,15 +26,12 @@ vaults: [{
 | REST operation | Method and path (copyable), auth, the note's own Markdown, parameters by location with defaults and allowed values, request body schema, responses by status with their schemas, and "Defined in" source links. Examples: the request in cURL, JavaScript, and Python (the choice is remembered), and a response per status |
 | GraphQL operation | Kind, name, arguments, return type, the note's Markdown. Examples: the endpoint, query, variables, and response |
 | Model | "The X object": the note's Markdown, an attribute tree, and a generated JSON example |
-| Guide | Any other note: plain prose |
-| Home | The home note, then one card per resource |
-| Resource | `/folders/:resource/` (or your `routes.folders`): models, then operations in path and method order |
-| Reference | `/folders/`: every resource and its operations |
-| Recently updated | `/feed/` |
+| Guide | Any other note: its description, prose, and contents on the right |
+| Lists | theme-minimal's tag, folder, and feed pages |
 
-Each top-level folder is one sidebar section, and each folder inside it a group. A folder note (`graphql/index.md`) names its section, so `GraphQL` doesn't read as `Graphql`. An `order` number in a page's frontmatter, or in a folder note for its section or group, sorts it first, lowest first. Operations list by path beside a fixed-width method badge, and the filter above the sidebar narrows it as you type; Enter opens the first match.
+The theme extends `@svartz/theme-minimal`, so the sidebar is minimal's explorer: folders nest at any depth under their own names, a folder's name opens its page, and open folders persist across visits. A folder note (`graphql/index.md`) names its folder, so `GraphQL` doesn't read as `Graphql`. An `order` number in a page's frontmatter, or a folder note's for its folder, sorts it first, lowest first. Operations list by path beside a fixed-width method badge, and the filter above the explorer narrows it as you type; Enter opens the first match. Every page ends with previous and next links in explorer order.
 
-To document HTTP endpoints and MCP tools in one site, combine this theme's `apiRenderers` (from `@svartz/theme-api-docs/runtime`) with `@svartz/theme-mcp-docs`'s. [Reference themes](../../docs/reference-themes.md) shows how.
+To document HTTP endpoints and MCP tools in one site, compose this theme's `extensions` with `@svartz/theme-mcp-docs`'s. [Reference themes](../../docs/reference-themes.md#compose-them) shows how.
 
 ## Frontmatter
 

@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { RELEASE_PACKAGES as packages } from './release-packages.mjs';
+import { majorOf, readReleasePackages, RELEASE_LINE, RELEASE_PACKAGES as packages } from './release-packages.mjs';
 
 /** Every package a changeset may declare a bump for; everything else is ignored by releases. */
 export const RELEASE_PACKAGES = new Set(packages.map(([name]) => name));
@@ -27,8 +27,12 @@ export function parseChangeset(content, path = 'changeset.md') {
 	return { frontmatter: match[1], body: match[2].trim() };
 }
 
-/** Validate one changeset file; throws with the offending path on every problem. */
-export function validateChangeset(content, path = 'changeset.md') {
+/**
+ * Validate one changeset file; throws with the offending path on every problem.
+ * `currentMajor` is the release group's major version: `major` is allowed only
+ * while it is below `RELEASE_LINE`.
+ */
+export function validateChangeset(content, path = 'changeset.md', currentMajor = majorOf(readReleasePackages()[0].version)) {
 	const { frontmatter, body } = parseChangeset(content, path);
 	const declarations = frontmatter.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
 		const match = DECLARATION.exec(line);
@@ -36,9 +40,9 @@ export function validateChangeset(content, path = 'changeset.md') {
 		return match;
 	});
 	assert.ok(declarations.length > 0, `${path}: declare a patch, minor, or major bump`);
-	for (const [, name, bump] of declarations) {
-		assert.notEqual(bump, 'major',
-			`${path}: Svartz v1 releases do not take major bumps; a 2.0 release needs a deliberate change to this check`);
+	for (const [, , bump] of declarations) {
+		assert.ok(bump !== 'major' || currentMajor < RELEASE_LINE,
+			`${path}: Svartz ${RELEASE_LINE}.x releases do not take major bumps; a ${RELEASE_LINE + 1}.0 release raises RELEASE_LINE in scripts/release-packages.mjs`);
 	}
 	for (const [, name] of declarations) {
 		assert.ok(

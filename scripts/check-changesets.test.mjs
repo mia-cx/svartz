@@ -7,6 +7,7 @@ import {
 	parseChangeset,
 	validateChangeset
 } from './check-changesets.mjs';
+import { RELEASE_LINE } from './release-packages.mjs';
 
 const valid = `---
 '@svartz/core': patch
@@ -26,11 +27,10 @@ test('validateChangeset accepts released packages with patch or minor bumps', ()
 	validateChangeset(valid, 'x.md');
 });
 
-test('validateChangeset rejects major bumps while releases stay on 1.x', () => {
-	assert.throws(
-		() => validateChangeset(`---\n'@svartz/ui': major\n---\nShip it.\n`, 'bad.md'),
-		/do not take major bumps/
-	);
+test('validateChangeset takes a major bump only to reach the release line', () => {
+	const major = `---\n'@svartz/ui': major\n---\nShip it.\n`;
+	validateChangeset(major, 'two.md', RELEASE_LINE - 1);
+	assert.throws(() => validateChangeset(major, 'bad.md', RELEASE_LINE), /do not take major bumps; a \d+\.0 release raises RELEASE_LINE/);
 });
 
 test('validateChangeset rejects malformed files', () => {
