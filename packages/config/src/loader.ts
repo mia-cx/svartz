@@ -17,7 +17,6 @@ import {
   VaultIdConflict,
   VaultPathInvalid,
 } from "./types/index";
-import { getPackageVersion } from "./utils";
 
 const CONFIG_FILENAMES = ["svartz.config", ".svartzrc"];
 const CONFIG_EXTENSIONS = [".ts", ".mjs", ".js"] as const;
@@ -43,8 +42,15 @@ const usesNativeEsm = async (configPath: string): Promise<boolean> => {
 };
 
 /**
+ * The config file format's major version, the one `version` in `svartz.config.ts`
+ * names. It changes only when a config written for the old format stops working,
+ * not with each package major: a 1.x config still loads under Svartz 2.
+ */
+export const CONFIG_FORMAT_MAJOR = 1;
+
+/**
  * Parse (validate) a raw JS object against the config schema, then check that the
- * major version matches the version this package supports.
+ * major version matches the config format this package reads.
  * @param raw - The raw JS object to parse.
  * @returns The parsed SvartzConfig.
  */
@@ -62,12 +68,11 @@ export const parseConfig = (
       ),
     );
 
-    const supportedMajor = semverMajor(getPackageVersion(import.meta.url));
     const major = semverMajor(config.version);
-    if (major !== supportedMajor) {
+    if (major !== CONFIG_FORMAT_MAJOR) {
       return yield* new ConfigDecodeFailed({
         issues: [],
-        message: `Incompatible config version: major ${major} (expected ${supportedMajor}). Config version "${config.version}" is not compatible with this version of @svartz/config.`,
+        message: `Incompatible config version: major ${major} (expected ${CONFIG_FORMAT_MAJOR}). Config version "${config.version}" is not compatible with this version of @svartz/config.`,
       });
     }
 
