@@ -1,0 +1,29 @@
+/*
+ * Wikipedia's article prose, for any note inside `.wiki-prose`: the wiki's
+ * frame and its article renderer, which may render inside another theme.
+ */
+
+.wiki-prose .sv-prose {
+	max-inline-size: none;
+}
+
+/* Boxed blocks stay beside a floated infobox instead of running under it. */
+.wiki-prose .sv-prose :is(.sv-callout, .sv-code, .svartz-embed) {
+	overflow: hidden;
+}
+
+/* A rule under each second-level heading; flow-root keeps it beside a floated infobox, not under it. */
+.wiki-prose .sv-prose h2 {
+	display: flow-root;
+	padding-block-end: var(--sv-space-1);
+	border-block-end: var(--sv-rule-width) solid var(--sv-rule);
+}
+
+.wiki-prose .sv-prose .footnotes::before {
+	content: 'References';
+	display: block;
+	margin-block-end: var(--sv-space-2);
+	color: var(--sv-ink);
+	font-size: var(--sv-step-3);
+	font-weight: 700;
+}

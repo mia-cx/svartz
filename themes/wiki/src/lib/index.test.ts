@@ -4,6 +4,19 @@ import createNodeTheme from './index.js';
 import createRuntimeTheme from './runtime.js';
 
 describe('@svartz/theme-wiki manifests', () => {
+	it("is the wiki on minimal's routes, in both manifests", () => {
+		for (const theme of [createRuntimeTheme(), createNodeTheme()]) {
+			expect([theme.id, theme.displayName]).toEqual(['@svartz/theme-wiki', 'Svartz Wiki']);
+			expect(theme.routes.map((route) => route.id)).toEqual(['home', 'tags-index', 'tag', 'feed', 'folders-index', 'folder', 'note']);
+		}
+	});
+
+	it('honours renamed list routes', () => {
+		const theme = createNodeTheme({ routes: { tags: 'categories', feed: 'recent' } });
+		expect(theme.routes.find((route) => route.id === 'tags-index')?.pattern).toBe('/categories');
+		expect(theme.routes.find((route) => route.id === 'feed')?.pattern).toBe('/recent');
+	});
+
 	it('loads every layout, route page, and component for SSR', async () => {
 		const theme = await materializeTheme(createRuntimeTheme());
 		const modules = [

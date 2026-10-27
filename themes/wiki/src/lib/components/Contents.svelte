@@ -37,7 +37,8 @@
 </script>
 
 {#if items.length > 0}
-	<nav class="contents" aria-labelledby="contents-heading">
+	<!-- Not `.contents`: that is a Tailwind utility (`display: contents`) in minimal's stylesheet. -->
+	<nav class="article-contents" aria-labelledby="contents-heading">
 		<h2 id="contents-heading" class="sv-section-title">Contents</h2>
 		<ol>
 			<li><a href="#top">(Top)</a></li>
@@ -54,7 +55,7 @@
 {/if}
 
 <style>
-	.contents {
+	.article-contents {
 		font-size: var(--sv-step--1);
 	}
 
