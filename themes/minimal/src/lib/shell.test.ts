@@ -1,6 +1,8 @@
-import { buildExplorerTree, type ExplorerItem } from '@svartz/ui';
+import { buildExplorerTree, folderLayout, type ExplorerItem } from '@svartz/ui';
 import { describe, expect, it } from 'vitest';
-import { adjacentPages, explorerNotes, explorerTrail, filterExplorer, readingOrder } from './shell.js';
+import type { PageRenderer, ThemeExtension } from './extension.js';
+import { choosePage } from './select.js';
+import { adjacentPages, explorerNotes, explorerTrail, filterExplorer, physicalFolder, readingOrder } from './shell.js';
 
 interface Note {
 	slug: string;
@@ -82,5 +84,32 @@ describe('the explorer tree with theme rows', () => {
 		expect(explorerNotes(filterExplorer(tree, 'authentication')).map((node) => node.title)).toEqual(['Get a challenge', 'Exchange a token grant']);
 		expect(explorerNotes(filterExplorer(tree, 'tool')).map((node) => node.title)).toEqual(['Get your profile']);
 		expect(filterExplorer(tree, 'webhook')).toEqual([]);
+	});
+});
+
+describe('a hidden note outside the folder records', () => {
+	// Public `guides/index.md` says `theme: reference`, public `guides/section/index.md` says `theme: minimal`,
+	// and an unlocked hidden `guides/section/index.mdx` collided into the slug `guides/section-2`.
+	const listed = [
+		note('guides/index.md', 'Guides', undefined, { theme: 'reference' }),
+		note('guides/section/index.md', 'Section', undefined, { theme: 'minimal' })
+	];
+	const guides = [folder(listed, 'guides', 'Guides'), folder(listed, 'guides/section', 'Section')];
+	const hidden = { slug: 'guides/section-2', title: 'Hidden', path: 'guides/section/index.mdx', href: '/guides/section-2/', properties: { model: { name: 'Secret' } } };
+	const layout = folderLayout(listed, guides);
+
+	it('sits in the folder its file is in, not the one its suffixed slug suggests', () => {
+		expect(layout.folderOf(hidden.slug)).toBeUndefined();
+		expect(physicalFolder(hidden, listed, layout.folderOf)).toBe('guides/section');
+	});
+
+	it("takes the nearest folder note's theme over another theme's detection", () => {
+		const schema: PageRenderer = { id: 'schema', detect: (properties) => properties.model, body: (() => null) as never };
+		const reference: ThemeExtension = { id: '@acme/reference', name: 'reference', renderers: [schema] };
+		const minimal: ThemeExtension = { id: '@svartz/theme-minimal', name: 'minimal' };
+		const site = { primary: reference, extensions: [reference, minimal] };
+		const folderNotes = ['guides/section', 'guides'].flatMap((slug) => layout.noteOf(slug) ?? []) as Parameters<typeof choosePage>[2];
+		// A plain note in minimal's style: no schema renderer.
+		expect(choosePage(site, hidden, folderNotes)).toEqual({ theme: minimal });
 	});
 });

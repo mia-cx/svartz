@@ -28,7 +28,7 @@
 	import { compositionOf } from '../compose.js';
 	import type { ListPageName, ShellState, ThemeChrome } from '../extension.js';
 	import { choosePage, folderTheme } from '../select.js';
-	import { adjacentPages, explorerTrail, readingOrder } from '../shell.js';
+	import { adjacentPages, explorerTrail, physicalFolder, readingOrder } from '../shell.js';
 	import Explorer from '../components/Explorer.svelte';
 	import ColumnsFrame from '../shell/ColumnsFrame.svelte';
 	import Masthead from '../shell/Masthead.svelte';
@@ -93,11 +93,9 @@
 		const entry = props.entry;
 		if (!entry) return undefined;
 		if (props.vault.entries.includes(entry)) return pages.get(entry);
-		// Hidden slugs are left out of the folder records, so the deepest folder whose slug prefixes it is its home.
-		const home = props.vault.folders
-			.filter((folder) => entry.slug.startsWith(`${folder.slug}/`))
-			.reduce<string | undefined>((deepest, folder) => (folder.slug.length > (deepest?.length ?? -1) ? folder.slug : deepest), undefined);
-		return choosePage(composition, entry, folderNotes(layout.folderOf(entry.slug) ?? home, entry));
+		// The folder records leave hidden notes out, so the note's file decides which folder notes cascade.
+		const folder = layout.folderOf(entry.slug) ?? physicalFolder(entry, props.vault.entries, layout.folderOf);
+		return choosePage(composition, entry, folderNotes(folder, entry));
 	});
 
 	let drawer = $state(false);

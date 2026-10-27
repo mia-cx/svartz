@@ -53,6 +53,30 @@ export function filterExplorer<T extends UiIndexEntry>(tree: readonly ExplorerNo
 	return prune(tree, []);
 }
 
+const directoryOf = (path: string) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
+
+/**
+ * The folder a note sits in when the folder records don't list it, as for an
+ * unlocked hidden note. Its published slug can't tell (a collision may
+ * suffix it: `guides/section-2`), so its file's directory decides: the folder
+ * of a listed note in the same directory, else in the nearest one above.
+ */
+export function physicalFolder<T extends UiIndexEntry>(
+	entry: Pick<T, 'path'>,
+	listed: readonly T[],
+	folderOf: (slug: string) => string | undefined
+): string | undefined {
+	if (!entry.path) return undefined;
+	for (let directory = directoryOf(entry.path); directory; directory = directoryOf(directory)) {
+		for (const note of listed) {
+			if (note.path === undefined || directoryOf(note.path) !== directory) continue;
+			const folder = folderOf(note.slug);
+			if (folder !== undefined) return folder;
+		}
+	}
+	return undefined;
+}
+
 /** Every note in the tree, in order. */
 export const explorerNotes = <T extends UiIndexEntry>(tree: readonly ExplorerNode<T>[]): ExplorerNode<T>[] =>
 	tree.flatMap((node) => (node.isFolder ? explorerNotes(node.children) : [node]));
