@@ -113,13 +113,15 @@ export function readSchema(raw: unknown): SchemaNode | undefined {
 		constraints: constraintsOf(raw),
 		pattern: text(raw.pattern)
 	};
-	// A union left with one alternative is that alternative, keeping the keywords written beside the union.
+	// A union left with one alternative is that alternative. Keywords written beside the union fill
+	// what the alternative leaves out, and the union's title, description, default, and example win.
 	const [lone, ...others] = [...someOf, ...someAny];
 	if (!lone || others.length > 0 || node.properties || node.ref) return node;
 	const beside = defined({ ...node, oneOf: undefined, anyOf: undefined, constraints: undefined, nullable: undefined });
 	return {
-		...lone,
 		...beside,
+		...defined(lone),
+		...defined({ ...shared, nullable: undefined }),
 		nullable: lone.nullable || node.nullable,
 		constraints: [...new Set([...(lone.constraints ?? []), ...(node.constraints ?? [])])]
 	};

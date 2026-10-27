@@ -58,6 +58,16 @@ describe('readSchema', () => {
 		expect([pinned.enum, exampleFromSchema(pinned, {})]).toEqual([['allowed'], 'allowed']);
 	});
 
+	it("keeps the folded alternative's own structure over the wrapper's", () => {
+		const links = readSchema({
+			type: 'array',
+			items: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+			anyOf: [{ type: 'array', items: { type: 'object', required: ['url'], properties: { url: { type: 'string', example: 'https://a.example' } } } }, { type: 'null' }]
+		})!;
+		expect(links.items?.properties?.map(({ name, required }) => [name, required])).toEqual([['url', true]]);
+		expect(exampleFromSchema(links, {})).toEqual([{ url: 'https://a.example' }]);
+	});
+
 	it('describes length and range limits in words, and keeps the pattern as written', () => {
 		expect(readSchema({ type: 'string', maxLength: 100 })?.constraints).toEqual(['at most 100 characters']);
 		const id = readSchema({ type: 'string', minLength: 1, maxLength: 64, pattern: '^[a-z]+$' });
