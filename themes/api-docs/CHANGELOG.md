@@ -1,5 +1,17 @@
 # @svartz/theme-api-docs
 
+## 2.1.0
+
+### Minor Changes
+
+- 65ac6c4: WebSocket endpoints and browser routes render as reference operations. `operation.protocol: websocket` shows a `WS` badge and the path, the upgrade's parameters and handshake responses, `messages` by direction, and `close` codes, with connection examples in websocat, JavaScript, and Python. `client: browser` on a REST operation shows its request as an HTML form and raw HTTP in place of cURL, fetch, and requests. Responses take `headers`, shown on the page and as an HTTP status line in the examples, and a path with a query joins its query parameters with `&`.
+
+### Patch Changes
+
+- @svartz/core@2.1.0
+  - @svartz/ui@2.1.0
+  - @svartz/theme-minimal@2.1.0
+
 ## 2.0.0
 
 ### Major Changes

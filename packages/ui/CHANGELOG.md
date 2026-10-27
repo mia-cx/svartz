@@ -1,5 +1,12 @@
 # @svartz/ui
 
+## 2.1.0
+
+### Patch Changes
+
+- @svartz/core@2.1.0
+  - @svartz/plugins@2.1.0
+
 ## 2.0.0
 
 ### Major Changes
