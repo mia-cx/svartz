@@ -22,13 +22,19 @@ it("keeps host Vite settings and supplies aliases for the secondary Kit build", 
 
   const config = await wrapped({ command: "build", mode: "production" });
   expect(config.define).toEqual({ __HOST_MODE__: '"production"' });
-  expect(config.resolve?.alias).toMatchObject({
-    "host:module": "/host/module.ts",
-    "@svartz/theme-local": "/themes/local/src/lib/index.ts",
-    "virtual:svartz/theme": "/generated/theme.ts",
-    "virtual:svartz/artifacts": "/generated/artifacts.ts",
-    "virtual:svartz/tailwind-sources.css": "/generated/sources.css",
-  });
+  // Vite merges the host's object aliases and ours into one ordered list.
+  const aliases = config.resolve?.alias as { find: string | RegExp; replacement: string }[];
+  const resolveAlias = (id: string) =>
+    aliases.find(({ find }) => (typeof find === "string" ? id === find || id.startsWith(`${find}/`) : find.test(id)))?.replacement;
+  expect([
+    resolveAlias("host:module"),
+    resolveAlias("@svartz/theme-local"),
+    resolveAlias("virtual:svartz/theme"),
+    resolveAlias("virtual:svartz/artifacts"),
+    resolveAlias("virtual:svartz/tailwind-sources.css"),
+  ]).toEqual(["/host/module.ts", "/themes/local/src/lib/index.ts", "/generated/theme.ts", "/generated/artifacts.ts", "/generated/sources.css"]);
+  // A listed theme's subpath import reaches the package, not the source entry.
+  expect(resolveAlias("@svartz/theme-local/runtime")).toBeUndefined();
   expect(config.plugins?.some((plugin) => plugin && typeof plugin === "object" && "name" in plugin && plugin.name === "@tailwindcss/vite:scan")).toBe(true);
   expect(config.plugins?.some((plugin) => plugin && typeof plugin === "object" && "name" in plugin && plugin.name === "svartz:host-styles")).toBe(true);
 });

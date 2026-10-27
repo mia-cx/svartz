@@ -61,6 +61,7 @@ import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryP
 import { emitProtectedGroupArtifacts } from "./protected-payload";
 import { clearPublicAssets, recordPublicAssets } from "./public-assets";
 import { writeProtectedBridgeModules, type ProtectedBridgeModule } from "./protected-bridge";
+import { themeSourceAliases } from "./theme-aliases";
 
 const PIPELINE_STAGES: readonly StageName[] = [
   "discoverFiles",
@@ -306,15 +307,9 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
         { find: "virtual:svartz/theme", replacement: getGeneratedRuntimeThemeModulePath(options.config) },
         { find: "virtual:svartz/artifacts", replacement: getGeneratedRuntimeArtifactsModulePath(options.config) },
       ];
-      // Exact matches only: a string alias also captures subpaths, so `@svartz/theme-minimal`
-      // would rewrite another listed theme's `@svartz/theme-minimal/runtime` import.
-      const themeSources = Object.entries(selectedThemeSources(options.config)).map(([id, source]) => ({
-        find: new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}$`),
-        replacement: source,
-      }));
       return {
         resolve: {
-          alias: [...virtualModules, ...themeSources],
+          alias: [...virtualModules, ...themeSourceAliases(selectedThemeSources(options.config))],
         },
       };
     },
@@ -437,6 +432,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
 
 export default svartz;
 export { svartz };
+export { themeSourceAliases } from "./theme-aliases";
 export {
   createArtifactsVirtualModuleSource,
   getGeneratedArtifactsRoot,

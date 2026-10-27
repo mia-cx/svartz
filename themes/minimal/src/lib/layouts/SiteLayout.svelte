@@ -92,7 +92,12 @@
 	const choice = $derived.by(() => {
 		const entry = props.entry;
 		if (!entry) return undefined;
-		return props.vault.entries.includes(entry) ? pages.get(entry) : choosePage(composition, entry, folderNotes(layout.folderOf(entry.slug), entry));
+		if (props.vault.entries.includes(entry)) return pages.get(entry);
+		// Hidden slugs are left out of the folder records, so the deepest folder whose slug prefixes it is its home.
+		const home = props.vault.folders
+			.filter((folder) => entry.slug.startsWith(`${folder.slug}/`))
+			.reduce<string | undefined>((deepest, folder) => (folder.slug.length > (deepest?.length ?? -1) ? folder.slug : deepest), undefined);
+		return choosePage(composition, entry, folderNotes(layout.folderOf(entry.slug) ?? home, entry));
 	});
 
 	let drawer = $state(false);

@@ -37,8 +37,13 @@ export default defineConfig({
 		emptyOutDir: true
 	},
 	resolve: {
-		alias: {
-			...runtimeThemeSources,
+		// Theme sources alias by exact id, so another listed theme's `<id>/runtime` import still reaches the package.
+		alias: [
+			...Object.entries(runtimeThemeSources).map(([id, source]) => ({
+				find: new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`),
+				replacement: source
+			})),
+			...Object.entries({
 			...(runtimeHostModulePath
 				? { [SVARTZ_HOST_VIRTUAL_ID]: runtimeHostModulePath }
 				: isVitest ? { [SVARTZ_HOST_VIRTUAL_ID]: testRuntimeHostModulePath } : {}),
@@ -54,7 +59,8 @@ export default defineConfig({
 				: {}),
 			[SVARTZ_TAILWIND_SOURCES_VIRTUAL_ID]:
 				runtimeTailwindSourcesPath ?? fallbackTailwindSourcesPath
-		}
+			}).map(([find, replacement]) => ({ find, replacement }))
+		]
 	},
 	plugins: [
 		tailwindcss(),
