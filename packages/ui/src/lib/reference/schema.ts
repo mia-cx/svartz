@@ -140,6 +140,8 @@ function intersect(left: SchemaNode, right: Partial<SchemaNode>): SchemaNode {
 		...b.filter(({ name }) => !a.some((field) => field.name === name))
 	]);
 	const allowed = both(left.enum, right.enum, (a, b) => a.filter((value) => b.includes(value)));
+	// One `pattern` shows as such; a second, different one joins the limits.
+	const otherPattern = left.pattern && right.pattern && left.pattern !== right.pattern ? [`also matches ${right.pattern}`] : [];
 	return {
 		...defined(right),
 		...defined(left),
@@ -147,7 +149,7 @@ function intersect(left: SchemaNode, right: Partial<SchemaNode>): SchemaNode {
 		enum: allowed,
 		items: both(left.items, right.items, intersect),
 		values: both(left.values, right.values, intersect),
-		constraints: [...new Set([...(left.constraints ?? []), ...(right.constraints ?? [])])]
+		constraints: [...new Set([...(left.constraints ?? []), ...(right.constraints ?? []), ...otherPattern])]
 	};
 }
 

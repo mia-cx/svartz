@@ -68,6 +68,8 @@ describe('readSchema', () => {
 		expect(exampleFromSchema(links, {})).toEqual([{ url: 'https://a.example', id: 'l_1' }]);
 		const level = readSchema({ enum: ['b', 'c'], anyOf: [{ type: 'string', enum: ['a', 'b'] }, { type: 'null' }] })!;
 		expect([level.enum, exampleFromSchema(level, {})]).toEqual([['b'], 'b']);
+		const code = readSchema({ pattern: '^[a-z]+$', anyOf: [{ type: 'string', pattern: '^.{3}$' }, { type: 'null' }] })!;
+		expect([code.pattern, code.constraints]).toEqual(['^.{3}$', ['also matches ^[a-z]+$']]);
 	});
 
 	it('describes length and range limits in words, and keeps the pattern as written', () => {
