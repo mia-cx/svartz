@@ -58,14 +58,16 @@ describe('readSchema', () => {
 		expect([pinned.enum, exampleFromSchema(pinned, {})]).toEqual([['allowed'], 'allowed']);
 	});
 
-	it("keeps the folded alternative's own structure over the wrapper's", () => {
+	it('binds a folded alternative by both its own and the wrapper keywords', () => {
 		const links = readSchema({
 			type: 'array',
-			items: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+			items: { type: 'object', required: ['id'], properties: { id: { type: 'string', example: 'l_1' } } },
 			anyOf: [{ type: 'array', items: { type: 'object', required: ['url'], properties: { url: { type: 'string', example: 'https://a.example' } } } }, { type: 'null' }]
 		})!;
-		expect(links.items?.properties?.map(({ name, required }) => [name, required])).toEqual([['url', true]]);
-		expect(exampleFromSchema(links, {})).toEqual([{ url: 'https://a.example' }]);
+		expect(links.items?.properties?.map(({ name, required }) => [name, required])).toEqual([['url', true], ['id', true]]);
+		expect(exampleFromSchema(links, {})).toEqual([{ url: 'https://a.example', id: 'l_1' }]);
+		const level = readSchema({ enum: ['b', 'c'], anyOf: [{ type: 'string', enum: ['a', 'b'] }, { type: 'null' }] })!;
+		expect([level.enum, exampleFromSchema(level, {})]).toEqual([['b'], 'b']);
 	});
 
 	it('describes length and range limits in words, and keeps the pattern as written', () => {

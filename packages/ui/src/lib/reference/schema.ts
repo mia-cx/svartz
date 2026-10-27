@@ -113,23 +113,43 @@ export function readSchema(raw: unknown): SchemaNode | undefined {
 		constraints: constraintsOf(raw),
 		pattern: text(raw.pattern)
 	};
-	// A union left with one alternative is that alternative. Keywords written beside the union fill
-	// what the alternative leaves out, and the union's title, description, default, and example win.
+	// A union left with one alternative is that alternative, still bound by the keywords written beside
+	// the union. The union's own title, description, default, and example describe the result.
 	const [lone, ...others] = [...someOf, ...someAny];
 	if (!lone || others.length > 0 || node.properties || node.ref) return node;
-	const beside = defined({ ...node, oneOf: undefined, anyOf: undefined, constraints: undefined, nullable: undefined });
-	return {
-		...beside,
-		...defined(lone),
-		...defined({ ...shared, nullable: undefined }),
-		nullable: lone.nullable || node.nullable,
-		constraints: [...new Set([...(lone.constraints ?? []), ...(node.constraints ?? [])])]
-	};
+	const beside = defined({ ...node, oneOf: undefined, anyOf: undefined, nullable: undefined });
+	return { ...intersect(lone, beside), ...defined({ ...shared, nullable: undefined }), nullable: lone.nullable || node.nullable };
 }
 
 /** The entries of `record` that have a value. */
 const defined = <T extends object>(record: T): Partial<T> =>
 	Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined)) as Partial<T>;
+
+/**
+ * A value must match both schemas, as with `allOf`: fields and required
+ * marks from either, allowed values both permit, and every limit. Other
+ * keywords come from `left` when it has them.
+ */
+function intersect(left: SchemaNode, right: Partial<SchemaNode>): SchemaNode {
+	const both = <T>(a: T | undefined, b: T | undefined, merge: (a: T, b: T) => T) => (a && b ? merge(a, b) : (a ?? b));
+	const properties = both(left.properties, right.properties, (a, b) => [
+		...a.map((field) => {
+			const match = b.find(({ name }) => name === field.name);
+			return match ? { name: field.name, required: field.required || match.required, schema: intersect(field.schema, match.schema) } : field;
+		}),
+		...b.filter(({ name }) => !a.some((field) => field.name === name))
+	]);
+	const allowed = both(left.enum, right.enum, (a, b) => a.filter((value) => b.includes(value)));
+	return {
+		...defined(right),
+		...defined(left),
+		properties,
+		enum: allowed,
+		items: both(left.items, right.items, intersect),
+		values: both(left.values, right.values, intersect),
+		constraints: [...new Set([...(left.constraints ?? []), ...(right.constraints ?? [])])]
+	};
+}
 
 /** A union's alternatives: its `oneOf`, else its `anyOf`. */
 export const alternativesOf = (schema: SchemaNode) => schema.oneOf ?? schema.anyOf;
