@@ -81,7 +81,7 @@ interface ThemeRouteConfig {
   feed?: string;
 }
 
-function resolveThemeRouteConfig(theme: { base: string; [key: string]: unknown }): Required<ThemeRouteConfig> {
+function resolveThemeRouteConfig(theme: { readonly [key: string]: unknown }): Required<ThemeRouteConfig> {
   const routes = (theme as { routes?: ThemeRouteConfig }).routes;
   return {
     tags: routes?.tags ?? "tags",

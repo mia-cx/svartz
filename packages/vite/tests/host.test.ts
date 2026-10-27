@@ -11,8 +11,7 @@ afterEach(() => vi.unstubAllEnvs());
 
 it("keeps host Vite settings and supplies aliases for the secondary Kit build", async () => {
   vi.stubEnv("SVARTZ_THEME_MODULE_PATH", "/generated/theme.ts");
-  vi.stubEnv("SVARTZ_THEME_SOURCE_ID", "@svartz/theme-local");
-  vi.stubEnv("SVARTZ_THEME_SOURCE_PATH", "/themes/local/src/lib/index.ts");
+  vi.stubEnv("SVARTZ_THEME_SOURCES", JSON.stringify({ "@svartz/theme-local": "/themes/local/src/lib/index.ts" }));
   vi.stubEnv("SVARTZ_ARTIFACTS_MODULE_PATH", "/generated/artifacts.ts");
   vi.stubEnv("SVARTZ_TAILWIND_SOURCES_PATH", "/generated/sources.css");
   vi.stubEnv("SVARTZ_HOST_STYLE_MAP", "[]");

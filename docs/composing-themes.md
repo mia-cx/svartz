@@ -6,27 +6,24 @@ One site can combine themes. The first theme styles the site; every theme render
 
 ## Compose themes
 
-Each theme package exports its `extensions` from both entries. `composeThemes` from theme-minimal combines them:
+List the themes in `theme.base`. Svartz composes them on minimal's shell; every other `theme` key applies to all of them:
 
-```js
-// theme/index.js: the build manifest
-import { composeThemes } from '@svartz/theme-minimal';
-import { extensions as wiki } from '@svartz/theme-wiki';
-import { extensions as api } from '@svartz/theme-api-docs';
-
-export default (config) => composeThemes([...wiki, ...api], config, { id: '@acme/site-theme' });
+```ts
+// svartz.config.ts
+theme: { base: ['@svartz/theme-wiki', '@svartz/theme-api-docs'], baseUrl: 'https://api.example.com' }
 ```
 
+Each theme package exports its `extensions` from both entries, and `composeThemes` from theme-minimal combines them. To publish a combination as one package, export the combined extensions and a default built with `composeThemes`, so the package works as a `base` on its own or inside another list:
+
 ```js
-// theme/runtime.js: the same themes, with their components
+// runtime.js; index.js is the same without `/runtime`
 import { composeThemes } from '@svartz/theme-minimal/runtime';
 import { extensions as wiki } from '@svartz/theme-wiki/runtime';
 import { extensions as api } from '@svartz/theme-api-docs/runtime';
 
-export default (config) => composeThemes([...wiki, ...api], config, { id: '@acme/site-theme' });
+export const extensions = [...wiki, ...api];
+export default (config) => composeThemes(extensions, config, { id: '@acme/site-theme' });
 ```
-
-Point `theme.base` at the directory, as in [Reference themes](reference-themes.md#compose-them). A package that publishes a composition exports the extensions it combines, so it composes further.
 
 ## How a page picks its theme
 

@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import type { ResolvedConfig } from "@svartz/config";
-import { getGeneratedHostRegistryPath, getVaultBuildRoot, resolveThemePackageRoot } from "@svartz/vite";
+import { getGeneratedHostRegistryPath, getVaultBuildRoot, resolveThemeModuleIds, resolveThemePackageRoot } from "@svartz/vite";
 
 function dedupePaths(paths: readonly string[]): string[] {
   return [...new Set(paths)];
@@ -27,9 +27,13 @@ function packageContentGlob(packageRoot: string): string {
   return path.join(sourceRoot, "**/*.{svelte,js,ts}");
 }
 
-/** Collects Tailwind source globs for the resolved theme and its package deps (for example @svartz/ui). */
+/** Collects Tailwind source globs for every listed theme and its package deps (for example @svartz/ui). */
 function getTailwindSourceGlobs(appRoot: string, vault: ResolvedConfig): string[] {
-  const themeRoot = resolveThemePackageRoot(vault.theme.base, appRoot);
+  return dedupePaths(resolveThemeModuleIds(vault).flatMap((themeBase) => getThemeSourceGlobs(appRoot, themeBase)));
+}
+
+function getThemeSourceGlobs(appRoot: string, themeBase: string): string[] {
+  const themeRoot = resolveThemePackageRoot(themeBase, appRoot);
   if (!themeRoot) return [];
 
   const sourceGlobs = [packageContentGlob(themeRoot)];

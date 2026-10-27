@@ -69,7 +69,8 @@ const VaultThemeConfigSchema = Schema.Union(
   Schema.String,
   Schema.Struct(
     {
-      base: Schema.String,
+      /** A theme module, or a list that theme-minimal composes; the first listed theme styles the site. */
+      base: Schema.Union(Schema.String, Schema.NonEmptyArray(Schema.String)),
       comments: Schema.optional(GiscusConfigSchema),
       recentNotes: Schema.optional(Schema.Struct({
         enabled: Schema.optional(Schema.Boolean),

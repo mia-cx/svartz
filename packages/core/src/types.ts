@@ -25,7 +25,8 @@ interface ResolvedFrontmatterConfig {
 }
 
 interface ResolvedThemeConfig {
-  readonly base: string;
+  /** One theme module, or several that theme-minimal composes; the first styles the site. */
+  readonly base: string | readonly string[];
   readonly [key: string]: unknown;
 }
 

@@ -20,42 +20,30 @@ Both themes read `tokens`, `routes`, `version`, `nav`, `footer.links`, and `comm
 
 ## Compose them
 
-Each theme exports its `extensions`; `composeThemes` from theme-minimal combines them. Write a directory theme beside your config with a package manifest and two entries:
-
-```json
-// theme/package.json
-{
-  "name": "@acme/docs-theme",
-  "private": true,
-  "type": "module",
-  "exports": { ".": "./index.js", "./runtime": "./runtime.js" }
-}
-```
-
-```js
-// theme/index.js: the build manifest
-import { composeThemes } from '@svartz/theme-minimal';
-import { extensions as api } from '@svartz/theme-api-docs';
-import { extensions as mcp } from '@svartz/theme-mcp-docs';
-
-export default (config) => composeThemes([...api, ...mcp], config, { id: '@acme/docs-theme' });
-```
-
-```js
-// theme/runtime.js: the same themes, with their components
-import { composeThemes } from '@svartz/theme-minimal/runtime';
-import { extensions as api } from '@svartz/theme-api-docs/runtime';
-import { extensions as mcp } from '@svartz/theme-mcp-docs/runtime';
-
-export default (config) => composeThemes([...api, ...mcp], config, { id: '@acme/docs-theme' });
-```
+List both themes in `base`. Svartz composes them on theme-minimal's shell: the first listed theme styles the site, and each page renders with the theme that claims it. Every other `theme` key applies to all of them.
 
 ```ts
 // svartz.config.ts
-theme: { base: './theme', baseUrl: 'https://api.example.com', tokens: { accent: 'var(--brand)' } }
+theme: {
+  base: ['@svartz/theme-api-docs', '@svartz/theme-mcp-docs'],
+  baseUrl: 'https://api.example.com',
+  tokens: { accent: 'var(--brand)' },
+}
 ```
 
-Install `@svartz/theme-minimal`, `@svartz/theme-api-docs`, and `@svartz/theme-mcp-docs`. The first theme listed styles the site. Both themes include the shared schema renderer, and it counts once.
+Install `@svartz/theme-api-docs` and `@svartz/theme-mcp-docs`. Both themes include the shared schema renderer, and it counts once. The `showcase-reference` vault in this repository composes its themes this way and serves under `/docs`.
+
+To reuse a combination across sites, publish it as one theme package. Export the combined `extensions` from both entries, so the package also composes inside another `base` list:
+
+```js
+// runtime.js; index.js is the same without `/runtime`
+import { extensions as api } from '@svartz/theme-api-docs/runtime';
+import { extensions as mcp } from '@svartz/theme-mcp-docs/runtime';
+import { composeThemes } from '@svartz/theme-minimal/runtime';
+
+export const extensions = [...api, ...mcp];
+export default (config) => composeThemes(extensions, config, { id: '@acme/docs-theme' });
+```
 
 ## How a page picks its renderer
 
@@ -151,8 +139,8 @@ Import components from `@svartz/ui/reference/runtime`. The bare `@svartz/ui/refe
 
 ## Upgrading
 
-**From 1.x to 2.0:** the API and MCP themes extend theme-minimal, and `referenceTheme`, `ReferenceLayout`, `ReferenceNav`, the reference nav model, and the renderer registry are gone from `@svartz/ui/reference`. A site that uses one theme only bumps versions. A site that combined renderers with `referenceTheme` replaces its `theme/index.js` and `theme/runtime.js` with the `composeThemes` entries under [Compose them](#compose-them), and installs `@svartz/theme-minimal`. The sidebar becomes minimal's explorer: folders nest at any depth under their own names, and a folder's name opens its page. Its open folders persist across visits.
+**From 1.x to 2.0:** the API and MCP themes extend theme-minimal, and `referenceTheme`, `ReferenceLayout`, `ReferenceNav`, the reference nav model, and the renderer registry are gone from `@svartz/ui/reference`. A site that uses one theme only bumps versions. A site that combined renderers with `referenceTheme` deletes its `theme/` folder and lists both themes in `theme.base`, as under [Compose them](#compose-them). The sidebar becomes minimal's explorer: folders nest at any depth under their own names, and a folder's name opens its page. Its open folders persist across visits.
 
 **From `@svartz/theme-api-docs` 1.0:** pages and config keep working. The sidebar now labels endpoints by path beside a method badge, gains a filter, and groups nested folders. Parameters accept `default`, `enum`, or a `schema`. `operation.auth` also accepts `{ scheme, description, scopes }`, so `RestOperation.auth` is now an object rather than a string. A page whose `operation` or `model` metadata can't be read now fails the build instead of rendering as a guide.
 
-**From the minimal theme:** give each endpoint page `operation` metadata with `method` and `path`, and each tool page `operation` metadata with `protocol: mcp`, a `name`, and an `inputSchema`. Move "Sources:" lines into `source`. Then point `theme.base` at a theme, or compose several. Pages without that metadata keep rendering as guides.
+**From the minimal theme:** give each endpoint page `operation` metadata with `method` and `path`, and each tool page `operation` metadata with `protocol: mcp`, a `name`, and an `inputSchema`. Move "Sources:" lines into `source`. Then point `theme.base` at a theme, or list both. Pages without that metadata keep rendering as guides.

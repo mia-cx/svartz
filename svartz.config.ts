@@ -94,7 +94,7 @@ export default defineConfig({
       path: "vaults/showcase-reference",
       target: { type: "static", basePath: "/docs" },
       theme: {
-        base: "./themes/showcase-reference",
+        base: ["@svartz/theme-api-docs", "@svartz/theme-mcp-docs"],
         version: "v2",
         baseUrl: "https://api.harbour.example/v2",
         graphqlEndpoint: "https://api.harbour.example/graphql",

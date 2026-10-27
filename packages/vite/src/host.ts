@@ -149,9 +149,7 @@ export function withSvartzHost(config: UserConfigExport): UserConfigExport {
       ssr: { noExternal: ["@lucide/svelte"] },
       resolve: {
         alias: {
-          ...(process.env.SVARTZ_THEME_SOURCE_ID && process.env.SVARTZ_THEME_SOURCE_PATH
-            ? { [process.env.SVARTZ_THEME_SOURCE_ID]: process.env.SVARTZ_THEME_SOURCE_PATH }
-            : {}),
+          ...(JSON.parse(process.env.SVARTZ_THEME_SOURCES ?? "{}") as Record<string, string>),
           ...(process.env.SVARTZ_THEME_MODULE_PATH
             ? { "virtual:svartz/theme": process.env.SVARTZ_THEME_MODULE_PATH }
             : {}),

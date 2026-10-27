@@ -16,20 +16,10 @@ Docs, wiki, and blog keep their look as minimal extensions. Docs keeps its top b
 
 The API and MCP themes are minimal extensions with the reference frame: a top bar, minimal's explorer nested at any depth with method and TOOL badges and a filter, and examples in a wide right column. Guides get contents on the right, and every page gets previous and next links. Prerendered pages open the current page's folders and show previous and next without JavaScript. The explorer keeps folders closed when an open folder sits inside a closed one, and the phone drawer focuses its filter, closes on Escape, and makes the page behind it inert.
 
-Migration: `referenceTheme`, `ReferenceLayout`, `ReferenceNav`, the reference nav model, and the renderer registry are gone from `@svartz/ui/reference`. A site that combined API and MCP pages composes the themes' `extensions` instead:
+Migration: `referenceTheme`, `ReferenceLayout`, `ReferenceNav`, the reference nav model, and the renderer registry are gone from `@svartz/ui/reference`. A site that combined API and MCP pages deletes its `theme/` folder and lists the themes in config:
 
-```js
-// theme/runtime.js
-import { composeThemes } from '@svartz/theme-minimal/runtime';
-import { extensions as api } from '@svartz/theme-api-docs/runtime';
-import { extensions as mcp } from '@svartz/theme-mcp-docs/runtime';
-export default (config) => composeThemes([...api, ...mcp], config, { id: '@acme/docs-theme' });
-
-// theme/index.js
-import { composeThemes } from '@svartz/theme-minimal';
-import { extensions as api } from '@svartz/theme-api-docs';
-import { extensions as mcp } from '@svartz/theme-mcp-docs';
-export default (config) => composeThemes([...api, ...mcp], config, { id: '@acme/docs-theme' });
+```ts
+theme: { base: ['@svartz/theme-api-docs', '@svartz/theme-mcp-docs'], baseUrl: 'https://api.example.com' }
 ```
 
 Vaults that use one default theme only bump versions.

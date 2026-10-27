@@ -461,6 +461,18 @@ describe("resolveConfigPaths", () => {
     expect(resolved.vaults[0]?.theme.base).toBe(resolve(PKG_ROOT, "themes/custom"));
   });
 
+  it("resolves each relative entry of a theme list from the config directory", async () => {
+    const config: SvartzConfig = {
+      ...minimalConfig,
+      defaults: { theme: { base: ["@svartz/theme-api-docs", "./themes/custom"], version: "v2" } },
+    };
+    const resolved = await resolveConfig(config, PKG_ROOT);
+    expect(resolved.vaults[0]?.theme).toEqual({
+      base: ["@svartz/theme-api-docs", resolve(PKG_ROOT, "themes/custom")],
+      version: "v2",
+    });
+  });
+
   it("preserves absolute theme paths", async () => {
     const themePath = resolve(PKG_ROOT, "themes/custom");
     const config: SvartzConfig = {

@@ -13,7 +13,7 @@ Svartz publishes Obsidian vaults as SvelteKit sites, in the spirit of Quartz: on
 ## Current state (October 2026)
 
 - 1.2.1 is published. It ships a nested reference sidebar as an interim fix.
-- 2.0.0 is in progress on `feat/theme-compositor`, tracked by PRD #203 with slices #204–#211. The extension contract, the compositor, and API and MCP as extensions are built. Docs, wiki, blog, and config lists are in progress.
+- 2.0.0 is in review as PR #212, tracked by PRD #203 with slices #204–#211. The extension contract, the compositor, all five default themes as extensions, and `theme.base` lists are built; the release (#211) follows the merge.
 - Logitland's docs (staging.logit.land/docs) consume the published API and MCP themes and move to the composition after 2.0.0.
 
 ## Decisions
