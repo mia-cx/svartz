@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adjacentPosts, archive, blogPosts, readPost, relatedPosts } from './blog.js';
+import { archive, blogPosts, readPost, relatedPosts } from './blog.js';
 
 const post = (slug: string, publishedAt: string, tags: string[] = [], properties: Record<string, unknown> = {}) => ({
 	slug,
@@ -44,12 +44,6 @@ describe('post navigation', () => {
 	it('ranks related posts by shared tags, then recency', () => {
 		const ordered = blogPosts(posts);
 		expect(relatedPosts(ordered[1]!, ordered, 2).map((entry) => entry.slug)).toEqual(['a', 'c']);
-	});
-
-	it('finds the newer and older neighbours', () => {
-		const ordered = blogPosts(posts);
-		const b = ordered.find((entry) => entry.slug === 'b')!;
-		expect(adjacentPosts(b, ordered)).toMatchObject({ newer: { slug: 'd' }, older: { slug: 'a' } });
 	});
 
 	it('groups the archive by year and month, newest first', () => {

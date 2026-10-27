@@ -1,3 +1,7 @@
+import type { ShellState } from '@svartz/theme-minimal/runtime';
+import { themeSettings, type SettingsLink } from '@svartz/ui';
+import type { BlogThemeConfig } from './manifest.js';
+
 type Properties = Readonly<Record<string, unknown>>;
 
 interface Post {
@@ -57,10 +61,19 @@ export function relatedPosts<T extends Post>(post: T, posts: readonly T[], limit
 		.slice(0, limit);
 }
 
-/** The next newer and older posts, for the links under a post. `posts` must be newest first. */
-export function adjacentPosts<T extends Post>(post: T, posts: readonly T[]): { newer?: T; older?: T } {
-	const index = posts.findIndex((other) => other.slug === post.slug);
-	return index < 0 ? {} : { newer: posts[index - 1], older: posts[index + 1] };
+/** The post a page shows: any plain note but the home note. Pages another theme renders aren't posts. */
+export const postOf = (shell: Pick<ShellState, 'entry' | 'page'>) => (shell.page || shell.entry?.slug === 'index' ? undefined : shell.entry);
+
+/** The header links: `theme.nav`, else Archive and Tags at the configured routes. */
+export function headerLinks(shell: Pick<ShellState, 'themeConfig' | 'vault'>): readonly SettingsLink[] {
+	const { navLinks } = themeSettings(shell.themeConfig);
+	if (navLinks.length > 0) return navLinks;
+	const routes = (shell.themeConfig as BlogThemeConfig | undefined)?.routes;
+	const mount = shell.vault.routes.mountPath;
+	return [
+		{ label: 'Archive', href: `${mount}/${routes?.feed ?? 'feed'}/` },
+		{ label: 'Tags', href: `${mount}/${routes?.tags ?? 'tags'}/` }
+	];
 }
 
 const MONTH = new Intl.DateTimeFormat('en-US', { month: 'long', timeZone: 'UTC' });
