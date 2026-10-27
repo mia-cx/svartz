@@ -21,15 +21,14 @@ vaults: [{
 
 | Page | Contents |
 | --- | --- |
-| Symbol | Kind badge, name, since, summary, signature (tabs for overloads), deprecation, type parameters, parameters, returns, throws, the note's own Markdown, hierarchy, members by kind, "Defined in" |
+| Symbol | Kind badge, name, since, summary, the note's own Markdown, signature (tabs for overloads), deprecation, type parameters, parameters, returns, throws, hierarchy, members by kind, "Defined in" |
 | Guide | Any note without a `symbol`: plain prose |
 | Home | The home note, then one card per module |
 | Module | `/folders/:module/` (or your `routes.folders`): symbols grouped by kind with summaries |
 | Reference | `/folders/`: every symbol by kind |
 | Recently updated | `/feed/` |
 
-The sidebar lists guides first, then each top-level folder as a module with its symbols grouped by kind. "On this page" includes the generated sections.
-
+The theme extends `@svartz/theme-minimal`: it swaps the frame, top bar, page head, right column, and footer, and adds a `symbol` page renderer. Minimal's explorer, search, drawer, and previous/next links come with it. In the explorer, each symbol shows its kind badge and name, listed by kind before the folder's guides. "On this page" includes the generated sections.
 ## Frontmatter
 
 ```yaml

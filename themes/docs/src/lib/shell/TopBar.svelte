@@ -15,7 +15,7 @@
 	class="sv-icon-button menu"
 	type="button"
 	aria-expanded={shell.drawer}
-	aria-controls="docs-sidebar"
+	aria-controls="explorer-panel"
 	aria-label={shell.drawer ? 'Close the reference' : 'Open the reference'}
 	onclick={shell.toggleDrawer}
 >

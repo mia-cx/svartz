@@ -13,11 +13,12 @@
 <header class="top-bar">{@render header()}</header>
 
 <div class="docs">
-	<aside class="sidebar" id="docs-sidebar" aria-label="Reference" data-open={shell.drawer ? '' : undefined}>
+	<!-- The shell's drawer finds the explorer by this id. -->
+	<aside class="sidebar" id="explorer-panel" aria-label="Reference" data-open={shell.drawer ? '' : undefined}>
 		{@render navigation()}
 	</aside>
 
-	<main class="content" id="content" tabindex="-1">
+	<main class="content" id="content" tabindex="-1" inert={shell.drawer}>
 		<div data-sv-preview>
 			{@render pageHead()}
 			{@render body()}
