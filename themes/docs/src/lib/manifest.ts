@@ -14,5 +14,5 @@ export const docsIdentity = {
 	name: 'docs',
 	displayName: 'Svartz Docs',
 	description: 'Package reference docs: modules, classes, interfaces, functions, and types.',
-	version: '1.2.1',
+	version: '2.0.0',
 };

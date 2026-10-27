@@ -11,5 +11,5 @@ export const identity: ReferenceThemeIdentity = {
 	name: 'mcp-docs',
 	displayName: 'Svartz MCP Docs',
 	description: 'MCP server reference docs: tools, their schemas, annotations, and tools/call examples.',
-	version: '1.2.1',
+	version: '2.0.0',
 };
