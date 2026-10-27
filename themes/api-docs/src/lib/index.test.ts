@@ -17,7 +17,7 @@ describe('@svartz/theme-api-docs manifests', () => {
 		expect(Object.keys(theme.components ?? {})).toEqual(expect.arrayContaining(['callout', 'codeBlock', 'link', 'embed']));
 		const composition = compositionOf(runtime);
 		expect(composition.primary).toBe(extensions[0]);
-		expect(composition.primary.renderers?.map((renderer) => renderer.id)).toEqual(['rest', 'graphql', 'schema']);
+		expect(composition.primary.renderers?.map((renderer) => renderer.id)).toEqual(['rest', 'websocket', 'graphql', 'schema']);
 		expect(composition.extensions.at(-1)?.id).toBe('@svartz/theme-minimal');
 	});
 

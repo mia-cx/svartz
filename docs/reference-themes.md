@@ -1,6 +1,6 @@
 # Reference themes: API and MCP docs in one site
 
-`@svartz/theme-api-docs` and `@svartz/theme-mcp-docs` extend theme-minimal. Minimal's shell gives every page the explorer, search, breadcrumbs, contents, and previous and next links. Each theme adds page renderers: REST, GraphQL, and schema pages for API docs; MCP tool and schema pages for MCP docs. Both use the reference frame: a top bar, the explorer beside the page with method and TOOL badges and a filter, and code examples in a wide right column. Guides keep their contents on the right.
+`@svartz/theme-api-docs` and `@svartz/theme-mcp-docs` extend theme-minimal. Minimal's shell gives every page the explorer, search, breadcrumbs, contents, and previous and next links. Each theme adds page renderers: REST, WebSocket, GraphQL, and schema pages for API docs; MCP tool and schema pages for MCP docs. Both use the reference frame: a top bar, the explorer beside the page with method and TOOL badges and a filter, and code examples in a wide right column. Guides keep their contents on the right.
 
 Use one theme when a site documents one kind of interface. Compose them when one site documents several, such as guides, HTTP endpoints, and MCP tools. [Composing themes](composing-themes.md) covers composition in general.
 
@@ -52,6 +52,7 @@ A page names what it documents in its frontmatter:
 | Metadata | Renderer |
 | --- | --- |
 | `operation.protocol: rest`, or `operation` without a protocol | REST endpoint |
+| `operation.protocol: websocket` | WebSocket endpoint |
 | `operation.protocol: graphql` | GraphQL operation |
 | `operation.protocol: mcp` | MCP tool |
 | `model` | Shared schema |

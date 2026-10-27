@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { graphqlQuery, readOperation, requestSnippets } from './api.js';
+import { browserSnippets, graphqlQuery, readOperation, requestSnippets, responseTabs } from './api.js';
 
 describe('readOperation', () => {
 	it('reads a REST operation, uppercasing the method and ordering responses', () => {
@@ -154,5 +154,74 @@ describe('graphqlQuery', () => {
 		});
 		if (operation?.protocol !== 'graphql') throw new Error('expected a GraphQL operation');
 		expect(graphqlQuery(operation)).toBe('mutation {\n  deletePet\n}');
+	});
+});
+
+describe('browser routes', () => {
+	const allow = readOperation({
+		operation: {
+			method: 'post',
+			path: '/oauth/authorize?/allow',
+			client: 'browser',
+			parameters: [{ name: 'session', in: 'cookie', example: '<browser-session>' }],
+			requestBody: { contentType: 'application/x-www-form-urlencoded', example: { client_id: 'lgc_1', state: 'a"b&c' } },
+			responses: { 303: { description: 'Back to the client.', headers: { Location: 'https://client.example/callback?code=c_1' } } }
+		}
+	});
+	if (allow?.protocol !== 'rest') throw new Error('expected a REST operation');
+
+	it('shows a form action as an escaped HTML form and the raw request it sends, joining the action query', () => {
+		expect(browserSnippets(allow, 'https://relay.example', {})).toEqual({
+			html: [
+				'<form method="post" action="/oauth/authorize?/allow">',
+				'  <input type="hidden" name="client_id" value="lgc_1" />',
+				'  <input type="hidden" name="state" value="a&quot;b&amp;c" />',
+				'  <button>Submit</button>',
+				'</form>'
+			].join('\n'),
+			http: [
+				'POST /oauth/authorize?/allow HTTP/1.1',
+				'Host: relay.example',
+				'Cookie: session=<browser-session>',
+				'Content-Type: application/x-www-form-urlencoded',
+				'',
+				'client_id=lgc_1&state=a%22b%26c'
+			].join('\n')
+		});
+	});
+
+	it('shows a redirect as its status line and headers, with no invented body', () => {
+		expect(responseTabs(allow.responses, {})).toEqual([
+			{ id: '303', label: '303', code: 'HTTP/1.1 303 See Other\nLocation: https://client.example/callback?code=c_1' }
+		]);
+	});
+
+	it('appends query parameters to a path that already has a query', () => {
+		const signIn = readOperation({
+			operation: { method: 'get', path: '/login?/next', parameters: [{ name: 'to', in: 'query', example: '/agents' }] }
+		});
+		if (signIn?.protocol !== 'rest') throw new Error('expected a REST operation');
+		expect(requestSnippets(signIn, 'https://relay.example', {}).curl).toContain("'https://relay.example/login?/next&to=%2Fagents'");
+	});
+});
+
+describe('WebSocket operations', () => {
+	it('read the upgrade, messages by direction, and close codes', () => {
+		const operation = readOperation({
+			operation: {
+				protocol: 'websocket',
+				path: '/v1/stream',
+				responses: { 101: { description: 'Switching Protocols' }, 429: { description: 'A sixth socket.' } },
+				messages: [{ direction: 'receive', name: 'digest' }, { direction: 'sideways', name: 'lost' }],
+				close: { 4003: 'The agent lost `messages:read`.' }
+			}
+		});
+		expect(operation).toMatchObject({
+			protocol: 'websocket',
+			path: '/v1/stream',
+			responses: [{ status: '101' }, { status: '429' }],
+			messages: [{ direction: 'receive', name: 'digest' }],
+			close: [{ code: '4003', description: 'The agent lost `messages:read`.' }]
+		});
 	});
 });

@@ -808,6 +808,9 @@ importers:
       '@types/node':
         specifier: ^24
         version: 24.11.0
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       publint:
         specifier: ^0.3.17
         version: 0.3.18
@@ -816,7 +819,7 @@ importers:
         version: 5.53.7
       svelte-check:
         specifier: ^4.4.2
-        version: 4.4.4(picomatch@4.0.7)(svelte@5.53.7)(typescript@5.9.3)
+        version: 4.4.4(picomatch@4.0.3)(svelte@5.53.7)(typescript@5.9.3)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -826,6 +829,9 @@ importers:
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@24.11.0)(@vitest/browser-playwright@4.0.18)(jiti@2.7.0)(lightningcss@1.32.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)(yaml@2.9.1)
+      ws:
+        specifier: ^8.19.0
+        version: 8.19.0
 
   themes/blog:
     dependencies:
@@ -3517,6 +3523,7 @@ packages:
   eslint@9.39.3:
     resolution: {integrity: sha512-VmQ+sifHUbI/IcSopBCF/HO3YiHQx/AVd3UVyYL6weuwW+HvON9VYn5l6Zl1WZzPWXPNZrSQpxwkkZ/VuvJZzg==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'

@@ -23,7 +23,8 @@ vaults: [{
 
 | Page | Contents |
 | --- | --- |
-| REST operation | Method and path (copyable), auth, the note's own Markdown, parameters by location with defaults and allowed values, request body schema, responses by status with their schemas, and "Defined in" source links. Examples: the request in cURL, JavaScript, and Python (the choice is remembered), and a response per status |
+| REST operation | Method and path (copyable), auth, the note's own Markdown, parameters by location with defaults and allowed values, request body schema, responses by status with their schemas and headers, and "Defined in" source links. Examples: the request in cURL, JavaScript, and Python (the choice is remembered), and a response per status. A browser route shows its request as an HTML form and raw HTTP instead |
+| WebSocket | `WS` and the path, auth, the note's Markdown, the upgrade's parameters, handshake responses, messages by direction with their schemas, and close codes. Examples: connecting in websocat, JavaScript, and Python, each message, and the handshake responses |
 | GraphQL operation | Kind, name, arguments, return type, the note's Markdown. Examples: the endpoint, query, variables, and response |
 | Model | "The X object": the note's Markdown, an attribute tree, and a generated JSON example |
 | Guide | Any other note: its description, prose, and contents on the right |
@@ -60,6 +61,49 @@ operation:
 Request examples encode the body for its `contentType`: JSON for `application/json` and `+json` types, form fields for `application/x-www-form-urlencoded` and `multipart/form-data`, and the example as written for anything else. They read each success response for what it holds. A 204, 205, or 304, or a response with `empty: true`, has no body. A `contentType` of `text/*` or XML reads as text, and any other non-JSON type as bytes. Without a `contentType`, a `schema` or `example` means JSON, and a response with neither reads as text. When successes differ, the example branches on the status. An operation whose only documented results are redirects reads `Location` without following it.
 
 `bearer`, `oauth2`, and `openIdConnect` send `Authorization: Bearer $TOKEN`, and `basic` sends `Authorization: Basic $CREDENTIALS`. Any other scheme sends no credential: document its header as a `header` parameter.
+
+A response's `headers` map names to example values. A response with headers shows as HTTP in the examples, its status line and headers above any body, so a redirect shows where it goes:
+
+```yaml
+  responses:
+    303: { description: Back to the client., headers: { Location: https://client.example/callback?code=c_1 } }
+```
+
+A page or form action that a browser sends with its session takes `client: browser`. Its request shows as an HTML form, for a POST with a form body or none, and as the raw HTTP request, with `cookie` parameters as its `Cookie` header. Both use the path alone. A path with a query, such as the SvelteKit form action `/oauth/authorize?/allow`, joins query parameters with `&`.
+
+```yaml
+operation:
+  method: POST
+  path: /oauth/authorize?/allow
+  client: browser
+  parameters: [{ name: session, in: cookie, example: <browser-session> }]
+  requestBody: { contentType: application/x-www-form-urlencoded, example: { client_id: lgc_1 } }
+  responses:
+    303: { description: Back to the client., headers: { Location: https://client.example/callback?code=c_1 } }
+    403: { description: The owner lacks `logan`., contentType: text/html }
+```
+
+A WebSocket takes the same `path`, `server`, `auth`, `parameters`, and `responses` for its upgrade request, plus its messages and close codes:
+
+```yaml
+operation:
+  protocol: websocket
+  path: /v1/stream
+  auth: bearer
+  parameters: [{ name: v, in: query, required: true, example: 10 }]
+  responses:
+    101: { description: Switching Protocols }
+    401: { description: A missing or invalid token., schema: { $ref: Problem } }
+  messages:
+    - { direction: send, name: ping, description: Answered with `pong`., example: ping }
+    - { direction: receive, name: digest, schema: { $ref: Digest } }
+  close:
+    4003: The agent lost `messages:read`.
+```
+
+A message's string example is a text frame as written; any other example is JSON. The connection examples use `ws://` or `wss://` for the server, send the first `send` message's example, and print what arrives, parsed when every received message is JSON. Browsers can't set WebSocket headers, so a socket with header credentials connects from Node 22 or later in the JavaScript example.
+
+A note without `operation` or `model` stays a guide, such as a page load that has no request of its own.
 
 A GraphQL operation:
 

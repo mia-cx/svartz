@@ -8,7 +8,9 @@ export type {
 	ApiResponse,
 	GraphqlOperation,
 	RestOperation,
-	SchemaNode
+	SchemaNode,
+	SocketMessage,
+	WebSocketOperation
 } from './api.js';
 export type { ApiDocsRouteConfig, ApiDocsThemeConfig } from './manifest.js';
 

@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { readOperation, requestSnippets, type RestOperation } from './api.js';
+import { WebSocketServer } from 'ws';
+import { readOperation, requestSnippets, socketSnippets, type RestOperation } from './api.js';
 
 // Each generated snippet runs for real against this server, so a snippet that
 // parses a 204 as JSON or posts JSON to a form endpoint fails here.
@@ -72,14 +73,15 @@ afterAll(() => {
 	rmSync(scratch, { recursive: true, force: true });
 });
 
-const python = (() => {
+const pythonHas = (module: string) => {
 	try {
-		execFileSync('python3', ['-c', 'import requests']);
+		execFileSync('python3', ['-c', `import ${module}`]);
 		return true;
 	} catch {
 		return false;
 	}
-})();
+};
+const python = pythonHas('requests');
 
 const operation = (metadata: Record<string, unknown>) => {
 	const parsed = readOperation({ operation: { auth: 'bearer', ...metadata } });
@@ -280,4 +282,54 @@ it('reads a body nobody described as text, never as JSON', () => {
 	const snippets = requestSnippets(operation({ method: 'get', path: '/x', responses: { 200: { description: 'Something.' } } }), 'https://api.example.com', {});
 	expect(snippets.javascript).toContain('const text = await response.text();');
 	expect(snippets.python).toContain('text = response.text');
+});
+
+describe('generated WebSocket connections', () => {
+	let sockets: WebSocketServer;
+	let socketOrigin: string;
+
+	// Answers `ping` with a JSON frame, then closes, so each snippet ends on its own.
+	beforeAll(async () => {
+		sockets = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+		sockets.on('connection', (socket, request) => {
+			const url = new URL(request.url!, 'http://localhost');
+			if (request.headers.authorization !== `Bearer ${TOKEN}` || url.searchParams.get('v') !== '10') return socket.close(4003, 'refused');
+			socket.on('message', (data) => {
+				socket.send(JSON.stringify({ type: 'pong', got: data.toString() }));
+				socket.close(1000);
+			});
+		});
+		await new Promise((resolve) => sockets.once('listening', resolve));
+		socketOrigin = `http://127.0.0.1:${(sockets.address() as AddressInfo).port}`;
+	});
+
+	afterAll(() => sockets.close());
+
+	const op = () => {
+		const parsed = readOperation({
+			operation: {
+				protocol: 'websocket',
+				path: '/stream',
+				auth: 'bearer',
+				parameters: [{ name: 'v', in: 'query', required: true, example: 10 }],
+				messages: [
+					{ direction: 'send', name: 'ping', example: 'ping' },
+					{ direction: 'receive', name: 'pong', example: { type: 'pong' } }
+				]
+			}
+		});
+		if (parsed?.protocol !== 'websocket') throw new Error('expected a WebSocket operation');
+		return parsed;
+	};
+
+	it('connect with the token and query, send the first message, and print the parsed reply in JavaScript', async () => {
+		const file = join(scratch, 'socket.mjs');
+		writeFileSync(file, `const TOKEN = '${TOKEN}';\n${socketSnippets(op(), socketOrigin, {}).javascript}\n`);
+		expect((await run('node', [file])).stdout).toBe("{ type: 'pong', got: 'ping' }\nClosed: 1000 \n");
+	});
+
+	it.skipIf(!pythonHas('websockets'))('do the same in Python', async () => {
+		const script = `TOKEN = "${TOKEN}"\n${socketSnippets(op(), socketOrigin, {}).python}\n`;
+		expect((await run('python3', ['-c', script])).stdout).toBe("{'type': 'pong', 'got': 'ping'}\n");
+	});
 });
