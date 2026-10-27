@@ -352,7 +352,8 @@ describe.each([
 	};
 
 	// Each runtime prints JSON, so the assertion sees the exact frame the server echoed.
-	it('connects, sends the first message, and prints the parsed reply in JavaScript', async () => {
+	// Node 20 has WebSocket only behind a flag; the snippet targets Node 22 and later.
+	it.skipIf(typeof WebSocket === 'undefined')('connects, sends the first message, and prints the parsed reply in JavaScript', async () => {
 		const file = join(scratch, `socket-${Math.random().toString(36).slice(2)}.mjs`);
 		const shim = 'console.log = (...values) => process.stdout.write(`${JSON.stringify(values)}\\n`);';
 		writeFileSync(file, `${shim}\nconst TOKEN = '${TOKEN}';\n${socketSnippets(op(), socketOrigin, {}).javascript}\n`);
@@ -360,7 +361,7 @@ describe.each([
 		expect(lines).toEqual([[{ type: 'pong', got: frame }], ['Closed:', 1000, '']]);
 	});
 
-	it.skipIf(!pythonHas('websockets'))('does the same in Python', async () => {
+	it.skipIf(!pythonHas('websockets.asyncio.client'))('does the same in Python', async () => {
 		const shim = 'import builtins\nimport json as _json\nprint = lambda value: builtins.print(_json.dumps(value))';
 		const script = `${shim}\nTOKEN = "${TOKEN}"\n${socketSnippets(op(), socketOrigin, {}).python}\n`;
 		expect(JSON.parse((await run('python3', ['-c', script])).stdout)).toEqual({ type: 'pong', got: frame });
