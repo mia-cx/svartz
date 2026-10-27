@@ -2,6 +2,8 @@
 
 A starting point for a blog: a front page with a featured post and a filterable grid, long-form post pages, tags, and an archive. The structure follows Ghost's Casper; the look is Svartz's.
 
+The blog extends `@svartz/theme-minimal`: it swaps minimal's frame and regions for a top header and one reading column, and keeps minimal's search, drawer, and previous/next. Compose it with other themes through its `extensions` export.
+
 ```ts
 // svartz.config.ts
 vaults: [{
@@ -18,7 +20,7 @@ vaults: [{
 | Page | Contents |
 | --- | --- |
 | Front page | Site name and description, the featured post (or the newest), then every other post with tag filters (`?tag=`) and a Show more button |
-| Post | Primary tag, title, excerpt, byline (author, date, reading time), cover, the post, tags, older/newer links, related posts by shared tags |
+| Post | Primary tag, title, excerpt, byline (author, date, reading time), cover, the post, tags, previous/next links in folder order, related posts by shared tags |
 | Tags | `/tags/` lists topics by use; `/tags/:tag/` is a post grid |
 | Archive | `/feed/`, grouped by year and month |
 | Series | `/folders/` and `/folders/:path/` group posts by folder |
