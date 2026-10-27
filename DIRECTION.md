@@ -12,8 +12,7 @@ Svartz publishes Obsidian vaults as SvelteKit sites, in the spirit of Quartz: on
 
 ## Current state (October 2026)
 
-- 2.0.0 is published: the extension contract, the compositor, all five default themes as extensions of minimal, and `theme.base` lists (PRD #203).
-- 2.1.0 is in review as PR #217: WebSocket endpoints and browser routes (form actions, redirects) as reference operations.
+- 2.1.0 is published. 2.0 brought the extension contract, the compositor, all five default themes as extensions of minimal, and `theme.base` lists (PRD #203). 2.1 renders WebSocket endpoints and browser routes (form actions, redirects) as reference operations.
 - Logitland's docs (staging.logit.land/docs) consume the published API and MCP themes as a `theme.base` list and document their sockets and browser routes with the 2.1 frontmatter.
 
 ## Decisions
