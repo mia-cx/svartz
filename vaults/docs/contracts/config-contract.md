@@ -327,7 +327,7 @@ Theme reference and configuration.
 type ThemeConfig =
   | string  // Theme package name (e.g., "@svartz/theme-minimal")
   | {
-      base: string;  // Theme package name
+      base: string | [string, ...string[]];  // Theme package name or path, or a list to compose
       tailwind?: TailwindThemeConfig;  // Tailwind customization
       [key: string]: any;  // Custom theme options
     };
