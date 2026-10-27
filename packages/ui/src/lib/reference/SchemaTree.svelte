@@ -108,7 +108,7 @@
 	{/if}
 	{#if branches}
 		<div class="union" class:nested={depth > 0}>
-			<p class="union-label">{body.oneOf ? 'One of' : 'Any of'}</p>
+			<p class="union-label">{body.oneOf ? 'One of the following' : 'Any of the following'}</p>
 			<ul class="tree">
 				{#each branches as node, index (index)}
 					<li>

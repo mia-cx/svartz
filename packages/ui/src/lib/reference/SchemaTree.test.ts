@@ -43,7 +43,7 @@ describe('unions', () => {
 				}
 			]
 		});
-		expect(text).toContain('One of');
+		expect(text).toContain('One of the following');
 		expect(branches(text)).toEqual(['kind: none', 'kind: webhook']);
 		const webhook = text.slice(text.indexOf('kind: webhook'));
 		expect(webhook).toMatch(/url_host<\/code>.*?string<\/span>.*?Required/s);
@@ -80,7 +80,7 @@ describe('unions', () => {
 				{ $ref: 'TokenResponse' }
 			]
 		});
-		expect(text).toContain('Any of');
+		expect(text).toContain('Any of the following');
 		expect(branches(text)).toEqual(['Assertion grant', 'Option 2']);
 		expect(text).toMatch(/<a class="type[^"]*" href="\/schemas\/TokenResponse"[^>]*>TokenResponse<\/a>/);
 	});
@@ -88,7 +88,6 @@ describe('unions', () => {
 	it('keeps scalar unions on one line', () => {
 		const text = renderText({ type: 'object', properties: { id: { anyOf: [{ type: 'string' }, { type: 'number' }], nullable: true } } });
 		expect(text).toContain('string | number | null');
-		expect(text).not.toContain('One of');
-		expect(text).not.toContain('Any of');
+		expect(text).not.toContain('of the following');
 	});
 });

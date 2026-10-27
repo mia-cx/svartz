@@ -46,6 +46,7 @@
 				<summary>
 					<span class="status" data-sv-signal style:--sv-hue="var(--sv-hue-{statusHue(response.status)})">{response.status}</span>
 					<span>{#if response.description}<DescText value={response.description} {entries} />{/if}</span>
+					{#if response.contentType}<code class="media">{response.contentType}</code>{/if}
 				</summary>
 				{#if response.schema}
 					<div class="response-body"><SchemaTree schema={response.schema} schemaHref={context.schemaHref} {entries} /></div>
@@ -104,6 +105,14 @@
 		font-family: var(--sv-font-mono);
 		font-weight: 600;
 		text-align: center;
+	}
+
+	.media {
+		margin-inline-start: auto;
+		color: var(--sv-muted);
+		font-family: var(--sv-font-mono);
+		font-size: 0.92em;
+		overflow-wrap: anywhere;
 	}
 
 	.response-body {
