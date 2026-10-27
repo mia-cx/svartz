@@ -56,7 +56,7 @@ const theme = defineTheme((config?: MinimalThemeConfig) => composeThemes(extensi
 
 export { definePageRenderer } from './extension.js';
 export type * from './extension.js';
-export { minimalExtension, type ThemeIdentity } from './compose.js';
-export { ThemeSelectionError } from './select.js';
+export { compositionOf, minimalExtension, type ThemeIdentity } from './compose.js';
+export { choosePage, folderTheme, ThemeSelectionError, type Composition } from './select.js';
 export { theme };
 export default theme;

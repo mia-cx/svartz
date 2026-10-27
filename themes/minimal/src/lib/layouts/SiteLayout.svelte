@@ -11,10 +11,11 @@
 	import '@svartz/ui/prose.css';
 	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
+	import { tick } from 'svelte';
 	import type { IndexEntry } from '@svartz/core';
 	import { buildExplorerTree, Comments, DescText, folderLayout, LinkPreviews, PageActions, themeSettings, type ThemePageProps } from '@svartz/ui';
 	import { compositionOf } from '../compose.js';
-	import type { ListPageName, RegionName, ShellState, ThemeChrome } from '../extension.js';
+	import type { ListPageName, ShellState, ThemeChrome } from '../extension.js';
 	import { choosePage, folderTheme } from '../select.js';
 	import { adjacentPages, explorerTrail, readingOrder } from '../shell.js';
 	import Explorer from '../components/Explorer.svelte';
@@ -28,7 +29,15 @@
 	let props: ThemePageProps = $props();
 	const { children } = $derived(props);
 
-	const MINIMAL_CHROME: Required<ThemeChrome> = { graph: true, backlinks: true, dates: true, readerMode: true, explorerFilter: false, pageNav: true };
+	const MINIMAL_CHROME: Required<ThemeChrome> = {
+		graph: true,
+		backlinks: true,
+		dates: true,
+		summary: false,
+		readerMode: true,
+		explorerFilter: false,
+		pageNav: true
+	};
 	const LIST_PAGES: Readonly<Record<string, ListPageName>> = {
 		'tags-index': 'tags',
 		tag: 'tag',
@@ -66,12 +75,30 @@
 			return choice?.renderer?.explorerItem?.(choice.data, entry);
 		})
 	);
-	const currentHref = $derived(page.url.pathname);
+	// A note's own href is the URL the tree links; prerendering can see another pathname.
+	const currentHref = $derived(props.entry?.href ?? page.url.pathname);
 	const choice = $derived(props.entry ? pages.get(props.entry) : undefined);
 
 	let drawer = $state(false);
 	let reader = $state(false);
 	afterNavigate(() => (drawer = false));
+
+	// Frames put the explorer in `#explorer-panel` and its menu button controls it.
+	const DRAWER = '#explorer-panel';
+	const MENU = `[aria-controls="explorer-panel"]`;
+
+	/** Opening the drawer focuses its first control, the filter when there is one. */
+	async function toggleDrawer() {
+		drawer = !drawer;
+		await tick();
+		if (drawer) document.querySelector<HTMLElement>(`${DRAWER} input, ${DRAWER} a, ${DRAWER} button`)?.focus();
+	}
+
+	function onkeydown(event: KeyboardEvent) {
+		if (event.key !== 'Escape' || !drawer) return;
+		drawer = false;
+		document.querySelector<HTMLElement>(MENU)?.focus();
+	}
 
 	const shell: ShellState = $derived({
 		...props,
@@ -85,20 +112,18 @@
 		pages,
 		chrome: { ...MINIMAL_CHROME, ...primary.chrome },
 		drawer,
-		toggleDrawer: () => (drawer = !drawer),
+		toggleDrawer,
 		reader,
 		toggleReader: () => (reader = !reader)
 	});
 
-	const regions = $derived({
-		header: Masthead,
-		navigation: Explorer,
-		pageHead: PageHead,
-		aside: Related,
-		pageFoot: PageNav,
-		footer: SiteFooter,
-		...primary.regions
-	} satisfies Record<RegionName, unknown>);
+	// One derived per region: a dotted tag (`<regions.header>`) on a derived object skips it during SSR.
+	const Header = $derived(primary.regions?.header ?? Masthead);
+	const Navigation = $derived(primary.regions?.navigation ?? Explorer);
+	const PageHeadRegion = $derived(primary.regions?.pageHead ?? PageHead);
+	const Aside = $derived(primary.regions?.aside ?? Related);
+	const PageFoot = $derived(primary.regions?.pageFoot ?? PageNav);
+	const Footer = $derived(primary.regions?.footer ?? SiteFooter);
 	const Frame = $derived(primary.frame ?? ColumnsFrame);
 
 	/** The list page for this route: a folder note's theme's for a folder, else the primary theme's. */
@@ -115,11 +140,11 @@
 	const comments = $derived(props.entry?.page.comments ? themeSettings(props.themeConfig).comments : undefined);
 </script>
 
-{#snippet header()}<regions.header {shell} />{/snippet}
-{#snippet navigation()}<regions.navigation {shell} />{/snippet}
-{#snippet pageHead()}<regions.pageHead {shell} />{/snippet}
-{#snippet pageFoot()}<regions.pageFoot {shell} />{/snippet}
-{#snippet footer()}<regions.footer {shell} />{/snippet}
+{#snippet header()}<Header {shell} />{/snippet}
+{#snippet navigation()}<Navigation {shell} />{/snippet}
+{#snippet pageHead()}<PageHeadRegion {shell} />{/snippet}
+{#snippet pageFoot()}<PageFoot {shell} />{/snippet}
+{#snippet footer()}<Footer {shell} />{/snippet}
 
 {#snippet intro()}
 	{#if props.entry?.description}<p class="summary"><DescText value={props.entry.description} entries={props.vault.entries} /></p>{/if}
@@ -131,9 +156,11 @@
 	{#if ListPage}
 		<ListPage {...props} />
 	{:else if props.entry && choice?.renderer}
-		<choice.renderer.body {shell} data={choice.data} entry={props.entry}>{@render intro()}</choice.renderer.body>
+		{@const Body = choice.renderer.body}
+		<Body {shell} data={choice.data} entry={props.entry}>{@render intro()}</Body>
 	{:else if props.entry && choice?.theme.note}
-		<choice.theme.note {shell} data={undefined} entry={props.entry}>{@render intro()}</choice.theme.note>
+		{@const Note = choice.theme.note}
+		<Note {shell} data={undefined} entry={props.entry}>{@render intro()}</Note>
 	{:else if props.entry}
 		<article class="sv-prose">{@render children?.()}</article>
 	{:else}
@@ -144,11 +171,14 @@
 
 {#snippet aside()}
 	{#if props.entry && choice?.renderer?.aside}
-		<choice.renderer.aside {shell} data={choice.data} entry={props.entry}>{@render intro()}</choice.renderer.aside>
+		{@const RendererAside = choice.renderer.aside}
+		<RendererAside {shell} data={choice.data} entry={props.entry}>{@render intro()}</RendererAside>
 	{:else}
-		<regions.aside {shell} />
+		<Aside {shell} />
 	{/if}
 {/snippet}
+
+<svelte:window {onkeydown} />
 
 <a class="sv-skip-link" href="#content">Skip to content</a>
 

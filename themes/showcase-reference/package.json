@@ -10,6 +10,7 @@
 	"dependencies": {
 		"@svartz/theme-api-docs": "workspace:*",
 		"@svartz/theme-mcp-docs": "workspace:*",
+		"@svartz/theme-minimal": "workspace:*",
 		"@svartz/ui": "workspace:*"
 	}
 }

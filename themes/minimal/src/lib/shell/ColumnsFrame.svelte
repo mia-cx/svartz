@@ -19,7 +19,7 @@
 		</div>
 	</aside>
 
-	<main class="center" id="content" tabindex="-1">
+	<main class="center" id="content" tabindex="-1" inert={shell.drawer}>
 		<div data-sv-preview>
 			{@render pageHead()}
 			{@render body()}

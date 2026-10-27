@@ -789,6 +789,9 @@ importers:
       '@svartz/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@svartz/theme-minimal':
+        specifier: workspace:*
+        version: link:../minimal
       '@svartz/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -915,6 +918,9 @@ importers:
       '@svartz/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@svartz/theme-minimal':
+        specifier: workspace:*
+        version: link:../minimal
       '@svartz/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -1082,6 +1088,9 @@ importers:
       '@svartz/theme-mcp-docs':
         specifier: workspace:*
         version: link:../mcp-docs
+      '@svartz/theme-minimal':
+        specifier: workspace:*
+        version: link:../minimal
       '@svartz/ui':
         specifier: workspace:*
         version: link:../../packages/ui

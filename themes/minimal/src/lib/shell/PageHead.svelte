@@ -4,7 +4,7 @@
 	themselves under the breadcrumbs.
 -->
 <script lang="ts">
-	import { formatDate, isoDate, PageActions, pageCrumbs, readingTime, tagHrefFor } from '@svartz/ui';
+	import { DescText, formatDate, isoDate, PageActions, pageCrumbs, readingTime, tagHrefFor } from '@svartz/ui';
 	import type { RegionProps } from '../extension.js';
 
 	let { shell }: RegionProps = $props();
@@ -29,6 +29,7 @@
 {#if entry}
 	<header class="note-head">
 		<h1>{entry.title}</h1>
+		{#if shell.chrome.summary && entry.description}<p class="summary"><DescText value={entry.description} entries={shell.vault.entries} /></p>{/if}
 		{#if shell.chrome.dates && (date || entry.readingTimeMinutes)}
 			<p class="meta sv-label">
 				{#if date}<time datetime={isoDate(date)}>{formatDate(date)}</time>{/if}
@@ -88,6 +89,12 @@
 		font-weight: 700;
 		line-height: 1.05;
 		text-wrap: balance;
+	}
+
+	.summary {
+		margin: var(--sv-space-3) 0 0;
+		color: var(--sv-text);
+		font-size: var(--sv-step-1);
 	}
 
 	.meta {

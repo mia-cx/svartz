@@ -13,6 +13,7 @@ export type { ReferenceRouteConfig as ApiDocsRouteConfig } from '@svartz/ui/refe
 
 export const identity: ReferenceThemeIdentity = {
 	id: '@svartz/theme-api-docs',
+	name: 'api-docs',
 	displayName: 'Svartz API Docs',
 	description: 'REST and GraphQL reference docs: operations, schemas, and request examples.',
 	version: '1.2.1',

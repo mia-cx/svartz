@@ -45,6 +45,7 @@
 	},
 	"dependencies": {
 		"@svartz/core": "workspace:*",
+		"@svartz/theme-minimal": "workspace:*",
 		"@svartz/ui": "workspace:*"
 	},
 	"devDependencies": {

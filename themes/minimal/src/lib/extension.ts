@@ -107,6 +107,8 @@ export interface ThemeChrome {
 	readonly backlinks?: boolean;
 	/** Dates and reading time under the title. */
 	readonly dates?: boolean;
+	/** The page's description under the title. */
+	readonly summary?: boolean;
 	readonly readerMode?: boolean;
 	/** A filter above the explorer. */
 	readonly explorerFilter?: boolean;
