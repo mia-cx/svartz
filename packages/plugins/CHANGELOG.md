@@ -1,5 +1,11 @@
 # @svartz/plugins
 
+## 1.2.1
+
+### Patch Changes
+
+- @svartz/core@1.2.1
+
 ## 1.2.0
 
 ### Patch Changes

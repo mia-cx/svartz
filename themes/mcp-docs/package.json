@@ -1,6 +1,6 @@
 {
 	"name": "@svartz/theme-mcp-docs",
-	"version": "1.2.0",
+	"version": "1.2.1",
 	"description": "A Svartz theme for MCP server docs: tools, their schemas, annotations, and tools/call examples.",
 	"license": "SEE LICENSE IN LICENSE",
 	"publishConfig": { "access": "public" },
