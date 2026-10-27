@@ -1,5 +1,13 @@
 # @svartz/theme-docs
 
+## 1.2.0
+
+### Patch Changes
+
+- Updated dependencies [1debbc9]
+  - @svartz/ui@1.2.0
+  - @svartz/core@1.2.0
+
 ## 1.1.1
 
 ### Patch Changes
