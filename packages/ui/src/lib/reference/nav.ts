@@ -1,5 +1,5 @@
 import { topLevelSections } from '../listing.js';
-import { folderLayout, type UiFolderEntry } from '../navigation.js';
+import { folderLayout, orderOf, type UiFolderEntry } from '../navigation.js';
 import type { ReferenceNavItem } from './renderers.js';
 
 interface NavEntry {
@@ -7,6 +7,8 @@ interface NavEntry {
 	readonly title: string;
 	readonly path?: string;
 	readonly href: string;
+	/** Frontmatter. The sidebar reads `order` from it. */
+	readonly properties?: Readonly<Record<string, unknown>>;
 }
 
 type NavFolder = Pick<UiFolderEntry, 'slug' | 'title' | 'href' | 'noteSlugs' | 'noteSlug'>;
@@ -39,10 +41,18 @@ export interface ReferenceNavSection<T> {
 const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
 const GUIDE_RANK = 2;
 
-const compareLinks = <T>(left: ReferenceNavLink<T>, right: ReferenceNavLink<T>) => {
+/** `order` frontmatter sorts first, lowest first; pages and folders without one follow. */
+const byOrder = (left: number | undefined, right: number | undefined) => (left ?? Infinity) - (right ?? Infinity) || 0;
+
+const compareLinks = <T extends NavEntry>(left: ReferenceNavLink<T>, right: ReferenceNavLink<T>) => {
 	const [leftRank, leftKey, leftOrder] = left.item.sort;
 	const [rightRank, rightKey, rightOrder] = right.item.sort;
-	return leftRank - rightRank || collator.compare(leftKey, rightKey) || leftOrder - rightOrder;
+	return (
+		byOrder(orderOf(left.entry), orderOf(right.entry)) ||
+		leftRank - rightRank ||
+		collator.compare(leftKey, rightKey) ||
+		leftOrder - rightOrder
+	);
 };
 
 /** How a guide lists: its title, after every reference page. */
@@ -52,7 +62,9 @@ export const guideNavItem = (entry: Pick<NavEntry, 'title'>): ReferenceNavItem =
  * The sidebar: one section per top-level folder, guides before reference
  * sections, and inside each section one group per folder. A folder's own note
  * links its group instead of listing in it. `itemOf` gives a reference page's
- * badge and label; other pages list as guides.
+ * badge and label; other pages list as guides. `order` frontmatter comes
+ * first at every level: a page's own, or for a section or group its folder
+ * note's.
  */
 export function referenceNav<T extends NavEntry>(
 	entries: readonly T[],
@@ -88,7 +100,13 @@ export function referenceNav<T extends NavEntry>(
 				reference: [...groups.values()].some((links) => links.some((link) => link.item.sort[0] < GUIDE_RANK)),
 				groups: [...groups]
 					.filter(([slug, links]) => slug === section.slug ? links.length > 0 : true)
-					.sort(([left], [right]) => (left === section.slug ? -1 : right === section.slug ? 1 : collator.compare(left, right)))
+					.sort(([left], [right]) =>
+						left === section.slug
+							? -1
+							: right === section.slug
+								? 1
+								: byOrder(orderOf(layout.noteOf(left)), orderOf(layout.noteOf(right))) || collator.compare(left, right)
+					)
 					.map(([slug, links]) => ({
 						slug,
 						title:
@@ -102,7 +120,12 @@ export function referenceNav<T extends NavEntry>(
 					}))
 			};
 		})
-		.sort((left, right) => Number(left.reference) - Number(right.reference) || collator.compare(left.title, right.title));
+		.sort(
+			(left, right) =>
+				byOrder(orderOf(layout.noteOf(left.slug)), orderOf(layout.noteOf(right.slug))) ||
+				Number(left.reference) - Number(right.reference) ||
+				collator.compare(left.title, right.title)
+		);
 }
 
 /**

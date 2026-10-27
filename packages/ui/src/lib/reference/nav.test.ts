@@ -78,6 +78,30 @@ describe('referenceNav', () => {
 			['Public API / Authentication', undefined, ['/oauth2/token']]
 		]);
 	});
+
+	it('sorts sections, groups, and pages by `order` first, a folder by its folder note', () => {
+		const ordered = (path: string, order: number, item?: ReferenceNavItem) => ({ ...note(path, item), properties: { order } });
+		const notes = [
+			note('fake-discord/get-guild.md', operation('GET', '/guilds/{id}')),
+			ordered('public-api/index.md', 1),
+			ordered('public-api/site/index.md', 2),
+			note('public-api/site/get-stats.md', operation('GET', '/v1/stats')),
+			ordered('public-api/auth/index.md', 1),
+			note('public-api/auth/post-token.md', operation('POST', '/oauth2/token')),
+			ordered('public-api/auth/post-register.md', 1, operation('POST', '/register'))
+		];
+		const folders = foldersOf(
+			notes,
+			['fake-discord', 'Fake Discord'],
+			['public-api', 'Public API'],
+			['public-api/site', 'Site'],
+			['public-api/auth', 'Authentication']
+		);
+		expect(labels(referenceNav(notes, folders, (entry) => entry.item))).toEqual([
+			['Public API', [['Authentication', ['/register', '/oauth2/token']], ['Site', ['/v1/stats']]]],
+			['Fake Discord', [['', ['/guilds/{id}']]]]
+		]);
+	});
 });
 
 describe('filterReferenceNav', () => {
