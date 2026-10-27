@@ -91,7 +91,11 @@
 	async function toggleDrawer() {
 		drawer = !drawer;
 		await tick();
-		if (drawer) document.querySelector<HTMLElement>(`${DRAWER} input, ${DRAWER} a, ${DRAWER} button`)?.focus();
+		if (!drawer) return;
+		// The filter first, else the first control the drawer shows; hidden ones can't take focus.
+		const controls = [...document.querySelectorAll<HTMLElement>(`${DRAWER} input, ${DRAWER} a, ${DRAWER} button`)];
+		const visible = controls.filter((control) => control.checkVisibility());
+		(visible.find((control) => control instanceof HTMLInputElement) ?? visible[0])?.focus();
 	}
 
 	function onkeydown(event: KeyboardEvent) {

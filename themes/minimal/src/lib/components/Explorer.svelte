@@ -13,7 +13,7 @@
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import type { IndexEntry } from '@svartz/core';
 	import { Badge, BreakAfterSlashes, explorerOpenIds, type ExplorerNode } from '@svartz/ui';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { RegionProps } from '../extension.js';
 	import { explorerNotes, filterExplorer } from '../shell.js';
@@ -34,7 +34,8 @@
 	onMount(() => explorerOpenIds.subscribe((ids: readonly string[]) => (stored = ids)));
 	$effect(() => {
 		void shell.currentHref;
-		closedAncestors.clear();
+		// Untracked: clearing reads the set, and this must not rerun each time the reader closes a folder.
+		untrack(() => closedAncestors.clear());
 	});
 	const isOpen = (id: string) => filtering || (forcedOpen.has(id) && !closedAncestors.has(id)) || stored.includes(id);
 
@@ -285,9 +286,10 @@
 			visibility 0s linear var(--sv-duration);
 	}
 
+	/* `inherit`, not `visible`: an open folder inside a closed one must stay hidden, or Tab reaches its links. */
 	.explorer-children[data-open] {
 		grid-template-rows: 1fr;
-		visibility: visible;
+		visibility: inherit;
 		transition: grid-template-rows var(--sv-duration) var(--sv-ease);
 	}
 
