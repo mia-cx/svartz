@@ -1,14 +1,21 @@
 <!--
-	The reference sidebar: a filter, then one section per top-level folder and
-	one group per folder inside it. Reference pages show a fixed-width badge
-	beside their path or name, so long paths wrap without moving the badges.
-	Nested groups fold shut unless they hold the current page or a filter match.
+	The reference sidebar: a filter, then one section per top-level folder, with
+	its folders nested inside it as a tree at any depth. Reference pages show a
+	fixed-width badge beside their path or name, so long paths wrap without
+	moving the badges.
+
+	Folders open and close like the explorer. The current page's folders open on
+	arrival and on every navigation; folders a reader opened or closed stay that
+	way. A filter opens the path to every match, and clearing it restores the
+	reader's own choices.
 -->
 <script lang="ts">
 	import type { IndexEntry } from '@svartz/core';
+	import { untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import Badge from './Badge.svelte';
 	import BreakAfterSlashes from './BreakAfterSlashes.svelte';
-	import { filterReferenceNav, navLinks, type ReferenceNavSection } from './nav.js';
+	import { filterReferenceNav, folderTrail, navLinks, type ReferenceNavFolder, type ReferenceNavSection } from './nav.js';
 
 	let {
 		sections,
@@ -26,8 +33,25 @@
 	const shown = $derived(filterReferenceNav(sections, query));
 	const matches = $derived(navLinks(shown).length);
 	const filtering = $derived(query.trim().length > 0);
-	const isCurrent = (href: string | undefined) => href !== undefined && href === currentHref;
-	const current = (href: string | undefined) => (isCurrent(href) ? 'page' : undefined);
+	const current = (href: string | undefined) => (href !== undefined && href === currentHref ? 'page' : undefined);
+
+	/** A folder that is its parent's only subfolder opens with it, so a lone folder never hides a section. */
+	const loneFolders = (folder: ReferenceNavFolder<IndexEntry>): string[] =>
+		folder.folders.length === 1 ? [folder.folders[0].slug, ...loneFolders(folder.folders[0])] : folder.folders.flatMap(loneFolders);
+
+	// Folders the reader has open. Server-rendered pages start with the current page's path open.
+	const opened = new SvelteSet<string>(untrack(() => [...sections.flatMap(loneFolders), ...folderTrail(sections, currentHref)]));
+
+	$effect.pre(() => {
+		for (const slug of folderTrail(sections, currentHref)) untrack(() => opened.add(slug));
+	});
+
+	/** Records the reader's own opening and closing; a filter's forced opening isn't theirs. */
+	function remember(slug: string, open: boolean) {
+		if (filtering) return;
+		if (open) opened.add(slug);
+		else opened.delete(slug);
+	}
 
 	// Keep the current page in view when it sits far down a long sidebar.
 	$effect(() => {
@@ -72,23 +96,7 @@
 				<h2 class="sv-section-title">
 					{#if section.href}<a href={section.href} aria-current={current(section.href)}>{section.title}</a>{:else}{section.title}{/if}
 				</h2>
-				{#each section.groups as group (group.slug)}
-					{#if group.title}
-						{@const titled = section.groups.filter((candidate) => candidate.title).length}
-						<details
-							class="group"
-							open={filtering || titled === 1 || isCurrent(group.href) || group.links.some((link) => isCurrent(link.entry.href))}
-						>
-							<summary>{group.title}</summary>
-							<ul>
-								{#if group.href}<li><a class="link overview" href={group.href} aria-current={current(group.href)}><span class="label">Overview</span></a></li>{/if}
-								{@render links(group.links)}
-							</ul>
-						</details>
-					{:else}
-						<ul>{@render links(group.links)}</ul>
-					{/if}
-				{/each}
+				<ul>{@render contents(section)}</ul>
 			</section>
 		{:else}
 			<p class="empty">No pages match “{query.trim()}”.</p>
@@ -96,13 +104,24 @@
 	</div>
 </nav>
 
-{#snippet links(items: (typeof shown)[number]['groups'][number]['links'])}
-	{#each items as { entry, item } (entry.slug)}
+{#snippet contents(folder: ReferenceNavFolder<IndexEntry>)}
+	{#each folder.links as { entry, item } (entry.slug)}
 		<li>
 			<a class="link" href={entry.href} aria-current={current(entry.href)}>
 				{#if item.badge}<Badge badge={item.badge} fixed />{/if}
 				<span class="label" class:code={item.badge}><BreakAfterSlashes text={item.label} /></span>
 			</a>
+		</li>
+	{/each}
+	{#each folder.folders as child (child.slug)}
+		<li>
+			<details class="folder" open={filtering || opened.has(child.slug)} ontoggle={(event) => remember(child.slug, event.currentTarget.open)}>
+				<summary>{child.title}</summary>
+				<ul>
+					{#if child.href}<li><a class="link overview" href={child.href} aria-current={current(child.href)}><span class="label">Overview</span></a></li>{/if}
+					{@render contents(child)}
+				</ul>
+			</details>
 		</li>
 	{/each}
 {/snippet}
@@ -151,13 +170,13 @@
 		list-style: none;
 	}
 
-	.group {
-		margin-block-start: var(--sv-space-2);
+	.folder {
+		margin-block: var(--sv-space-1);
 	}
 
-	.group ul {
-		margin: var(--sv-space-1) 0 0;
-		padding-inline-start: var(--sv-space-2);
+	.folder > ul {
+		margin: var(--sv-space-1) 0 0 0.3em;
+		padding-inline-start: var(--sv-space-3);
 		border-inline-start: var(--sv-rule-width) solid var(--sv-rule);
 	}
 
@@ -165,10 +184,16 @@
 		display: flex;
 		align-items: baseline;
 		gap: var(--sv-space-1);
+		padding-block: 0.15rem;
+		border-radius: var(--sv-radius-s);
 		color: var(--sv-ink);
 		font-weight: 600;
 		cursor: pointer;
 		list-style: none;
+	}
+
+	summary:hover {
+		color: var(--sv-accent-text);
 	}
 
 	summary::-webkit-details-marker {

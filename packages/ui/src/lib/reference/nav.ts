@@ -18,24 +18,20 @@ export interface ReferenceNavLink<T> {
 	readonly item: ReferenceNavItem;
 }
 
-/** The pages of one folder inside a section. The section's own pages have no title. */
-export interface ReferenceNavGroup<T> {
+/** A folder in the sidebar: its own pages, then its subfolders, each titled by its own name. */
+export interface ReferenceNavFolder<T> {
 	readonly slug: string;
-	/** Folder titles below the section, joined: `Public API / Authentication`. */
-	readonly title?: string;
+	readonly title: string;
 	/** The folder's own note, when it has one. */
 	readonly href?: string;
 	readonly links: ReferenceNavLink<T>[];
+	readonly folders: ReferenceNavFolder<T>[];
 }
 
-export interface ReferenceNavSection<T> {
-	/** The top-level folder, or `""` for pages at the vault root. */
-	readonly slug: string;
-	readonly title: string;
-	readonly href?: string;
+/** A top-level folder, or `""` for pages at the vault root. */
+export interface ReferenceNavSection<T> extends ReferenceNavFolder<T> {
 	/** Holds reference pages (schemas, operations, tools), not only guides. */
 	readonly reference: boolean;
-	readonly groups: ReferenceNavGroup<T>[];
 }
 
 const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
@@ -58,13 +54,18 @@ const compareLinks = <T extends NavEntry>(left: ReferenceNavLink<T>, right: Refe
 /** How a guide lists: its title, after every reference page. */
 export const guideNavItem = (entry: Pick<NavEntry, 'title'>): ReferenceNavItem => ({ label: entry.title, sort: [GUIDE_RANK, entry.title, 0] });
 
+const parentOf = (slug: string) => slug.slice(0, Math.max(slug.lastIndexOf('/'), 0));
+
+/** Every link in a folder and its subfolders, in sidebar order. */
+const linksIn = <T>(folder: ReferenceNavFolder<T>): ReferenceNavLink<T>[] => [...folder.links, ...folder.folders.flatMap(linksIn)];
+
 /**
  * The sidebar: one section per top-level folder, guides before reference
- * sections, and inside each section one group per folder. A folder's own note
- * links its group instead of listing in it. `itemOf` gives a reference page's
- * badge and label; other pages list as guides. `order` frontmatter comes
- * first at every level: a page's own, or for a section or group its folder
- * note's.
+ * sections. Each folder lists its own pages, then its subfolders, at any
+ * depth. A folder's own note links the folder instead of listing in it.
+ * `itemOf` gives a reference page's badge and label; other pages list as
+ * guides. `order` frontmatter comes first at every level: a page's own, or a
+ * folder's folder note's.
  */
 export function referenceNav<T extends NavEntry>(
 	entries: readonly T[],
@@ -80,44 +81,37 @@ export function referenceNav<T extends NavEntry>(
 
 	return topLevelSections(entries, folders)
 		.map((section): ReferenceNavSection<T> => {
-			const groups = new Map<string, ReferenceNavLink<T>[]>([[section.slug, []]]);
+			// Each folder's own links, with every folder between it and the section.
+			const contents = new Map<string, ReferenceNavLink<T>[]>([[section.slug, []]]);
+			const reach = (slug: string) => {
+				for (let folder = slug; !contents.has(folder); folder = parentOf(folder)) contents.set(folder, []);
+				return contents.get(slug)!;
+			};
 			for (const entry of section.entries) {
 				const home = folderNotes.get(entry);
 				if (home !== undefined && home !== section.slug) {
-					// The folder note heads its group, even when the folder holds nothing else.
-					if (!groups.has(home)) groups.set(home, []);
+					// The folder note links its folder, even when the folder holds nothing else.
+					reach(home);
 					continue;
 				}
-				const folder = layout.folderOf(entry.slug) ?? section.slug;
-				const links = groups.get(folder) ?? [];
-				groups.set(folder, links);
-				links.push({ entry, item: itemOf(entry) ?? guideNavItem(entry) });
+				reach(layout.folderOf(entry.slug) ?? section.slug).push({ entry, item: itemOf(entry) ?? guideNavItem(entry) });
 			}
-			const nested = (slug: string) => (section.slug ? slug.slice(section.slug.length + 1) : slug).split('/');
+			const build = (slug: string): ReferenceNavFolder<T> => ({
+				slug,
+				title: titleOf(slug),
+				href: layout.noteOf(slug)?.href,
+				links: contents.get(slug)!.sort(compareLinks),
+				folders: [...contents.keys()]
+					.filter((child) => child !== slug && parentOf(child) === slug)
+					.map(build)
+					.sort((left, right) => byOrder(orderOf(layout.noteOf(left.slug)), orderOf(layout.noteOf(right.slug))) || collator.compare(left.title, right.title))
+			});
+			const root = build(section.slug);
 			return {
-				...section,
+				...root,
 				title: section.slug ? section.title : 'Overview',
-				reference: [...groups.values()].some((links) => links.some((link) => link.item.sort[0] < GUIDE_RANK)),
-				groups: [...groups]
-					.filter(([slug, links]) => slug === section.slug ? links.length > 0 : true)
-					.sort(([left], [right]) =>
-						left === section.slug
-							? -1
-							: right === section.slug
-								? 1
-								: byOrder(orderOf(layout.noteOf(left)), orderOf(layout.noteOf(right))) || collator.compare(left, right)
-					)
-					.map(([slug, links]) => ({
-						slug,
-						title:
-							slug === section.slug
-								? undefined
-								: nested(slug)
-										.map((_, depth, parts) => titleOf([section.slug, ...parts.slice(0, depth + 1)].filter(Boolean).join('/')))
-										.join(' / '),
-						href: slug === section.slug ? undefined : layout.noteOf(slug)?.href,
-						links: links.sort(compareLinks)
-					}))
+				href: section.href,
+				reference: linksIn(root).some((link) => link.item.sort[0] < GUIDE_RANK)
 			};
 		})
 		.sort(
@@ -130,26 +124,60 @@ export function referenceNav<T extends NavEntry>(
 
 /**
  * The sidebar narrowed to pages matching every word of `query`, checked
- * against the label, the page title, the badge, and the group and section
- * titles. An empty query keeps everything.
+ * against the label, the page title, the badge, and every folder and section
+ * title above the page. Folders keep only what matches below them, so each
+ * match shows with its path. An empty query keeps everything.
  */
 export function filterReferenceNav<T extends NavEntry>(sections: readonly ReferenceNavSection<T>[], query: string): ReferenceNavSection<T>[] {
 	const words = query.toLocaleLowerCase().split(/\s+/).filter(Boolean);
 	if (words.length === 0) return [...sections];
-	return sections.flatMap((section) => {
-		const groups = section.groups.flatMap((group) => {
-			const links = group.links.filter((link) => {
-				const haystack = [link.item.label, link.entry.title, link.item.badge?.label, group.title, section.title]
-					.join(' ')
-					.toLocaleLowerCase();
-				return words.every((word) => haystack.includes(word));
-			});
-			return links.length ? [{ ...group, links }] : [];
+	const prune = <F extends ReferenceNavFolder<T>>(folder: F, trail: readonly string[]): F | undefined => {
+		const path = [...trail, folder.title];
+		const links = folder.links.filter((link) => {
+			const haystack = [link.item.label, link.entry.title, link.item.badge?.label, ...path].join(' ').toLocaleLowerCase();
+			return words.every((word) => haystack.includes(word));
 		});
-		return groups.length ? [{ ...section, groups }] : [];
-	});
+		const children = folder.folders.flatMap((child) => prune(child, path) ?? []);
+		return links.length || children.length ? { ...folder, links, folders: children } : undefined;
+	};
+	return sections.flatMap((section) => prune(section, []) ?? []);
 }
 
 /** Every page in the sidebar, in order. */
-export const navLinks = <T>(sections: readonly ReferenceNavSection<T>[]) =>
-	sections.flatMap((section) => section.groups.flatMap((group) => group.links));
+export const navLinks = <T>(sections: readonly ReferenceNavFolder<T>[]) => sections.flatMap(linksIn);
+
+/** A stop in reading order: a folder's overview, or a page. */
+export interface ReferenceNavStop {
+	readonly title: string;
+	readonly href: string;
+}
+
+/**
+ * The sidebar in reading order, for previous and next links: each section
+ * and folder's own note, then its pages, then its subfolders.
+ */
+export function readingOrder<T extends NavEntry>(sections: readonly ReferenceNavSection<T>[]): ReferenceNavStop[] {
+	const walk = (folder: ReferenceNavFolder<T>): ReferenceNavStop[] => [
+		...(folder.href ? [{ title: folder.title, href: folder.href }] : []),
+		...folder.links.map(({ entry }) => ({ title: entry.title, href: entry.href })),
+		...folder.folders.flatMap(walk)
+	];
+	return sections.flatMap(walk);
+}
+
+/** The folders, below their section, that lead to the page or folder overview at `href`, outermost first. */
+export function folderTrail<T extends NavEntry>(sections: readonly ReferenceNavSection<T>[], href: string): string[] {
+	const search = (folder: ReferenceNavFolder<T>, trail: readonly string[]): string[] | undefined => {
+		if (folder.href === href || folder.links.some(({ entry }) => entry.href === href)) return [...trail];
+		for (const child of folder.folders) {
+			const found = search(child, [...trail, child.slug]);
+			if (found) return found;
+		}
+		return undefined;
+	};
+	for (const section of sections) {
+		const found = search(section, []);
+		if (found) return found;
+	}
+	return [];
+}
