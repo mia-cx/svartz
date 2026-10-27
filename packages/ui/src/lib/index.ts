@@ -60,3 +60,5 @@ export {
 	type UiIndexEntry,
 	type UiTagEntry
 } from './navigation.js';
+export { default as Badge } from './reference/Badge.svelte';
+export { default as BreakAfterSlashes } from './reference/BreakAfterSlashes.svelte';

@@ -1,5 +1,5 @@
 import type { IndexEntry, SvartzPlugin, ThemeRenderCapabilities, TocEntry, VaultView } from '@svartz/core';
-import type { ExplorerItem, ExplorerNode, ThemePageProps, ThemeTokens } from '@svartz/ui';
+import type { ExplorerItem, ExplorerNode, ThemePageProps } from '@svartz/ui';
 import type { Component, Snippet } from 'svelte';
 
 type Properties = Readonly<Record<string, unknown>>;
@@ -45,6 +45,9 @@ export interface ShellState extends ThemePageProps {
 	/** Whether the phone drawer is open. */
 	readonly drawer: boolean;
 	readonly toggleDrawer: () => void;
+	/** Reader mode dims the side columns. */
+	readonly reader: boolean;
+	readonly toggleReader: () => void;
 }
 
 export interface RegionProps {
@@ -114,12 +117,12 @@ export interface ThemeChrome {
 export type RegionName = 'header' | 'navigation' | 'pageHead' | 'aside' | 'pageFoot' | 'footer';
 
 /** The list pages a theme can provide; each receives the usual page props. */
-export type ListPageName = 'home' | 'tags' | 'tag' | 'folders' | 'folder' | 'feed' | 'notFound';
+export type ListPageName = 'home' | 'tags' | 'tag' | 'folders' | 'folder' | 'feed';
 
 /**
  * What a theme adds to theme-minimal. Everything is optional: minimal itself is
  * the empty extension. In a composition the first extension's frame, regions,
- * list pages, chrome, and tokens style the site; every extension's renderers
+ * list pages, and chrome style the site; every extension's renderers
  * render pages.
  */
 export interface ThemeExtension {
@@ -137,7 +140,6 @@ export interface ThemeExtension {
 	readonly note?: Component<RendererProps<undefined>>;
 	readonly pages?: Partial<Record<ListPageName, Component<ThemePageProps>>>;
 	readonly chrome?: ThemeChrome;
-	readonly tokens?: ThemeTokens;
 	/** Content components (`callout`, `codeBlock`, …) this theme overrides. */
 	readonly components?: Readonly<Record<string, Component>>;
 }
