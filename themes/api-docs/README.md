@@ -32,7 +32,7 @@ vaults: [{
 | Reference | `/folders/`: every resource and its operations |
 | Recently updated | `/feed/` |
 
-Each top-level folder is one sidebar section, and each folder inside it a group. A folder note (`graphql/index.md`) names its section, so `GraphQL` doesn't read as `Graphql`. Operations list by path beside a fixed-width method badge, and the filter above the sidebar narrows it as you type; Enter opens the first match.
+Each top-level folder is one sidebar section, and each folder inside it a group. A folder note (`graphql/index.md`) names its section, so `GraphQL` doesn't read as `Graphql`. An `order` number in a page's frontmatter, or in a folder note for its section or group, sorts it first, lowest first. Operations list by path beside a fixed-width method badge, and the filter above the sidebar narrows it as you type; Enter opens the first match.
 
 To document HTTP endpoints and MCP tools in one site, combine this theme's `apiRenderers` (from `@svartz/theme-api-docs/runtime`) with `@svartz/theme-mcp-docs`'s. [Reference themes](../../docs/reference-themes.md) shows how.
 
@@ -45,18 +45,24 @@ operation:
   protocol: rest
   method: POST
   path: /pets/{petId}/photos
-  auth: bearer                 # bearer, basic, none, or any label
+  server: https://uploads.example.com   # optional; the theme's baseUrl otherwise
+  auth: bearer                 # bearer, oauth2, openIdConnect, basic, none, or any label
   parameters:
     - { name: petId, in: path, type: string, example: p_42 }
     - { name: Idempotency-Key, in: header, type: string, description: … }
   requestBody:
-    contentType: application/json   # the default
+    contentType: multipart/form-data   # default application/json
     schema: { $ref: NewPhoto }
     example: { caption: On the beach }   # optional; generated from the schema otherwise
   responses:
     201: { description: Created, schema: { $ref: Photo } }
+    202: { description: Queued for review, empty: true }
     404: { description: No pet with this id., schema: { $ref: Error } }
 ```
+
+Request examples encode the body for its `contentType`: JSON for `application/json` and `+json` types, form fields for `application/x-www-form-urlencoded` and `multipart/form-data`, and the example as written for anything else. They read each success response for what it holds. A 204, 205, or 304, or a response with `empty: true`, has no body. A `contentType` of `text/*` or XML reads as text, and any other non-JSON type as bytes. Without a `contentType`, a `schema` or `example` means JSON, and a response with neither reads as text. When successes differ, the example branches on the status. An operation whose only documented results are redirects reads `Location` without following it.
+
+`bearer`, `oauth2`, and `openIdConnect` send `Authorization: Bearer $TOKEN`, and `basic` sends `Authorization: Basic $CREDENTIALS`. Any other scheme sends no credential: document its header as a `header` parameter.
 
 A GraphQL operation:
 
@@ -84,9 +90,9 @@ model:
       shelter: { $ref: Shelter }
 ```
 
-Schemas are a JSON Schema subset: `type` (a name or a list with `"null"`), `format`, `enum`, `const`, `default`, `example`, `nullable`, `items`, `properties`, `required`, `additionalProperties`, `oneOf`, `anyOf`, `minLength`/`maxLength`, `minimum`/`maximum`, `minItems`/`maxItems`, `pattern`, and `$ref`. A `$ref` names another note's model; `#/components/schemas/Pet` and `#/$defs/Pet` also resolve to `Pet`. Examples come from `example` values first, then `default`, then the first `enum` value, then a placeholder by type.
+Schemas are a JSON Schema subset: `type` (a name or a list with `"null"`), `format`, `enum`, `const`, `default`, `example`, `nullable`, `items`, `properties`, `required`, `additionalProperties`, `oneOf`, `anyOf`, `minLength`/`maxLength`, `minimum`/`maximum`, `minItems`/`maxItems`, `pattern`, and `$ref`. A `$ref` names another note's model; `#/components/schemas/Pet` and `#/$defs/Pet` also resolve to `Pet`. A `null` type or alternative makes a field nullable, and a union lists each alternative with its fields, named by its `title` or the property that tells the alternatives apart (OpenAPI's `discriminator.propertyName`, or one every alternative fixes with a different `const`). Examples come from `example` values first, then `default`, then the first `enum` value, then a placeholder by type.
 
-A parameter takes `type`, `enum`, and `default`, or a full `schema`. `auth` is a scheme (`bearer`, `basic`, `none`, or any label) or `{ scheme, description, scopes }`. A `source` URL, or list of them, adds "Defined in" links; GitHub and GitLab file links read as `path:line`.
+A parameter takes `type`, `enum`, and `default`, or a full `schema`. `auth` is a scheme or `{ scheme, description, scopes }`. A `source` URL, or list of them, adds "Defined in" links; GitHub and GitLab file links read as `path:line`.
 
 Backticks in descriptions render as code, and `[[Note]]` links. The types are exported as `ApiOperation` and `SchemaNode`. An OpenAPI or GraphQL SDL plugin should emit exactly this shape.
 
