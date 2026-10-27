@@ -60,7 +60,7 @@ operation:
 
 Request examples encode the body for its `contentType`: JSON for `application/json` and `+json` types, form fields for `application/x-www-form-urlencoded` and `multipart/form-data`, and the example as written for anything else. They read each success response for what it holds. A 204, 205, or 304, or a response with `empty: true`, has no body. A `contentType` of `text/*` or XML reads as text, and any other non-JSON type as bytes. Without a `contentType`, a `schema` or `example` means JSON, and a response with neither reads as text. When successes differ, the example branches on the status. An operation whose only documented results are redirects reads `Location` without following it.
 
-`bearer`, `oauth2`, and `openIdConnect` send `Authorization: Bearer $TOKEN`, and `basic` sends `Authorization: Basic $CREDENTIALS`. Any other scheme sends no credential: document its header as a `header` parameter.
+`bearer`, `oauth2`, and `openIdConnect` send `Authorization: Bearer $TOKEN`, and `basic` sends `Authorization: Basic $CREDENTIALS`. Any other scheme sends no credential: document its header as a `header` parameter. `cookie` parameters send as one `Cookie` header.
 
 A response's `headers` map names to example values. A response with headers shows as HTTP in the examples, its status line and headers above any body, so a redirect shows where it goes:
 
@@ -69,7 +69,7 @@ A response's `headers` map names to example values. A response with headers show
     303: { description: Back to the client., headers: { Location: https://client.example/callback?code=c_1 } }
 ```
 
-A page or form action that a browser sends with its session takes `client: browser`. Its request shows as an HTML form, for a POST with a form body or none, and as the raw HTTP request, with `cookie` parameters as its `Cookie` header. Both use the path alone. A path with a query, such as the SvelteKit form action `/oauth/authorize?/allow`, joins query parameters with `&`.
+A page or form action that a browser sends with its session takes `client: browser`. Its request shows as an HTML form, for a POST with a form body or none, and as the raw HTTP request with its `Content-Length`, which sends as copied. Both use the path alone. A path with a query, such as the SvelteKit form action `/oauth/authorize?/allow`, joins query parameters with `&`.
 
 ```yaml
 operation:

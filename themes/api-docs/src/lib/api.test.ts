@@ -184,9 +184,10 @@ describe('browser routes', () => {
 				'Host: relay.example',
 				'Cookie: session=<browser-session>',
 				'Content-Type: application/x-www-form-urlencoded',
+				'Content-Length: 31',
 				'',
 				'client_id=lgc_1&state=a%22b%26c'
-			].join('\n')
+			].join('\r\n')
 		});
 	});
 

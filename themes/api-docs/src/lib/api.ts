@@ -447,7 +447,8 @@ const formFields = (body: unknown): (readonly [string, string])[] =>
 		: [];
 
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-const jsString = (value: string) => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`;
+const jsString = (value: string) =>
+	`'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'").replaceAll('\n', '\\n').replaceAll('\r', '\\r')}'`;
 
 /** A saved binary response's file name, with the media type's extension when it has a plain one. */
 function outputName(responses: readonly ApiResponse[]): string {
@@ -485,10 +486,12 @@ function requestOf(operation: HttpEndpoint, baseUrl: string) {
 		.join('&');
 	const root = (operation.server ?? baseUrl).replace(/\/$/, '');
 	const target = `${path}${query ? `${path.includes('?') ? '&' : '?'}${query}` : ''}`;
+	const cookies = operation.parameters.filter((parameter) => parameter.in === 'cookie').map((parameter) => `${parameter.name}=${valueOf(parameter)}`);
 	// Only the credential is a shell or language variable; every other value is literal.
 	const headers: SnippetHeader[] = [
 		...authHeader(operation.auth),
-		...operation.parameters.filter((parameter) => parameter.in === 'header').map((parameter) => ({ name: parameter.name, value: valueOf(parameter) }))
+		...operation.parameters.filter((parameter) => parameter.in === 'header').map((parameter) => ({ name: parameter.name, value: valueOf(parameter) })),
+		...(cookies.length ? [{ name: 'Cookie', value: cookies.join('; ') }] : [])
 	];
 	return { root, target, url: `${root}${target}`, headers };
 }
@@ -602,12 +605,12 @@ export function browserSnippets(
 	const contentType = operation.requestBody?.contentType ?? 'application/json';
 	const encoding = body === undefined ? undefined : encodingOf(contentType);
 	const fields = encoding === 'form' || encoding === 'multipart' ? formFields(body) : [];
-	const cookies = operation.parameters.filter((parameter) => parameter.in === 'cookie').map((parameter) => `${parameter.name}=${valueOf(parameter)}`);
 	const payload =
 		encoding === 'form'
 			? new URLSearchParams(fields.map(([name, value]) => [name, value])).toString()
 			: encoding === 'multipart'
-				? [...fields.flatMap(([name, value]) => [`--${MULTIPART_BOUNDARY}`, `Content-Disposition: form-data; name="${name}"`, '', value]), `--${MULTIPART_BOUNDARY}--`].join('\n')
+				? // Multipart framing needs CRLF, so the Content-Length below counts it.
+					[...fields.flatMap(([name, value]) => [`--${MULTIPART_BOUNDARY}`, `Content-Disposition: form-data; name="${name}"`, '', value]), `--${MULTIPART_BOUNDARY}--`].join('\r\n')
 				: encoding === undefined
 					? undefined
 					: typeof body === 'string' && encoding === 'raw'
@@ -615,13 +618,15 @@ export function browserSnippets(
 						: JSON.stringify(body, null, 2);
 	const sentType =
 		encoding === 'form' ? 'application/x-www-form-urlencoded' : encoding === 'multipart' ? `multipart/form-data; boundary=${MULTIPART_BOUNDARY}` : contentType;
+	// CRLF line ends and a blank line after the headers, so the request sends as copied.
 	const http = [
 		`${operation.method} ${requestTarget} HTTP/1.1`,
 		...(server ? [`Host: ${server.host}`] : []),
 		...headers.map(({ name, value, variable }) => `${name}: ${value}${variable ? `$${variable}` : ''}`),
-		...(cookies.length ? [`Cookie: ${cookies.join('; ')}`] : []),
-		...(payload === undefined ? [] : [`Content-Type: ${sentType}`, '', payload])
-	].join('\n');
+		...(payload === undefined
+			? ['', '']
+			: [`Content-Type: ${sentType}`, `Content-Length: ${new TextEncoder().encode(payload).length}`, '', payload])
+	].join('\r\n');
 
 	const formable = operation.method === 'POST' && (encoding === undefined || encoding === 'form' || encoding === 'multipart');
 	const html = formable
