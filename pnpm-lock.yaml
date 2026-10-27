@@ -1080,21 +1080,6 @@ importers:
         specifier: ^2.0.2
         version: 2.0.2(svelte@5.53.7)(vitest@4.0.18)
 
-  themes/showcase-reference:
-    dependencies:
-      '@svartz/theme-api-docs':
-        specifier: workspace:*
-        version: link:../api-docs
-      '@svartz/theme-mcp-docs':
-        specifier: workspace:*
-        version: link:../mcp-docs
-      '@svartz/theme-minimal':
-        specifier: workspace:*
-        version: link:../minimal
-      '@svartz/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
-
   themes/wiki:
     dependencies:
       '@lucide/svelte':
