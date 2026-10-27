@@ -62,3 +62,5 @@ export {
 } from './navigation.js';
 export { default as Badge } from './reference/Badge.svelte';
 export { default as BreakAfterSlashes } from './reference/BreakAfterSlashes.svelte';
+export { default as SourceLinks } from './reference/SourceLinks.svelte';
+export { readSources, sourceLabel, type ReferenceSource } from './reference/metadata.js';

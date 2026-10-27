@@ -13,7 +13,18 @@
 	import { page } from '$app/state';
 	import { tick } from 'svelte';
 	import type { IndexEntry } from '@svartz/core';
-	import { buildExplorerTree, Comments, DescText, folderLayout, LinkPreviews, PageActions, themeSettings, type ThemePageProps } from '@svartz/ui';
+	import {
+		buildExplorerTree,
+		Comments,
+		DescText,
+		folderLayout,
+		LinkPreviews,
+		PageActions,
+		readSources,
+		SourceLinks,
+		themeSettings,
+		type ThemePageProps
+	} from '@svartz/ui';
 	import { compositionOf } from '../compose.js';
 	import type { ListPageName, ShellState, ThemeChrome } from '../extension.js';
 	import { choosePage, folderTheme } from '../select.js';
@@ -77,7 +88,12 @@
 	);
 	// A note's own href is the URL the tree links; prerendering can see another pathname.
 	const currentHref = $derived(props.entry?.href ?? page.url.pathname);
-	const choice = $derived(props.entry ? pages.get(props.entry) : undefined);
+	// An unlocked hidden note is the current entry without being in the vault's discovery list, so it picks its theme here.
+	const choice = $derived.by(() => {
+		const entry = props.entry;
+		if (!entry) return undefined;
+		return props.vault.entries.includes(entry) ? pages.get(entry) : choosePage(composition, entry, folderNotes(layout.folderOf(entry.slug), entry));
+	});
 
 	let drawer = $state(false);
 	let reader = $state(false);
@@ -113,6 +129,7 @@
 		toc: props.entry?.page.toc ? props.entry.toc : [],
 		...adjacentPages(readingOrder(tree), currentHref),
 		page: choice,
+		headed: Boolean(props.entry && (choice?.renderer || (choice?.theme ?? primary).note)),
 		pages,
 		chrome: { ...MINIMAL_CHROME, ...primary.chrome },
 		drawer,
@@ -148,6 +165,8 @@
 	});
 	/** Plain notes render with their theme's `note`, the primary theme's when no `theme:` names another. */
 	const Note = $derived(props.entry && !choice?.renderer ? (choice?.theme ?? primary).note : undefined);
+	/** "Defined in" links from a note's `source` frontmatter, after its body in every theme. */
+	const sources = $derived(props.entry ? readSources(props.entry.properties) : []);
 	// Notes only: list pages and 404s must not open discussions.
 	const comments = $derived(props.entry?.page.comments ? themeSettings(props.themeConfig).comments : undefined);
 </script>
@@ -164,23 +183,34 @@
 {#snippet actions()}
 	{#if props.entry?.markdownHref}<PageActions href={props.entry.markdownHref} />{/if}
 {/snippet}
+{#snippet sourceLinks()}
+	{#if sources.length > 0}<SourceLinks {sources} />{/if}
+{/snippet}
 {#snippet content()}
 	<div class="sv-prose note-body">{@render children?.()}</div>
+	{@render sourceLinks()}
 {/snippet}
 {#snippet intro()}
 	{@render summary()}{@render actions()}{@render content()}
 {/snippet}
+{#snippet claimed()}
+	{#if props.entry && choice?.renderer}
+		{@const Body = choice.renderer.body}
+		<Body {shell} data={choice.data} entry={props.entry} {summary} {actions} {content}>{@render intro()}</Body>
+	{/if}
+{/snippet}
 
 {#snippet body()}
 	{#if ListPage}
-		<ListPage {...props} />
+		<!-- A home note a renderer claims reaches the home page rendered, infobox or symbol included. -->
+		<ListPage {...props} children={props.entry && choice?.renderer ? claimed : children} />
 	{:else if props.entry && choice?.renderer}
-		{@const Body = choice.renderer.body}
-		<Body {shell} data={choice.data} entry={props.entry} {summary} {actions} {content}>{@render intro()}</Body>
+		{@render claimed()}
 	{:else if props.entry && Note}
 		<Note {shell} data={undefined} entry={props.entry} {summary} {actions} {content}>{@render intro()}</Note>
 	{:else if props.entry}
 		<article class="sv-prose">{@render children?.()}</article>
+		{@render sourceLinks()}
 	{:else}
 		{@render children?.()}
 	{/if}

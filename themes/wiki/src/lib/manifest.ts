@@ -1,4 +1,4 @@
-/** Who the wiki theme is, shared by its runtime and build extensions. */
+/** Who the wiki theme is, shared by its runtime and build extensions. The release script keeps `version` in step with the package. */
 export const wikiIdentity = {
 	id: '@svartz/theme-wiki',
 	name: 'wiki',

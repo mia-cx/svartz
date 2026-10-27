@@ -11,7 +11,7 @@
 
 	const crumbs = $derived(pageCrumbs(shell.vault, shell.entry, shell.match));
 	const tagHref = $derived(tagHrefFor(shell.vault));
-	const entry = $derived(shell.page ? undefined : shell.entry);
+	const entry = $derived(shell.headed ? undefined : shell.entry);
 	const date = $derived(entry ? (entry.modifiedAt ?? entry.publishedAt ?? entry.createdAt) : undefined);
 </script>
 

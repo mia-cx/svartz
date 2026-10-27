@@ -9,7 +9,7 @@
 	let { shell }: RegionProps = $props();
 
 	const crumbs = $derived(pageCrumbs(shell.vault, shell.entry, shell.match).slice(0, -1));
-	const entry = $derived(shell.page ? undefined : shell.entry);
+	const entry = $derived(shell.headed ? undefined : shell.entry);
 </script>
 
 {#if crumbs.length > 0}

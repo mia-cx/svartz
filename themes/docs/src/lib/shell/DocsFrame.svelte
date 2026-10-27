@@ -1,8 +1,9 @@
 <!--
 	The docs frame: a full-width top bar over three columns. Left: the
 	reference explorer. Centre: the page and its footer. Right: "On this page".
-	Tablets drop the right column; phones turn the explorer into a drawer under
-	the top bar.
+	Tablets move the right column under the page, hiding its contents list but
+	keeping another theme's examples; phones turn the explorer into a drawer
+	under the top bar.
 -->
 <script lang="ts">
 	import type { FrameProps } from '@svartz/theme-minimal/runtime';
@@ -94,7 +95,15 @@
 			grid-template-columns: 15rem minmax(0, 1fr);
 		}
 
+		/* The rail drops under the page; contents hide, but another theme's examples stay readable. */
 		.rail {
+			position: static;
+			grid-column: 2;
+			max-block-size: none;
+			padding-block: 0 var(--sv-space-6);
+		}
+
+		.rail :global(.on-this-page) {
 			display: none;
 		}
 	}
@@ -107,6 +116,10 @@
 		.docs {
 			grid-template-columns: minmax(0, 1fr);
 			padding-inline: var(--sv-space-4);
+		}
+
+		.rail {
+			grid-column: 1;
 		}
 
 		.sidebar {

@@ -62,7 +62,7 @@ export function relatedPosts<T extends Post>(post: T, posts: readonly T[], limit
 }
 
 /** The post a page shows: any plain note but the home note. Pages another theme renders aren't posts. */
-export const postOf = (shell: Pick<ShellState, 'entry' | 'page'>) => (shell.page || shell.entry?.slug === 'index' ? undefined : shell.entry);
+export const postOf = (shell: Pick<ShellState, 'entry' | 'headed'>) => (shell.headed || shell.entry?.slug === 'index' ? undefined : shell.entry);
 
 /** The header links: `theme.nav`, else Archive and Tags at the configured routes. */
 export function headerLinks(shell: Pick<ShellState, 'themeConfig' | 'vault'>): readonly SettingsLink[] {

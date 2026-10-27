@@ -10,7 +10,10 @@ const page = (raw: Record<string, unknown>) => {
 	// Only the shell fields the page reads.
 	const shell = { vault: { entries: [] } } as unknown as RendererProps<DocSymbol>['shell'];
 	const children = createRawSnippet(() => ({ render: () => '<p class="intro">Remarks</p>' }));
-	return render(SymbolPage, { props: { shell, data, entry: {} as RendererProps<DocSymbol>['entry'], children } }).body;
+	const empty = createRawSnippet(() => ({ render: () => '<span></span>' }));
+	return render(SymbolPage, {
+		props: { shell, data, entry: {} as RendererProps<DocSymbol>['entry'], children, summary: empty, actions: empty, content: children }
+	}).body;
 };
 
 it('heads the page with the kind and name, then the note, then the generated reference', () => {

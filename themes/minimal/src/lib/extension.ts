@@ -39,6 +39,8 @@ export interface ShellState extends ThemePageProps {
 	readonly next?: ReadingStop;
 	/** The theme and renderer this page renders with, when it isn't a plain note. */
 	readonly page?: PageChoice;
+	/** A renderer or a theme's `note` renders this page's head, so page-head regions show breadcrumbs only. */
+	readonly headed: boolean;
 	/** Every page's choice in the vault, for renderers that link across pages (schemas). */
 	readonly pages: ReadonlyMap<IndexEntry, PageChoice>;
 	readonly chrome: Required<ThemeChrome>;

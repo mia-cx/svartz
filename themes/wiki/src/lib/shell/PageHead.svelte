@@ -7,7 +7,7 @@
 	let { shell }: RegionProps = $props();
 </script>
 
-{#if shell.entry && !shell.page}
+{#if shell.entry && !shell.headed}
 	<ArticleHead title={shell.entry.title} site={shell.site.title}>
 		{#if shell.entry.markdownHref}<PageActions href={shell.entry.markdownHref} />{/if}
 	</ArticleHead>
