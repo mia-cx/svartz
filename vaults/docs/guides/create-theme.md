@@ -47,7 +47,7 @@ Publish a `./runtime` export that Vite can bundle in SvelteKit. It can share the
 }
 ```
 
-Configure the theme for a vault with `theme: { base: '@example/theme' }`. `base` can also be a path resolved from the config directory. Theme options beside `base` pass to a factory manifest.
+Configure the theme for a vault with `theme: { base: '@example/theme' }`. `base` can also be a path resolved from the config directory. Theme options beside `base` pass to a factory manifest. To let vaults list your theme beside others in `base`, export its theme-minimal `extensions` from both entries.
 
 ## Build on @svartz/ui
 

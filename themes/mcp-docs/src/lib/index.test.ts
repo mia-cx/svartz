@@ -1,36 +1,38 @@
 import { materializeTheme } from '@svartz/core';
-import { referencePage, referenceTheme, themeRegistry } from '@svartz/ui/reference/runtime';
-import { apiRenderers } from '@svartz/theme-api-docs/runtime';
+import { extensions as api } from '@svartz/theme-api-docs/runtime';
+import { choosePage, composeThemes, compositionOf } from '@svartz/theme-minimal/runtime';
 import { describe, expect, it } from 'vitest';
-import createRuntimeTheme, { mcpRenderers } from './runtime.js';
+import createRuntimeTheme, { extensions as mcp } from './runtime.js';
 
 const page = (path: string, properties: Record<string, unknown>) => ({ path, slug: path.replace(/\.md$/, ''), properties });
 
 describe('@svartz/theme-mcp-docs', () => {
-	it('loads every layout and route page for SSR, with the MCP and schema renderers', async () => {
-		const theme = await materializeTheme(createRuntimeTheme());
+	it("extends theme-minimal: minimal's layout and pages load for SSR, with the MCP and schema renderers", async () => {
+		const runtime = createRuntimeTheme();
+		const theme = await materializeTheme(runtime);
 		for (const module of [...Object.values(theme.layouts), ...theme.routes.map((route) => route.component)].filter(Boolean)) {
 			expect(module).toHaveProperty('default');
 		}
-		expect([...themeRegistry(theme).keys()]).toEqual(['mcp', 'schema']);
+		expect(compositionOf(runtime).primary.renderers?.map((renderer) => renderer.id)).toEqual(['mcp', 'schema']);
 	});
 
-	it('composes with the API renderers into one theme that renders every kind of page', () => {
-		const registry = themeRegistry(referenceTheme({ id: '@acme/docs', renderers: [...apiRenderers, ...mcpRenderers] }));
+	it('composes with the API theme into one site where each page picks its renderer, the shared schema renderer once', () => {
+		const site = compositionOf(composeThemes([...api, ...mcp]));
 		const kinds = [
 			page('guides/start.md', {}),
 			page('rest/get-pet.md', { operation: { method: 'GET', path: '/pets/{id}' } }),
 			page('graphql/pet.md', { operation: { protocol: 'graphql', kind: 'query', name: 'pet' } }),
-			page('mcp/get-pet.md', { operation: { protocol: 'mcp', name: 'get_pet' } }),
+			page('mcp/get-pet.md', { operation: { protocol: 'mcp', kind: 'tool', name: 'get_pet', inputSchema: { type: 'object' } } }),
 			page('schemas/pet.md', { model: { name: 'Pet', schema: { type: 'object' } } })
-		].map((entry) => referencePage(registry, entry)?.renderer.id ?? 'guide');
+		].map((entry) => choosePage(site, entry)?.renderer?.id ?? 'guide');
 		expect(kinds).toEqual(['guide', 'rest', 'graphql', 'mcp', 'schema']);
 	});
 
-	it('tells an MCP-only site which renderer an HTTP page needs', () => {
-		const registry = themeRegistry(createRuntimeTheme());
-		expect(() => referencePage(registry, page('rest/get-pet.md', { operation: { method: 'GET', path: '/pets' } }))).toThrow(
-			'"rest/get-pet.md" can\'t render: no renderer handles `operation.protocol: rest`. This theme renders mcp, schema.'
+	it("leaves an HTTP page on an MCP-only site as a plain note, and names the page when a tool's metadata is invalid", () => {
+		const site = compositionOf(createRuntimeTheme());
+		expect(choosePage(site, page('rest/get-pet.md', { operation: { method: 'GET', path: '/pets' } }))).toBeUndefined();
+		expect(() => choosePage(site, page('mcp/broken.md', { operation: { protocol: 'mcp', kind: 'tool' } }))).toThrow(
+			/"mcp\/broken\.md" can't render: the mcp renderer rejected its metadata/
 		);
 	});
 });

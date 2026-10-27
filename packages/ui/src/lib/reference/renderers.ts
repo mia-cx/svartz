@@ -1,4 +1,4 @@
-import type { IndexEntry, SvartzTheme, VaultView } from '@svartz/core';
+import type { IndexEntry, VaultView } from '@svartz/core';
 import type { Component, Snippet } from 'svelte';
 import { isRecord } from '../theme-settings.js';
 import type { SchemaNode } from './schema.js';
@@ -90,12 +90,6 @@ export const defineRenderer = <T>(renderer: ReferenceRenderer<T>): ReferenceRend
 /** The renderer id that handles `model` pages. */
 export const SCHEMA_RENDERER = 'schema';
 
-/** A page and the renderer its metadata selects. Guides have no renderer. */
-export interface ReferencePage {
-	readonly renderer: ReferenceRenderer;
-	readonly data: unknown;
-}
-
 export class ReferencePageError extends Error {
 	override readonly name = 'ReferencePageError';
 }
@@ -115,63 +109,47 @@ export function rendererIdOf(properties: Properties): string | undefined {
 	return protocol.trim();
 }
 
-/** A theme's renderers by id, checked so each id has exactly one renderer. */
-export type ReferenceRegistry = ReadonlyMap<string, ReferenceRenderer>;
-
 /**
- * Register renderers by id. Listing one renderer twice is fine, so presets can
- * each include the shared schema renderer; two different renderers for one id
- * throw, naming the id, because either choice would silently drop pages.
+ * The page's data as `renderer` reads it from the page's frontmatter. Throws
+ * a `ReferencePageError` with the reason when the metadata isn't a valid page;
+ * the shell adds the page's path.
  */
-export function registerRenderers(themeId: string, renderers: readonly ReferenceRenderer[]): ReferenceRegistry {
-	const registry = new Map<string, ReferenceRenderer>();
-	for (const renderer of renderers) {
-		const existing = registry.get(renderer.id);
-		if (existing && existing !== renderer) {
-			throw new Error(
-				`[svartz:reference] Theme "${themeId}" has two renderers for "${renderer.id}". Pass one of them to referenceTheme.`
-			);
-		}
-		registry.set(renderer.id, renderer);
-	}
-	return registry;
-}
-
-/** The renderer and data for a page, or `undefined` for a guide. Throws a `ReferencePageError` naming the page. */
-export function referencePage(registry: ReferenceRegistry, entry: Pick<IndexEntry, 'path' | 'slug' | 'properties'>): ReferencePage | undefined {
-	const where = entry.path ?? entry.slug;
-	const fail = (reason: string, cause?: unknown): never => {
-		throw new ReferencePageError(`[svartz:reference] "${where}" can't render: ${reason}`, { cause });
-	};
-	let id: string | undefined;
-	try {
-		id = rendererIdOf(entry.properties);
-	} catch (error) {
-		return fail(error instanceof Error ? error.message : String(error));
-	}
-	if (id === undefined) return undefined;
-	const renderer = registry.get(id);
-	if (!renderer) {
-		return fail(
-			`no renderer handles \`${id === SCHEMA_RENDERER ? 'model' : `operation.protocol: ${id}`}\`. This theme renders ${[...registry.keys()].join(', ') || 'guides only'}.`
-		);
-	}
+export function readReferencePage(renderer: ReferenceRenderer, properties: Properties): unknown {
 	let data: unknown;
 	try {
-		data = renderer.read(entry.properties);
+		data = renderer.read(properties);
 	} catch (error) {
-		return fail(`the ${id} renderer rejected its metadata: ${error instanceof Error ? error.message : String(error)}`, error);
+		throw new ReferencePageError(error instanceof Error ? error.message : String(error), { cause: error });
 	}
-	return data === undefined ? fail(`its metadata isn't a valid ${id} page.`) : { renderer, data };
+	if (data === undefined) throw new ReferencePageError(`its metadata isn't a valid ${renderer.id} page.`);
+	return data;
 }
 
-/** Where a reference theme keeps its renderers on the runtime manifest. */
-const HOOK = 'reference';
+/** The part of theme-minimal's shell state reference pages read. */
+export interface ReferenceShell {
+	readonly vault: VaultView;
+	readonly themeConfig?: Readonly<Record<string, unknown>>;
+	readonly page?: { readonly renderer?: { readonly id: string; readonly source?: ReferenceRenderer } };
+	readonly pages: ReadonlyMap<IndexEntry, { readonly renderer?: { readonly id: string }; readonly data?: unknown }>;
+}
 
-export const referenceHooks = (registry: ReferenceRegistry) => ({ [HOOK]: registry });
+export interface ReferenceShellProps {
+	readonly shell: ReferenceShell;
+	readonly data: unknown;
+	readonly entry: IndexEntry;
+	readonly children: Snippet;
+}
 
-/** The renderers a reference theme's runtime manifest carries; empty for other themes. */
-export function themeRegistry(theme: Pick<SvartzTheme, 'hooks'> | undefined): ReferenceRegistry {
-	const registry = theme?.hooks?.[HOOK];
-	return registry instanceof Map ? registry : new Map();
+/** What a reference renderer's components receive, worked out from the shell: every schema page by name, for `$ref`s. */
+export function referenceContext(shell: ReferenceShell, entry: IndexEntry): ReferenceContext {
+	const schemaPages = [...shell.pages].flatMap(([note, choice]) =>
+		choice.renderer?.id === SCHEMA_RENDERER ? [{ note, schema: choice.data as { name: string; schema: SchemaNode } }] : []
+	);
+	return {
+		entry,
+		vault: shell.vault,
+		themeConfig: shell.themeConfig ?? {},
+		schemas: Object.fromEntries(schemaPages.map(({ schema }) => [schema.name, schema.schema])),
+		schemaHref: (name) => schemaPages.find(({ schema }) => schema.name === name)?.note.href
+	};
 }

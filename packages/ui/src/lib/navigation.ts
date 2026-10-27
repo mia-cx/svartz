@@ -26,14 +26,30 @@ export interface UiTagEntry {
 	readonly href: string;
 }
 
-export interface ExplorerNode {
+/** A signal hue from the design tokens (`--sv-hue-<name>`), or `neutral`. */
+export type BadgeHue = 'blue' | 'cyan' | 'teal' | 'green' | 'amber' | 'orange' | 'red' | 'violet' | 'neutral';
+
+/** How a page lists in the explorer when a theme renders it specially: a fixed-width badge beside a monospace label. */
+export interface ExplorerItem {
+	readonly badge?: { readonly label: string; readonly hue: BadgeHue };
+	/** The explorer label: a path or a name. */
+	readonly label: string;
+	/** Sort within a folder after `order`: rank, then key, then order. Plain notes rank 2, by title. */
+	readonly sort?: readonly [rank: number, key: string, order: number];
+}
+
+export interface ExplorerNode<T extends UiIndexEntry = UiIndexEntry> {
 	readonly id: string;
 	readonly title: string;
 	readonly href: string;
-	readonly children: readonly ExplorerNode[];
+	readonly children: readonly ExplorerNode<T>[];
 	readonly isFolder: boolean;
 	/** The note's `order` frontmatter, or for a folder its folder note's. Lower sorts first. */
 	readonly order?: number;
+	/** The note, or a folder's folder note. */
+	readonly entry?: T;
+	/** A theme's explorer row for the note. */
+	readonly item?: ExplorerItem;
 }
 
 export interface Breadcrumb {
@@ -158,31 +174,39 @@ export function orderOf(entry: Pick<UiIndexEntry, 'properties'> | undefined): nu
 	return typeof order === 'number' && Number.isFinite(order) ? order : undefined;
 }
 
-function sortExplorerNodes(nodes: ExplorerNode[]): ExplorerNode[] {
+/** Plain notes rank after themed pages that set a rank below 2 (schemas 0, operations 1). */
+const PLAIN_RANK = 2;
+
+function sortExplorerNodes<T extends UiIndexEntry>(nodes: ExplorerNode<T>[]): ExplorerNode<T>[] {
+	const rank = (node: ExplorerNode<T>) => node.item?.sort?.[0] ?? PLAIN_RANK;
+	const key = (node: ExplorerNode<T>) => node.item?.sort?.[1] ?? node.title;
 	return nodes
 		.map((node) => ({ ...node, children: sortExplorerNodes([...node.children]) }))
 		.sort(
 			(left, right) =>
 				Number(right.isFolder) - Number(left.isFolder) ||
 				(left.order ?? Infinity) - (right.order ?? Infinity) ||
-				naturalOrder.compare(left.title, right.title)
+				rank(left) - rank(right) ||
+				naturalOrder.compare(key(left), key(right)) ||
+				(left.item?.sort?.[2] ?? 0) - (right.item?.sort?.[2] ?? 0)
 		);
 }
 
 /**
  * The vault as a tree: folders first, then notes. Each group sorts by `order`
- * frontmatter, then in natural order by title; a folder takes its folder note's
- * `order`. The home note is left out (the site title links home). A folder links
- * its folder note (`guides/index.md`) when one exists, otherwise its generated
- * folder page.
+ * frontmatter, then by a theme's explorer row (`itemOf`), then in natural order
+ * by title; a folder takes its folder note's `order`. The home note is left out
+ * (the site title links home). A folder links its folder note
+ * (`guides/index.md`) when one exists, otherwise its generated folder page.
  */
-export function buildExplorerTree(
-	entries: readonly UiIndexEntry[],
-	folders: readonly UiFolderEntry[]
-): readonly ExplorerNode[] {
+export function buildExplorerTree<T extends UiIndexEntry>(
+	entries: readonly T[],
+	folders: readonly UiFolderEntry[],
+	itemOf?: (entry: T) => ExplorerItem | undefined
+): readonly ExplorerNode<T>[] {
 	const layout = folderLayout(entries, folders);
-	const roots: ExplorerNode[] = [];
-	const nodes = new Map<string, ExplorerNode>();
+	const roots: ExplorerNode<T>[] = [];
+	const nodes = new Map<string, ExplorerNode<T>>();
 	for (const folder of folders) {
 		const folderNote = layout.noteOf(folder.slug);
 		nodes.set(folder.slug, {
@@ -191,12 +215,13 @@ export function buildExplorerTree(
 			href: folderNote?.href ?? folder.href,
 			children: [],
 			isFolder: true,
-			order: orderOf(folderNote)
+			order: orderOf(folderNote),
+			entry: folderNote
 		});
 	}
 	// Every ancestor of a non-empty folder is in the index too.
 	const childrenOf = (folder: string | undefined) =>
-		folder === undefined ? roots : (nodes.get(folder)!.children as ExplorerNode[]);
+		folder === undefined ? roots : (nodes.get(folder)!.children as ExplorerNode<T>[]);
 
 	for (const [slug, node] of nodes) childrenOf(parentFolder(slug)).push(node);
 	for (const entry of entries) {
@@ -209,7 +234,9 @@ export function buildExplorerTree(
 			href: entry.href ?? slugToHref(entry.slug),
 			children: [],
 			isFolder: false,
-			order: orderOf(entry)
+			order: orderOf(entry),
+			entry,
+			item: itemOf?.(entry)
 		});
 	}
 

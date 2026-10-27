@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { RELEASE_PACKAGES, readReleasePackages } from './release-packages.mjs';
+import { RELEASE_LINE, RELEASE_PACKAGES, readReleasePackages } from './release-packages.mjs';
 
 const repo = fileURLToPath(new URL('../', import.meta.url));
 
@@ -40,10 +40,10 @@ test('release packages reject missing or wrong repository metadata', () => {
   })), /repository\.directory/);
 });
 
-test('release packages stay on the 1.x line', () => {
+test('release packages stay on or below the release line', () => {
   assert.throws(() => readReleasePackages(fixture((manifest) => {
-    manifest.version = '2.0.0';
-  })), /must stay on 1\.x/);
+    manifest.version = `${RELEASE_LINE + 1}.0.0`;
+  })), new RegExp(`must stay on ${RELEASE_LINE}\\.x or below`));
 });
 
 test('every internal dependency publishes before its dependent', () => {

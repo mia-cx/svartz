@@ -4,7 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { resolveConfig } from "@svartz/config";
-import { resolveThemePackageRoot, resolveThemeRuntimeImportId } from "@svartz/vite";
+import { resolveThemePackageRoot, resolveThemeRuntimeImport } from "@svartz/vite";
 import {
   getConfigWatchDescriptors,
   getViteConfigWatchDescriptors,
@@ -185,10 +185,10 @@ describe("CLI dev watch helpers", () => {
     const vault = resolved.vaults[0]!;
 
     expect(vault.theme.base).toBe(localThemeRoot);
-    expect(resolveThemeRuntimeImportId(vault, appRoot)).toBe(
+    expect(resolveThemeRuntimeImport(vault, appRoot)).toBe(
       pathToFileURL(path.join(localThemeRoot, "index.js")).href,
     );
-    expect(getThemeWatchDescriptors(vault.theme.base, appRoot, workspaceRoot)[0]?.buildFilters).toEqual(
+    expect(getThemeWatchDescriptors(localThemeRoot, appRoot, workspaceRoot)[0]?.buildFilters).toEqual(
       ["@acme/theme-local"],
     );
   });

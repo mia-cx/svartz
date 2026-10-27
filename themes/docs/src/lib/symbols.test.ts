@@ -1,5 +1,6 @@
+import { buildExplorerTree } from '@svartz/ui';
 import { describe, expect, it } from 'vitest';
-import { groupByKind, readSymbol, symbolNav, symbolToc } from './symbols.js';
+import { groupByKind, moduleSections, readSymbol, symbolExplorerItem, symbolToc } from './symbols.js';
 
 describe('readSymbol', () => {
 	it('reads a full symbol and normalises signatures to a list', () => {
@@ -53,7 +54,7 @@ describe('readSymbol', () => {
 });
 
 describe('symbolToc', () => {
-	it('lists generated sections around the note’s own headings, in page order', () => {
+	it('lists the note’s own headings, then the generated sections, in page order', () => {
 		const symbol = readSymbol({
 			symbol: {
 				kind: 'class',
@@ -64,7 +65,31 @@ describe('symbolToc', () => {
 			}
 		})!;
 		const toc = symbolToc(symbol, [{ depth: 2, text: 'Examples', slug: 'examples' }]);
-		expect(toc.map((item) => item.slug)).toEqual(['parameters', 'examples', 'hierarchy', 'members-method']);
+		expect(toc.map((item) => item.slug)).toEqual(['examples', 'parameters', 'hierarchy', 'members-method']);
+	});
+});
+
+describe('symbolExplorerItem', () => {
+	const item = (kind: string, name: string) => symbolExplorerItem(readSymbol({ symbol: { kind, name } })!);
+
+	it('shows the kind as a badge beside the symbol name', () => {
+		expect(item('interface', 'SvartzTheme')).toMatchObject({ badge: { label: 'INTERFACE', hue: 'teal' }, label: 'SvartzTheme' });
+	});
+
+	it('lists a folder’s symbols by kind in reference order, then its guides', () => {
+		const note = (name: string, kind?: string) => ({
+			slug: `core/${name}`,
+			title: name,
+			href: `/core/${name}/`,
+			properties: kind ? { symbol: { kind, name } } : {}
+		});
+		const entries = [note('Alpha guide'), note('zeta', 'function'), note('Beta', 'class'), note('alpha', 'function')];
+		const folders = [{ slug: 'core', title: 'Core', noteCount: 4, noteSlugs: entries.map((entry) => entry.slug), href: '/folders/core/' }];
+		const [core] = buildExplorerTree(entries, folders, (entry) => {
+			const symbol = readSymbol(entry.properties);
+			return symbol && symbolExplorerItem(symbol);
+		});
+		expect(core!.children.map((node) => node.item?.label ?? node.title)).toEqual(['Beta', 'alpha', 'zeta', 'Alpha guide']);
 	});
 });
 
@@ -96,7 +121,7 @@ describe('grouping', () => {
 		]);
 	});
 
-	it('builds sidebar sections: guides first, then one section per module', () => {
+	it('builds home sections: guides first, then one section per module', () => {
 		const entries = [
 			entry('index'),
 			entry('guides/start'),
@@ -104,8 +129,8 @@ describe('grouping', () => {
 			entry('core/SvartzTheme', 'interface'),
 			entry('vite/withSvartzHost', 'function')
 		];
-		const nav = symbolNav(entries, foldersOf(entries, ['guides', 'Guides'], ['core', 'core'], ['vite', 'vite']));
-		expect(nav.map((section) => [section.title, section.symbols, section.entries.length])).toEqual([
+		const sections = moduleSections(entries, foldersOf(entries, ['guides', 'Guides'], ['core', 'core'], ['vite', 'vite']));
+		expect(sections.map((section) => [section.title, section.symbols, section.entries.length])).toEqual([
 			['Guides', false, 1],
 			['core', true, 2],
 			['vite', true, 1]
@@ -114,18 +139,18 @@ describe('grouping', () => {
 
 	it('sorts the root section first even when a folder note is titled Overview', () => {
 		const entries = [folderNote('guides', 'Overview'), entry('guides/start'), entry('about')];
-		const nav = symbolNav(entries, foldersOf(entries, ['guides', 'Overview']));
-		expect(nav.map((section) => [section.slug, section.title])).toEqual([
+		const sections = moduleSections(entries, foldersOf(entries, ['guides', 'Overview']));
+		expect(sections.map((section) => [section.slug, section.title])).toEqual([
 			['', 'Overview'],
 			['guides', 'Overview']
 		]);
 	});
 
-	it('names and links a module with its folder note, and keeps its guides', () => {
+	it('names and links a module with its folder note, which it doesn’t count', () => {
 		const entries = [folderNote('core', 'Core API'), entry('core/defineTheme', 'function'), entry('core/migration')];
-		const nav = symbolNav(entries, foldersOf(entries, ['core', 'Core API']));
-		expect(nav.map((section) => [section.title, section.href, section.pages.map((page) => page.title)])).toEqual([
-			['Core API', '/core/', ['migration']]
+		const sections = moduleSections(entries, foldersOf(entries, ['core', 'Core API']));
+		expect(sections.map((section) => [section.title, section.href, section.entries.map((page) => page.title)])).toEqual([
+			['Core API', '/core/', ['defineTheme', 'migration']]
 		]);
 	});
 });

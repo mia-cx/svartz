@@ -11,8 +11,7 @@ const SVARTZ_ARTIFACTS_VIRTUAL_ID = 'virtual:svartz/artifacts';
 const SVARTZ_HOST_VIRTUAL_ID = 'virtual:svartz/host';
 const SVARTZ_TAILWIND_SOURCES_VIRTUAL_ID = 'virtual:svartz/tailwind-sources.css';
 const runtimeThemeModulePath = process.env.SVARTZ_THEME_MODULE_PATH;
-const runtimeThemeSourcePath = process.env.SVARTZ_THEME_SOURCE_PATH;
-const runtimeThemeSourceId = process.env.SVARTZ_THEME_SOURCE_ID;
+const runtimeThemeSources: Record<string, string> = JSON.parse(process.env.SVARTZ_THEME_SOURCES ?? '{}');
 const runtimeArtifactsModulePath = process.env.SVARTZ_ARTIFACTS_MODULE_PATH;
 const runtimeHostModulePath = process.env.SVARTZ_HOST_MODULE_PATH;
 const runtimeTailwindSourcesPath = process.env.SVARTZ_TAILWIND_SOURCES_PATH;
@@ -38,10 +37,13 @@ export default defineConfig({
 		emptyOutDir: true
 	},
 	resolve: {
-		alias: {
-			...(runtimeThemeSourceId && runtimeThemeSourcePath
-				? { [runtimeThemeSourceId]: runtimeThemeSourcePath }
-				: {}),
+		// Theme sources alias by exact id, so another listed theme's `<id>/runtime` import still reaches the package.
+		alias: [
+			...Object.entries(runtimeThemeSources).map(([id, source]) => ({
+				find: new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`),
+				replacement: source
+			})),
+			...Object.entries({
 			...(runtimeHostModulePath
 				? { [SVARTZ_HOST_VIRTUAL_ID]: runtimeHostModulePath }
 				: isVitest ? { [SVARTZ_HOST_VIRTUAL_ID]: testRuntimeHostModulePath } : {}),
@@ -57,7 +59,8 @@ export default defineConfig({
 				: {}),
 			[SVARTZ_TAILWIND_SOURCES_VIRTUAL_ID]:
 				runtimeTailwindSourcesPath ?? fallbackTailwindSourcesPath
-		}
+			}).map(([find, replacement]) => ({ find, replacement }))
+		]
 	},
 	plugins: [
 		tailwindcss(),

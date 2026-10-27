@@ -33,6 +33,6 @@ operation:
       result: { structuredContent: { pets: [] } }
 ```
 
-`model` notes are shared schemas that tools name with `$ref`. Other notes are guides. To document HTTP endpoints and MCP tools in one site, combine this theme's `mcpRenderers` with `@svartz/theme-api-docs`'s `apiRenderers`.
+`model` notes are shared schemas that tools name with `$ref`. Other notes are guides. To document HTTP endpoints and MCP tools in one site, compose this theme's `extensions` with `@svartz/theme-api-docs`'s. The theme extends `@svartz/theme-minimal`, so its explorer, contents, and previous and next links are minimal's.
 
 [Reference themes](../../docs/reference-themes.md) documents the full metadata format, the composition API, and upgrade steps. The types are exported as `McpTool`, `McpToolExample`, and `McpToolResult`.

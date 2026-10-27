@@ -36,7 +36,12 @@ Set `mountPath: "/blog"` on a host vault to serve it beneath `/blog` in an exist
 
 ## Themes
 
-The default is `@svartz/theme-minimal`. Set `theme` to an installed package name, a `./themes/custom` path relative to this config file, or an absolute path. Svartz resolves installed packages from the host SvelteKit app. An invalid configured theme fails the build. Local workspace theme source changes rebuild that package and restart dev; external absolute themes restart when their built files change.
+The default is `@svartz/theme-minimal`. Set `theme` to an installed package name, a `./themes/custom` path relative to this config file, or an absolute path. To combine themes in one site, list them in `base`; Svartz composes their `extensions` on theme-minimal's shell, and the first listed theme styles the site:
+
+```ts
+theme: { base: ["@svartz/theme-api-docs", "@svartz/theme-mcp-docs"] },
+```
+ Svartz resolves installed packages from the host SvelteKit app. An invalid configured theme fails the build. Local workspace theme source changes rebuild that package and restart dev; external absolute themes restart when their built files change.
 
 ### Colours and other tokens
 

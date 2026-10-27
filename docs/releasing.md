@@ -23,6 +23,7 @@ CI still validates added or modified changesets when that label is present.
 
 The fixed group keeps all twelve versions equal.
 `pnpm release:version` runs Changesets, synchronizes theme versions, and updates the lockfile.
+Each theme keeps its package `version` in `src/lib/manifest.ts`, shared by its build and runtime extensions; the synchronization script updates that file.
 Theme contract versions remain independent of package versions.
 Changesets is pinned to `3.0.3`.
 

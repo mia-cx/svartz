@@ -1,10 +1,10 @@
 # Reference themes: API and MCP docs in one site
 
-`@svartz/theme-api-docs` and `@svartz/theme-mcp-docs` are presets of one reference shell from `@svartz/ui`. The shell owns the top bar, search, the filterable sidebar, page actions, the examples column, and the design tokens. Each preset adds renderers: REST, GraphQL, and schema pages for API docs; MCP tool and schema pages for MCP docs.
+`@svartz/theme-api-docs` and `@svartz/theme-mcp-docs` extend theme-minimal. Minimal's shell gives every page the explorer, search, breadcrumbs, contents, and previous and next links. Each theme adds page renderers: REST, GraphQL, and schema pages for API docs; MCP tool and schema pages for MCP docs. Both use the reference frame: a top bar, the explorer beside the page with method and TOOL badges and a filter, and code examples in a wide right column. Guides keep their contents on the right.
 
-Use a preset when a site documents one kind of interface. Combine renderers when one site documents several, such as guides, HTTP endpoints, and MCP tools.
+Use one theme when a site documents one kind of interface. Compose them when one site documents several, such as guides, HTTP endpoints, and MCP tools. [Composing themes](composing-themes.md) covers composition in general.
 
-## Use a preset
+## Use one theme
 
 ```ts
 // svartz.config.ts
@@ -16,45 +16,34 @@ theme: {
 }
 ```
 
-Both presets read `tokens`, `routes`, `version`, `nav`, `footer.links`, and `comments`. The API preset also reads `baseUrl` and `graphqlEndpoint` for its request examples.
+Both themes read `tokens`, `routes`, `version`, `nav`, `footer.links`, and `comments`. The API theme also reads `baseUrl` and `graphqlEndpoint` for its request examples.
 
-## Combine renderers
+## Compose them
 
-Write a directory theme beside your config. It needs a package manifest and two entries. The build entry is the same for every reference theme. The runtime entry lists the renderers.
-
-```json
-// theme/package.json
-{
-  "name": "@acme/docs-theme",
-  "private": true,
-  "type": "module",
-  "exports": { ".": "./index.js", "./runtime": "./runtime.js" }
-}
-```
-
-```js
-// theme/index.js
-import { referenceTheme } from '@svartz/ui/reference';
-
-export default (config) => referenceTheme({ id: '@acme/docs-theme' }, config);
-```
-
-```js
-// theme/runtime.js
-import { apiRenderers } from '@svartz/theme-api-docs/runtime';
-import { mcpRenderers } from '@svartz/theme-mcp-docs/runtime';
-import { referenceTheme } from '@svartz/ui/reference/runtime';
-
-export default (config) =>
-  referenceTheme({ id: '@acme/docs-theme', renderers: [...apiRenderers, ...mcpRenderers] }, config);
-```
+List both themes in `base`. Svartz composes them on theme-minimal's shell: the first listed theme styles the site, and each page renders with the theme that claims it. Every other `theme` key applies to all of them.
 
 ```ts
 // svartz.config.ts
-theme: { base: './theme', baseUrl: 'https://api.example.com', tokens: { accent: 'var(--brand)' } }
+theme: {
+  base: ['@svartz/theme-api-docs', '@svartz/theme-mcp-docs'],
+  baseUrl: 'https://api.example.com',
+  tokens: { accent: 'var(--brand)' },
+}
 ```
 
-Install `@svartz/ui`, `@svartz/theme-api-docs`, and `@svartz/theme-mcp-docs`. Both presets list the shared schema renderer; listing a renderer twice is fine. The [mixed showcase](../themes/showcase-reference) composes its theme this way and serves under `/docs`.
+Install `@svartz/theme-api-docs` and `@svartz/theme-mcp-docs`. Both themes include the shared schema renderer, and it counts once. The `showcase-reference` vault in this repository composes its themes this way and serves under `/docs`.
+
+To reuse a combination across sites, publish it as one theme package. Export the combined `extensions` from both entries, so the package also composes inside another `base` list:
+
+```js
+// runtime.js; index.js is the same without `/runtime`
+import { extensions as api } from '@svartz/theme-api-docs/runtime';
+import { extensions as mcp } from '@svartz/theme-mcp-docs/runtime';
+import { composeThemes } from '@svartz/theme-minimal/runtime';
+
+export const extensions = [...api, ...mcp];
+export default (config) => composeThemes(extensions, config, { id: '@acme/docs-theme' });
+```
 
 ## How a page picks its renderer
 
@@ -66,15 +55,14 @@ A page names what it documents in its frontmatter:
 | `operation.protocol: graphql` | GraphQL operation |
 | `operation.protocol: mcp` | MCP tool |
 | `model` | Shared schema |
-| neither | Guide: the page's Markdown in a reading column |
+| neither | Guide: the page's Markdown, with its contents on the right |
 
 The build fails with the page's path and the reason when:
 
 - a page has both `operation` and `model`;
-- no renderer handles its `operation.protocol`, for example a REST page in an MCP-only site;
 - its renderer can't read the metadata, such as a REST operation without a `path`.
 
-Two different renderers for one protocol also fail, naming the theme and the protocol. Keep one of them.
+Two themes claiming one page also fail, naming both; set `theme:` on the page to choose. A renderer two themes share, such as the schema renderer, counts once.
 
 ## Metadata every reference page can use
 
@@ -131,10 +119,10 @@ Each page's `.md` copy and `llms.txt` entry carry its frontmatter, so agents rea
 
 ## Write a renderer
 
-A renderer reads one kind of metadata and renders it. Its components can use the shell's `EndpointBar`, `AuthSummary`, `ReferenceSection`, `SchemaTree`, and `CodePanel`.
+A renderer reads one kind of metadata and renders it. Its components can use `EndpointBar`, `AuthSummary`, `ReferenceSection`, `SchemaTree`, and `CodePanel` from `@svartz/ui/reference/runtime`. `referenceExtension` turns renderers into a theme-minimal extension with the reference frame, ready for `composeThemes`:
 
 ```ts
-import { defineRenderer } from '@svartz/ui/reference/runtime';
+import { defineRenderer, referenceExtension } from '@svartz/ui/reference/runtime';
 
 export const webhookRenderer = defineRenderer({
   id: 'webhook',                                     // operation.protocol: webhook
@@ -143,12 +131,16 @@ export const webhookRenderer = defineRenderer({
   page: WebhookPage,         // receives { data, context, children }; render children after the header
   examples: WebhookExamples, // optional; receives { data, context }
 });
+
+export const extensions = [referenceExtension({ id: '@acme/webhook-docs', name: 'webhooks' }, [webhookRenderer])];
 ```
 
-Import runtime code from `@svartz/ui/reference/runtime`. The bare `@svartz/ui/reference` entry loads the build's syntax plugin, so it is only for a theme's `index.js`.
+Import components from `@svartz/ui/reference/runtime`. The bare `@svartz/ui/reference` entry has the Node-safe metadata readers and types only.
 
 ## Upgrading
 
+**From 1.x to 2.0:** the API and MCP themes extend theme-minimal, and `referenceTheme`, `ReferenceLayout`, `ReferenceNav`, the reference nav model, and the renderer registry are gone from `@svartz/ui/reference`. A site that uses one theme only bumps versions. A site that combined renderers with `referenceTheme` deletes its `theme/` folder and lists both themes in `theme.base`, as under [Compose them](#compose-them). The sidebar becomes minimal's explorer: folders nest at any depth under their own names, and a folder's name opens its page. Its open folders persist across visits.
+
 **From `@svartz/theme-api-docs` 1.0:** pages and config keep working. The sidebar now labels endpoints by path beside a method badge, gains a filter, and groups nested folders. Parameters accept `default`, `enum`, or a `schema`. `operation.auth` also accepts `{ scheme, description, scopes }`, so `RestOperation.auth` is now an object rather than a string. A page whose `operation` or `model` metadata can't be read now fails the build instead of rendering as a guide.
 
-**From the minimal theme:** give each endpoint page `operation` metadata with `method` and `path`, and each tool page `operation` metadata with `protocol: mcp`, a `name`, and an `inputSchema`. Move "Sources:" lines into `source`. Then point `theme.base` at a preset, or at a directory theme that combines them. Pages without that metadata keep rendering as guides.
+**From the minimal theme:** give each endpoint page `operation` metadata with `method` and `path`, and each tool page `operation` metadata with `protocol: mcp`, a `name`, and an `inputSchema`. Move "Sources:" lines into `source`. Then point `theme.base` at a theme, or list both. Pages without that metadata keep rendering as guides.

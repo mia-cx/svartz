@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { mergeConfig, normalizePath, type Plugin, type PluginOption, type UserConfigExport } from "vite";
 import { HOST_STYLES_PLACEHOLDER } from "./host-registry";
 import { publicAssetsPlugin } from "./public-assets";
+import { themeSourceAliases } from "./theme-aliases";
 
 export { publicAssetsPlugin };
 
@@ -148,29 +149,15 @@ export function withSvartzHost(config: UserConfigExport): UserConfigExport {
       // from a workspace never lists them, so SSR would try to import raw .svelte.
       ssr: { noExternal: ["@lucide/svelte"] },
       resolve: {
-        alias: {
-          ...(process.env.SVARTZ_THEME_SOURCE_ID && process.env.SVARTZ_THEME_SOURCE_PATH
-            ? { [process.env.SVARTZ_THEME_SOURCE_ID]: process.env.SVARTZ_THEME_SOURCE_PATH }
-            : {}),
-          ...(process.env.SVARTZ_THEME_MODULE_PATH
-            ? { "virtual:svartz/theme": process.env.SVARTZ_THEME_MODULE_PATH }
-            : {}),
-          ...(process.env.SVARTZ_ARTIFACTS_MODULE_PATH
-            ? {
-                "virtual:svartz/artifacts":
-                  process.env.SVARTZ_ARTIFACTS_MODULE_PATH,
-              }
-            : {}),
-          ...(process.env.SVARTZ_HOST_MODULE_PATH
-            ? { "virtual:svartz/host": process.env.SVARTZ_HOST_MODULE_PATH }
-            : {}),
-          ...(process.env.SVARTZ_TAILWIND_SOURCES_PATH
-            ? {
-                "virtual:svartz/tailwind-sources.css":
-                  process.env.SVARTZ_TAILWIND_SOURCES_PATH,
-              }
-            : {}),
-        },
+        alias: [
+          ...themeSourceAliases(JSON.parse(process.env.SVARTZ_THEME_SOURCES ?? "{}") as Record<string, string>),
+          ...Object.entries({
+            "virtual:svartz/theme": process.env.SVARTZ_THEME_MODULE_PATH,
+            "virtual:svartz/artifacts": process.env.SVARTZ_ARTIFACTS_MODULE_PATH,
+            "virtual:svartz/host": process.env.SVARTZ_HOST_MODULE_PATH,
+            "virtual:svartz/tailwind-sources.css": process.env.SVARTZ_TAILWIND_SOURCES_PATH,
+          }).flatMap(([find, replacement]) => (replacement ? [{ find, replacement }] : [])),
+        ],
       },
     });
   };

@@ -1,6 +1,8 @@
 import { defineTheme, type ThemeComponentLoader } from '@svartz/core';
 import { svartzSyntax } from '@svartz/ui/syntax';
-import { createMinimalTheme, type MinimalThemeConfig, type MinimalThemeModules } from './manifest.js';
+import { composeBuildTheme, type ThemeIdentity } from './compose.js';
+import type { ThemeBuildExtension } from './extension.js';
+import type { MinimalThemeConfig, MinimalThemeModules } from './manifest.js';
 
 type ComponentModule = { default: unknown };
 type Loader = () => Promise<ComponentModule>;
@@ -33,7 +35,16 @@ const modules: MinimalThemeModules = {
 	plugins: [svartzSyntax()]
 };
 
+/** The build manifest for themes composed on minimal: minimal's routes with each theme's build plugins. */
+export const composeThemes = (extensions: readonly ThemeBuildExtension[], config?: MinimalThemeConfig, identity?: ThemeIdentity) =>
+	composeBuildTheme(modules, extensions, config, identity);
+
+/** Minimal's own build extension. */
+export const extensions: readonly ThemeBuildExtension[] = [{ id: '@svartz/theme-minimal', name: 'minimal', displayName: 'Svartz Minimal' }];
+
 export type { MinimalRouteConfig, MinimalThemeConfig } from './manifest.js';
+export type { ThemeBuildExtension } from './extension.js';
+export type { ThemeIdentity } from './compose.js';
 
 /** Node-safe manifest used by the build pipeline. */
-export default defineTheme((config?: MinimalThemeConfig) => createMinimalTheme(modules, config));
+export default defineTheme((config?: MinimalThemeConfig) => composeThemes(extensions, config));

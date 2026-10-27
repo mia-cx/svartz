@@ -23,6 +23,7 @@ import {
   getGeneratedHostRegistryPath,
   svelteKitBasePath,
   getVaultBuildRoot,
+  resolveThemeModuleIds,
   resolveThemePackageRoot,
   svartz,
   clearPublicAssets,
@@ -436,7 +437,9 @@ const loadDevWatchContext = async (
   ];
 
   for (const vault of vaults) {
-    descriptors.push(...getThemeWatchDescriptors(vault.theme.base, workspace.appRoot, workspaceRoot, workspace.hostApp));
+    for (const themeBase of resolveThemeModuleIds(vault)) {
+      descriptors.push(...getThemeWatchDescriptors(themeBase, workspace.appRoot, workspaceRoot, workspace.hostApp));
+    }
   }
 
   return {
@@ -506,24 +509,19 @@ const createAppConfig = (
       },
       catch: (cause) => cause as Error,
     });
-    const themeRoots = vaults.flatMap((item) => resolveThemePackageRoot(item.theme.base, appRoot) ?? []);
-    const themeRoot = themeRoots[0];
-    const workspaceRoot = projectRoot;
-    const themeSourceCandidate = themeRoot
-      ? path.join(themeRoot, "src", "lib", "index.ts")
-      : "";
-    if (
-      vaults.length === 1 && themeRoot &&
-      isLocalWorkspacePackage(themeRoot, workspaceRoot) &&
-      themeSourceCandidate &&
-      existsSync(themeSourceCandidate)
-    ) {
-      process.env["SVARTZ_THEME_SOURCE_PATH"] = themeSourceCandidate;
-      process.env["SVARTZ_THEME_SOURCE_ID"] = vault.theme.base;
-    } else {
-      delete process.env["SVARTZ_THEME_SOURCE_PATH"];
-      delete process.env["SVARTZ_THEME_SOURCE_ID"];
-    }
+    const themes = vaults.flatMap((item) => resolveThemeModuleIds(item).flatMap((id) => {
+      const root = resolveThemePackageRoot(id, appRoot);
+      return root ? [{ id, root }] : [];
+    }));
+    const themeRoots = themes.map(({ root }) => root);
+    // A lone vault loads its workspace themes from source, so theme edits need no rebuild.
+    const themeSources = vaults.length === 1
+      ? Object.fromEntries(themes.flatMap(({ id, root }) => {
+          const source = path.join(root, "src", "lib", "index.ts");
+          return isLocalWorkspacePackage(root, projectRoot) && existsSync(source) ? [[id, source]] : [];
+        }))
+      : {};
+    process.env["SVARTZ_THEME_SOURCES"] = JSON.stringify(themeSources);
 
     process.env["SVARTZ_TAILWIND_SOURCES_PATH"] = yield* Effect.tryPromise({
       try: () => vaults.length === 1
@@ -569,7 +567,7 @@ const createAppConfig = (
       resolve: { alias: { "virtual:svartz/host": hostRegistryPath } },
       server: {
         fs: {
-          allow: [workspaceRoot, ...themeRoots],
+          allow: [projectRoot, ...themeRoots],
         },
         ...serverOptions,
       },

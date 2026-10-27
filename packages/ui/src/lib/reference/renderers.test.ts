@@ -1,44 +1,43 @@
 import { describe, expect, it } from 'vitest';
-import { defineRenderer, referencePage, registerRenderers, type ReferenceRenderer } from './renderers.js';
+import { referenceRenderer } from './adapter.js';
+import { defineRenderer, rendererIdOf, type ReferenceRenderer } from './renderers.js';
 
 const renderer = (id: string, read: ReferenceRenderer['read'] = (properties) => properties.operation ?? properties.model) =>
 	defineRenderer({ id, read, nav: () => ({ label: id, sort: [1, id, 0] }), page: (() => {}) as never });
 
-const registry = registerRenderers('@acme/docs', [renderer('rest'), renderer('mcp'), renderer('schema')]);
-const page = (properties: Record<string, unknown>) => referencePage(registry, { path: 'reference/thing.md', slug: 'reference/thing', properties });
+const entry = (properties: Record<string, unknown>) => ({ path: 'reference/thing.md', slug: 'reference/thing', properties }) as never;
 
-describe('referencePage', () => {
+describe('rendererIdOf', () => {
 	it.each([
 		['a page without reference metadata is a guide', {}, undefined],
 		['operation.protocol names the renderer', { operation: { protocol: 'mcp', kind: 'tool' } }, 'mcp'],
 		['an operation without a protocol is REST, as in the first API theme', { operation: { method: 'GET', path: '/pets' } }, 'rest'],
 		['a model block is a schema page', { model: { name: 'Pet' } }, 'schema']
 	])('%s', (_, properties, id) => {
-		expect(page(properties)?.renderer.id).toBe(id);
+		expect(rendererIdOf(properties)).toBe(id);
 	});
 
-	it.each([
-		['both kinds of metadata', { operation: { protocol: 'rest' }, model: { name: 'Pet' } }, 'has both `operation` and `model`'],
-		['a protocol without a renderer', { operation: { protocol: 'grpc' } }, 'no renderer handles `operation.protocol: grpc`. This theme renders rest, mcp, schema.'],
-		['metadata its renderer rejects', { operation: { protocol: 'rest', method: 'FETCH' } }, "isn't a valid rest page"]
-	])('names the page and the reason for %s', (_, properties, reason) => {
-		const strict = registerRenderers('@acme/docs', [renderer('rest', () => undefined), renderer('mcp'), renderer('schema')]);
-		expect(() => referencePage(strict, { path: 'reference/thing.md', slug: 'reference/thing', properties })).toThrow(
-			`"reference/thing.md" can't render: `
-		);
-		expect(() => referencePage(strict, { path: 'reference/thing.md', slug: 'reference/thing', properties })).toThrow(reason);
+	it('rejects a page with both kinds of metadata', () => {
+		expect(() => rendererIdOf({ operation: { protocol: 'rest' }, model: { name: 'Pet' } })).toThrow('has both `operation` and `model`');
 	});
 });
 
-describe('registerRenderers', () => {
-	it('accepts one renderer listed twice, so presets can share the schema renderer', () => {
-		const schema = renderer('schema');
-		expect([...registerRenderers('@acme/docs', [schema, renderer('rest'), schema]).keys()]).toEqual(['schema', 'rest']);
+describe('referenceRenderer', () => {
+	it('claims only the pages its protocol names, with the data its renderer reads', () => {
+		const rest = referenceRenderer(renderer('rest'));
+		expect(rest.detect({ operation: { method: 'GET' } }, entry({}))).toEqual({ method: 'GET' });
+		expect(rest.detect({ operation: { protocol: 'mcp' } }, entry({}))).toBeUndefined();
+		expect(rest.detect({}, entry({}))).toBeUndefined();
 	});
 
-	it('rejects two different renderers for one id, naming the theme and the id', () => {
-		expect(() => registerRenderers('@acme/docs', [renderer('rest'), renderer('rest')])).toThrow(
-			'Theme "@acme/docs" has two renderers for "rest".'
-		);
+	it('gives the reason when its renderer rejects a page it claims', () => {
+		const strict = referenceRenderer(renderer('rest', () => undefined));
+		expect(() => strict.detect({ operation: { method: 'FETCH' } }, entry({}))).toThrow("isn't a valid rest page");
+	});
+
+	it('adapts one renderer to one page renderer, so themes sharing the schema renderer make one claim', () => {
+		const schema = renderer('schema');
+		expect(referenceRenderer(schema)).toBe(referenceRenderer(schema));
+		expect(referenceRenderer(schema)).not.toBe(referenceRenderer(renderer('schema')));
 	});
 });

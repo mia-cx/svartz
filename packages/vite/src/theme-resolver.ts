@@ -8,13 +8,30 @@ import { createJiti } from "jiti";
 type ThemeModule = Record<string, unknown> & {
   default?: SvartzTheme | ((config?: Record<string, unknown>) => SvartzTheme);
   theme?: SvartzTheme | ((config?: Record<string, unknown>) => SvartzTheme);
+  extensions?: readonly unknown[];
 };
+
+/** theme-minimal's `composeThemes` entry, the composer for a `theme.base` list. */
+type ComposerModule = {
+  composeThemes: (extensions: readonly unknown[], config?: Record<string, unknown>) => SvartzTheme;
+};
+
+/** What `virtual:svartz/theme` imports: one theme module, or several and the `composeThemes` entry that composes them. */
+type ThemeImport = string | { readonly compose: string; readonly themes: readonly string[] };
+
+/**
+ * Local theme ids mapped to their source manifests (`src/lib/index.ts`), so dev
+ * loads unbuilt themes. The CLI passes it as JSON in `SVARTZ_THEME_SOURCES`.
+ */
+type ThemeSources = Readonly<Record<string, string>>;
 
 const BUILTIN_THEME_MODULE_ID = "@svartz/theme-minimal";
 const BUILTIN_THEME_RUNTIME_MODULE_ID = `${BUILTIN_THEME_MODULE_ID}/runtime`;
 
-function resolveThemeModuleId(config: ResolvedConfig): string {
-  return config.theme.base;
+/** The theme modules a vault lists, in order. */
+function resolveThemeModuleIds(config: ResolvedConfig): readonly string[] {
+  const { base } = config.theme;
+  return typeof base === "string" ? [base] : base;
 }
 
 function createRequireFromDirectory(resolveFromDirectory: string) {
@@ -88,11 +105,62 @@ function resolvePackageRootFromEntry(resolvedEntryPath: string): string | undefi
   }
 }
 
-function resolveThemeRuntimeImportId(
+/**
+ * theme-minimal's build or runtime entry for composing `themeModuleIds`. The host
+ * may not install theme-minimal under pnpm's strict layout, but every composable
+ * theme depends on it, so the first listed theme's package root resolves it too.
+ */
+function resolveComposerEntry(
+  exportId: typeof BUILTIN_THEME_MODULE_ID | typeof BUILTIN_THEME_RUNTIME_MODULE_ID,
+  themeModuleIds: readonly string[],
+  resolveFromDirectory: string,
+): string {
+  const directories = [resolveFromDirectory, resolveThemePackageRoot(themeModuleIds[0]!, resolveFromDirectory)];
+  for (const directory of directories) {
+    if (!directory) continue;
+    try {
+      return createRequireFromDirectory(directory).resolve(exportId);
+    } catch {
+      // Try the next directory; the error below names the composition.
+    }
+  }
+  throw new Error(
+    `Could not resolve "${exportId}" to compose ${themeModuleIds.join(", ")}. Install @svartz/theme-minimal in the host app.`,
+  );
+}
+
+/**
+ * The browser entry beside a theme's source manifest. The manifest (index.ts) may
+ * import build-time plugins that can't run in the browser; runtime.ts can.
+ */
+function runtimeThemeSourcePath(manifestPath: string): string | undefined {
+  const runtime = path.join(path.dirname(manifestPath), "runtime.ts");
+  return existsSync(runtime) ? runtime : undefined;
+}
+
+/**
+ * What `virtual:svartz/theme` imports for this vault. A theme with a selected
+ * source imports its `runtime.ts`, or its package id, which Vite aliases to the source.
+ */
+function resolveThemeRuntimeImport(
   config: ResolvedConfig,
   resolveFromDirectory = process.cwd(),
-): string {
-  const themeModuleId = resolveThemeModuleId(config);
+  sources: ThemeSources = {},
+): ThemeImport {
+  const runtimeImport = (themeModuleId: string) => {
+    const source = sources[themeModuleId];
+    if (source) return runtimeThemeSourcePath(source) ?? themeModuleId;
+    return resolveThemeRuntimeImportId(themeModuleId, resolveFromDirectory);
+  };
+  const { base } = config.theme;
+  if (typeof base === "string") return runtimeImport(base);
+  return {
+    compose: pathToFileURL(resolveComposerEntry(BUILTIN_THEME_RUNTIME_MODULE_ID, base, resolveFromDirectory)).href,
+    themes: base.map(runtimeImport),
+  };
+}
+
+function resolveThemeRuntimeImportId(themeModuleId: string, resolveFromDirectory: string): string {
   if (themeModuleId === BUILTIN_THEME_MODULE_ID) {
     return pathToFileURL(resolveThemeEntry(BUILTIN_THEME_RUNTIME_MODULE_ID, resolveFromDirectory)).href;
   }
@@ -110,11 +178,7 @@ function resolveThemeRuntimeImportId(
   }
 }
 
-function resolveThemeBuildImportId(
-  config: ResolvedConfig,
-  resolveFromDirectory = process.cwd(),
-): string {
-  const themeModuleId = resolveThemeModuleId(config);
+function resolveThemeBuildImportId(themeModuleId: string, resolveFromDirectory: string): string {
   if (themeModuleId === BUILTIN_THEME_MODULE_ID) {
     return themeModuleId;
   }
@@ -148,17 +212,59 @@ function resolveThemeExport(
   return theme;
 }
 
+/** A listed theme's extensions: a list composes only themes that export them. */
+function themeExtensions(themeModule: ThemeModule, themeModuleId: string): readonly unknown[] {
+  if (Array.isArray(themeModule.extensions)) return themeModule.extensions;
+  throw new Error(`Theme "${themeModuleId}" isn't a composable theme; it exports no \`extensions\`.`);
+}
+
+/**
+ * The vault's build manifest. A `theme.base` list composes every listed theme's
+ * `extensions` with theme-minimal's `composeThemes`; a theme with a selected
+ * source loads unbuilt.
+ */
 async function loadThemeModule(
   loader: (id: string) => Promise<unknown>,
   config: ResolvedConfig,
   resolveFromDirectory = process.cwd(),
-  sourcePath?: string,
+  sources: ThemeSources = {},
 ): Promise<SvartzTheme> {
-  const themeModule = (sourcePath
-    ? await createJiti(import.meta.url, { moduleCache: false }).import(sourcePath)
-    : await loader(resolveThemeBuildImportId(config, resolveFromDirectory))) as ThemeModule;
-  const { base: _base, ...themeConfig } = config.theme;
-  return resolveThemeExport(themeModule, themeConfig);
+  const importTheme = async (themeModuleId: string) => {
+    const source = sources[themeModuleId];
+    return (source
+      ? await createJiti(import.meta.url, { moduleCache: false }).import(source)
+      : await loader(resolveThemeBuildImportId(themeModuleId, resolveFromDirectory))) as ThemeModule;
+  };
+  const { base, ...themeConfig } = config.theme;
+  if (typeof base === "string") return resolveThemeExport(await importTheme(base), themeConfig);
+
+  const themeModules = await Promise.all(base.map(importTheme));
+  const extensions = themeModules.flatMap((themeModule, index) => themeExtensions(themeModule, base[index]!));
+  const composer = pathToFileURL(resolveComposerEntry(BUILTIN_THEME_MODULE_ID, base, resolveFromDirectory)).href;
+  const { composeThemes } = await loader(composer) as ComposerModule;
+  const theme = composeThemes(extensions, themeConfig);
+  validateTheme(theme);
+  return theme;
+}
+
+/** Source lines that import the theme and bind `_manifest` to its manifest for `themeConfig`. */
+function manifestSource(themeImport: ThemeImport, themeConfig: Record<string, unknown>): string[] {
+  const config = `const _themeConfig = ${JSON.stringify(themeConfig)};`;
+  if (typeof themeImport === "string") {
+    return [
+      `import * as themeModule from ${JSON.stringify(themeImport)};`,
+      config,
+      "const _themeExport = themeModule.default ?? themeModule.theme ?? themeModule;",
+      "const _manifest = typeof _themeExport === 'function' ? _themeExport(_themeConfig) : _themeExport;",
+    ];
+  }
+  const { compose, themes } = themeImport;
+  return [
+    `import { composeThemes } from ${JSON.stringify(compose)};`,
+    ...themes.map((id, index) => `import * as themeModule${index} from ${JSON.stringify(id)};`),
+    config,
+    `const _manifest = composeThemes([${themes.map((_, index) => `...themeModule${index}.extensions`).join(", ")}], _themeConfig);`,
+  ];
 }
 
 /**
@@ -166,9 +272,10 @@ async function loadThemeModule(
  *
  * If the theme module exports a factory function, it is called with themeConfig
  * at module evaluation time so route patterns reflect vault-level configuration.
+ * Several theme modules compose their `extensions` on theme-minimal's shell.
  */
 function createThemeVirtualModuleSource(
-  themeModuleId: string,
+  themeImport: ThemeImport,
   themeConfig: Record<string, unknown> = {},
 ): string {
   // Generated files live under the host project, which may not install core directly.
@@ -176,12 +283,9 @@ function createThemeVirtualModuleSource(
     ? fileURLToPath(import.meta.resolve("@svartz/core"))
     : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../node_modules/@svartz/core/dist/index.js");
   return [
-    `import * as themeModule from ${JSON.stringify(themeModuleId)};`,
     `import { matchThemeRoute, materializeTheme, resolveThemeRouteToArtifactKey } from ${JSON.stringify(coreModuleId)};`,
+    ...manifestSource(themeImport, themeConfig),
     "",
-    `const _themeConfig = ${JSON.stringify(themeConfig)};`,
-    "const _themeExport = themeModule.default ?? themeModule.theme ?? themeModule;",
-    "const _manifest = typeof _themeExport === 'function' ? _themeExport(_themeConfig) : _themeExport;",
     "export let theme = _manifest;",
     "export let routes = theme.routes;",
     "export const ready = materializeTheme(_manifest).then((resolved) => {",
@@ -204,8 +308,8 @@ export {
   loadThemeModule,
   BUILTIN_THEME_MODULE_ID,
   resolveThemeExport,
-  resolveThemeModuleId,
+  resolveThemeModuleIds,
   resolveThemePackageRoot,
-  resolveThemeRuntimeImportId,
+  resolveThemeRuntimeImport,
 };
-export type { ThemeModule };
+export type { ThemeImport, ThemeModule, ThemeSources };

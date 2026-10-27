@@ -1,4 +1,4 @@
-import { isRecord, topLevelSections, type UiFolderEntry } from '@svartz/ui';
+import { isRecord, topLevelSections, type ExplorerItem, type UiFolderEntry } from '@svartz/ui';
 
 type Properties = Readonly<Record<string, unknown>>;
 
@@ -148,18 +148,18 @@ export interface TocItem {
 }
 
 /**
- * "On this page" for a symbol: the generated sections (ids match
- * SymbolReference) around the note's own headings, in the order they render.
+ * "On this page" for a symbol: the note's own headings, then the generated
+ * sections (ids match SymbolPage), in the order they render.
  */
 export function symbolToc(symbol: DocSymbol, noteToc: readonly TocItem[]): TocItem[] {
 	const section = (slug: string, text: string, present: boolean) => (present ? [{ depth: 2, text, slug }] : []);
 	const memberKinds = [...new Set(symbol.members.map((member) => member.kind))];
 	return [
+		...noteToc,
 		...section('type-parameters', 'Type parameters', symbol.typeParameters.length > 0),
 		...section('parameters', 'Parameters', symbol.parameters.length > 0),
 		...section('returns', 'Returns', Boolean(symbol.returns)),
 		...section('throws', 'Throws', symbol.throws.length > 0),
-		...noteToc,
 		...section('hierarchy', 'Hierarchy', symbol.extends.length + symbol.implements.length > 0),
 		...memberKinds.map((kind) => ({ depth: 2, text: KIND_HEADINGS[kind], slug: `members-${kind}` }))
 	];
@@ -183,41 +183,48 @@ export function groupByKind<T extends NavEntry>(entries: readonly T[]): { kind: 
 	})).filter((group) => group.entries.length > 0);
 }
 
-export interface NavSection<T> {
+/** Every symbol kind in reference order, for the explorer. */
+const KIND_ORDER = Object.keys(SYMBOL_KINDS) as SymbolKind[];
+
+/**
+ * A symbol's explorer row: its kind badge and name. Symbols list before a
+ * folder's guides (plain notes rank 2), grouped by kind in reference order.
+ */
+export const symbolExplorerItem = (symbol: DocSymbol): ExplorerItem => ({
+	badge: { label: symbol.kind.toUpperCase(), hue: SYMBOL_KINDS[symbol.kind] },
+	label: symbol.name,
+	sort: [KIND_ORDER.indexOf(symbol.kind) - KIND_ORDER.length, symbol.name, 0]
+});
+
+export interface ModuleSection<T> {
 	/** The top-level folder, or `""` for the Overview section of root notes. */
 	readonly slug: string;
 	readonly title: string;
 	readonly href?: string;
-	/** A module of symbols (grouped by kind) rather than a folder of guides. */
+	/** A module of symbols rather than a folder of guides. */
 	readonly symbols: boolean;
 	readonly entries: T[];
-	/** Entries that aren't page-level symbols (guides), which `groupByKind` leaves out. */
-	readonly pages: T[];
 }
 
-const isPageKind = (kind: SymbolKind | undefined) => (PAGE_KINDS as readonly (SymbolKind | undefined)[]).includes(kind);
-
 /**
- * The sidebar: one section per top-level folder, guides before modules. Notes
- * at the vault root (other than the home note) form an Overview section. A
- * folder note (`core/index.md`) names and links its module.
+ * The home page's modules: one section per top-level folder, guides before
+ * modules. Notes at the vault root (other than the home note) form an Overview
+ * section. A folder note (`core/index.md`) names and links its module.
  */
-export function symbolNav<T extends NavEntry>(
+export function moduleSections<T extends NavEntry>(
 	entries: readonly T[],
 	folders: readonly Pick<UiFolderEntry, 'slug' | 'title' | 'href' | 'noteSlugs' | 'noteSlug'>[]
-): NavSection<T>[] {
+): ModuleSection<T>[] {
 	return topLevelSections(entries, folders)
-		.map((section): NavSection<T> => {
-			const sorted = [...section.entries].sort((left, right) => collator.compare(left.title, right.title));
-			return {
+		.map(
+			(section): ModuleSection<T> => ({
 				slug: section.slug,
 				title: section.slug ? section.title : 'Overview',
 				href: section.href,
-				symbols: sorted.some((entry) => kindOf(entry) !== undefined),
-				entries: sorted,
-				pages: sorted.filter((entry) => !isPageKind(kindOf(entry)))
-			};
-		})
+				symbols: section.entries.some((entry) => kindOf(entry) !== undefined),
+				entries: section.entries
+			})
+		)
 		.sort(
 			(left, right) =>
 				Number(left.symbols) - Number(right.symbols) ||

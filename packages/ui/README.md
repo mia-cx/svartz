@@ -37,4 +37,4 @@ Add `/// <reference types="@svartz/ui/virtual-modules" />` to `src/app.d.ts` whe
 
 ## Reference themes
 
-`@svartz/ui/reference/runtime` is the shell behind `@svartz/theme-api-docs` and `@svartz/theme-mcp-docs`: the layout, the filterable sidebar, schema trees, code panels, and `referenceTheme`, which binds page renderers to the shell. `@svartz/ui/reference` is its build-time manifest for a theme's Node entry. [Reference themes](../../docs/reference-themes.md) shows how to combine renderers in one site.
+`@svartz/ui/reference/runtime` holds the building blocks behind `@svartz/theme-api-docs` and `@svartz/theme-mcp-docs`: schema trees, code panels, endpoint bars, the reference frame and top bar, renderer types, and `referenceExtension`, which turns page renderers into a theme-minimal extension. `@svartz/ui/reference` has the Node-safe metadata readers and types. The shell itself is theme-minimal's; [Reference themes](../../docs/reference-themes.md) shows how to compose the themes.

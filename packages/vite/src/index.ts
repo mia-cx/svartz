@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import {
   mkdir,
   writeFile,
@@ -44,10 +43,12 @@ import {
   createThemeVirtualModuleSource,
   loadThemeModule,
   resolveThemeExport,
-  resolveThemeModuleId,
+  resolveThemeModuleIds,
   resolveThemePackageRoot,
-  resolveThemeRuntimeImportId,
+  resolveThemeRuntimeImport,
+  type ThemeImport,
   type ThemeModule,
+  type ThemeSources,
 } from "./theme-resolver";
 import {
   assertRequiredStages,
@@ -60,6 +61,7 @@ import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryP
 import { emitProtectedGroupArtifacts } from "./protected-payload";
 import { clearPublicAssets, recordPublicAssets } from "./public-assets";
 import { writeProtectedBridgeModules, type ProtectedBridgeModule } from "./protected-bridge";
+import { themeSourceAliases } from "./theme-aliases";
 
 const PIPELINE_STAGES: readonly StageName[] = [
   "discoverFiles",
@@ -82,29 +84,23 @@ function toError(cause: unknown): Error {
   return cause instanceof Error ? cause : new Error(String(cause));
 }
 
-function extractThemeConfig(theme: { base: string; [key: string]: unknown }): Record<string, unknown> {
+function extractThemeConfig(theme: ResolvedConfig["theme"]): Record<string, unknown> {
   const { base: _base, ...rest } = theme;
   return rest;
 }
 
-function selectedThemeSourcePath(config: ResolvedConfig): string | undefined {
-  if (process.env["SVARTZ_THEME_SOURCE_ID"] !== config.theme.base) return;
-  return process.env["SVARTZ_THEME_SOURCE_PATH"];
-}
-
-/**
- * The browser entry beside a theme's source manifest. The manifest (index.ts) may
- * import build-time plugins that can't run in the browser; runtime.ts can.
- */
-function runtimeThemeSourcePath(manifestPath: string): string | undefined {
-  const runtime = join(dirname(manifestPath), "runtime.ts");
-  return existsSync(runtime) ? runtime : undefined;
+/** The selected workspace theme sources among this vault's themes. */
+function selectedThemeSources(config: ResolvedConfig): ThemeSources {
+  const sources = JSON.parse(process.env["SVARTZ_THEME_SOURCES"] ?? "{}") as ThemeSources;
+  return Object.fromEntries(resolveThemeModuleIds(config).flatMap((id) => sources[id] ? [[id, sources[id]]] : []));
 }
 
 function svartz(options: SvartzVitePluginOptions): Plugin {
   let context = createSvartzViteContext(options);
   let kitBasePath: string | undefined;
-  let themeModuleId = resolveThemeModuleId(context.config);
+  // Bare ids until `configResolved` resolves them from the app root.
+  const { base } = context.config.theme;
+  let themeImport: ThemeImport = typeof base === "string" ? base : { compose: "@svartz/theme-minimal/runtime", themes: base };
   let theme: SvartzTheme | undefined;
   let plugins: ReturnType<typeof resolveRuntimePlugins> = [];
   let emittedArtifacts: Artifact[] = [];
@@ -192,7 +188,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
 
   async function executePipeline(changeEvent?: ChangeEvent): Promise<void> {
     theme = await loadThemeModule(
-      (id) => import(id), context.config, context.root, selectedThemeSourcePath(context.config),
+      (id) => import(id), context.config, context.root, selectedThemeSources(context.config),
     );
     plugins = resolveRuntimePlugins(context.config, theme);
     const runnerContext = createRunnerContext();
@@ -233,7 +229,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
         [
           writeGeneratedModule(
             getGeneratedRuntimeThemeModulePath(context.config),
-            createThemeVirtualModuleSource(themeModuleId, extractThemeConfig(context.config.theme)),
+            createThemeVirtualModuleSource(themeImport, extractThemeConfig(context.config.theme)),
           ),
           writeGeneratedModule(
             getGeneratedRuntimeArtifactsModulePath(context.config),
@@ -307,27 +303,20 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     name: options.exposeVirtualModules === false ? `svartz:vite:${options.config.id}` : "svartz:vite",
     enforce: "post",
     config() {
-      const alias: Record<string, string> = options.exposeVirtualModules === false ? {} : {
-        "virtual:svartz/theme": getGeneratedRuntimeThemeModulePath(options.config),
-        "virtual:svartz/artifacts": getGeneratedRuntimeArtifactsModulePath(options.config),
-      };
-      const themeSourcePath = selectedThemeSourcePath(options.config);
-      if (themeSourcePath && options.config.theme?.base) {
-        alias[options.config.theme.base] = themeSourcePath;
-      }
+      const virtualModules = options.exposeVirtualModules === false ? [] : [
+        { find: "virtual:svartz/theme", replacement: getGeneratedRuntimeThemeModulePath(options.config) },
+        { find: "virtual:svartz/artifacts", replacement: getGeneratedRuntimeArtifactsModulePath(options.config) },
+      ];
       return {
         resolve: {
-          alias,
+          alias: [...virtualModules, ...themeSourceAliases(selectedThemeSources(options.config))],
         },
       };
     },
     configResolved(resolved) {
       context = createSvartzViteContext(options, resolved);
       kitBasePath = svelteKitBasePath(resolved.define);
-      const themeSourcePath = selectedThemeSourcePath(context.config);
-      themeModuleId = themeSourcePath
-        ? runtimeThemeSourcePath(themeSourcePath) ?? resolveThemeModuleId(context.config)
-        : resolveThemeRuntimeImportId(context.config, context.root);
+      themeImport = resolveThemeRuntimeImport(context.config, context.root, selectedThemeSources(context.config));
     },
     async buildStart() {
       await executePipeline();
@@ -419,7 +408,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     load(id) {
       if (options.exposeVirtualModules === false) return null;
       if (id === RESOLVED_THEME_VIRTUAL_ID) {
-        return createThemeVirtualModuleSource(themeModuleId, extractThemeConfig(context.config.theme));
+        return createThemeVirtualModuleSource(themeImport, extractThemeConfig(context.config.theme));
       }
 
       if (id === RESOLVED_ARTIFACTS_VIRTUAL_ID) {
@@ -443,6 +432,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
 
 export default svartz;
 export { svartz };
+export { themeSourceAliases } from "./theme-aliases";
 export {
   createArtifactsVirtualModuleSource,
   getGeneratedArtifactsRoot,
@@ -457,9 +447,9 @@ export {
   createThemeVirtualModuleSource,
   loadThemeModule,
   resolveThemeExport,
-  resolveThemeModuleId,
+  resolveThemeModuleIds,
   resolveThemePackageRoot,
-  resolveThemeRuntimeImportId,
+  resolveThemeRuntimeImport,
   loadVirtualModule,
   resolveVirtualModuleId,
   assertRequiredStages,
@@ -477,5 +467,7 @@ export type {
   SvartzVirtualModuleId,
   SvartzViteContext,
   SvartzVitePluginOptions,
+  ThemeImport,
   ThemeModule,
+  ThemeSources,
 };
