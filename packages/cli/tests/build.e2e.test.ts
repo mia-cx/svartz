@@ -1,4 +1,4 @@
-import { access, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { execFile, spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -123,6 +123,70 @@ describe("svartz CLI", () => {
       await writeFile(resolve(ROOT, "turbo.json"), turboSource);
     }
   }, 240_000);
+
+  describe("composes reference themes", () => {
+    const configPath = resolve(ROOT, ".svartz-compose-e2e.config.ts");
+    const compositePath = resolve(ROOT, ".svartz-compose-e2e-theme");
+    const dist = resolve(ROOT, ".svartz/vaults/compose-e2e/dist");
+
+    /** Builds the reference showcase with this theme `base`, then reads a REST and an MCP page. */
+    async function buildReference(base: string | readonly string[]) {
+      const packageSource = await readFile(resolve(ROOT, "package.json"), "utf8");
+      const turboSource = await readFile(resolve(ROOT, "turbo.json"), "utf8");
+      try {
+        await writeFile(configPath, `export default {
+          version: "1.0.0",
+          vaults: [{ id: "compose-e2e", path: "vaults/showcase-reference", target: { type: "static" },
+            theme: { base: ${JSON.stringify(base)}, version: "v2", routes: { folders: "reference" } },
+            site: { title: "Composed reference" } }],
+        };\n`);
+        await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
+        return {
+          rest: await readFile(resolve(dist, "rest/get-pet/index.html"), "utf8"),
+          mcp: await readFile(resolve(dist, "mcp/find-pets/index.html"), "utf8"),
+        };
+      } finally {
+        await rm(configPath, { force: true });
+        await writeFile(resolve(ROOT, "package.json"), packageSource);
+        await writeFile(resolve(ROOT, "turbo.json"), turboSource);
+      }
+    }
+
+    function expectReferencePages({ rest, mcp }: { rest: string; mcp: string }) {
+      expect(rest).toContain("sv-reference-badge");
+      expect(rest).toContain(">GET");
+      expect(rest).toContain("Retrieve a pet");
+      expect(rest).toContain("curl -X GET");
+      expect(rest).toContain('id="explorer-tree"');
+      expect(mcp).toContain("find_pets");
+    }
+
+    it("composes every theme a theme.base list names", async () => {
+      expectReferencePages(await buildReference(["@svartz/theme-api-docs", "@svartz/theme-mcp-docs"]));
+    }, 240_000);
+
+    it("builds a composite theme package as a single base", async () => {
+      const compose = (entry: string) => [
+        `import { extensions as api } from '@svartz/theme-api-docs${entry}';`,
+        `import { extensions as mcp } from '@svartz/theme-mcp-docs${entry}';`,
+        `import { composeThemes } from '@svartz/theme-minimal${entry}';`,
+        "export const extensions = [...api, ...mcp];",
+        "export default (config) => composeThemes(extensions, config);",
+        "",
+      ].join("\n");
+      try {
+        await mkdir(compositePath, { recursive: true });
+        await writeFile(resolve(compositePath, "package.json"), JSON.stringify({
+          name: "@acme/reference-theme", type: "module", exports: { ".": "./index.js", "./runtime": "./runtime.js" },
+        }));
+        await writeFile(resolve(compositePath, "index.js"), compose(""));
+        await writeFile(resolve(compositePath, "runtime.js"), compose("/runtime"));
+        expectReferencePages(await buildReference(compositePath));
+      } finally {
+        await rm(compositePath, { recursive: true, force: true });
+      }
+    }, 240_000);
+  });
 
   it("builds social images and favicon variants for a static vault", async () => {
     const configPath = resolve(ROOT, ".svartz-images-e2e.config.ts");

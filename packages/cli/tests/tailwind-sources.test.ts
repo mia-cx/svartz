@@ -13,7 +13,7 @@ import {
 const require = createRequire(import.meta.url);
 const tempDirs: string[] = [];
 
-function createConfig(themeBase: string): ResolvedConfig {
+function createConfig(themeBase: string | readonly string[]): ResolvedConfig {
   return {
     theme: { base: themeBase },
   } as unknown as ResolvedConfig;
@@ -55,6 +55,23 @@ describe("tailwind source generation", () => {
 
     expect(sourceGlobs).toContain(path.join(await realpath(themeRoot), "src", "**/*.{svelte,js,ts}"));
     expect(sourceGlobs).toContain(path.join(await realpath(uiRoot), "src", "**/*.{svelte,js,ts}"));
+  });
+
+  it("collects source globs for every theme a theme.base list names", async () => {
+    const appRoot = await mkdtemp(path.join(os.tmpdir(), "svartz-tailwind-list-"));
+    tempDirs.push(appRoot);
+
+    const apiRoot = path.join(appRoot, "node_modules", "@acme", "theme-api");
+    const mcpRoot = path.join(appRoot, "node_modules", "@acme", "theme-mcp");
+    await createPackage(apiRoot, "@acme/theme-api");
+    await createPackage(mcpRoot, "@acme/theme-mcp");
+
+    const sourceGlobs = getTailwindSourceGlobs(appRoot, createConfig(["@acme/theme-api", "@acme/theme-mcp"]));
+
+    expect(sourceGlobs).toEqual([
+      path.join(await realpath(apiRoot), "src", "**/*.{svelte,js,ts}"),
+      path.join(await realpath(mcpRoot), "src", "**/*.{svelte,js,ts}"),
+    ]);
   });
 
   it("scans dist in packed theme and UI packages without src", async () => {
