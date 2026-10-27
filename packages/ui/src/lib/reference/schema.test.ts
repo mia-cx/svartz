@@ -33,9 +33,22 @@ describe('readSchema', () => {
 		['a type list with null is nullable', { type: ['string', 'null'] }, 'string | null'],
 		['additionalProperties is a map', { type: 'object', additionalProperties: { type: 'string' } }, 'map of string'],
 		['a $defs ref names its schema', { $ref: '#/$defs/Pet' }, 'Pet'],
-		['const is a one-value enum', { const: 'tools/call' }, '"tools/call"']
+		['const is a one-value enum', { const: 'tools/call' }, '"tools/call"'],
+		['a null alternative is nullable', { anyOf: [{ type: 'string', maxLength: 2048, format: 'uri' }, { type: 'null' }] }, 'string (uri) | null'],
+		['a type list keeps every type', { type: ['string', 'number', 'null'] }, 'string | number | null'],
+		['a nullable union keeps its alternatives', { anyOf: [{ type: 'string' }, { type: 'number' }], nullable: true }, 'string | number | null'],
+		['object alternatives read once', { oneOf: [{ type: 'object', properties: {} }, { type: 'object', properties: {} }] }, 'object'],
+		['an array of a union brackets the union', { type: 'array', items: { oneOf: [{ type: 'string' }, { $ref: 'Pet' }] } }, '(string | Pet)[]'],
+		['null alone is null', { type: 'null' }, 'null']
 	])('labels JSON Schema as written by tools: %s', (_, raw, label) => {
 		expect(schemaLabel(readSchema(raw)!)).toBe(label);
+	});
+
+	it('folds a null alternative into the other, keeping its limits and the outer description', () => {
+		const avatar = readSchema({ description: 'Null shows your sigil.', anyOf: [{ type: 'string', maxLength: 2048, format: 'uri' }, { type: 'null' }] });
+		expect(avatar).toMatchObject({ type: 'string', format: 'uri', nullable: true, description: 'Null shows your sigil.', constraints: ['at most 2048 characters'] });
+		expect(avatar?.anyOf).toBeUndefined();
+		expect(exampleFromSchema(readSchema({ type: 'null' })!, {})).toBeNull();
 	});
 
 	it('describes length and range limits in words, and keeps the pattern as written', () => {

@@ -2,13 +2,15 @@
 	A schema as a field list: each field's name, type, whether it's required,
 	its limits, default, allowed values, and description. Nested objects fold
 	open; `$ref`s link to their schema page instead of expanding, so cycles stay
-	finite. Parameters and arguments render through the same tree.
+	finite. A `oneOf`/`anyOf` lists each alternative under its title or
+	discriminator value, with its own fields. Parameters and arguments render
+	through the same tree.
 -->
 <script lang="ts">
 	import type { IndexEntry } from '@svartz/core';
 	import DescText from '../DescText.svelte';
 	import SchemaTree from './SchemaTree.svelte';
-	import { schemaLabel, type SchemaNode, type SchemaProperty } from './schema.js';
+	import { alternativesOf, discriminatorOf, schemaLabel, type SchemaNode, type SchemaProperty } from './schema.js';
 
 	let {
 		schema,
@@ -24,14 +26,33 @@
 	} = $props();
 
 	const OPEN_DEPTH = 1;
+	// An array lists its items' fields, so `Pet[]` and `Pet[][]` open like `Pet`.
+	const bodyOf = (node: SchemaNode): SchemaNode =>
+		node.type === 'array' && node.items && !node.items.ref ? bodyOf(node.items) : node;
 	// A map lists one `[key: string]` field for its values, so their fields stay a level down.
 	const fieldsOf = (node: SchemaNode): readonly SchemaProperty[] | undefined =>
-		node.properties ??
-		(node.type === 'array' ? node.items?.properties : undefined) ??
-		(node.values ? [{ name: '[key: string]', required: false, schema: node.values }] : undefined);
+		node.properties ?? (node.values ? [{ name: '[key: string]', required: false, schema: node.values }] : undefined);
+	// Scalar unions read in one line (`string | number`); alternatives with fields or links list below.
+	const branchesOf = (node: SchemaNode) => {
+		const alternatives = alternativesOf(node);
+		return alternatives?.some((alternative) => alternative.ref || opens(alternative)) ? alternatives : undefined;
+	};
+	const opens = (node: SchemaNode): boolean => Boolean(fieldsOf(bodyOf(node)) || branchesOf(bodyOf(node)));
 	// Allowed values list on their own line, so the type stays short.
 	const typeOf = (node: SchemaNode) => (node.enum?.length ? (node.type ?? 'enum') + (node.nullable ? ' | null' : '') : schemaLabel(node));
 	const literal = (value: unknown) => (typeof value === 'string' ? value : JSON.stringify(value));
+
+	const body = $derived(bodyOf(schema));
+	const fields = $derived(fieldsOf(body));
+	const branches = $derived(branchesOf(body));
+	const discriminator = $derived(discriminatorOf(body));
+	/** An alternative's name: its `title`, else its discriminator value, else its position. A `$ref` names itself. */
+	const branchName = (node: SchemaNode, index: number) => {
+		if (node.title) return node.title;
+		const pinned = discriminator && node.properties?.find((property) => property.name === discriminator)?.schema.enum?.[0];
+		if (pinned !== undefined) return `${discriminator}: ${literal(pinned)}`;
+		return node.ref ? undefined : `Option ${index + 1}`;
+	};
 </script>
 
 {#snippet typeLabel(node: SchemaNode)}
@@ -60,24 +81,52 @@
 	<span class={property.required ? 'required' : 'optional'}>{property.required ? 'Required' : 'Optional'}</span>
 {/snippet}
 
-{#if fieldsOf(schema)}
-	<ul class="tree" class:nested={depth > 0}>
-		{#each fieldsOf(schema) ?? [] as property (property.name)}
-			{@const nested = fieldsOf(property.schema)}
-			<li>
-				{#if nested && !property.schema.ref}
-					<details open={depth < OPEN_DEPTH}>
-						<summary>{@render field(property)}</summary>
+{#snippet branch(node: SchemaNode, index: number)}
+	{@const name = branchName(node, index)}
+	{#if name}<span class="branch">{name}</span>{/if}
+	{@render typeLabel(node)}
+{/snippet}
+
+{#if fields || branches}
+	{#if fields}
+		<ul class="tree" class:nested={depth > 0}>
+			{#each fields as property (property.name)}
+				<li>
+					{#if opens(property.schema) && !property.schema.ref}
+						<details open={depth < OPEN_DEPTH}>
+							<summary>{@render field(property)}</summary>
+							{@render details(property.schema)}
+							<SchemaTree schema={property.schema} {schemaHref} {entries} depth={depth + 1} />
+						</details>
+					{:else}
+						<div class="row">{@render field(property)}</div>
 						{@render details(property.schema)}
-						<SchemaTree schema={property.schema} {schemaHref} {entries} depth={depth + 1} />
-					</details>
-				{:else}
-					<div class="row">{@render field(property)}</div>
-					{@render details(property.schema)}
-				{/if}
-			</li>
-		{/each}
-	</ul>
+					{/if}
+				</li>
+			{/each}
+		</ul>
+	{/if}
+	{#if branches}
+		<div class="union" class:nested={depth > 0}>
+			<p class="union-label">{body.oneOf ? 'One of' : 'Any of'}</p>
+			<ul class="tree">
+				{#each branches as node, index (index)}
+					<li>
+						{#if opens(node) && !node.ref}
+							<details open={depth < OPEN_DEPTH}>
+								<summary>{@render branch(node, index)}</summary>
+								{@render details(node)}
+								<SchemaTree schema={node} {schemaHref} {entries} depth={depth + 1} />
+							</details>
+						{:else}
+							<div class="row">{@render branch(node, index)}</div>
+							{@render details(node)}
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
 {:else}
 	<div class="single">
 		<p>{@render typeLabel(schema)}</p>
@@ -93,7 +142,8 @@
 		font-size: var(--sv-step--1);
 	}
 
-	.tree.nested {
+	.tree.nested,
+	.union.nested {
 		margin: var(--sv-space-2) 0 0 var(--sv-space-2);
 		padding-inline-start: var(--sv-space-4);
 		border-inline-start: var(--sv-rule-width) solid var(--sv-rule);
@@ -106,6 +156,33 @@
 
 	.nested li:last-child {
 		border-block-end: 0;
+	}
+
+	.union {
+		font-size: var(--sv-step--1);
+	}
+
+	.tree.nested + .union.nested {
+		margin-block-start: var(--sv-space-3);
+	}
+
+	.union-label {
+		margin: var(--sv-space-2) 0 0;
+		color: var(--sv-muted);
+		font-size: var(--sv-label-size);
+		font-weight: 600;
+		text-transform: uppercase;
+	}
+
+	.union .tree {
+		font-size: inherit;
+	}
+
+	.branch {
+		color: var(--sv-ink);
+		font-family: var(--sv-font-mono);
+		font-weight: 600;
+		overflow-wrap: anywhere;
 	}
 
 	.row,

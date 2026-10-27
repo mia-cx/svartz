@@ -10,7 +10,10 @@ const isScalar = (value: unknown): value is string | number | boolean =>
  * (`$ref: Pet`); `#/components/schemas/Pet` and `#/$defs/Pet` also name `Pet`.
  */
 export interface SchemaNode {
+	/** `null` only for a schema that allows nothing else. */
 	readonly type?: string;
+	/** Names an alternative in a union. */
+	readonly title?: string;
 	readonly format?: string;
 	readonly description?: string;
 	/** Values keep their JSON type: `enum: [0, 1]` stays numeric. */
@@ -26,6 +29,8 @@ export interface SchemaNode {
 	readonly values?: SchemaNode;
 	readonly oneOf?: readonly SchemaNode[];
 	readonly anyOf?: readonly SchemaNode[];
+	/** OpenAPI's `discriminator.propertyName`. */
+	readonly discriminator?: string;
 	/** Length and range limits in words: `at most 100 characters`. */
 	readonly constraints?: readonly string[];
 	/** The regular expression a string matches. */
@@ -56,10 +61,37 @@ function constraintsOf(raw: Readonly<Record<string, unknown>>): string[] {
 	});
 }
 
+const isNullType = (node: SchemaNode) => node.type === 'null';
+
+/** Keywords that describe the whole schema rather than one of its types. */
+const SHARED_KEYWORDS = { title: undefined, description: undefined, default: undefined, example: undefined, examples: undefined, nullable: undefined };
+
+/**
+ * A frontmatter schema, normalized. `null` never stands alone in a union: a
+ * `null` type or alternative marks the schema `nullable`, and a union left
+ * with one alternative becomes that alternative. `type: [string, number]`
+ * reads as `anyOf` its types.
+ */
 export function readSchema(raw: unknown): SchemaNode | undefined {
 	if (!isRecord(raw)) return undefined;
-	const ref = text(raw.$ref)?.split('/').at(-1);
 	const types = (Array.isArray(raw.type) ? raw.type : [raw.type]).filter((type): type is string => typeof type === 'string');
+	const nonNull = types.filter((type) => type !== 'null');
+	const alternatives = (value: unknown) => (Array.isArray(value) ? value.map(readSchema).filter((node) => node !== undefined) : []);
+	const [oneOf, anyOf] = [alternatives(raw.oneOf), alternatives(raw.anyOf)];
+	const shared = {
+		title: text(raw.title),
+		description: text(raw.description),
+		default: raw.default,
+		// `example: null` is a real example, so only a missing one falls back.
+		example: raw.example !== undefined ? raw.example : Array.isArray(raw.examples) ? raw.examples[0] : undefined,
+		nullable: raw.nullable === true || (nonNull.length > 0 && nonNull.length < types.length) || [...oneOf, ...anyOf].some(isNullType) || undefined
+	};
+	if (nonNull.length > 1) {
+		return { ...shared, anyOf: nonNull.map((type) => readSchema({ ...raw, ...SHARED_KEYWORDS, type })!) };
+	}
+	const [someOf, someAny] = [oneOf.filter((node) => !isNullType(node)), anyOf.filter((node) => !isNullType(node))];
+	const lone = someOf.length + someAny.length === 1 && !raw.properties && !raw.$ref ? (someOf[0] ?? someAny[0]) : undefined;
+	if (lone) return { ...lone, ...defined(shared) };
 	const required = Array.isArray(raw.required) ? raw.required.filter((name) => typeof name === 'string') : [];
 	const properties = isRecord(raw.properties)
 		? Object.entries(raw.properties).flatMap(([name, value]): SchemaProperty[] => {
@@ -67,27 +99,48 @@ export function readSchema(raw: unknown): SchemaNode | undefined {
 				return schema ? [{ name, required: required.includes(name), schema }] : [];
 			})
 		: undefined;
-	const variants = (value: unknown) =>
-		Array.isArray(value) ? value.map(readSchema).filter((node) => node !== undefined) : undefined;
 	const values = isScalar(raw.const) ? [raw.const] : Array.isArray(raw.enum) ? raw.enum.filter(isScalar) : undefined;
 	return {
-		type: types.find((type) => type !== 'null'),
+		...shared,
+		type: nonNull[0] ?? (types.length ? 'null' : undefined),
 		format: text(raw.format),
-		description: text(raw.description),
 		enum: values,
-		default: raw.default,
-		// `example: null` is a real example, so only a missing one falls back.
-		example: raw.example !== undefined ? raw.example : Array.isArray(raw.examples) ? raw.examples[0] : undefined,
-		nullable: raw.nullable === true || types.includes('null'),
-		ref,
+		ref: text(raw.$ref)?.split('/').at(-1),
 		items: readSchema(raw.items),
 		properties,
 		values: readSchema(raw.additionalProperties),
-		oneOf: variants(raw.oneOf),
-		anyOf: variants(raw.anyOf),
+		oneOf: someOf.length ? someOf : undefined,
+		anyOf: someAny.length ? someAny : undefined,
+		discriminator: isRecord(raw.discriminator) ? text(raw.discriminator.propertyName) : undefined,
 		constraints: constraintsOf(raw),
 		pattern: text(raw.pattern)
 	};
+}
+
+/** The entries of `record` that have a value. */
+const defined = <T extends object>(record: T): Partial<T> =>
+	Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined)) as Partial<T>;
+
+/** A union's alternatives: its `oneOf`, else its `anyOf`. */
+export const alternativesOf = (schema: SchemaNode) => schema.oneOf ?? schema.anyOf;
+
+/**
+ * The property that tells a union's object alternatives apart: OpenAPI's
+ * `discriminator`, else the one property every alternative pins to a
+ * different single value (`kind: { const: webhook }`).
+ */
+export function discriminatorOf(schema: SchemaNode): string | undefined {
+	if (schema.discriminator) return schema.discriminator;
+	const alternatives = alternativesOf(schema);
+	if (!alternatives || alternatives.length < 2) return undefined;
+	const pinned = (node: SchemaNode, name: string) => {
+		const values = node.properties?.find((property) => property.name === name)?.schema.enum;
+		return values?.length === 1 ? JSON.stringify(values[0]) : undefined;
+	};
+	return alternatives[0].properties?.map(({ name }) => name).find((name) => {
+		const values = alternatives.map((node) => pinned(node, name));
+		return values.every((value) => value !== undefined) && new Set(values).size === values.length;
+	});
 }
 
 /** A schema page: `model: { name: Pet, schema: {…} }`. */
@@ -104,9 +157,13 @@ export function schemaLabel(schema: SchemaNode): string {
 	const nullable = schema.nullable ? ' | null' : '';
 	if (schema.ref) return `${schema.ref}${nullable}`;
 	if (schema.enum?.length) return schema.enum.map((value) => JSON.stringify(value)).join(' | ') + nullable;
-	if (schema.type === 'array') return `${schema.items ? schemaLabel(schema.items) : 'unknown'}[]${nullable}`;
-	const variants = schema.oneOf ?? schema.anyOf;
-	if (variants?.length) return variants.map(schemaLabel).join(' | ') + nullable;
+	if (schema.type === 'array') {
+		const item = schema.items ? schemaLabel(schema.items) : 'unknown';
+		return `${item.includes(' | ') ? `(${item})` : item}[]${nullable}`;
+	}
+	// Alternatives that read alike list once: two object shapes read `object`.
+	const variants = alternativesOf(schema);
+	if (variants?.length) return [...new Set(variants.map(schemaLabel))].join(' | ') + nullable;
 	if (schema.values && !schema.properties) return `map of ${schemaLabel(schema.values)}${nullable}`;
 	const base = schema.type ?? (schema.properties ? 'object' : 'any');
 	return `${base}${schema.format ? ` (${schema.format})` : ''}${nullable}`;
@@ -144,6 +201,8 @@ export function exampleFromSchema(
 			return 0;
 		case 'boolean':
 			return true;
+		case 'null':
+			return null;
 		case 'string':
 			return (schema.format && FORMAT_EXAMPLES[schema.format]) ?? 'string';
 		default:
