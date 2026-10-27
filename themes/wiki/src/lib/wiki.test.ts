@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ExplorerNode } from '@svartz/ui';
-import { alphabetical, byDay, featuredNote, inFolder, readHatnote, readInfobox, sectionMenu } from './wiki.js';
+import { alphabetical, byDay, featuredNote, readArticle, readHatnote, readInfobox, sectionMenu, wikiRoutes } from './wiki.js';
 
 const note = (title: string, modifiedAt?: string, properties: Record<string, unknown> = {}) => ({
 	slug: title.toLowerCase(),
@@ -41,6 +41,12 @@ describe('page helpers', () => {
 	it('reads a hatnote string', () => {
 		expect(readHatnote({ hatnote: 'For the indoor unit, see Base station.' })).toBe('For the indoor unit, see Base station.');
 		expect(readHatnote({ hatnote: 3 })).toBeUndefined();
+	});
+
+	it('makes an article of a note with an infobox or a hatnote, and leaves plain notes alone', () => {
+		expect(readArticle({ hatnote: 'For the guild, see Lamplighters.' })).toEqual({ infobox: undefined, hatnote: 'For the guild, see Lamplighters.' });
+		expect(readArticle({ infobox: { rows: { Role: 'Lamplighter' } } })?.infobox?.sections).toEqual([{ heading: undefined, rows: [['Role', 'Lamplighter']] }]);
+		expect(readArticle({ title: 'Plain', infobox: 'nope' })).toBeUndefined();
 	});
 
 	it('groups pages A–Z, with everything else under #', () => {
@@ -104,11 +110,9 @@ describe('sectionMenu', () => {
 	});
 });
 
-describe('inFolder', () => {
-	it('matches the folder and every folder under it, however deep', () => {
-		expect(inFolder('folder:characters', 'characters')).toBe(true);
-		expect(inFolder('folder:characters', 'characters/lamplighters/wardens')).toBe(true);
-		expect(inFolder('folder:characters', 'characters-old/ada')).toBe(false);
-		expect(inFolder('folder:characters', undefined)).toBe(false);
+describe('wikiRoutes', () => {
+	it("links the portal to the list pages' prefixes, renamed or not", () => {
+		expect(wikiRoutes(undefined)).toEqual({ tags: 'tags', folders: 'folders', feed: 'feed' });
+		expect(wikiRoutes({ routes: { tags: 'categories', feed: 3 } })).toEqual({ tags: 'categories', folders: 'folders', feed: 'feed' });
 	});
 });

@@ -66,6 +66,26 @@ export function readInfobox(properties: Properties): Infobox | undefined {
 export const readHatnote = (properties: Properties) =>
 	typeof properties.hatnote === 'string' ? properties.hatnote : undefined;
 
+/** What the article renderer adds to a note: its infobox and hatnote. */
+export interface Article {
+	readonly infobox?: Infobox;
+	readonly hatnote?: string;
+}
+
+/** The note's infobox and hatnote, or undefined when it has neither. */
+export function readArticle(properties: Properties): Article | undefined {
+	const infobox = readInfobox(properties);
+	const hatnote = readHatnote(properties);
+	return infobox || hatnote ? { infobox, hatnote } : undefined;
+}
+
+/** The list pages' URL prefixes, from `theme.routes`; the pipeline reads the same keys. */
+export function wikiRoutes(themeConfig?: Properties) {
+	const routes = isRecord(themeConfig?.routes) ? themeConfig.routes : {};
+	const prefix = (key: string) => (typeof routes[key] === 'string' ? routes[key] : key);
+	return { tags: prefix('tags'), folders: prefix('folders'), feed: prefix('feed') };
+}
+
 const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
 
 /** Pages grouped under their first letter, A–Z; digits and symbols go under `#` first. */
@@ -143,14 +163,4 @@ export function sectionMenu(
 		more: Math.max(0, node.children.length - limit)
 	});
 	return tree.filter((node) => node.isFolder).map((node) => toFolder(node, 1));
-}
-
-/**
- * Whether the current page's folder is a menu folder or sits anywhere inside it
- * (`folder:characters` holds `characters/lamplighters`). Pages past the dropdown
- * limit or deeper than a flyout still count.
- */
-export function inFolder(folderId: string, current: string | undefined): boolean {
-	const folder = folderId.replace(/^folder:/, '');
-	return current !== undefined && (current === folder || current.startsWith(`${folder}/`));
 }

@@ -19,6 +19,8 @@ vaults: [{ id: "wiki", path: "vault", target: { type: "static" }, theme: { base:
 
 The rail also has a Random page button. On narrow screens the rail becomes a menu drawer and the infobox leads the article.
 
+The wiki extends `@svartz/theme-minimal`, which supplies search, the drawer, contents, and the footer. A note with an `infobox` or a `hatnote` renders as a wiki article in any site that composes the wiki, and `theme: wiki` in a note's frontmatter picks it explicitly.
+
 ## Section bar
 
 The vault's folders become the bar under the search, so you group pages by moving them into folders:

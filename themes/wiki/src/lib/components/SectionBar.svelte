@@ -10,17 +10,17 @@
 	import { afterNavigate } from '$app/navigation';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
-	import { inFolder, type MenuFolder } from '../wiki.js';
+	import type { MenuFolder } from '../wiki.js';
 
 	let {
 		menu,
 		currentPath,
-		currentFolder
+		currentFolders
 	}: {
 		menu: readonly MenuFolder[];
 		currentPath: string;
-		/** The folder the page belongs to, for highlighting its section. */
-		currentFolder: string | undefined;
+		/** The folder ids above the page (the shell's `trail`), for highlighting its section. */
+		currentFolders: readonly string[];
 	} = $props();
 
 	let nav = $state<HTMLElement>();
@@ -88,7 +88,7 @@
 			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 			<li
 				class="top"
-				class:current={inFolder(folder.id, currentFolder)}
+				class:current={currentFolders.includes(folder.id)}
 				onpointerenter={(event) => withMouse(event, () => (open = folder.id))}
 				onpointerleave={(event) => withMouse(event, closeTop)}
 				onfocusout={(event) => closeOnFocusOut(event, closeTop)}

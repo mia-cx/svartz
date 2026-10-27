@@ -9,17 +9,18 @@
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import { tick } from 'svelte';
 	import { fly } from 'svelte/transition';
-	import { inFolder, type MenuFolder } from '../wiki.js';
+	import type { MenuFolder } from '../wiki.js';
 
 	let {
 		menu,
 		currentPath,
-		currentFolder,
+		currentFolders,
 		trail = $bindable([])
 	}: {
 		menu: readonly MenuFolder[];
 		currentPath: string;
-		currentFolder: string | undefined;
+		/** The folder ids above the page (the shell's `trail`), for highlighting its section. */
+		currentFolders: readonly string[];
 		trail?: MenuFolder[];
 	} = $props();
 
@@ -49,7 +50,7 @@
 </script>
 
 {#snippet folderRow(target: MenuFolder)}
-	<button class="row" class:current={inFolder(target.id, currentFolder)} type="button" data-folder={target.id} onclick={() => open(target)}>
+	<button class="row" class:current={currentFolders.includes(target.id)} type="button" data-folder={target.id} onclick={() => open(target)}>
 		<span>{target.title}</span>
 		<ChevronRight aria-hidden="true" />
 	</button>

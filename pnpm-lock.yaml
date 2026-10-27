@@ -1103,6 +1103,9 @@ importers:
       '@svartz/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@svartz/theme-minimal':
+        specifier: workspace:*
+        version: link:../minimal
       '@svartz/ui':
         specifier: workspace:*
         version: link:../../packages/ui
