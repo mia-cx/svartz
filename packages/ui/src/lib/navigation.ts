@@ -153,7 +153,7 @@ export function folderBreadcrumbs(
 const naturalOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 /** A note's `order` frontmatter, when it is a finite number. */
-function orderOf(entry: UiIndexEntry | undefined): number | undefined {
+export function orderOf(entry: Pick<UiIndexEntry, 'properties'> | undefined): number | undefined {
 	const order = entry?.properties?.order;
 	return typeof order === 'number' && Number.isFinite(order) ? order : undefined;
 }

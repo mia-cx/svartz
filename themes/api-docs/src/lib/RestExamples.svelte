@@ -1,7 +1,7 @@
 <!-- A REST operation's examples: the request in the reader's language (remembered), then a response per status. -->
 <script lang="ts">
 	import { CodePanel, exampleFromSchema, type CodeTab, type ReferenceExamplesProps } from '@svartz/ui/reference/runtime';
-	import { requestSnippets, SNIPPET_LANGUAGES, type RestOperation } from './api.js';
+	import { requestSnippets, responseBody, SNIPPET_LANGUAGES, type RestOperation } from './api.js';
 	import { apiSettings } from './settings.js';
 
 	let { data: operation, context }: ReferenceExamplesProps<RestOperation> = $props();
@@ -16,10 +16,15 @@
 
 	const responseTabs = $derived(
 		operation.responses.flatMap((response): CodeTab[] => {
+			const body = responseBody(response);
+			if (body === 'none' || body === 'binary') return [];
 			// An authored `null` is a real example.
 			const example =
 				response.example !== undefined ? response.example : response.schema ? exampleFromSchema(response.schema, context.schemas) : undefined;
-			return example === undefined ? [] : [{ id: response.status, label: response.status, code: json(example) }];
+			if (example === undefined) return [];
+			// A text body shows as written: Markdown stays Markdown.
+			const code = body === 'text' && typeof example === 'string' ? example : json(example);
+			return [{ id: response.status, label: response.status, code }];
 		})
 	);
 </script>

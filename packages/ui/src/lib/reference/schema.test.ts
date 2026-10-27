@@ -33,9 +33,43 @@ describe('readSchema', () => {
 		['a type list with null is nullable', { type: ['string', 'null'] }, 'string | null'],
 		['additionalProperties is a map', { type: 'object', additionalProperties: { type: 'string' } }, 'map of string'],
 		['a $defs ref names its schema', { $ref: '#/$defs/Pet' }, 'Pet'],
-		['const is a one-value enum', { const: 'tools/call' }, '"tools/call"']
+		['const is a one-value enum', { const: 'tools/call' }, '"tools/call"'],
+		['a null alternative is nullable', { anyOf: [{ type: 'string', maxLength: 2048, format: 'uri' }, { type: 'null' }] }, 'string (uri) | null'],
+		['a type list keeps every type', { type: ['string', 'number', 'null'] }, 'string | number | null'],
+		['a nullable union keeps its alternatives', { anyOf: [{ type: 'string' }, { type: 'number' }], nullable: true }, 'string | number | null'],
+		['object alternatives read once', { oneOf: [{ type: 'object', properties: {} }, { type: 'object', properties: {} }] }, 'object'],
+		['an array of a union brackets the union', { type: 'array', items: { oneOf: [{ type: 'string' }, { $ref: 'Pet' }] } }, '(string | Pet)[]'],
+		['null alone is null', { type: 'null' }, 'null']
 	])('labels JSON Schema as written by tools: %s', (_, raw, label) => {
 		expect(schemaLabel(readSchema(raw)!)).toBe(label);
+	});
+
+	it('folds a null alternative into the other, keeping its limits and the outer description', () => {
+		const avatar = readSchema({ description: 'Null shows your sigil.', anyOf: [{ type: 'string', maxLength: 2048, format: 'uri' }, { type: 'null' }] });
+		expect(avatar).toMatchObject({ type: 'string', format: 'uri', nullable: true, description: 'Null shows your sigil.', constraints: ['at most 2048 characters'] });
+		expect(avatar?.anyOf).toBeUndefined();
+		expect(exampleFromSchema(readSchema({ type: 'null' })!, {})).toBeNull();
+	});
+
+	it('keeps the limits, pattern, and allowed values written beside a folded union', () => {
+		const slug = readSchema({ maxLength: 64, pattern: '^[a-z]+$', anyOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] });
+		expect(slug).toMatchObject({ type: 'string', nullable: true, pattern: '^[a-z]+$', constraints: ['at least 1 character', 'at most 64 characters'] });
+		const pinned = readSchema({ type: 'string', enum: ['allowed'], anyOf: [{ type: 'string' }, { type: 'null' }] })!;
+		expect([pinned.enum, exampleFromSchema(pinned, {})]).toEqual([['allowed'], 'allowed']);
+	});
+
+	it('binds a folded alternative by both its own and the wrapper keywords', () => {
+		const links = readSchema({
+			type: 'array',
+			items: { type: 'object', required: ['id'], properties: { id: { type: 'string', example: 'l_1' } } },
+			anyOf: [{ type: 'array', items: { type: 'object', required: ['url'], properties: { url: { type: 'string', example: 'https://a.example' } } } }, { type: 'null' }]
+		})!;
+		expect(links.items?.properties?.map(({ name, required }) => [name, required])).toEqual([['url', true], ['id', true]]);
+		expect(exampleFromSchema(links, {})).toEqual([{ url: 'https://a.example', id: 'l_1' }]);
+		const level = readSchema({ enum: ['b', 'c'], anyOf: [{ type: 'string', enum: ['a', 'b'] }, { type: 'null' }] })!;
+		expect([level.enum, exampleFromSchema(level, {})]).toEqual([['b'], 'b']);
+		const code = readSchema({ pattern: '^[a-z]+$', anyOf: [{ type: 'string', pattern: '^.{3}$' }, { type: 'null' }] })!;
+		expect([code.pattern, code.constraints]).toEqual(['^.{3}$', ['also matches ^[a-z]+$']]);
 	});
 
 	it('describes length and range limits in words, and keeps the pattern as written', () => {
