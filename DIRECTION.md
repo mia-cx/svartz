@@ -12,9 +12,9 @@ Svartz publishes Obsidian vaults as SvelteKit sites, in the spirit of Quartz: on
 
 ## Current state (October 2026)
 
-- 1.2.1 is published. It ships a nested reference sidebar as an interim fix.
-- 2.0.0 is in review as PR #212, tracked by PRD #203 with slices #204–#211. The extension contract, the compositor, all five default themes as extensions, and `theme.base` lists are built; the release (#211) follows the merge.
-- Logitland's docs (staging.logit.land/docs) consume the published API and MCP themes and move to the composition after 2.0.0.
+- 2.0.0 is published: the extension contract, the compositor, all five default themes as extensions of minimal, and `theme.base` lists (PRD #203).
+- 2.1.0 is in review as PR #217: WebSocket endpoints and browser routes (form actions, redirects) as reference operations.
+- Logitland's docs (staging.logit.land/docs) consume the published API and MCP themes as a `theme.base` list and document their sockets and browser routes with the 2.1 frontmatter.
 
 ## Decisions
 
@@ -23,4 +23,6 @@ Svartz publishes Obsidian vaults as SvelteKit sites, in the spirit of Quartz: on
 - Themes may swap any region, the explorer included; swapped regions receive minimal's shell state so behaviour stays inherited.
 - List pages belong to the first theme; a folder note's `theme:` picks its folder's list page.
 - Conflicts fail the build with the page path rather than choosing silently.
+- The config file format keeps its own major (`CONFIG_FORMAT_MAJOR`), separate from the package major, so a package major never breaks existing configs.
+- Reference pages show only what the frontmatter states: a page without `operation` stays a guide, and no method is inferred from a title.
 - The compositor ships as 2.0.0. `RELEASE_LINE` in `scripts/release-packages.mjs` names the major version; a changeset may declare `major` only to reach it.

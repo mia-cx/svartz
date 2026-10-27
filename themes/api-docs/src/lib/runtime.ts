@@ -10,6 +10,6 @@ export const extensions: readonly ThemeExtension[] = [referenceExtension(identit
 /** Vite-bundled runtime manifest. */
 const theme = defineTheme((config?: ApiDocsThemeConfig) => composeThemes(extensions, config));
 
-export { apiRenderers, graphqlRenderer, restRenderer } from './renderers.js';
+export { apiRenderers, graphqlRenderer, restRenderer, websocketRenderer } from './renderers.js';
 export { theme };
 export default theme;

@@ -1,12 +1,13 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { connect, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { readOperation, requestSnippets, type RestOperation } from './api.js';
+import { WebSocketServer } from 'ws';
+import { browserSnippets, readOperation, requestSnippets, socketSnippets, type RestOperation } from './api.js';
 
 // Each generated snippet runs for real against this server, so a snippet that
 // parses a 204 as JSON or posts JSON to a form endpoint fails here.
@@ -30,6 +31,9 @@ beforeAll(async () => {
 		const body = await readBody(request);
 		const type = request.headers['content-type'] ?? '';
 		const json = (status: number, value: unknown) => response.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(value));
+		if (url.pathname === '/form') {
+			return json(200, { cookie: request.headers.cookie, fields: Object.fromEntries(new URLSearchParams(body)) });
+		}
 		if (url.pathname === '/internal') {
 			return request.headers.authorization === 'Bot abc' ? json(200, { ok: true }) : json(401, { auth: request.headers.authorization });
 		}
@@ -72,14 +76,15 @@ afterAll(() => {
 	rmSync(scratch, { recursive: true, force: true });
 });
 
-const python = (() => {
+const pythonHas = (module: string) => {
 	try {
-		execFileSync('python3', ['-c', 'import requests']);
+		execFileSync('python3', ['-c', `import ${module}`]);
 		return true;
 	} catch {
 		return false;
 	}
-})();
+};
+const python = pythonHas('requests');
 
 const operation = (metadata: Record<string, unknown>) => {
 	const parsed = readOperation({ operation: { auth: 'bearer', ...metadata } });
@@ -280,4 +285,85 @@ it('reads a body nobody described as text, never as JSON', () => {
 	const snippets = requestSnippets(operation({ method: 'get', path: '/x', responses: { 200: { description: 'Something.' } } }), 'https://api.example.com', {});
 	expect(snippets.javascript).toContain('const text = await response.text();');
 	expect(snippets.python).toContain('text = response.text');
+});
+
+it('frames a browser route raw HTTP request so the server reads its cookie and form body', async () => {
+	const op = operation({
+		method: 'post',
+		path: '/form?/allow',
+		auth: 'none',
+		client: 'browser',
+		parameters: [{ name: 'session', in: 'cookie', example: 's_1' }],
+		requestBody: { contentType: 'application/x-www-form-urlencoded', example: { client_id: 'lgc_1', note: 'é & more' } },
+		responses: { 303: { headers: { Location: '/done' } } }
+	});
+	// Sent as the reader would copy it; `Connection: close` only lets the reply end the test.
+	const raw = browserSnippets(op, origin, {}).http.replace(/^Host: .*$/m, '$&\r\nConnection: close');
+	const reply = await new Promise<string>((resolve, reject) => {
+		const socket = connect(Number(new URL(origin).port), '127.0.0.1', () => socket.end(raw));
+		let data = '';
+		socket.on('data', (chunk) => (data += chunk)).on('end', () => resolve(data)).on('error', reject);
+	});
+	// The reply may be chunked; its JSON body is the one object in it.
+	expect(reply).toMatch(/^HTTP\/1\.1 200/);
+	expect(JSON.parse(reply.slice(reply.indexOf('{'), reply.lastIndexOf('}') + 1))).toEqual({ cookie: 'session=s_1', fields: { client_id: 'lgc_1', note: 'é & more' } });
+});
+
+describe.each([
+	{ name: 'a bearer token', auth: 'bearer', cookie: [], frame: 'ping' },
+	{ name: 'a session cookie and a multiline frame', auth: 'none', cookie: [{ name: 'session', in: 'cookie', required: true, example: 's_1' }], frame: 'hello\nworld' }
+])('generated WebSocket connections with $name', ({ auth, cookie, frame }) => {
+	let sockets: WebSocketServer;
+	let socketOrigin: string;
+
+	// Echoes the first frame as JSON, then closes, so each snippet ends on its own.
+	beforeAll(async () => {
+		sockets = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+		sockets.on('connection', (socket, request) => {
+			const url = new URL(request.url!, 'http://localhost');
+			const signedIn = request.headers.authorization === `Bearer ${TOKEN}` || request.headers.cookie === 'session=s_1';
+			if (!signedIn || url.searchParams.get('v') !== '10') return socket.close(4003, 'refused');
+			socket.on('message', (data) => {
+				socket.send(JSON.stringify({ type: 'pong', got: data.toString() }));
+				socket.close(1000);
+			});
+		});
+		await new Promise((resolve) => sockets.once('listening', resolve));
+		socketOrigin = `http://127.0.0.1:${(sockets.address() as AddressInfo).port}`;
+	});
+
+	afterAll(() => sockets.close());
+
+	const op = () => {
+		const parsed = readOperation({
+			operation: {
+				protocol: 'websocket',
+				path: '/stream',
+				auth,
+				parameters: [{ name: 'v', in: 'query', required: true, example: 10 }, ...cookie],
+				messages: [
+					{ direction: 'send', name: 'greeting', example: frame },
+					{ direction: 'receive', name: 'pong', example: { type: 'pong' } }
+				]
+			}
+		});
+		if (parsed?.protocol !== 'websocket') throw new Error('expected a WebSocket operation');
+		return parsed;
+	};
+
+	// Each runtime prints JSON, so the assertion sees the exact frame the server echoed.
+	// Node 20 has WebSocket only behind a flag; the snippet targets Node 22 and later.
+	it.skipIf(typeof WebSocket === 'undefined')('connects, sends the first message, and prints the parsed reply in JavaScript', async () => {
+		const file = join(scratch, `socket-${Math.random().toString(36).slice(2)}.mjs`);
+		const shim = 'console.log = (...values) => process.stdout.write(`${JSON.stringify(values)}\\n`);';
+		writeFileSync(file, `${shim}\nconst TOKEN = '${TOKEN}';\n${socketSnippets(op(), socketOrigin, {}).javascript}\n`);
+		const lines = (await run('node', [file])).stdout.trim().split('\n').map((line) => JSON.parse(line));
+		expect(lines).toEqual([[{ type: 'pong', got: frame }], ['Closed:', 1000, '']]);
+	});
+
+	it.skipIf(!pythonHas('websockets.asyncio.client'))('does the same in Python', async () => {
+		const shim = 'import builtins\nimport json as _json\nprint = lambda value: builtins.print(_json.dumps(value))';
+		const script = `${shim}\nTOKEN = "${TOKEN}"\n${socketSnippets(op(), socketOrigin, {}).python}\n`;
+		expect(JSON.parse((await run('python3', ['-c', script])).stdout)).toEqual({ type: 'pong', got: frame });
+	});
 });

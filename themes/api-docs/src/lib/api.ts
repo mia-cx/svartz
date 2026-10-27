@@ -3,6 +3,7 @@ import {
 	exampleFromSchema,
 	readAuth,
 	readSchema,
+	type CodeTab,
 	type ReferenceAuth,
 	type ReferenceBadge,
 	type ReferenceHue,
@@ -39,6 +40,10 @@ export type GraphqlKind = keyof typeof GRAPHQL_KINDS;
 const GRAPHQL_NAV_LABELS: Record<GraphqlKind, string> = { query: 'QUERY', mutation: 'MUTATION', subscription: 'SUB' };
 
 export const methodBadge = (method: HttpMethod): ReferenceBadge => ({ label: method, hue: HTTP_METHODS[method] });
+/** A WebSocket streams like a GraphQL subscription, so it shares the hue. */
+export const WEBSOCKET_BADGE: ReferenceBadge = { label: 'WS', hue: GRAPHQL_KINDS.subscription };
+export const endpointBadge = (operation: RestOperation | WebSocketOperation): ReferenceBadge =>
+	operation.protocol === 'websocket' ? WEBSOCKET_BADGE : methodBadge(operation.method);
 export const graphqlBadge = (kind: GraphqlKind, nav = false): ReferenceBadge => ({
 	label: nav ? GRAPHQL_NAV_LABELS[kind] : kind.toUpperCase(),
 	hue: GRAPHQL_KINDS[kind]
@@ -64,18 +69,43 @@ export interface ApiResponse {
 	readonly contentType?: string;
 	/** From `empty: true`: a response with no body. 204, 205, and 304 responses never have one. */
 	readonly empty: boolean;
+	/** Example response headers, in order: `Location`, `Set-Cookie`. */
+	readonly headers: readonly (readonly [name: string, value: string])[];
 }
 
-export interface RestOperation {
-	readonly protocol: 'rest';
-	readonly method: HttpMethod;
+/** What REST and WebSocket endpoints share: a path on a server, reached with an HTTP request. */
+interface HttpEndpoint {
 	readonly path: string;
 	/** The server this operation runs on, when it isn't the theme's `baseUrl`. */
 	readonly server?: string;
 	readonly auth?: ReferenceAuth;
 	readonly parameters: readonly ApiParameter[];
-	readonly requestBody?: { readonly contentType: string; readonly schema?: SchemaNode; readonly example?: unknown };
 	readonly responses: readonly ApiResponse[];
+}
+
+export interface RestOperation extends HttpEndpoint {
+	readonly protocol: 'rest';
+	readonly method: HttpMethod;
+	/** `browser` for pages and form actions a browser requests with its session, `api` for everything else. */
+	readonly client: 'api' | 'browser';
+	readonly requestBody?: { readonly contentType: string; readonly schema?: SchemaNode; readonly example?: unknown };
+}
+
+/** One kind of WebSocket message, by who sends it: the client (`send`) or the server (`receive`). */
+export interface SocketMessage {
+	readonly direction: 'send' | 'receive';
+	readonly name: string;
+	readonly description?: string;
+	readonly schema?: SchemaNode;
+	/** A string sends as a text frame as written; anything else as JSON. */
+	readonly example?: unknown;
+}
+
+/** A WebSocket endpoint: the upgrade request's parameters and responses, then the messages over the open socket. */
+export interface WebSocketOperation extends HttpEndpoint {
+	readonly protocol: 'websocket';
+	readonly messages: readonly SocketMessage[];
+	readonly close: readonly { readonly code: string; readonly description?: string }[];
 }
 
 export interface GraphqlArgument {
@@ -117,9 +147,25 @@ export interface GraphqlOperation {
  * `server` overrides the theme's `baseUrl` for one operation.
  * `requestBody.contentType` defaults to `application/json`;
  * `application/x-www-form-urlencoded`, `multipart/form-data`, and text types
- * encode the example to match.
+ * encode the example to match. A response's `headers` map names to example
+ * values. `client: browser` marks a page or form action, shown as an HTML form
+ * and a raw HTTP request rather than API client code.
+ *
+ * `protocol: websocket` takes the same `path`, `server`, `auth`, `parameters`,
+ * and `responses` for the upgrade request, plus the messages and close codes:
+ *
+ * ```yaml
+ * operation:
+ *   protocol: websocket
+ *   path: /v1/stream
+ *   responses: { 101: { description: Switching Protocols }, 429: { description: Too many sockets } }
+ *   messages:
+ *     - { direction: send, name: ping, example: ping }
+ *     - { direction: receive, name: digest, schema: { $ref: Digest } }
+ *   close: { 4003: The token lost its scope. }
+ * ```
  */
-export type ApiOperation = RestOperation | GraphqlOperation;
+export type ApiOperation = RestOperation | WebSocketOperation | GraphqlOperation;
 
 const LOCATIONS = ['path', 'query', 'header', 'cookie'] as const;
 
@@ -137,7 +183,13 @@ function readResponses(raw: unknown): ApiResponse[] {
 			schema: readSchema(response.schema),
 			example: response.example,
 			contentType: text(response.contentType),
-			empty: response.empty === true
+			empty: response.empty === true,
+			headers: isRecord(response.headers)
+				? Object.entries(response.headers).flatMap(([name, value]) => {
+						const example = scalarText(value);
+						return example === undefined ? [] : [[name, example] as const];
+					})
+				: []
 		}))
 		.sort((left, right) => left.status.localeCompare(right.status));
 }
@@ -162,29 +214,52 @@ function readParameter(parameter: Properties): ApiParameter[] {
 	}];
 }
 
-/** A REST or GraphQL operation from a page's `operation` metadata, or `undefined` when it isn't one. */
+/** A REST, WebSocket, or GraphQL operation from a page's `operation` metadata, or `undefined` when it isn't one. */
 export function readOperation(properties: Properties): ApiOperation | undefined {
 	const raw = properties.operation;
 	if (!isRecord(raw)) return undefined;
 	if (raw.protocol === 'graphql') return readGraphql(raw);
-	if (raw.protocol !== undefined && raw.protocol !== 'rest') return undefined;
-	const method = text(raw.method)?.toUpperCase();
 	const path = text(raw.path);
-	if (!method || !(method in HTTP_METHODS) || !path) return undefined;
-	const body = isRecord(raw.requestBody) ? raw.requestBody : undefined;
-	return {
-		protocol: 'rest',
-		method: method as HttpMethod,
+	if (!path) return undefined;
+	const endpoint: HttpEndpoint = {
 		path,
 		server: text(raw.server),
 		auth: readAuth(raw.auth),
 		parameters: records(raw.parameters).flatMap(readParameter),
+		responses: readResponses(raw.responses)
+	};
+	if (raw.protocol === 'websocket') return readWebSocket(raw, endpoint);
+	if (raw.protocol !== undefined && raw.protocol !== 'rest') return undefined;
+	const method = text(raw.method)?.toUpperCase();
+	if (!method || !(method in HTTP_METHODS)) return undefined;
+	const body = isRecord(raw.requestBody) ? raw.requestBody : undefined;
+	return {
+		protocol: 'rest',
+		method: method as HttpMethod,
+		client: raw.client === 'browser' ? 'browser' : 'api',
+		...endpoint,
 		requestBody: body && {
 			contentType: text(body.contentType) ?? 'application/json',
 			schema: readSchema(body.schema),
 			example: body.example
-		},
-		responses: readResponses(raw.responses)
+		}
+	};
+}
+
+const DIRECTIONS = ['send', 'receive'] as const;
+
+function readWebSocket(raw: Properties, endpoint: HttpEndpoint): WebSocketOperation {
+	return {
+		protocol: 'websocket',
+		...endpoint,
+		messages: records(raw.messages).flatMap((message): SocketMessage[] => {
+			const direction = DIRECTIONS.find((candidate) => candidate === message.direction);
+			const name = text(message.name);
+			return direction && name
+				? [{ direction, name, description: text(message.description), schema: readSchema(message.schema), example: message.example }]
+				: [];
+		}),
+		close: isRecord(raw.close) ? Object.entries(raw.close).map(([code, description]) => ({ code, description: text(description) })) : []
 	};
 }
 
@@ -372,6 +447,8 @@ const formFields = (body: unknown): (readonly [string, string])[] =>
 		: [];
 
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+const jsString = (value: string) =>
+	`'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'").replaceAll('\n', '\\n').replaceAll('\r', '\\r')}'`;
 
 /** A saved binary response's file name, with the media type's extension when it has a plain one. */
 function outputName(responses: readonly ApiResponse[]): string {
@@ -386,12 +463,14 @@ function outputName(responses: readonly ApiResponse[]): string {
  * documented success the way its status and content type allow: no body for
  * 204 or `empty: true`, text, binary, or JSON.
  */
-export function requestSnippets(
-	operation: RestOperation,
-	baseUrl: string,
-	schemas: Readonly<Record<string, SchemaNode>>
-): Record<SnippetLanguage, string> {
-	const valueOf = (parameter: ApiParameter) => parameter.example ?? `{${parameter.name}}`;
+const valueOf = (parameter: ApiParameter) => parameter.example ?? `{${parameter.name}}`;
+
+/**
+ * An endpoint's request with example values: the server root, the path and
+ * query it requests, and its headers. A path that already has a query, such as
+ * a SvelteKit form action (`/login?/signIn`), joins the parameters with `&`.
+ */
+function requestOf(operation: HttpEndpoint, baseUrl: string) {
 	// Placeholders stay readable (`{petId}`), so only real examples are encoded. Encoding
 	// covers `'` too, since the URL lands inside single-quoted shell and JavaScript strings.
 	const urlValue = (parameter: ApiParameter) =>
@@ -406,12 +485,23 @@ export function requestSnippets(
 		.map((parameter) => `${encodeURIComponent(parameter.name)}=${urlValue(parameter)}`)
 		.join('&');
 	const root = (operation.server ?? baseUrl).replace(/\/$/, '');
-	const url = `${root}${path}${query ? `?${query}` : ''}`;
+	const target = `${path}${query ? `${path.includes('?') ? '&' : '?'}${query}` : ''}`;
+	const cookies = operation.parameters.filter((parameter) => parameter.in === 'cookie').map((parameter) => `${parameter.name}=${valueOf(parameter)}`);
 	// Only the credential is a shell or language variable; every other value is literal.
 	const headers: SnippetHeader[] = [
 		...authHeader(operation.auth),
-		...operation.parameters.filter((parameter) => parameter.in === 'header').map((parameter) => ({ name: parameter.name, value: valueOf(parameter) }))
+		...operation.parameters.filter((parameter) => parameter.in === 'header').map((parameter) => ({ name: parameter.name, value: valueOf(parameter) })),
+		...(cookies.length ? [{ name: 'Cookie', value: cookies.join('; ') }] : [])
 	];
+	return { root, target, url: `${root}${target}`, headers };
+}
+
+export function requestSnippets(
+	operation: RestOperation,
+	baseUrl: string,
+	schemas: Readonly<Record<string, SchemaNode>>
+): Record<SnippetLanguage, string> {
+	const { url, headers } = requestOf(operation, baseUrl);
 	const body = requestBodyExample(operation, schemas);
 	const contentType = operation.requestBody?.contentType ?? 'application/json';
 	const encoding = body === undefined ? undefined : encodingOf(contentType);
@@ -435,7 +525,6 @@ export function requestSnippets(
 		...(binary ? [`  -o ${outputName(operation.responses)}`] : [])
 	].join(' \\\n');
 
-	const jsString = (value: string) => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`;
 	const jsHeaders = headers.map(
 		({ name, value, variable }) => `    ${jsString(name)}: ${variable ? `\`${value}\${${variable}}\`` : jsString(value)}`
 	);
@@ -487,6 +576,204 @@ export function requestSnippets(
 	].join('\n');
 
 	return { curl, javascript, python };
+}
+
+export type BrowserLanguage = 'html' | 'http';
+export const BROWSER_LANGUAGES: readonly { readonly id: BrowserLanguage; readonly label: string }[] = [
+	{ id: 'html', label: 'HTML' },
+	{ id: 'http', label: 'HTTP' }
+];
+
+const MULTIPART_BOUNDARY = 'svartz-example';
+const htmlAttribute = (value: string) => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
+
+/**
+ * A browser route's request: the raw HTTP request, with cookie parameters as
+ * its `Cookie` header, and an HTML form when a form can send it (a POST with no
+ * body or a form body). Both target the path alone, since the site's own pages
+ * send them.
+ */
+export function browserSnippets(
+	operation: RestOperation,
+	baseUrl: string,
+	schemas: Readonly<Record<string, SchemaNode>>
+): { readonly html?: string; readonly http: string } {
+	const { root, target, headers } = requestOf(operation, baseUrl);
+	const server = URL.canParse(root) ? new URL(root) : undefined;
+	const requestTarget = `${server ? server.pathname.replace(/\/$/, '') : root}${target}`;
+	const body = requestBodyExample(operation, schemas);
+	const contentType = operation.requestBody?.contentType ?? 'application/json';
+	const encoding = body === undefined ? undefined : encodingOf(contentType);
+	const fields = encoding === 'form' || encoding === 'multipart' ? formFields(body) : [];
+	const payload =
+		encoding === 'form'
+			? new URLSearchParams(fields.map(([name, value]) => [name, value])).toString()
+			: encoding === 'multipart'
+				? // Multipart framing needs CRLF, so the Content-Length below counts it.
+					[...fields.flatMap(([name, value]) => [`--${MULTIPART_BOUNDARY}`, `Content-Disposition: form-data; name="${name}"`, '', value]), `--${MULTIPART_BOUNDARY}--`].join('\r\n')
+				: encoding === undefined
+					? undefined
+					: typeof body === 'string' && encoding === 'raw'
+						? body
+						: JSON.stringify(body, null, 2);
+	const sentType =
+		encoding === 'form' ? 'application/x-www-form-urlencoded' : encoding === 'multipart' ? `multipart/form-data; boundary=${MULTIPART_BOUNDARY}` : contentType;
+	// CRLF line ends and a blank line after the headers, so the request sends as copied.
+	const http = [
+		`${operation.method} ${requestTarget} HTTP/1.1`,
+		...(server ? [`Host: ${server.host}`] : []),
+		...headers.map(({ name, value, variable }) => `${name}: ${value}${variable ? `$${variable}` : ''}`),
+		...(payload === undefined
+			? ['', '']
+			: [`Content-Type: ${sentType}`, `Content-Length: ${new TextEncoder().encode(payload).length}`, '', payload])
+	].join('\r\n');
+
+	const formable = operation.method === 'POST' && (encoding === undefined || encoding === 'form' || encoding === 'multipart');
+	const html = formable
+		? [
+				`<form method="post" action="${htmlAttribute(requestTarget)}"${encoding === 'multipart' ? ' enctype="multipart/form-data"' : ''}>`,
+				...fields.map(([name, value]) => `  <input type="hidden" name="${htmlAttribute(name)}" value="${htmlAttribute(value)}" />`),
+				'  <button>Submit</button>',
+				'</form>'
+			].join('\n')
+		: undefined;
+	return { html, http };
+}
+
+export type SocketLanguage = 'websocat' | 'javascript' | 'python';
+export const SOCKET_LANGUAGES: readonly { readonly id: SocketLanguage; readonly label: string }[] = [
+	{ id: 'websocat', label: 'websocat' },
+	{ id: 'javascript', label: 'JavaScript' },
+	{ id: 'python', label: 'Python' }
+];
+
+/** A message's example, else one generated from its schema. */
+export const messageExample = (message: SocketMessage, schemas: Readonly<Record<string, SchemaNode>>): unknown =>
+	message.example !== undefined ? message.example : message.schema ? exampleFromSchema(message.schema, schemas) : undefined;
+
+/** A message example as its frame: a string as written, anything else as JSON. */
+export const frameText = (example: unknown, indent?: number) => (typeof example === 'string' ? example : JSON.stringify(example, null, indent));
+
+/**
+ * Code that opens the socket with the upgrade's example query and headers,
+ * sends the first `send` message's example, and prints what arrives: parsed
+ * JSON when every received message is JSON, else the text. websocat stays
+ * interactive, so the reader types what to send.
+ */
+export function socketSnippets(
+	operation: WebSocketOperation,
+	baseUrl: string,
+	schemas: Readonly<Record<string, SchemaNode>>
+): Record<SocketLanguage, string> {
+	const { url: httpUrl, headers } = requestOf(operation, baseUrl);
+	const url = httpUrl.replace(/^http/i, 'ws');
+	const first = operation.messages.find((message) => message.direction === 'send');
+	const sent = first && messageExample(first, schemas);
+	const frame = sent === undefined ? undefined : frameText(sent);
+	const received = operation.messages.filter((message) => message.direction === 'receive');
+	const json = received.length > 0 && received.every((message) => !['string', 'undefined'].includes(typeof messageExample(message, schemas)));
+
+	const websocat = [
+		'websocat',
+		...headers.map(({ name, value, variable }) => (variable ? `  -H "${name}: ${value}$${variable}"` : `  -H ${shellQuote(`${name}: ${value}`)}`)),
+		`  ${shellQuote(url)}`
+	].join(' \\\n');
+
+	const jsHeaders = headers.map(({ name, value, variable }) => `    ${jsString(name)}: ${variable ? `\`${value}\${${variable}}\`` : jsString(value)}`);
+	const javascript = [
+		...(jsHeaders.length
+			? [
+					"// Browsers can't set WebSocket headers; Node 22 and later can.",
+					`const socket = new WebSocket(${jsString(url)}, {`,
+					'  headers: {',
+					jsHeaders.join(',\n'),
+					'  }',
+					'});'
+				]
+			: [`const socket = new WebSocket(${jsString(url)});`]),
+		...(frame === undefined ? [] : [`socket.addEventListener('open', () => socket.send(${jsString(frame)}));`]),
+		`socket.addEventListener('message', (event) => console.log(${json ? 'JSON.parse(event.data)' : 'event.data'}));`,
+		"socket.addEventListener('close', (event) => console.log('Closed:', event.code, event.reason));"
+	].join('\n');
+
+	const pyHeaders = headers.map(
+		({ name, value, variable }) => `            ${JSON.stringify(name)}: ${variable ? `f"${value}{${variable}}"` : JSON.stringify(value)},`
+	);
+	const python = [
+		'import asyncio',
+		...(json ? ['import json'] : []),
+		'',
+		'from websockets.asyncio.client import connect',
+		'',
+		'',
+		'async def main():',
+		...(pyHeaders.length
+			? ['    async with connect(', `        ${JSON.stringify(url)},`, '        additional_headers={', ...pyHeaders, '        },', '    ) as socket:']
+			: [`    async with connect(${JSON.stringify(url)}) as socket:`]),
+		...(frame === undefined ? [] : [`        await socket.send(${JSON.stringify(frame)})`]),
+		'        async for message in socket:',
+		`            print(${json ? 'json.loads(message)' : 'message'})`,
+		'',
+		'',
+		'asyncio.run(main())'
+	].join('\n');
+
+	return { websocat, javascript, python };
+}
+
+/** Reason phrases for the statuses references document most. */
+const REASONS: Readonly<Record<string, string>> = {
+	101: 'Switching Protocols',
+	200: 'OK',
+	201: 'Created',
+	202: 'Accepted',
+	204: 'No Content',
+	301: 'Moved Permanently',
+	302: 'Found',
+	303: 'See Other',
+	304: 'Not Modified',
+	307: 'Temporary Redirect',
+	308: 'Permanent Redirect',
+	400: 'Bad Request',
+	401: 'Unauthorized',
+	403: 'Forbidden',
+	404: 'Not Found',
+	405: 'Method Not Allowed',
+	409: 'Conflict',
+	415: 'Unsupported Media Type',
+	422: 'Unprocessable Content',
+	426: 'Upgrade Required',
+	429: 'Too Many Requests',
+	500: 'Internal Server Error',
+	502: 'Bad Gateway',
+	503: 'Service Unavailable'
+};
+
+/**
+ * A response example per status: its body as JSON or text. A response with
+ * `headers` shows as HTTP, its status line and headers above the body, so a
+ * redirect shows where it goes. Statuses with nothing to show get no tab.
+ */
+export function responseTabs(responses: readonly ApiResponse[], schemas: Readonly<Record<string, SchemaNode>>): CodeTab[] {
+	return responses.flatMap((response): CodeTab[] => {
+		const body = responseBody(response);
+		// An authored `null` is a real example.
+		const example =
+			body === 'none' || body === 'binary'
+				? undefined
+				: response.example !== undefined
+					? response.example
+					: response.schema
+						? exampleFromSchema(response.schema, schemas)
+						: undefined;
+		// A text body shows as written: Markdown stays Markdown.
+		const shown = example === undefined ? undefined : body === 'text' && typeof example === 'string' ? example : JSON.stringify(example, null, 2);
+		const head = response.headers.length
+			? [`HTTP/1.1 ${response.status}${REASONS[response.status] ? ` ${REASONS[response.status]}` : ''}`, ...response.headers.map(([name, value]) => `${name}: ${value}`)].join('\n')
+			: undefined;
+		const code = head && shown !== undefined ? `${head}\n\n${shown}` : (head ?? shown);
+		return code === undefined ? [] : [{ id: response.status, label: response.status, code }];
+	});
 }
 
 const GRAPHQL_SCALARS = new Set(['Int', 'Float', 'String', 'Boolean', 'ID']);
