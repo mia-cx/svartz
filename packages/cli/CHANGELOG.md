@@ -1,5 +1,12 @@
 # svartz
 
+## 2.1.2
+
+### Patch Changes
+
+- @svartz/vite@2.1.2
+  - @svartz/config@2.1.2
+
 ## 2.1.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
 	"name": "@svartz/theme-api-docs",
-	"version": "2.1.1",
+	"version": "2.1.2",
 	"description": "A Svartz theme for REST and GraphQL API docs: endpoints, schemas, and examples.",
 	"license": "SEE LICENSE IN LICENSE",
 	"publishConfig": { "access": "public" },

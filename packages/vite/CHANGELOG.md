@@ -1,5 +1,13 @@
 # @svartz/vite
 
+## 2.1.2
+
+### Patch Changes
+
+- @svartz/theme-minimal@2.1.2
+  - @svartz/core@2.1.2
+  - @svartz/plugins@2.1.2
+
 ## 2.1.1
 
 ### Patch Changes
