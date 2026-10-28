@@ -43,7 +43,7 @@
 	<div class="search"><SearchDialog documents={shell.vault.search} searchIndex={shell.searchIndex} searchOptions={shell.searchOptions} /></div>
 	{#if settings.navLinks.length > 0}
 		<nav class="top-links" aria-label="Project">
-			{#each settings.navLinks as link (link.href)}<a href={link.href}>{link.label}</a>{/each}
+			{#each settings.navLinks as link (link.label)}<a href={link.href}>{link.label}</a>{/each}
 		</nav>
 	{/if}
 	<ColorModeToggle />

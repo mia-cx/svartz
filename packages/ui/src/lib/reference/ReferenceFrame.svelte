@@ -38,7 +38,7 @@
 		<!-- The top bar's project links, which phones hide there, lead the drawer. -->
 		{#if navLinks.length > 0}
 			<nav class="drawer-links" aria-label="Project">
-				{#each navLinks as link (link.href)}<a href={link.href}>{link.label}</a>{/each}
+				{#each navLinks as link (link.label)}<a href={link.href}>{link.label}</a>{/each}
 			</nav>
 		{/if}
 		{@render navigation()}
