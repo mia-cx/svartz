@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { themeSettings } from '../theme-settings.js';
 
 	let {
 		shell,
@@ -17,7 +18,7 @@
 		pageFoot,
 		footer
 	}: {
-		shell: { readonly drawer: boolean };
+		shell: { readonly drawer: boolean; readonly themeConfig?: Readonly<Record<string, unknown>> };
 		header: Snippet;
 		navigation: Snippet;
 		pageHead: Snippet;
@@ -26,12 +27,20 @@
 		pageFoot: Snippet;
 		footer: Snippet;
 	} = $props();
+
+	const navLinks = $derived(themeSettings(shell.themeConfig ?? {}).navLinks);
 </script>
 
 {@render header()}
 
 <div class="frame">
 	<aside class="sidebar" id="explorer-panel" aria-label="Pages" data-open={shell.drawer ? '' : undefined}>
+		<!-- The top bar's project links, which phones hide there, lead the drawer. -->
+		{#if navLinks.length > 0}
+			<nav class="drawer-links" aria-label="Project">
+				{#each navLinks as link (link.href)}<a href={link.href}>{link.label}</a>{/each}
+			</nav>
+		{/if}
 		{@render navigation()}
 	</aside>
 
@@ -72,6 +81,10 @@
 		overflow-y: auto;
 		overscroll-behavior: contain;
 		scrollbar-width: thin;
+	}
+
+	.drawer-links {
+		display: none;
 	}
 
 	.main {
@@ -156,6 +169,25 @@
 			translate: 0 0;
 			visibility: visible;
 			transition: translate var(--sv-duration-slow) var(--sv-ease);
+		}
+
+		.drawer-links {
+			display: flex;
+			flex-wrap: wrap;
+			gap: var(--sv-space-2) var(--sv-space-4);
+			margin-block-end: var(--sv-space-5);
+			padding-block-end: var(--sv-space-4);
+			border-block-end: var(--sv-rule-width) solid var(--sv-rule);
+			font-weight: 600;
+		}
+
+		.drawer-links a {
+			color: var(--sv-text);
+			text-decoration: none;
+		}
+
+		.drawer-links a:hover {
+			color: var(--sv-ink);
 		}
 	}
 </style>
