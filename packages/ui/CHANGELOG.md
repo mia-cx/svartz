@@ -1,5 +1,13 @@
 # @svartz/ui
 
+## 2.1.1
+
+### Patch Changes
+
+- 3209fb1: Jumps to a heading on reference pages, from the contents list or a `#anchor` link, stop below the sticky top bar instead of under it.
+- @svartz/core@2.1.1
+  - @svartz/plugins@2.1.1
+
 ## 2.1.0
 
 ### Patch Changes

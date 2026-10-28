@@ -1,5 +1,14 @@
 # @svartz/theme-blog
 
+## 2.1.1
+
+### Patch Changes
+
+- Updated dependencies [3209fb1]
+  - @svartz/ui@2.1.1
+  - @svartz/theme-minimal@2.1.1
+  - @svartz/core@2.1.1
+
 ## 2.1.0
 
 ### Patch Changes
