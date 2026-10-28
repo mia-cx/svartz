@@ -1,5 +1,13 @@
 # @svartz/ui
 
+## 2.1.2
+
+### Patch Changes
+
+- cbad902: On phones, reference themes show the top bar's project links (`theme.nav`) at the top of the page drawer, since the top bar has no room for them there.
+- @svartz/core@2.1.2
+  - @svartz/plugins@2.1.2
+
 ## 2.1.1
 
 ### Patch Changes
