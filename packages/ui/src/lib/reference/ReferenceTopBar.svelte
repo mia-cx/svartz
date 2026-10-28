@@ -50,6 +50,11 @@
 </header>
 
 <style>
+	/* Jumps to a heading (contents links, #anchors) stop below the bar instead of under it. */
+	:global(html:has(.top-bar)) {
+		scroll-padding-block-start: 3.5rem;
+	}
+
 	.top-bar {
 		position: sticky;
 		inset-block-start: 0;
