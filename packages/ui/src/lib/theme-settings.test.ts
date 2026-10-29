@@ -12,11 +12,19 @@ describe('themeSettings', () => {
 
 	it.each([
 		['a light mark only', { src: '/logo.svg' }, { src: '/logo.svg', dark: undefined, alt: '' }],
-		['both marks and alt text', { src: '/l.svg', dark: '/d.svg', alt: 'Logo' }, { src: '/l.svg', dark: '/d.svg', alt: 'Logo' }],
+		[
+			'both marks and alt text',
+			{ src: '/l.svg', dark: '/d.svg', alt: 'Logo' },
+			{ src: '/l.svg', dark: '/d.svg', alt: 'Logo' }
+		],
 		['no logo', undefined, undefined],
 		['a bare string', '/logo.svg', undefined],
 		['an empty src', { src: ' ', dark: '/d.svg' }, undefined],
-		['a non-string dark mark and alt', { src: '/l.svg', dark: 3, alt: 4 }, { src: '/l.svg', dark: undefined, alt: '' }]
+		[
+			'a non-string dark mark and alt',
+			{ src: '/l.svg', dark: 3, alt: 4 },
+			{ src: '/l.svg', dark: undefined, alt: '' }
+		]
 	])('reads the logo from %s', (_case, logo, expected) => {
 		expect(themeSettings({ logo }).logo).toEqual(expected);
 	});
