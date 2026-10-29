@@ -16,5 +16,5 @@ export const identity: ReferenceThemeIdentity = {
 	name: 'api-docs',
 	displayName: 'Svartz API Docs',
 	description: 'REST and GraphQL reference docs: operations, schemas, and request examples.',
-	version: '2.1.2',
+	version: '2.1.3',
 };

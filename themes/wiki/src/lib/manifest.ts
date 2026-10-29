@@ -4,5 +4,5 @@ export const wikiIdentity = {
 	name: 'wiki',
 	displayName: 'Svartz Wiki',
 	description: 'A wiki: infoboxes, categories, recent changes, and references.',
-	version: '2.1.2',
+	version: '2.1.3',
 } as const;

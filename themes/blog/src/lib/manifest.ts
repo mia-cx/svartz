@@ -12,5 +12,5 @@ export const blogIdentity = {
 	name: 'blog',
 	displayName: 'Svartz Blog',
 	description: 'A blog: a post grid with tag filters, an archive, and long-form reading.',
-	version: '2.1.2',
+	version: '2.1.3',
 } as const;
