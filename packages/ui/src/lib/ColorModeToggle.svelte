@@ -6,7 +6,7 @@
 	import Moon from '@lucide/svelte/icons/moon';
 	import Sun from '@lucide/svelte/icons/sun';
 	import { onMount } from 'svelte';
-	import { COLOR_MODE_SCRIPT, currentColorMode, setColorMode, type ColorMode } from './color-mode.js';
+	import { COLOR_MODE_TAG, currentColorMode, setColorMode, type ColorMode } from './color-mode.js';
 
 	let mode = $state<ColorMode>();
 
@@ -22,7 +22,7 @@
 
 <svelte:head>
 	<!-- eslint-disable-next-line svelte/no-at-html-tags -- static, first-party script -->
-	{@html `<script>${COLOR_MODE_SCRIPT}</script>`}
+	{@html COLOR_MODE_TAG}
 </svelte:head>
 
 <button

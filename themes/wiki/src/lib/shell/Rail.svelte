@@ -44,7 +44,7 @@
 	<nav class="portal" aria-labelledby="portal-heading">
 		<h2 id="portal-heading" class="sv-section-title">Navigation</h2>
 		<ul>
-			{#each portal as link (link.href)}
+			{#each portal as link (link.label)}
 				<li><a href={link.href} aria-current={shell.currentHref === link.href ? 'page' : undefined}>{link.label}</a></li>
 			{/each}
 			<li><button type="button" onclick={randomPage}>Random page</button></li>

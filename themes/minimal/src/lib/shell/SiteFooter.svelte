@@ -15,7 +15,7 @@
 	</p>
 	{#if links.length > 0}
 		<ul>
-			{#each links as link (link.href)}
+			{#each links as link (link.label)}
 				<li><a href={link.href}>{link.label}</a></li>
 			{/each}
 		</ul>

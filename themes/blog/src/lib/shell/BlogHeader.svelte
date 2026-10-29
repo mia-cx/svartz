@@ -19,7 +19,7 @@
 	<a class="sv-wordmark" href={shell.homeHref}>{shell.site.title}</a>
 	<nav class="nav" data-open={shell.drawer ? '' : undefined} id="explorer-panel" aria-label="Main">
 		<ul>
-			{#each links as link (link.href)}
+			{#each links as link (link.label)}
 				<li><a href={link.href} aria-current={shell.currentHref === link.href ? 'page' : undefined}>{link.label}</a></li>
 			{/each}
 		</ul>

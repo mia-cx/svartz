@@ -16,6 +16,13 @@ export const COLOR_MODE_SCRIPT = `(()=>{try{const m=localStorage.getItem(${JSON.
  */
 export const COLOR_MODE_SCRIPT_HASH = "'sha256-rCQ5ZkhaVaditdWZrzCU2tHXYFq9cOfGEFSuMlTQJoc='";
 
+/**
+ * `COLOR_MODE_SCRIPT` as a `<script>` element. It lives here rather than in
+ * `ColorModeToggle.svelte` because Vite's dependency scanner reads any
+ * `<script>` text in a `.svelte` file as the component's script and fails.
+ */
+export const COLOR_MODE_TAG = `<script>${COLOR_MODE_SCRIPT}</script>`;
+
 /** The mode the page currently renders in. */
 export function currentColorMode(): ColorMode {
 	const root = document.documentElement;
