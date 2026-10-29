@@ -6,7 +6,12 @@
 
 	let { shell }: RegionProps = $props();
 
-	const links = $derived([...headerLinks(shell), ...themeSettings(shell.themeConfig).footerLinks]);
+	// A label in both lists shows once, as its header link.
+	const links = $derived(
+		[...headerLinks(shell), ...themeSettings(shell.themeConfig).footerLinks].filter(
+			(link, index, all) => all.findIndex((other) => other.label === link.label) === index
+		)
+	);
 	const rss = $derived(shell.site.feed ? `${shell.vault.routes.mountPath}/rss.xml` : undefined);
 </script>
 
@@ -16,7 +21,7 @@
 		{#if shell.site.description}<p class="foot-description">{shell.site.description}</p>{/if}
 	</div>
 	<ul class="foot-links">
-		{#each links as link (link.href)}<li><a href={link.href}>{link.label}</a></li>{/each}
+		{#each links as link (link.label)}<li><a href={link.href}>{link.label}</a></li>{/each}
 		{#if rss}<li><a href={rss}>RSS</a></li>{/if}
 	</ul>
 	<p class="published">Published with <a href="https://github.com/mia-cx/svartz">Svartz</a></p>
