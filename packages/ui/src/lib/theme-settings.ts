@@ -19,10 +19,18 @@ export interface SettingsLink {
 	readonly href: string;
 }
 
+/** The site's mark beside its title. `dark` replaces `src` in dark mode; `alt` is empty because the title names the site. */
+export interface LogoSettings {
+	readonly src: string;
+	readonly dark?: string;
+	readonly alt: string;
+}
+
 /** Settings every first-party theme reads from the vault's `theme` config. */
 export interface ThemeSettings {
 	readonly comments?: CommentsSettings;
 	readonly footerLinks: readonly SettingsLink[];
+	readonly logo?: LogoSettings;
 	/** Top navigation, for themes with a header (`nav: { Label: '/url/' }`). */
 	readonly navLinks: readonly SettingsLink[];
 }
@@ -54,10 +62,13 @@ export function themeSettings(themeConfig: Loose | undefined): ThemeSettings {
 	const commentsEnabled =
 		comments && comments.enabled !== false && ids && Object.values(ids).every(Boolean);
 	const footer = isRecord(themeConfig?.footer) ? themeConfig.footer : undefined;
+	const logo = isRecord(themeConfig?.logo) ? themeConfig.logo : undefined;
+	const logoSrc = text(logo?.src);
 
 	return {
 		comments: commentsEnabled ? ({ ...comments, ...ids } as CommentsSettings) : undefined,
 		footerLinks: readLinks(footer?.links),
+		logo: logoSrc ? { src: logoSrc, dark: text(logo?.dark), alt: typeof logo?.alt === 'string' ? logo.alt : '' } : undefined,
 		navLinks: readLinks(themeConfig?.nav)
 	};
 }

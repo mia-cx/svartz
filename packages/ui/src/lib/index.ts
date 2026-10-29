@@ -6,6 +6,7 @@ export { default as GraphPanel } from './GraphPanel.svelte';
 export { default as NoteHeader } from './NoteHeader.svelte';
 export { default as RecentNotes } from './RecentNotes.svelte';
 export { default as SearchBox } from './SearchBox.svelte';
+export { default as SiteLogo } from './SiteLogo.svelte';
 export { default as TableOfContents } from './TableOfContents.svelte';
 export { SVARTZ_MARK_SVG, svartzSocialImage } from './brand.js';
 export type { ThemePageProps, ThemeRouteMatch } from './runtime/theme-props.js';
@@ -27,6 +28,7 @@ export {
 	readLinks,
 	themeSettings,
 	type CommentsSettings,
+	type LogoSettings,
 	type SettingsLink,
 	type ThemeSettings
 } from './theme-settings.js';

@@ -37,10 +37,13 @@ Set these on the vault's `theme`:
 theme: {
   base: "@svartz/theme-minimal",
   routes: { tags: "tags", folders: "folders", feed: "feed" },
+  logo: { src: "/logo.svg", dark: "/logo-dark.svg" },
   footer: { links: { GitHub: "https://github.com/you/notes" } },
   comments: { repo: "you/notes", repoId: "R_…", category: "Comments", categoryId: "DIC_…" },
 }
 ```
+
+`logo` puts a mark before the site title in the header of every first-party theme, sized to the title. `dark` is optional and replaces `src` in dark mode. Each is a URL (`https:`, `data:`) or a path from the site root, such as a file in a SvelteKit host's `static/` folder; Svartz adds the deployment base to root paths. The title stays beside the mark, so `alt` defaults to empty.
 
 Comments need all four Giscus ids; a note with `comments: false` hides them. See `docs/comments-and-analytics.md`.
 

@@ -16,7 +16,7 @@ theme: {
 }
 ```
 
-Both themes read `tokens`, `routes`, `version`, `nav`, `footer.links`, and `comments`. The API theme also reads `baseUrl` and `graphqlEndpoint` for its request examples.
+Both themes read `tokens`, `routes`, `version`, `logo`, `nav`, `footer.links`, and `comments`; [theme-minimal's settings](../themes/minimal/README.md#settings) describe `logo`. The API theme also reads `baseUrl` and `graphqlEndpoint` for its request examples.
 
 ## Compose them
 
