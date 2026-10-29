@@ -1,5 +1,18 @@
 # @svartz/theme-docs
 
+## 2.1.3
+
+### Patch Changes
+
+- 4cd36f7: Two link labels that share a URL in `nav` or `footer.links` no longer crash the page. The blog footer shows a label in both lists once.
+
+  Vite no longer fails its dependency scan on `ColorModeToggle`, so the first browser test run in a theme stops reloading mid-run.
+
+- Updated dependencies [4cd36f7]
+  - @svartz/theme-minimal@2.1.3
+  - @svartz/ui@2.1.3
+  - @svartz/core@2.1.3
+
 ## 2.1.2
 
 ### Patch Changes
