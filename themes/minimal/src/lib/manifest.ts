@@ -50,7 +50,7 @@ export function createMinimalTheme(
 		id: '@svartz/theme-minimal',
 		displayName: 'Svartz Minimal',
 		description: 'Publish an Obsidian vault with an explorer, search, graph, and backlinks.',
-		version: '2.1.3',
+		version: '2.2.0',
 		contractVersion: '1.0.0',
 		socialImage: svartzSocialImage,
 		faviconSvg: SVARTZ_MARK_SVG,

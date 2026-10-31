@@ -1,5 +1,14 @@
 # @svartz/vite
 
+## 2.2.0
+
+### Patch Changes
+
+- Updated dependencies [39f24e9]
+  - @svartz/theme-minimal@2.2.0
+  - @svartz/core@2.2.0
+  - @svartz/plugins@2.2.0
+
 ## 2.1.3
 
 ### Patch Changes

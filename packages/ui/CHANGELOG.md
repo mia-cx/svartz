@@ -1,5 +1,17 @@
 # @svartz/ui
 
+## 2.2.0
+
+### Minor Changes
+
+- 39f24e9: `theme.logo` shows a site's mark before its title in every theme's header. `src` is the mark; an optional `dark` replaces it in dark mode, following the reader's pinned colour mode or else the OS. Paths from the site root get the deployment base; URLs pass through. `SiteLogo` renders it for custom headers.
+
+### Patch Changes
+
+- 6e7aab6: `theme.logo` works in Safari 16 and Chrome before 120.
+- @svartz/core@2.2.0
+  - @svartz/plugins@2.2.0
+
 ## 2.1.3
 
 ### Patch Changes
