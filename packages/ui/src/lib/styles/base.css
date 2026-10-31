@@ -209,6 +209,9 @@ a.sv-tag:hover {
 	flex: none;
 	block-size: 1.4em;
 	inline-size: auto;
+	/* A wide mark scales down instead of pushing the header's controls off a phone screen. */
+	max-inline-size: 6em;
+	object-fit: contain;
 }
 
 .sv-logo[data-color-mode='dark'] {

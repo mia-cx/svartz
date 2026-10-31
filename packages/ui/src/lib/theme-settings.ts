@@ -37,8 +37,15 @@ export interface ThemeSettings {
 
 type Loose = Readonly<Record<string, unknown>>;
 
-export const isRecord = (value: unknown): value is Loose => typeof value === 'object' && value !== null;
-const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value : undefined);
+export const isRecord = (value: unknown): value is Loose =>
+	typeof value === 'object' && value !== null;
+const text = (value: unknown) =>
+	typeof value === 'string' && value.trim() ? value.trim() : undefined;
+/** A path or URL the prerender crawler can parse; anything else would fail the build. */
+const url = (value: unknown) => {
+	const candidate = text(value);
+	return candidate && URL.canParse(candidate, 'http://localhost') ? candidate : undefined;
+};
 
 /** A `{ Label: 'url' }` map from user config as ordered links; non-string URLs are dropped. */
 export function readLinks(value: unknown): SettingsLink[] {
@@ -63,12 +70,14 @@ export function themeSettings(themeConfig: Loose | undefined): ThemeSettings {
 		comments && comments.enabled !== false && ids && Object.values(ids).every(Boolean);
 	const footer = isRecord(themeConfig?.footer) ? themeConfig.footer : undefined;
 	const logo = isRecord(themeConfig?.logo) ? themeConfig.logo : undefined;
-	const logoSrc = text(logo?.src);
+	const logoSrc = url(logo?.src);
 
 	return {
 		comments: commentsEnabled ? ({ ...comments, ...ids } as CommentsSettings) : undefined,
 		footerLinks: readLinks(footer?.links),
-		logo: logoSrc ? { src: logoSrc, dark: text(logo?.dark), alt: typeof logo?.alt === 'string' ? logo.alt : '' } : undefined,
+		logo: logoSrc
+			? { src: logoSrc, dark: url(logo?.dark), alt: typeof logo?.alt === 'string' ? logo.alt : '' }
+			: undefined,
 		navLinks: readLinks(themeConfig?.nav)
 	};
 }

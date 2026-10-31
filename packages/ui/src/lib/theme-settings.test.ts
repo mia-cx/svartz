@@ -21,6 +21,12 @@ describe('themeSettings', () => {
 		['a bare string', '/logo.svg', undefined],
 		['an empty src', { src: ' ', dark: '/d.svg' }, undefined],
 		[
+			'padded paths',
+			{ src: ' /l.svg ', dark: '/d.svg ' },
+			{ src: '/l.svg', dark: '/d.svg', alt: '' }
+		],
+		['an unparseable src', { src: 'https://[' }, undefined],
+		[
 			'a non-string dark mark and alt',
 			{ src: '/l.svg', dark: 3, alt: 4 },
 			{ src: '/l.svg', dark: undefined, alt: '' }
