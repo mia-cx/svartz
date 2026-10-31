@@ -44,7 +44,14 @@ const text = (value: unknown) =>
 /** A path or URL the prerender crawler can parse; anything else would fail the build. */
 const url = (value: unknown) => {
 	const candidate = text(value);
-	return candidate && URL.canParse(candidate, 'http://localhost') ? candidate : undefined;
+	if (!candidate) return undefined;
+	// Not `URL.canParse`: Safari 16 and Chrome before 120, inside Vite's default target, lack it.
+	try {
+		new URL(candidate, 'http://localhost');
+		return candidate;
+	} catch {
+		return undefined;
+	}
 };
 
 /** A `{ Label: 'url' }` map from user config as ordered links; non-string URLs are dropped. */
