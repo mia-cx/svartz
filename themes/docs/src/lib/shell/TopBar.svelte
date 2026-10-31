@@ -2,12 +2,13 @@
 <script lang="ts">
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
-	import { ColorModeToggle, SearchDialog, themeSettings } from '@svartz/ui';
+	import { ColorModeToggle, SearchDialog, SiteLogo, themeSettings } from '@svartz/ui';
 	import type { RegionProps } from '@svartz/theme-minimal/runtime';
 
 	let { shell }: RegionProps = $props();
 
-	const links = $derived(themeSettings(shell.themeConfig).navLinks);
+	const settings = $derived(themeSettings(shell.themeConfig));
+	const links = $derived(settings.navLinks);
 	const version = $derived(typeof shell.themeConfig?.version === 'string' ? shell.themeConfig.version : undefined);
 </script>
 
@@ -21,7 +22,7 @@
 >
 	{#if shell.drawer}<X aria-hidden="true" />{:else}<Menu aria-hidden="true" />{/if}
 </button>
-<a class="sv-wordmark" href={shell.homeHref}>{shell.site.title}</a>
+<a class="sv-wordmark" href={shell.homeHref}><SiteLogo logo={settings.logo} />{shell.site.title}</a>
 {#if version}<span class="sv-badge version" data-sv-signal style:--sv-hue="var(--sv-hue-green)">v{version}</span>{/if}
 <div class="search"><SearchDialog documents={shell.vault.search} searchIndex={shell.searchIndex} searchOptions={shell.searchOptions} /></div>
 {#if links.length > 0}

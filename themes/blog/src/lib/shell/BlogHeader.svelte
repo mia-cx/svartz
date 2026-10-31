@@ -7,7 +7,7 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import type { RegionProps } from '@svartz/theme-minimal/runtime';
-	import { ColorModeToggle, SearchDialog } from '@svartz/ui';
+	import { ColorModeToggle, SearchDialog, SiteLogo, themeSettings } from '@svartz/ui';
 	import { headerLinks } from '../blog.js';
 
 	let { shell }: RegionProps = $props();
@@ -16,7 +16,7 @@
 </script>
 
 <div class="bar">
-	<a class="sv-wordmark" href={shell.homeHref}>{shell.site.title}</a>
+	<a class="sv-wordmark" href={shell.homeHref}><SiteLogo logo={themeSettings(shell.themeConfig).logo} />{shell.site.title}</a>
 	<nav class="nav" data-open={shell.drawer ? '' : undefined} id="explorer-panel" aria-label="Main">
 		<ul>
 			{#each links as link (link.label)}

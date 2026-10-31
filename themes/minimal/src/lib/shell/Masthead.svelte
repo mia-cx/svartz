@@ -3,7 +3,7 @@
 	import BookOpen from '@lucide/svelte/icons/book-open';
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
-	import { ColorModeToggle, SearchDialog } from '@svartz/ui';
+	import { ColorModeToggle, SearchDialog, SiteLogo, themeSettings } from '@svartz/ui';
 	import type { RegionProps } from '../extension.js';
 
 	let { shell }: RegionProps = $props();
@@ -20,7 +20,7 @@
 	>
 		{#if shell.drawer}<X aria-hidden="true" />{:else}<Menu aria-hidden="true" />{/if}
 	</button>
-	<a class="sv-wordmark" href={shell.homeHref}>{shell.site.title}</a>
+	<a class="sv-wordmark" href={shell.homeHref}><SiteLogo logo={themeSettings(shell.themeConfig).logo} />{shell.site.title}</a>
 </div>
 <div class="tools">
 	<SearchDialog documents={shell.vault.search} searchIndex={shell.searchIndex} searchOptions={shell.searchOptions} />

@@ -8,7 +8,7 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import type { RegionProps } from '@svartz/theme-minimal/runtime';
-	import { ColorModeToggle, SearchDialog } from '@svartz/ui';
+	import { ColorModeToggle, SearchDialog, SiteLogo, themeSettings } from '@svartz/ui';
 	import SectionBar from '../components/SectionBar.svelte';
 	import { sectionMenu } from '../wiki.js';
 
@@ -28,7 +28,7 @@
 	>
 		{#if shell.drawer}<X aria-hidden="true" />{:else}<Menu aria-hidden="true" />{/if}
 	</button>
-	<a class="sv-wordmark" href={shell.homeHref}>{shell.site.title}</a>
+	<a class="sv-wordmark" href={shell.homeHref}><SiteLogo logo={themeSettings(shell.themeConfig).logo} />{shell.site.title}</a>
 	<div class="search"><SearchDialog documents={shell.vault.search} searchIndex={shell.searchIndex} searchOptions={shell.searchOptions} /></div>
 	<ColorModeToggle />
 	{#if menu.length > 0}

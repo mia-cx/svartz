@@ -5,6 +5,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import ColorModeToggle from '../ColorModeToggle.svelte';
 	import SearchDialog from '../SearchDialog.svelte';
+	import SiteLogo from '../SiteLogo.svelte';
 	import type { SearchOptions } from '../search.js';
 	import { themeSettings } from '../theme-settings.js';
 
@@ -38,7 +39,7 @@
 	>
 		{#if shell.drawer}<X aria-hidden="true" />{:else}<Menu aria-hidden="true" />{/if}
 	</button>
-	<a class="sv-wordmark" href={shell.homeHref}>{shell.site.title}</a>
+	<a class="sv-wordmark" href={shell.homeHref}><SiteLogo logo={settings.logo} />{shell.site.title}</a>
 	{#if version}<span class="sv-badge version" data-sv-signal style:--sv-hue="var(--sv-hue-green)">{version}</span>{/if}
 	<div class="search"><SearchDialog documents={shell.vault.search} searchIndex={shell.searchIndex} searchOptions={shell.searchOptions} /></div>
 	{#if settings.navLinks.length > 0}

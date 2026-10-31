@@ -204,6 +204,40 @@ a.sv-tag:hover {
 	text-decoration: none;
 }
 
+/* A site's own mark before its wordmark (`theme.logo`). The light and dark variants follow the OS unless the reader pinned a mode. */
+.sv-logo {
+	flex: none;
+	block-size: 1.4em;
+	inline-size: auto;
+	/* A wide mark scales down instead of pushing the header's controls off a phone screen. */
+	max-inline-size: 6em;
+	object-fit: contain;
+}
+
+.sv-logo[data-color-mode='dark'] {
+	display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+	.sv-logo[data-color-mode='light'] {
+		display: none;
+	}
+
+	.sv-logo[data-color-mode='dark'] {
+		display: block;
+	}
+}
+
+:root.light .sv-logo[data-color-mode='light'],
+:root.dark .sv-logo[data-color-mode='dark'] {
+	display: block;
+}
+
+:root.light .sv-logo[data-color-mode='dark'],
+:root.dark .sv-logo[data-color-mode='light'] {
+	display: none;
+}
+
 /* The Svartz mark: an ink block with a vermilion proof mark. Also the default favicon. */
 .sv-mark {
 	display: inline-block;

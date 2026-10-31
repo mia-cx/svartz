@@ -66,6 +66,7 @@ Both are self-hosted through Fontsource, so no page requests a font CDN.
 - `.sv-icon-button`: a 2rem square, quiet until hovered.
 - `.sv-kbd`: keyboard hints.
 - `.sv-wordmark`: the site name, set in the title face.
+- `.sv-logo`: the site's own mark before its name (`theme.logo`), 1.4em tall.
 - `.sv-mark`: the Svartz mark.
 - `.sv-skip-link`, `.sv-visually-hidden`.
 
