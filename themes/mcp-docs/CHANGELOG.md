@@ -1,5 +1,15 @@
 # @svartz/theme-mcp-docs
 
+## 2.2.0
+
+### Patch Changes
+
+- Updated dependencies [6e7aab6]
+- Updated dependencies [39f24e9]
+  - @svartz/ui@2.2.0
+  - @svartz/theme-minimal@2.2.0
+  - @svartz/core@2.2.0
+
 ## 2.1.3
 
 ### Patch Changes
