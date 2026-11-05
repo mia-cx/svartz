@@ -11,6 +11,11 @@
 	import type { ContentComponentOverrides } from './content-components.js';
 	type ThemeModule = typeof import('virtual:svartz/theme');
 	type ArtifactsModule = typeof import('virtual:svartz/artifacts');
+
+	// A theme page takes base.css's element defaults back from a host page (VaultNoteContent).
+	$effect(() => {
+		delete document.documentElement.dataset.svartzHostPage;
+	});
 	let {
 		pathname,
 		runtimeTheme,

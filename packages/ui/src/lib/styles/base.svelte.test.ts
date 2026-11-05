@@ -3,6 +3,7 @@ import './base.css';
 
 afterEach(() => {
 	document.documentElement.removeAttribute('style');
+	delete document.documentElement.dataset.svartzHostPage;
 	document.querySelector('[data-svartz-note-content]')?.remove();
 });
 
@@ -19,6 +20,13 @@ describe('base.css element defaults', () => {
 		const body = document.createElement('div');
 		body.dataset.svartzNoteContent = '';
 		document.body.append(body);
+		expect(getComputedStyle(document.documentElement).backgroundColor).not.toBe('rgb(1, 2, 3)');
+		expect(getComputedStyle(document.body).backgroundColor).not.toBe('rgb(1, 2, 3)');
+	});
+
+	it('leave the host page alone after the note body has gone', () => {
+		document.documentElement.style.setProperty('--sv-paper', 'rgb(1, 2, 3)');
+		document.documentElement.dataset.svartzHostPage = '';
 		expect(getComputedStyle(document.documentElement).backgroundColor).not.toBe('rgb(1, 2, 3)');
 		expect(getComputedStyle(document.body).backgroundColor).not.toBe('rgb(1, 2, 3)');
 	});
