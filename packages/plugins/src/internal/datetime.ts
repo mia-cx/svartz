@@ -19,15 +19,16 @@ export const normalizeDateTime = (
     return normalizeDateToUTC(value);
   }
 
+  // A date without an offset is wall-clock time in UTC, so a vault dates the same on every build machine.
   if (typeof value === "string") {
     if (dateFormat) {
-      const parsed = moment(value, dateFormat, true);
+      const parsed = moment.utc(value, dateFormat, true);
       if (parsed.isValid()) {
         return normalizeDateToUTC(parsed.toDate());
       }
     }
 
-    const directParse = moment(value);
+    const directParse = moment.utc(value);
     if (directParse.isValid()) {
       return normalizeDateToUTC(directParse.toDate());
     }
