@@ -10,8 +10,11 @@ const HTML_ASSET = /\b(?:href|src|poster|srcset)\s*=\s*(["'])(.*?)\1/gi;
 const ROAM_MEDIA = /\{\{\[\[(?:audio|video|pdf)\]\]:\s*([^}\r\n]+)\}\}/gi;
 const markdown = unified().use(remarkParse);
 
-/** Source spans of comments the page doesn't render: Obsidian `%%…%%` and HTML `<!--…-->`, outside code. */
-export function hiddenCommentSpans(source: string): { start: number; end: number }[] {
+/**
+ * Source spans of comments the page doesn't render: Obsidian `%%…%%` and HTML `<!--…-->`, outside code.
+ * In an executable `.svx` note, `%%` inside raw HTML is markup, as on the page (transform-ofm's protectCode).
+ */
+export function hiddenCommentSpans(source: string, executable = false): { start: number; end: number }[] {
   if (!source.includes("%%") && !source.includes("<!--")) return [];
   const code: { start: number; end: number }[] = [];
   const hidden: { start: number; end: number }[] = [];
@@ -23,6 +26,7 @@ export function hiddenCommentSpans(source: string): { start: number; end: number
     if (node.type === "code" || node.type === "inlineCode") {
       code.push({ start, end });
     } else if (node.type === "html") {
+      if (executable) code.push({ start, end });
       for (const comment of raw.matchAll(/<!--[\s\S]*?(?:-->|$)/g)) {
         hidden.push({ start: start + comment.index!, end: start + comment.index! + comment[0].length });
       }
@@ -39,9 +43,9 @@ export function hiddenCommentSpans(source: string): { start: number; end: number
 }
 
 /** Hide non-rendered comments without changing source offsets. */
-export function maskHiddenComments(source: string): string {
+export function maskHiddenComments(source: string, executable = false): string {
   let masked = source;
-  for (const { start, end } of hiddenCommentSpans(source).reverse()) {
+  for (const { start, end } of hiddenCommentSpans(source, executable).reverse()) {
     masked = masked.slice(0, start) + masked.slice(start, end).replace(/[^\r\n]/g, " ") + masked.slice(end);
   }
   return masked;

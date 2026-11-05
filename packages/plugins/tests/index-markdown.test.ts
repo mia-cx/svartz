@@ -77,6 +77,7 @@ const vault = () => [
   file("gear/streaming.md", "Budget gear."),
   file("Draft.md", "---\ndraft: true\n---\nNot yet."),
   file("cover.png"),
+  file("Widget.svx", '<div data-example="%%">Example</div>\n\n%%private secret%%\n\nPublic'),
 ];
 
 describe("index.markdown", () => {
@@ -92,6 +93,10 @@ describe("index.markdown", () => {
       "## Aftermath",
     ].join("\n"));
     expect(index(vault(), true).get("gear/streaming")!.markdown).toBe("Budget gear.");
+  });
+
+  it("treats %% in an executable note's HTML as markup, as the page does", () => {
+    expect(index(vault(), true).get("widget")!.markdown).toBe('<div data-example="%%">Example</div>\n\nPublic');
   });
 
   it("leaves the index as it was when the vault doesn't ask for it", () => {

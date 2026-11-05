@@ -115,11 +115,12 @@ function tidyOutsideCode(markdown: string): string {
  * wikilinks, embeds and Markdown links rewritten to the URLs `links` gives.
  */
 export function portableMarkdown(file: ProcessedFile, source: string, links: AgentMarkdownLinks): string {
-  const shown = file.extension === ".svx" ? source.replace(SVX_BLOCK, "") : source;
-  const visible = maskHiddenComments(shown);
+  const executable = file.extension === ".svx";
+  const shown = executable ? source.replace(SVX_BLOCK, "") : source;
+  const visible = maskHiddenComments(shown, executable);
   const replacements: Replacement[] = [
     // Comments go entirely, so text after one stays where it was instead of behind a run of spaces.
-    ...hiddenCommentSpans(shown).map(({ start, end }) => ({ start, end, text: "" })),
+    ...hiddenCommentSpans(shown, executable).map(({ start, end }) => ({ start, end, text: "" })),
     ...findLinkSpans(visible).flatMap((link): Replacement[] => {
       const label = link.label ?? link.target;
       const asset = assetUrl(links, link.section ? `${link.target}#${link.section}` : link.target);
