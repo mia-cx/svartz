@@ -4,7 +4,12 @@
  */
 @import './tokens.css';
 
-html {
+/*
+ * Element defaults apply only to a page the theme's site layout renders, which marks itself with
+ * `[data-svartz-site]`. A host page that shows a note body inside its own design keeps its own
+ * html, body, selection and focus styles. `:where()` keeps each selector's specificity unchanged.
+ */
+html:where(:has([data-svartz-site])) {
 	background: var(--sv-paper);
 	color: var(--sv-text);
 	font-family: var(--sv-font-sans);
@@ -15,17 +20,17 @@ html {
 	-webkit-font-smoothing: antialiased;
 }
 
-body {
+:where(html:has([data-svartz-site])) body {
 	margin: 0;
 	background: var(--sv-paper);
 	font-size: var(--sv-step-0);
 }
 
-::selection {
+:where(html:has([data-svartz-site])) ::selection {
 	background: var(--sv-selection);
 }
 
-:focus-visible {
+:where(html:has([data-svartz-site])) :focus-visible {
 	outline: var(--sv-focus-width) solid var(--sv-accent);
 	outline-offset: var(--sv-focus-offset);
 	border-radius: var(--sv-radius-s);
