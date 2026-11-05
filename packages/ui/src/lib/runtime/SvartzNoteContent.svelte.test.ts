@@ -3,6 +3,7 @@ import { render } from 'vitest-browser-svelte';
 import { createProtectionSalt, deriveProtectionKey, sealProtectedPayload } from '@svartz/core';
 import { afterEach, expect, it, vi } from 'vitest';
 import SvartzNoteContent from './SvartzNoteContent.svelte';
+import SvartzRuntimePage from './SvartzRuntimePage.svelte';
 import { noteStylesheets } from './note-stylesheets.js';
 import { lockProtectedGroup } from './protected-client.js';
 import { artifacts } from './testing/host';
@@ -33,6 +34,8 @@ it('marks the note body for prose styles and previews', async () => {
 	await expect.element(page.getByText('Plain body')).toBeVisible();
 	const body = container.querySelector('.sv-prose[data-sv-preview][data-clarity-mask="true"]');
 	expect(body?.textContent).toContain('Plain body');
+	// base.css leaves the host page's own html and body styles alone while this marker is on the page.
+	expect(body?.closest('[data-svartz-note-content]')).not.toBeNull();
 });
 
 it('uses theme content components and lets host overrides win their slot', async () => {
@@ -60,9 +63,7 @@ it('shows the unlock form for a protected note inside the clarity mask', async (
 	});
 	await expect.element(page.getByLabelText('Password')).toBeVisible();
 	await expect.element(page.getByRole('button', { name: 'Unlock note' })).toBeVisible();
-	expect(
-		container.querySelector('[data-clarity-mask="true"] form')
-	).toBeTruthy();
+	expect(container.querySelector('[data-clarity-mask="true"] form')).toBeTruthy();
 	expect(container.textContent).not.toContain('Locked shell');
 });
 
@@ -145,4 +146,19 @@ it('links the stylesheets its route computed in load', async () => {
 	);
 	expect(hrefs).toContain('/_app/immutable/assets/shared.css');
 	expect(hrefs).toContain('/_app/immutable/assets/callouts.css');
+});
+
+it('keeps the host page flag after the note body goes, until a theme page renders', async () => {
+	const root = document.documentElement;
+	delete root.dataset.svartzHostPage;
+	const note = render(SvartzNoteContent, { pathname: '/work/plain/', stylesheets: [] });
+	await expect.element(page.getByText('Plain body')).toBeVisible();
+	note.unmount();
+	// base.css stays loaded after client navigation, so the host's next page must stay unstyled by it.
+	expect(root.dataset.svartzHostPage).toBe('');
+
+	const theme = render(SvartzRuntimePage, { pathname: '/work/plain/' });
+	await expect.element(page.getByText('Plain body')).toBeVisible();
+	expect(root.dataset.svartzHostPage).toBeUndefined();
+	theme.unmount();
 });
