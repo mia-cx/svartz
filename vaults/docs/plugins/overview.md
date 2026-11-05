@@ -1,3 +1,7 @@
+---
+title: Overview
+---
+
 # Core plugins
 
 `createCorePlugins()` from `@svartz/plugins` returns the built-in plugins in pipeline order.

@@ -1,3 +1,7 @@
+---
+title: Emit Artifacts
+---
+
 # Emit artifacts
 
 `core:emit-artifacts` provides the required `emitArtifacts` stage. It writes vault-scoped page components and runtime index modules under the generated artifacts directory. `ctx.index` must already exist. The Vite artifact module imports the active compiler resources and exposes the index, graph, search, and page components to SvelteKit.

@@ -42,12 +42,14 @@ describe("fileToSlug", () => {
 });
 
 describe("deriveTitle", () => {
-  it("converts hyphens and underscores to spaces and capitalizes", () => {
-    expect(deriveTitle("my-note")).toBe("My Note");
-    expect(deriveTitle("my_note")).toBe("My Note");
+  it("keeps the filename as written, as Obsidian does", () => {
+    expect(deriveTitle("My Approach to Mastering")).toBe("My Approach to Mastering");
+    expect(deriveTitle("lament")).toBe("lament");
+    expect(deriveTitle("011.Internal_Flame")).toBe("011.Internal_Flame");
+    expect(deriveTitle("australis -- see the light")).toBe("australis -- see the light");
   });
 
   it("trims whitespace", () => {
-    expect(deriveTitle("  hello  ")).toBe("Hello");
+    expect(deriveTitle("  hello  ")).toBe("hello");
   });
 });

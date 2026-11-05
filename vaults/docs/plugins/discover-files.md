@@ -1,3 +1,7 @@
+---
+title: Discover Files
+---
+
 # Plugin: Discover Files
 
 Core pipeline plugin for vault discovery and file traversal.

@@ -1,3 +1,7 @@
+---
+title: Resolve
+---
+
 # Link resolution
 
 Internal helpers behind [[plugins/resolve-links]] and recursive embeds.

@@ -1,3 +1,7 @@
+---
+title: Quick Reference
+---
+
 # Plugin quick reference
 
 ```ts

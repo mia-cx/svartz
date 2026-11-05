@@ -1,3 +1,7 @@
+---
+title: Datetime
+---
+
 # Datetime Utilities
 
 ISO timestamp parsing and formatting for vault metadata.

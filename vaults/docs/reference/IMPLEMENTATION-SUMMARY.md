@@ -1,3 +1,7 @@
+---
+title: IMPLEMENTATION SUMMARY
+---
+
 # Implementation map
 
 Svartz processes each vault through the ordered hooks in [[contracts/plugin-contract]]. [[plugins/overview]] lists the core providers. Theme and config plugins can replace them by ID. The required stages are discovery, frontmatter, publication filtering, link resolution, indexing, and emission. Individual content transforms are optional.

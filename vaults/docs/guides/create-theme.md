@@ -1,3 +1,7 @@
+---
+title: Create Theme
+---
+
 # Create a theme
 
 A Svartz theme supplies SvelteKit layouts, route pages, and optional content components. The five first-party themes in `themes/` are working examples: `minimal`, `wiki`, `blog`, `docs`, and `api-docs`. Visual styles belong to the theme; note parsing belongs to plugins.
