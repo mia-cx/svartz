@@ -1,5 +1,17 @@
 # @svartz/vite
 
+## 2.3.0
+
+### Patch Changes
+
+- cd87265: `svartz dev` rebuilds and reloads after a vault edit again. The vault watchers were released as soon as the dev server started.
+- Updated dependencies [e199cef]
+- Updated dependencies [0a0cfba]
+- Updated dependencies [bdc5800]
+  - @svartz/plugins@2.3.0
+  - @svartz/core@2.3.0
+  - @svartz/theme-minimal@2.3.0
+
 ## 2.2.0
 
 ### Patch Changes

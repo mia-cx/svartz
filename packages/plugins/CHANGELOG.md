@@ -1,5 +1,18 @@
 # @svartz/plugins
 
+## 2.3.0
+
+### Minor Changes
+
+- e199cef: A note without a `title` is titled by its filename as written, as in Obsidian: `My Approach to Mastering.md` stays "My Approach to Mastering" and `create-plugin.md` stays "create-plugin". Add a `title` to keep a different one.
+- bdc5800: `index: { markdown: true }` puts each note's body in its index entry as Markdown with links resolved, for hosts that render notes with their own renderer.
+
+### Patch Changes
+
+- 0a0cfba: A frontmatter date without an offset is read as UTC, so `created_at: 2023-09-08T00:00` is 8 September on every build machine rather than 7 September on one east of UTC.
+- Updated dependencies [bdc5800]
+  - @svartz/core@2.3.0
+
 ## 2.2.0
 
 ### Patch Changes

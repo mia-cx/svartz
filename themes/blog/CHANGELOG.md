@@ -1,5 +1,15 @@
 # @svartz/theme-blog
 
+## 2.3.0
+
+### Patch Changes
+
+- Updated dependencies [276d9a0]
+- Updated dependencies [bdc5800]
+  - @svartz/ui@2.3.0
+  - @svartz/core@2.3.0
+  - @svartz/theme-minimal@2.3.0
+
 ## 2.2.0
 
 ### Minor Changes

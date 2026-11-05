@@ -1,5 +1,16 @@
 # @svartz/config
 
+## 2.3.0
+
+### Minor Changes
+
+- bdc5800: `index: { markdown: true }` puts each note's body in its index entry as Markdown with links resolved, for hosts that render notes with their own renderer.
+
+### Patch Changes
+
+- Updated dependencies [bdc5800]
+  - @svartz/core@2.3.0
+
 ## 2.2.0
 
 ### Patch Changes

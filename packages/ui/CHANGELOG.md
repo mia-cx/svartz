@@ -1,5 +1,16 @@
 # @svartz/ui
 
+## 2.3.0
+
+### Patch Changes
+
+- 276d9a0: A host page that shows a note body with `SvartzNoteContent` keeps its own `html`, `body`, selection and focus styles. Theme pages keep Svartz's element defaults as before.
+- Updated dependencies [e199cef]
+- Updated dependencies [0a0cfba]
+- Updated dependencies [bdc5800]
+  - @svartz/plugins@2.3.0
+  - @svartz/core@2.3.0
+
 ## 2.2.0
 
 ### Minor Changes
