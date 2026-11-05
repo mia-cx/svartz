@@ -130,6 +130,12 @@ const DiscoveryConfigSchema = Schema.Struct({
   )),
 });
 
+/** What the published index carries beyond its defaults. */
+const IndexConfigSchema = Schema.Struct({
+  /** Each entry's body as Markdown with links resolved, for hosts that render notes themselves. */
+  markdown: Schema.optional(Schema.Boolean),
+});
+
 /** Shallow plugin placeholder; plugin interface/standard TBD. */
 const PluginEntrySchema = Schema.Unknown;
 
@@ -145,6 +151,7 @@ const VaultOptionsSchema = Schema.Struct({
   site: Schema.optional(SiteConfigSchema),
   analytics: Schema.optional(AnalyticsConfigSchema),
   discovery: Schema.optional(DiscoveryConfigSchema),
+  index: Schema.optional(IndexConfigSchema),
   /** Output directory for this vault's build artifact. Default: `.svartz/vaults/<vault.id>`. */
   outDir: Schema.optional(Schema.String),
   /** Plugin instances (transformers, filters, emitters). Vault- and theme-specific. Shape TBD when plugin API is defined. */
@@ -195,6 +202,7 @@ const VaultConfigSchema = Schema.Struct({
   site: Schema.optional(SiteConfigSchema),
   analytics: Schema.optional(AnalyticsConfigSchema),
   discovery: Schema.optional(DiscoveryConfigSchema),
+  index: Schema.optional(IndexConfigSchema),
   outDir: Schema.optional(Schema.String),
   plugins: Schema.optional(Schema.Array(PluginEntrySchema)),
 });
@@ -227,6 +235,7 @@ export {
   GiscusConfigSchema,
   AnalyticsConfigSchema,
   DiscoveryConfigSchema,
+  IndexConfigSchema,
   PluginEntrySchema,
   VaultOptionsSchema,
   TargetConfigSchema,
