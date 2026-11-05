@@ -14,6 +14,7 @@ import type {
   FolderIndexEntry,
   IndexEntry,
   IndexLink,
+  PluginContext,
   Index,
   RouteIndex,
   SearchDocument,
@@ -24,9 +25,50 @@ import { countWords, extractDescription, stripMarkdownToText } from "./internal/
 import { normalizeDateTime, publicationOverride } from "./internal/datetime";
 import { allocateRedirects, alternateNames, markdownHref, routeHref } from "./internal/routes";
 import { normalizeSlugSegment } from "./internal/slug";
+import { portableMarkdown } from "./internal/agent-markdown";
+import { createAssetResolver } from "./internal/asset-references";
+import { buildSlugMap, resolveLink } from "./internal/resolve";
 
 const INDEX_VERSION = "1.0.0";
 const DEFAULT_INDEX_TIMESTAMP = new Date(0);
+
+/**
+ * Each public entry's body as Markdown that links to pages and attachments, for hosts that
+ * render notes with their own renderer. Links to notes that aren't public become their label.
+ */
+function withMarkdown(ctx: PluginContext, entries: readonly IndexEntry[]): IndexEntry[] {
+  const sources = (ctx.meta.get("sourceBodies") as ReadonlyMap<string, string> | undefined) ?? new Map<string, string>();
+  const notes = ctx.files.filter((file) => isMarkdownFile(file.extension));
+  const publicNotes = new Map(notes.filter((file) => !file.protection).map((file) => [file.slug, file]));
+  const slugMap = buildSlugMap(notes.map((file) => ({
+    slug: file.slug,
+    path: file.path,
+    aliases: alternateNames(file.frontmatter, ctx.config.frontmatter.aliasesField),
+  })));
+  const allSlugs = notes.map((file) => file.slug);
+  const publicAssets = ctx.meta.get("svartz:publicAssetPaths") as ReadonlySet<string> | undefined;
+  const resolveAsset = createAssetResolver(ctx.files.filter((file) =>
+    !isMarkdownFile(file.extension) && (!publicAssets || publicAssets.has(file.path))));
+  const mountPath = ctx.config.mountPath ?? "";
+  const hrefs = new Map(entries.filter((entry) => !entry.locked).map((entry) => [entry.slug, entry.href]));
+
+  return entries.map((entry) => {
+    const file = publicNotes.get(entry.slug);
+    const source = file && sources.get(file.path);
+    if (!file || entry.locked || source === undefined) return entry;
+    const markdown = portableMarkdown(file, source, {
+      note(link) {
+        const slug = resolveLink({ raw: "", label: undefined, ...link }, slugMap, allSlugs, ctx.config.linkResolution, file.slug, notes);
+        return slug ? hrefs.get(slug) : undefined;
+      },
+      asset(target) {
+        const path = resolveAsset(file, target);
+        return path && `${mountPath}/${path.split("/").map(encodeURIComponent).join("/")}`;
+      },
+    });
+    return { ...entry, markdown };
+  });
+}
 
 function isMarkdownFile(extension: string | undefined): boolean {
   return extension !== undefined && [".md", ".mdx", ".svx"].includes(extension);
@@ -261,6 +303,7 @@ export const indexContent = definePlugin(() => ({
       ctx.meta.set("svartz:protectedEntries", protectedEntries);
 
       entries.sort((a, b) => a.slug.localeCompare(b.slug));
+      if (ctx.config.index?.markdown) entries.splice(0, entries.length, ...withMarkdown(ctx, entries));
       search.sort((a, b) => a.slug.localeCompare(b.slug));
 
       const graph: Record<string, readonly string[]> = {};

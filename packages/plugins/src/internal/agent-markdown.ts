@@ -110,17 +110,10 @@ function tidyOutsideCode(markdown: string): string {
 }
 
 /**
- * One page's Markdown copy: its published properties as YAML front matter, the title
- * as a heading unless the body opens with one, then the source with links rewritten.
- * Structured themes (API models, symbol docs) render from those properties, so the
- * copy keeps them. The index already publishes them, so they reveal nothing new.
+ * A note's source as portable Markdown: hidden comments and `.svx` script and style removed,
+ * wikilinks, embeds and Markdown links rewritten to the URLs `links` gives.
  */
-export function agentMarkdown(
-  file: ProcessedFile,
-  source: string,
-  page: { readonly title: string; readonly properties: Readonly<Record<string, unknown>> },
-  links: AgentMarkdownLinks,
-): string {
+export function portableMarkdown(file: ProcessedFile, source: string, links: AgentMarkdownLinks): string {
   const visible = maskHiddenComments(file.extension === ".svx" ? source.replace(SVX_BLOCK, "") : source);
   const replacements: Replacement[] = [
     ...findLinkSpans(visible).flatMap((link): Replacement[] => {
@@ -148,8 +141,22 @@ export function agentMarkdown(
     body = body.slice(0, start) + text + body.slice(end);
     limit = start;
   }
-  body = tidyOutsideCode(body);
+  return tidyOutsideCode(body);
+}
 
+/**
+ * One page's Markdown copy: its published properties as YAML front matter, the title
+ * as a heading unless the body opens with one, then the source with links rewritten.
+ * Structured themes (API models, symbol docs) render from those properties, so the
+ * copy keeps them. The index already publishes them, so they reveal nothing new.
+ */
+export function agentMarkdown(
+  file: ProcessedFile,
+  source: string,
+  page: { readonly title: string; readonly properties: Readonly<Record<string, unknown>> },
+  links: AgentMarkdownLinks,
+): string {
+  const body = portableMarkdown(file, source, links);
   const content = `${/^#\s/.test(body) ? body : `# ${page.title}\n\n${body}`}`.trim();
   return Object.keys(page.properties).length > 0
     ? `${matter.stringify("", { ...page.properties }).trim()}\n\n${content}\n`

@@ -122,3 +122,25 @@ export const entries: EntryGenerator = () =>
 ```
 
 `work.basePath` is the absolute deployment base, SvelteKit's `kit.paths.base`, so the route slices the URL with it instead of `$app/paths.base`, which can be relative during SSR. `routes.notes` includes hidden protected notes. Those have no `vault.note()` entry until unlock, so the page shows no title for them. `vault.note()` matches hrefs that include the deployment base. Redirects follow the vault's alias redirects like the generated catchall. The `entries` generator reads route metadata in `vaults`, which needs no runtime code. The route takes priority over the Svartz catchall for every URL under `/work`. Import `virtual:svartz/tailwind-sources.css` once in the host, as the generated catchall does, so theme content classes get their styles. Add `/// <reference types="@svartz/vite/virtual-modules" />` to `src/app.d.ts`, the declarations the CLI template uses.
+
+## Render notes with your own renderer
+
+A host that styles and renders notes itself can use Svartz for the index alone. Set `index: { markdown: true }` on the vault, and each published entry carries `markdown`: the body without its frontmatter, with `%%comments%%` and HTML comments removed and wikilinks, embeds and Markdown links rewritten to page and attachment URLs. A link to a note that isn't public becomes its label. Protected notes never carry it.
+
+```ts
+{ id: 'blog', path: './content/blog', mountPath: '/blog', target: { type: 'host' }, index: { markdown: true } }
+```
+
+```ts
+import { marked } from 'marked';
+import { vaults } from 'virtual:svartz/host';
+
+const blog = vaults.find((vault) => vault.id === 'blog')!;
+export const posts = blog.artifacts.index.entries.map((entry) => ({
+  title: entry.title,
+  href: entry.href,
+  html: marked.parse(entry.markdown ?? ''),
+}));
+```
+
+Page links point at canonical URLs, such as `/blog/mastering/#low-end`, and attachments at `/blog/cover.png`. Neither includes SvelteKit's deployment base. The route needs no `prepareHostVault`, and the page loads no Svartz CSS or theme code. The entries ship in the bundle of any page that imports them, so leave the option off for vaults that render through Svartz.

@@ -270,6 +270,7 @@ const resolveVaultConfig = (
       site,
       analytics: vault.analytics ?? defaults?.analytics,
       discovery: mergeDiscovery(defaults?.discovery, vault.discovery, site.url, vault.target.type === "host"),
+      index: { markdown: vault.index?.markdown ?? defaults?.index?.markdown ?? false },
       mountPath: normalizeMountPath(vault.mountPath ?? defaults?.mountPath),
       target: vault.target,
       plugins,

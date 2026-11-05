@@ -106,6 +106,8 @@ interface ResolvedConfig {
   readonly site: ResolvedSiteConfig;
   readonly analytics?: AnalyticsConfig;
   readonly discovery: ResolvedDiscoveryConfig;
+  /** Optional index contents; missing means the defaults. */
+  readonly index?: { readonly markdown: boolean };
   /** Vault URL prefix within the host app, separate from SvelteKit's deployment base. */
   readonly mountPath: string;
   readonly target: TargetConfig;
@@ -262,6 +264,11 @@ interface IndexEntry {
   readonly socialImage?: string;
   /** The page's Markdown copy for LLM agents; absent when the vault disables it or the note is protected. */
   readonly markdownHref?: string;
+  /**
+   * The body as Markdown, with wikilinks, embeds and Markdown links resolved to page and attachment URLs
+   * and Obsidian comments removed. Set only when the vault enables `index.markdown`; protected notes never carry it.
+   */
+  readonly markdown?: string;
   readonly content: string;
   readonly links: readonly IndexLink[];
   readonly toc: readonly TocEntry[];
