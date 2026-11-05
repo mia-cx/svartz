@@ -6,34 +6,66 @@
 
 /*
  * Element defaults stay off a host page that shows a note body inside its own design:
- * `SvartzNoteContent` marks the body it renders with `[data-svartz-note-content]`, and that page keeps its own
- * html, body, selection and focus styles. `:where()` keeps each selector's specificity unchanged.
+ * `SvartzNoteContent` marks the body it renders with `[data-svartz-note-content]`, and that page keeps its
+ * own html, body, selection and focus styles. `:where()` keeps each selector's specificity unchanged.
+ * A browser without `:has()` applies the defaults everywhere, as before.
  */
-html:where(:not(:has([data-svartz-note-content]))) {
-	background: var(--sv-paper);
-	color: var(--sv-text);
-	font-family: var(--sv-font-sans);
-	font-size: 100%;
-	line-height: var(--sv-leading);
-	-webkit-text-size-adjust: 100%;
-	text-rendering: optimizeLegibility;
-	-webkit-font-smoothing: antialiased;
+@supports selector(:has(*)) {
+	html:where(:not(:has([data-svartz-note-content]))) {
+		background: var(--sv-paper);
+		color: var(--sv-text);
+		font-family: var(--sv-font-sans);
+		font-size: 100%;
+		line-height: var(--sv-leading);
+		-webkit-text-size-adjust: 100%;
+		text-rendering: optimizeLegibility;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	:where(html:not(:has([data-svartz-note-content]))) body {
+		margin: 0;
+		background: var(--sv-paper);
+		font-size: var(--sv-step-0);
+	}
+
+	:where(html:not(:has([data-svartz-note-content]))) ::selection {
+		background: var(--sv-selection);
+	}
+
+	:where(html:not(:has([data-svartz-note-content]))) :focus-visible {
+		outline: var(--sv-focus-width) solid var(--sv-accent);
+		outline-offset: var(--sv-focus-offset);
+		border-radius: var(--sv-radius-s);
+	}
 }
 
-:where(html:not(:has([data-svartz-note-content]))) body {
-	margin: 0;
-	background: var(--sv-paper);
-	font-size: var(--sv-step-0);
-}
+@supports not selector(:has(*)) {
+	html {
+		background: var(--sv-paper);
+		color: var(--sv-text);
+		font-family: var(--sv-font-sans);
+		font-size: 100%;
+		line-height: var(--sv-leading);
+		-webkit-text-size-adjust: 100%;
+		text-rendering: optimizeLegibility;
+		-webkit-font-smoothing: antialiased;
+	}
 
-:where(html:not(:has([data-svartz-note-content]))) ::selection {
-	background: var(--sv-selection);
-}
+	body {
+		margin: 0;
+		background: var(--sv-paper);
+		font-size: var(--sv-step-0);
+	}
 
-:where(html:not(:has([data-svartz-note-content]))) :focus-visible {
-	outline: var(--sv-focus-width) solid var(--sv-accent);
-	outline-offset: var(--sv-focus-offset);
-	border-radius: var(--sv-radius-s);
+	::selection {
+		background: var(--sv-selection);
+	}
+
+	:focus-visible {
+		outline: var(--sv-focus-width) solid var(--sv-accent);
+		outline-offset: var(--sv-focus-offset);
+		border-radius: var(--sv-radius-s);
+	}
 }
 
 /* The label voice: mCX's overline. */
