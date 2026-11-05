@@ -1,3 +1,7 @@
+---
+title: Transform Gfm
+---
+
 # Transform GFM
 
 `transformGfm(options?)` provides `core:transform-gfm` in the `transformGfm` stage. It registers remark-gfm with the compiler. Tables, task lists, strikethrough, and autolinks render only while this hook is active. Pass remark-gfm options to the factory. The hook does not rewrite `file.content`.

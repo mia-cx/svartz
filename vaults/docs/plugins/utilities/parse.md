@@ -1,3 +1,7 @@
+---
+title: Parse
+---
+
 # Frontmatter Parsing
 
 YAML frontmatter extraction and parsing.

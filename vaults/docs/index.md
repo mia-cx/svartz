@@ -1,3 +1,7 @@
+---
+title: Index
+---
+
 # Svartz Documentation Vault
 
 Complete reference and guides for the Svartz documentation, theme, and plugin systems.

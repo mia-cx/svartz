@@ -1,3 +1,7 @@
+---
+title: Resolve Links
+---
+
 # Resolve links
 
 `resolveLinks()` provides `core:resolve-links` in the `resolveLinks` stage. It rewrites each published note's wikilinks and Markdown links to relative route hrefs, records the targets in `file.links` for backlinks, and fills `file.linkTargets`. The hook is fatal: a failure stops the build.

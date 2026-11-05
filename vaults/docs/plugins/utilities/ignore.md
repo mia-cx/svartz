@@ -1,3 +1,7 @@
+---
+title: Ignore
+---
+
 # Gitignore Parsing
 
 Parses `.gitignore` and config include/exclude patterns for file filtering.

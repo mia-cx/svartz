@@ -1,3 +1,7 @@
+---
+title: Slug
+---
+
 # Slug Generation
 
 Generates canonical, deterministic, conflict-free slugs for vault files.

@@ -32,8 +32,5 @@ export const fileToSlug = (filePath: string): string => {
   return slug;
 };
 
-export const deriveTitle = (filename: string): string =>
-  filename
-    .replace(/[-_]/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-    .trim();
+/** A note's title is its filename as written, as in Obsidian. */
+export const deriveTitle = (filename: string): string => filename.trim();

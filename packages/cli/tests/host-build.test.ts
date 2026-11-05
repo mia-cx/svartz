@@ -359,14 +359,14 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
     const blogHome = await fetch(`http://127.0.0.1:${port}/blog/`);
     const blogBody = await blogHome.text();
     expect(blogBody).toContain("Vault content");
-    expect(blogBody).toContain("Index | Notes");
+    expect(blogBody).toContain("index | Notes");
     expect(blogBody).toContain('property="og:image" content="https://example.test/blog/__svartz/social/index.png"');
     expect((await fetch(`http://127.0.0.1:${port}/blog/__svartz/social/index.png`)).status).toBe(200);
     const workHome = await fetch(`http://127.0.0.1:${port}/work/`);
     const workBody = await workHome.text();
     expect(workHome.status, `${stderr}\n${workBody}`).toBe(200);
     expect(workBody).toContain("Work content");
-    expect(workBody).toContain("Index | Work");
+    expect(workBody).toContain("index | Work");
     expect(workBody).not.toContain("Vault content");
     expect(await (await fetch(`http://127.0.0.1:${port}/blog/shared.png`)).text()).toBe("blog asset");
     expect(await (await fetch(`http://127.0.0.1:${port}/work/shared.png`)).text()).toBe("work asset");

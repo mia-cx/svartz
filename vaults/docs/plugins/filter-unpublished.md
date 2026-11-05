@@ -1,3 +1,7 @@
+---
+title: Filter Unpublished
+---
+
 # Filter unpublished content
 
 `core:filter-unpublished` runs after frontmatter parsing and before links, embeds, search, graph, and artifact emission. It keeps only public notes and attachments referenced by public notes.

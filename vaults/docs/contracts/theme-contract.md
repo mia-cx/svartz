@@ -1,3 +1,7 @@
+---
+title: Theme Contract
+---
+
 # Authoring Themes
 
 Complete contract for `@svartz/core` theme system. Defines the shape, validation, and factory pattern for Svartz themes.

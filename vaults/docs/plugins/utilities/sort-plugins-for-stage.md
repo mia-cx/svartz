@@ -1,3 +1,7 @@
+---
+title: Sort Plugins For Stage
+---
+
 # sortPluginsForStage
 
 Sorts plugins for a given stage based on `enforce` level.

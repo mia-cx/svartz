@@ -1,3 +1,7 @@
+---
+title: Config Contract
+---
+
 # Config Contract & API
 
 Complete reference for `@svartz/config` schema, types, and public API.

@@ -1,3 +1,7 @@
+---
+title: Setup Config
+---
+
 # Configure Svartz vaults
 
 Svartz reads `svartz.config.ts` from the project root. The `vaults` array names the directories that Svartz treats as vaults.

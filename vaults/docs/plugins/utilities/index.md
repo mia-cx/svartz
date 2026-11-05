@@ -1,3 +1,7 @@
+---
+title: Index
+---
+
 # Plugin Utilities & Internals
 
 Reference for utility functions and internal modules used across `@svartz/plugins`.

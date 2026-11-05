@@ -1,3 +1,7 @@
+---
+title: Runtime Vite Integration
+---
+
 # Runtime Vite Integration
 
 How Svartz bridges a single resolved vault build into SvelteKit with `@svartz/vite`.

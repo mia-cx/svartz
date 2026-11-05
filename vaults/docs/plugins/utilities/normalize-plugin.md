@@ -1,3 +1,7 @@
+---
+title: Normalize Plugin
+---
+
 # normalizePlugin
 
 Validates and normalizes a plugin to standard form.

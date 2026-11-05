@@ -1,3 +1,7 @@
+---
+title: Index Content
+---
+
 # Plugin: Index Content
 
 Core pipeline plugin for building search index and manifest.

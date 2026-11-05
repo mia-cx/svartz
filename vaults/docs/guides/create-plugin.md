@@ -1,4 +1,5 @@
 ---
+title: Create Plugin
 tags: [guides]
 ---
 

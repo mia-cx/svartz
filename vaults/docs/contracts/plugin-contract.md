@@ -1,3 +1,7 @@
+---
+title: Plugin Contract
+---
+
 # Plugin contract
 
 `@svartz/core` owns the author-facing `SvartzPlugin` and `PluginContext` types. Plugin hooks do not require Effect.

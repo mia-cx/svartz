@@ -1,3 +1,7 @@
+---
+title: Merge Plugins
+---
+
 # mergePlugins
 
 Merges plugins from multiple layers with specificity-based conflict resolution.
