@@ -272,24 +272,31 @@ describe("@svartz/vite plugin", () => {
     expect(runStagesMock).toHaveBeenCalledTimes(3);
   });
 
-  it("stops watching the vault when the dev server closes", async () => {
+  it("stops watching the vault and drops a pending rebuild when the dev server closes", async () => {
     vi.useFakeTimers();
     const plugin = svartz({ config: testConfig, env: {}, mode: "test" });
     await plugin.buildStart?.call({} as never);
+    runStagesMock.mockClear();
     const watcher = Object.assign(new EventEmitter(), { add: vi.fn() });
-    const httpServer = new EventEmitter();
+    // Middleware mode: no HTTP server to listen on.
     const server = {
       watcher,
-      httpServer,
+      httpServer: null,
       middlewares: { use: vi.fn() },
       ws: { send: vi.fn() },
       moduleGraph: { getModulesByFile: vi.fn().mockReturnValue(new Set()), invalidateModule: vi.fn() },
       config: { logger: { warn: vi.fn(), error: vi.fn() } },
     };
     expect(plugin.configureServer?.(server as never)).toBeUndefined();
-    expect(watcher.listenerCount("change")).toBe(1);
-    httpServer.emit("close");
-    expect(watcher.listenerCount("change")).toBe(0);
+    for (const event of ["add", "change", "unlink"]) expect(watcher.listenerCount(event)).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(300);
+    watcher.emit("change", "/tmp/svartz-tests/vaults/docs/note.md");
+    await plugin.closeBundle?.call({} as never);
+    await vi.advanceTimersByTimeAsync(100);
+
+    for (const event of ["add", "change", "unlink"]) expect(watcher.listenerCount(event)).toBe(0);
+    expect(runStagesMock).not.toHaveBeenCalled();
   });
 
   it("emits public assets into the client bundle for any SvelteKit adapter", async () => {
