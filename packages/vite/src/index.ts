@@ -109,7 +109,6 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   let protectedBridgeModules: ProtectedBridgeModule[] = [];
   let runnerMeta = new Map<string, unknown>();
   let devServer: ViteDevServer | undefined;
-  let releaseDevServer: (() => void) | undefined;
   let pendingChange: ChangeEvent | undefined;
   let rebuildPromise: Promise<void> | undefined;
   let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
@@ -390,24 +389,22 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       server.watcher.on("unlink", onUnlink);
 
       // A function returned from `configureServer` is Vite's post-middleware hook, which runs as soon as the
-      // server is set up. Closing any dev server, middleware mode included, runs `closeBundle` instead.
-      releaseDevServer = () => {
+      // server is set up. The watchers go when this server closes instead, middleware mode included. Vite
+      // restarts by configuring the new server before closing the old one, with this plugin instance reused,
+      // so each server releases only its own listeners, and the shared rebuild state only while it is current.
+      const close = server.close.bind(server);
+      server.close = async () => {
         clearTimeout(primeTimer);
-        if (rebuildTimer) {
-          clearTimeout(rebuildTimer);
-          rebuildTimer = undefined;
-        }
         server.watcher.off("add", onAdd);
         server.watcher.off("change", onChange);
         server.watcher.off("unlink", onUnlink);
         if (devServer === server) {
+          if (rebuildTimer) clearTimeout(rebuildTimer);
+          rebuildTimer = undefined;
           devServer = undefined;
         }
+        await close();
       };
-    },
-    closeBundle() {
-      releaseDevServer?.();
-      releaseDevServer = undefined;
     },
     resolveId(id) {
       if (options.exposeVirtualModules === false) return null;
