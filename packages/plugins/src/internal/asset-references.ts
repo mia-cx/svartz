@@ -10,30 +10,38 @@ const HTML_ASSET = /\b(?:href|src|poster|srcset)\s*=\s*(["'])(.*?)\1/gi;
 const ROAM_MEDIA = /\{\{\[\[(?:audio|video|pdf)\]\]:\s*([^}\r\n]+)\}\}/gi;
 const markdown = unified().use(remarkParse);
 
-/** Hide non-rendered comments without changing source offsets. */
-export function maskHiddenComments(source: string): string {
-  if (!source.includes("%%") && !source.includes("<!--")) return source;
-  const obsidianDelimiters: number[] = [];
+/** Source spans of comments the page doesn't render: Obsidian `%%…%%` and HTML `<!--…-->`, outside code. */
+export function hiddenCommentSpans(source: string): { start: number; end: number }[] {
+  if (!source.includes("%%") && !source.includes("<!--")) return [];
+  const code: { start: number; end: number }[] = [];
   const hidden: { start: number; end: number }[] = [];
   visit(markdown.parse(source), (node) => {
     const start = node.position?.start.offset;
     const end = node.position?.end.offset;
     if (start === undefined || end === undefined) return;
     const raw = source.slice(start, end);
-    if (node.type === "text") {
-      for (const marker of raw.matchAll(/%%/g)) obsidianDelimiters.push(start + marker.index!);
+    if (node.type === "code" || node.type === "inlineCode") {
+      code.push({ start, end });
     } else if (node.type === "html") {
       for (const comment of raw.matchAll(/<!--[\s\S]*?(?:-->|$)/g)) {
         hidden.push({ start: start + comment.index!, end: start + comment.index! + comment[0].length });
       }
     }
   });
-  obsidianDelimiters.sort((left, right) => left - right);
+  // Like the page renderer, `%%` opens and closes a comment anywhere outside code, image alt text included.
+  const obsidianDelimiters = [...source.matchAll(/%%/g)]
+    .map((marker) => marker.index!)
+    .filter((offset) => !code.some(({ start, end }) => offset >= start && offset < end));
   for (let index = 0; index + 1 < obsidianDelimiters.length; index += 2) {
     hidden.push({ start: obsidianDelimiters[index]!, end: obsidianDelimiters[index + 1]! + 2 });
   }
+  return hidden.sort((left, right) => left.start - right.start);
+}
+
+/** Hide non-rendered comments without changing source offsets. */
+export function maskHiddenComments(source: string): string {
   let masked = source;
-  for (const { start, end } of hidden.sort((left, right) => right.start - left.start)) {
+  for (const { start, end } of hiddenCommentSpans(source).reverse()) {
     masked = masked.slice(0, start) + masked.slice(start, end).replace(/[^\r\n]/g, " ") + masked.slice(end);
   }
   return masked;

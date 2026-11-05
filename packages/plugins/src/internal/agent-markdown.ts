@@ -10,7 +10,7 @@ import type { ProcessedFile } from "@svartz/core";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
-import { htmlAssetSpans, maskHiddenComments, referenceDefinitionSpans } from "./asset-references";
+import { hiddenCommentSpans, htmlAssetSpans, maskHiddenComments, referenceDefinitionSpans } from "./asset-references";
 import { findLinkSpans } from "./parse";
 import { IMAGE_EXTENSIONS, splitEmbedInner } from "../transform-embeds";
 
@@ -19,6 +19,7 @@ const EMBED = /!\[\[([^\]]+)\]\]/g;
 const SVX_BLOCK = /<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi;
 // `![[photo.png|300]]` sizes an image; it is not alt text.
 const IMAGE_SIZE = /^\d+(?:x\d+)?$/;
+const NOTE_FILE = /\.(?:md|mdx|svx)$/i;
 
 export interface AgentMarkdownLinks {
   /** URL for a resolved note link: its Markdown copy, or its page when it has none. Undefined hides the link. */
@@ -114,15 +115,21 @@ function tidyOutsideCode(markdown: string): string {
  * wikilinks, embeds and Markdown links rewritten to the URLs `links` gives.
  */
 export function portableMarkdown(file: ProcessedFile, source: string, links: AgentMarkdownLinks): string {
-  const visible = maskHiddenComments(file.extension === ".svx" ? source.replace(SVX_BLOCK, "") : source);
+  const shown = file.extension === ".svx" ? source.replace(SVX_BLOCK, "") : source;
+  const visible = maskHiddenComments(shown);
   const replacements: Replacement[] = [
+    // Comments go entirely, so text after one stays where it was instead of behind a run of spaces.
+    ...hiddenCommentSpans(shown).map(({ start, end }) => ({ start, end, text: "" })),
     ...findLinkSpans(visible).flatMap((link): Replacement[] => {
       const label = link.label ?? link.target;
       const asset = assetUrl(links, link.section ? `${link.target}#${link.section}` : link.target);
       const note = asset ? undefined : links.note(link);
       const url = asset ?? (note && `${note}${anchor(link.section)}`);
       // A Markdown link swaps only its destination, keeping its label markup and title.
-      if (link.destination) return url ? [{ ...link.destination, text: url }] : [];
+      if (link.destination && url) return [{ ...link.destination, text: url }];
+      // A Markdown link to another path, such as a host route, stays as authored. One to a note that
+      // isn't public becomes its label, like a wikilink, rather than a link to a file that isn't published.
+      if (link.destination && !NOTE_FILE.test(link.target)) return [];
       // An unresolved wikilink becomes its label, as on the page.
       return [{ start: link.start, end: link.end, text: noteLink(url, label) }];
     }),
