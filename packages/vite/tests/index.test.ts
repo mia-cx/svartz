@@ -240,7 +240,9 @@ describe("@svartz/vite plugin", () => {
       },
     };
 
-    const dispose = plugin.configureServer?.(server as never);
+    // Vite calls a function returned from configureServer straight away, as its post-middleware hook.
+    const postHook = plugin.configureServer?.(server as never);
+    if (typeof postHook === "function") postHook();
     expect(watcher.add).toHaveBeenCalledWith(testConfig.path);
     expect(watcher.add).toHaveBeenCalledWith(testConfig.site.favicon);
 
@@ -268,8 +270,26 @@ describe("@svartz/vite plugin", () => {
     watcher.emit("change", testConfig.site.favicon);
     await vi.advanceTimersByTimeAsync(100);
     expect(runStagesMock).toHaveBeenCalledTimes(3);
+  });
 
-    dispose?.();
+  it("stops watching the vault when the dev server closes", async () => {
+    vi.useFakeTimers();
+    const plugin = svartz({ config: testConfig, env: {}, mode: "test" });
+    await plugin.buildStart?.call({} as never);
+    const watcher = Object.assign(new EventEmitter(), { add: vi.fn() });
+    const httpServer = new EventEmitter();
+    const server = {
+      watcher,
+      httpServer,
+      middlewares: { use: vi.fn() },
+      ws: { send: vi.fn() },
+      moduleGraph: { getModulesByFile: vi.fn().mockReturnValue(new Set()), invalidateModule: vi.fn() },
+      config: { logger: { warn: vi.fn(), error: vi.fn() } },
+    };
+    expect(plugin.configureServer?.(server as never)).toBeUndefined();
+    expect(watcher.listenerCount("change")).toBe(1);
+    httpServer.emit("close");
+    expect(watcher.listenerCount("change")).toBe(0);
   });
 
   it("emits public assets into the client bundle for any SvelteKit adapter", async () => {

@@ -388,7 +388,9 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       server.watcher.on("change", onChange);
       server.watcher.on("unlink", onUnlink);
 
-      return () => {
+      // A function returned from `configureServer` is Vite's post-middleware hook, which runs as soon as the
+      // server is set up, so the watchers are released when the server closes instead.
+      server.httpServer?.once("close", () => {
         clearTimeout(primeTimer);
         if (rebuildTimer) {
           clearTimeout(rebuildTimer);
@@ -399,7 +401,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
         if (devServer === server) {
           devServer = undefined;
         }
-      };
+      });
     },
     resolveId(id) {
       if (options.exposeVirtualModules === false) return null;
