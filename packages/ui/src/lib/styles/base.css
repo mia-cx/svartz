@@ -5,11 +5,11 @@
 @import './tokens.css';
 
 /*
- * Element defaults apply only to a page the theme's site layout renders, which marks itself with
- * `[data-svartz-site]`. A host page that shows a note body inside its own design keeps its own
+ * Element defaults stay off a host page that shows a note body inside its own design:
+ * `SvartzNoteContent` marks the body it renders with `[data-svartz-note-content]`, and that page keeps its own
  * html, body, selection and focus styles. `:where()` keeps each selector's specificity unchanged.
  */
-html:where(:has([data-svartz-site])) {
+html:where(:not(:has([data-svartz-note-content]))) {
 	background: var(--sv-paper);
 	color: var(--sv-text);
 	font-family: var(--sv-font-sans);
@@ -20,17 +20,17 @@ html:where(:has([data-svartz-site])) {
 	-webkit-font-smoothing: antialiased;
 }
 
-:where(html:has([data-svartz-site])) body {
+:where(html:not(:has([data-svartz-note-content]))) body {
 	margin: 0;
 	background: var(--sv-paper);
 	font-size: var(--sv-step-0);
 }
 
-:where(html:has([data-svartz-site])) ::selection {
+:where(html:not(:has([data-svartz-note-content]))) ::selection {
 	background: var(--sv-selection);
 }
 
-:where(html:has([data-svartz-site])) :focus-visible {
+:where(html:not(:has([data-svartz-note-content]))) :focus-visible {
 	outline: var(--sv-focus-width) solid var(--sv-accent);
 	outline-offset: var(--sv-focus-offset);
 	border-radius: var(--sv-radius-s);

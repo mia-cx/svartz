@@ -37,8 +37,9 @@
 </svelte:head>
 
 {#if state.noteModule}
-	<!-- Clarity must never record a note body, including content decrypted after hydration. -->
-	<div class="sv-prose" data-sv-preview data-clarity-mask="true">
+	<!-- Clarity must never record a note body, including content decrypted after hydration.
+	     `data-svartz-note-content` keeps base.css's element defaults off the host page. -->
+	<div class="sv-prose" data-sv-preview data-clarity-mask="true" data-svartz-note-content>
 		<PageBody {state} module={state.noteModule} />
 	</div>
 {/if}

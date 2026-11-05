@@ -33,6 +33,8 @@ it('marks the note body for prose styles and previews', async () => {
 	await expect.element(page.getByText('Plain body')).toBeVisible();
 	const body = container.querySelector('.sv-prose[data-sv-preview][data-clarity-mask="true"]');
 	expect(body?.textContent).toContain('Plain body');
+	// base.css leaves the host page's own html and body styles alone while this marker is on the page.
+	expect(body?.closest('[data-svartz-note-content]')).not.toBeNull();
 });
 
 it('uses theme content components and lets host overrides win their slot', async () => {

@@ -231,7 +231,7 @@
 
 <svelte:window {onkeydown} />
 
-<a class="sv-skip-link" href="#content" data-svartz-site>Skip to content</a>
+<a class="sv-skip-link" href="#content">Skip to content</a>
 
 <Frame {shell} {header} {navigation} {pageHead} {body} {aside} {pageFoot} {footer} />
 
