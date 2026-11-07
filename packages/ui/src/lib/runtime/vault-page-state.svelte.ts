@@ -144,12 +144,17 @@ export class VaultPageState {
 	);
 }
 
-/** Mount the vault's plugin browser scripts while rendered. Returning `undefined` mounts nothing. */
+/**
+ * Mount the vault's plugin browser scripts while rendered. Returning `undefined` mounts nothing.
+ * They remount when `pathname` or the rendered note (`noteHref`) changes: unlocking a hidden
+ * note renders its header, and the page-actions region in it, without navigating.
+ */
 export function useBrowserResources(
-	input: () => { artifacts: ArtifactsModule; pathname: string } | undefined
+	input: () => { artifacts: ArtifactsModule; pathname: string; noteHref?: string } | undefined
 ): void {
 	$effect(() => {
 		if (!browser) return;
+		// Calling `input` tracks everything it reads, `noteHref` included; scripts get only the pathname.
 		const resources = input();
 		if (!resources) return;
 		const { artifacts, pathname } = resources;

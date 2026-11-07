@@ -1,12 +1,24 @@
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { mountBrowserScripts, type BrowserScriptModule } from '@svartz/core';
-import { expect, it } from 'vitest';
+import {
+	createProtectionSalt,
+	deriveProtectionKey,
+	mountBrowserScripts,
+	sealProtectedPayload,
+	type BrowserScriptModule
+} from '@svartz/core';
+import { afterEach, expect, it, vi } from 'vitest';
 import '../styles/base.css';
 import PageActions from '../PageActions.svelte';
+import { lockProtectedGroup } from './protected-client.js';
 import SvartzVaultPage from './SvartzVaultPage.svelte';
 import RegionsLayout from './testing/RegionsLayout.svelte';
 import { artifacts, theme } from './testing/host';
+
+afterEach(() => {
+	lockProtectedGroup('vault:work:group:fixture');
+	vi.unstubAllGlobals();
+});
 
 const PAGE = '[data-svartz-region="page-actions"]';
 const SITE = '[data-svartz-region="site-actions"]';
@@ -76,6 +88,43 @@ it('leaves one mount for the last page after rapid navigation', async () => {
 	await view.rerender({ pathname: '/work/plain/' });
 
 	await expect.poll(() => labels(PAGE)).toEqual(['Edit /work/plain/']);
+	expect(labels(SITE)).toEqual(['New page']);
+	expect(listening.size).toBe(1);
+	view.unmount();
+});
+
+it('mounts page actions for a hidden note once it unlocks, and removes them when it locks', async () => {
+	const groupId = 'vault:work:group:fixture';
+	const hidden = { ...artifacts.index.entries[0]!, slug: 'hidden', href: '/work/hidden/', path: 'hidden.md', title: 'The hidden note' };
+	const salt = createProtectionSalt();
+	const key = await deriveProtectionKey('correct-password', salt);
+	const payload = {
+		version: 1,
+		notes: [{ slug: 'hidden', exportName: 'note0' }],
+		entries: [hidden],
+		search: [],
+		graph: {},
+		js: 'export function note0() {}',
+		css: '',
+		assets: [],
+		bridgeImports: []
+	};
+	const envelope = await sealProtectedPayload(key, salt, groupId, new TextEncoder().encode(JSON.stringify(payload)));
+	vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(envelope), { status: 200 })));
+
+	const { script, listening } = actionsPlugin();
+	const view = renderVault(script, '/work/hidden/');
+	await expect.element(page.getByLabelText('Password')).toBeVisible();
+	expect(document.querySelector(PAGE)).toBeNull();
+
+	await page.getByLabelText('Password').fill('correct-password');
+	await page.getByRole('button', { name: 'Unlock note' }).click();
+	await expect.element(page.getByRole('button', { name: 'Edit /work/hidden/' })).toBeVisible();
+	expect(labels(SITE)).toEqual(['New page']);
+	expect(listening.size).toBe(1);
+
+	await page.getByRole('button', { name: 'Lock note' }).click();
+	await expect.poll(() => document.querySelector(PAGE)).toBeNull();
 	expect(labels(SITE)).toEqual(['New page']);
 	expect(listening.size).toBe(1);
 	view.unmount();

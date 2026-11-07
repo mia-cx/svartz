@@ -60,6 +60,15 @@ const noteModules: Record<string, { default: Component<any>; svartzProtected?: {
 			payloadId: 'vault:work:group:fixture',
 			payloadPath: '/work/secret.json'
 		}
+	},
+	// A hidden note: not in the index, so it has no entry until its group unlocks.
+	'pages/hidden.svelte': {
+		default: LockedNote,
+		svartzProtected: {
+			slug: 'hidden',
+			payloadId: 'vault:work:group:fixture',
+			payloadPath: '/work/hidden.json'
+		}
 	}
 };
 
