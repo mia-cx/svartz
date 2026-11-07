@@ -1,4 +1,8 @@
-<!-- Above a post: its primary tag, title, excerpt, byline, page actions, and cover. Other pages head themselves. -->
+<!--
+	Above a post: its primary tag, title, excerpt, byline, page actions, and
+	cover. Above the home note: its page actions alone. Other pages head
+	themselves.
+-->
 <script lang="ts">
 	import type { RegionProps } from '@svartz/theme-minimal/runtime';
 	import { assetHref, formatDate, isoDate, PageActions, readingTime, tagHrefFor } from '@svartz/ui';
@@ -30,6 +34,9 @@
 			<img src={cover} alt={meta.coverAlt ?? ''} />
 		</figure>
 	{/if}
+{:else if shell.entry && !shell.headed}
+	<!-- The home note: no post head, but still the note's page actions above its introduction. -->
+	<div class="home-actions"><PageActions href={shell.entry.markdownHref} /></div>
 {/if}
 
 <style>
@@ -70,6 +77,17 @@
 
 	.post-head :global(.sv-page-actions) {
 		justify-content: center;
+	}
+
+	/* No box of its own, so nothing shows while the page actions are empty. */
+	.home-actions {
+		display: contents;
+	}
+
+	/* Lined up with the home note's text column below. */
+	.home-actions :global(.sv-page-actions) {
+		max-inline-size: var(--sv-measure);
+		margin: var(--sv-space-6) auto 0;
 	}
 
 	.post-cover {
