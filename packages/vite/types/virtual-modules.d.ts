@@ -90,3 +90,9 @@ declare module "virtual:svartz/host" {
   /** Built CSS assets needed by a direct SSR response for the selected vault. */
   export function hostStylesheets(pathname: string): readonly string[];
 }
+
+/** Server-only: the vault's server plugins and the `handle` that routes `/_svartz/<id>/` to them. */
+declare module "virtual:svartz/server" {
+  export const registry: import("@svartz/core").ServerRegistry;
+  export const handle: import("@sveltejs/kit").Handle;
+}

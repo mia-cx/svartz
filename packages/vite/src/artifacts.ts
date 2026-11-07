@@ -1,6 +1,6 @@
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Artifact, BrowserResource, ResolvedConfig } from "@svartz/core";
+import type { Artifact, BrowserResource, NormalizedSvartzPlugin, ResolvedConfig } from "@svartz/core";
 import type { ProtectedBridgeModule } from "./protected-bridge";
 
 const GENERATED_ARTIFACTS_DIRNAME = "artifacts" as const;
@@ -9,6 +9,7 @@ const GENERATED_INDEX_BASENAME = "index.ts" as const;
 const GENERATED_SEARCH_BASENAME = "search.ts" as const;
 const GENERATED_RUNTIME_THEME_BASENAME = "runtime-theme.ts" as const;
 const GENERATED_RUNTIME_ARTIFACTS_BASENAME = "runtime-artifacts.ts" as const;
+const GENERATED_RUNTIME_SERVER_BASENAME = "runtime-server.ts" as const;
 
 function getVaultBuildRoot(config: ResolvedConfig): string {
   return resolve(config.outDir, "..");
@@ -45,6 +46,51 @@ function getGeneratedPageModulePath(
   return join(getGeneratedPagesRoot(config), relativePagePath);
 }
 
+function getGeneratedRuntimeServerModulePath(config: ResolvedConfig): string {
+  return join(getGeneratedArtifactsRoot(config), GENERATED_RUNTIME_SERVER_BASENAME);
+}
+
+function resolveCoreModuleId(): string {
+  return typeof import.meta.resolve === "function"
+    ? fileURLToPath(import.meta.resolve("@svartz/core"))
+    : resolve(dirname(fileURLToPath(import.meta.url)), "../node_modules/@svartz/core/dist/index.js");
+}
+
+/**
+ * The server-only module behind `virtual:svartz/server`: the vault's active server plugins as a registry, and the
+ * SvelteKit `handle` that routes `/_svartz/<id>/` to them. `$env/dynamic/private` keeps it out of client bundles.
+ */
+function createServerRegistrySource(
+  config: ResolvedConfig,
+  plugins: readonly NormalizedSvartzPlugin[],
+  deploymentBasePath = "",
+): string {
+  const servers = plugins.flatMap(({ id, server }) => {
+    if (!server) return [];
+    const specifier = server.module.startsWith("file:") ? fileURLToPath(server.module) : server.module;
+    return [`  { id: ${JSON.stringify(id)}, load: () => import(${JSON.stringify(specifier)}), options: ${JSON.stringify(server.options) ?? "undefined"} },`];
+  });
+  const { favicon: _faviconSource, ...site } = config.site;
+  const registry = [
+    `export const registry = {`,
+    `  basePath: ${JSON.stringify(`${deploymentBasePath}${config.mountPath}`)},`,
+    `  vault: ${JSON.stringify({ id: config.id, mountPath: config.mountPath, site })},`,
+    `  servers: [\n${servers.map((server) => `  ${server}`).join("\n")}\n  ],`,
+    `};`,
+  ].join("\n");
+  // Without server plugins every request passes straight through, so the server bundle gains nothing else.
+  if (servers.length === 0) return `${registry}\nexport const handle = ({ event, resolve }) => resolve(event);\n`;
+  return [
+    `import { env } from "$env/dynamic/private";`,
+    `import { building } from "$app/environment";`,
+    `import { createServerHandle } from ${JSON.stringify(resolveCoreModuleId())};`,
+    "",
+    registry,
+    "export const handle = createServerHandle(registry, { privateEnv: env, building });",
+    "",
+  ].join("\n");
+}
+
 function createArtifactsVirtualModuleSource(
   artifacts: readonly Artifact[],
   indexModulePath: string,
@@ -56,9 +102,7 @@ function createArtifactsVirtualModuleSource(
   protectedBridgeModules: readonly ProtectedBridgeModule[] = [],
   deploymentBasePath = "",
 ): string {
-  const coreModuleId = typeof import.meta.resolve === "function"
-    ? fileURLToPath(import.meta.resolve("@svartz/core"))
-    : resolve(dirname(fileURLToPath(import.meta.url)), "../node_modules/@svartz/core/dist/index.js");
+  const coreModuleId = resolveCoreModuleId();
   const records = artifacts.map((artifact) => ({
     key: artifact.key,
     path: artifact.path,
@@ -166,6 +210,7 @@ function createArtifactsVirtualModuleSource(
 
 export {
   createArtifactsVirtualModuleSource,
+  createServerRegistrySource,
   GENERATED_ARTIFACTS_DIRNAME,
   GENERATED_INDEX_BASENAME,
   GENERATED_PAGES_DIRNAME,
@@ -177,6 +222,7 @@ export {
   getGeneratedPageModulePath,
   getGeneratedPagesRoot,
   getGeneratedRuntimeArtifactsModulePath,
+  getGeneratedRuntimeServerModulePath,
   getGeneratedRuntimeThemeModulePath,
   getGeneratedSearchModulePath,
   getVaultBuildRoot,
