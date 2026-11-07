@@ -111,6 +111,27 @@ describe("server plugin routing", () => {
   });
 });
 
+describe("server plugin loading", () => {
+  it("retries a server module that failed to load", async () => {
+    const load = vi.fn()
+      .mockRejectedValueOnce(new Error("cold start"))
+      .mockResolvedValue({ default: () => () => new Response("ok") });
+    const handle = createServerHandle({ basePath: "", vault, servers: [{ id: "flaky", load }] }, { privateEnv: {}, building: false, dev: false });
+    const resolve = vi.fn(async () => new Response("page"));
+
+    await expect(handle({ event: event("/_svartz/flaky/"), resolve })).rejects.toThrow("cold start");
+    expect(await (await handle({ event: event("/_svartz/flaky/"), resolve })).text()).toBe("ok");
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("names the plugin when its module has no factory", async () => {
+    const handle = createServerHandle({ basePath: "", vault, servers: [{ id: "empty", load: async () => ({}) }] }, { privateEnv: {}, building: false, dev: false });
+
+    await expect(handle({ event: event("/_svartz/empty/"), resolve: async () => new Response() }))
+      .rejects.toThrow('plugin "empty" server module must default-export a factory');
+  });
+});
+
 describe("server plugin context", () => {
   it("uses the platform's env and waitUntil when the platform has them", async () => {
     const { handle, resolve, seen } = setup();
