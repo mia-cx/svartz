@@ -35,7 +35,11 @@ type Options = { greeting: string; token: { env: string } };
 const hello: ServerModuleFactory<Options> = (options) => (request, context) => {
   const path = new URL(request.url).pathname.slice(context.base.length);
   if (path !== "/") return undefined;
-  if (request.headers.get("authorization") !== `Bearer ${context.env[options.token.env]}`) {
+  const token = context.env[options.token.env];
+  if (typeof token !== "string" || !token) {
+    return Response.json({ error: "misconfigured", message: "The server has no token." }, { status: 503 });
+  }
+  if (request.headers.get("authorization") !== `Bearer ${token}`) {
     return Response.json({ error: "unauthorized", message: "Send the token." }, { status: 401 });
   }
   return Response.json({ message: `${options.greeting} from ${context.vault.site.title}` });
@@ -50,7 +54,7 @@ The handler receives a `context`:
 
 | Field | Value |
 | --- | --- |
-| `env` | The platform's env on Cloudflare (vars, secrets and bindings); the server's environment variables on Node, minus `PUBLIC_` ones. |
+| `env` | The platform's env on Cloudflare (vars, secrets and bindings); the server's environment variables on Node, minus `PUBLIC_` ones. Under `svartz dev` it is always the dev server's environment variables and `.env`, because the Cloudflare emulator withholds `platform.env` from the prerendered routes plugin URLs fall under; bindings are absent there. |
 | `clientAddress` | The client's IP address, or `undefined` when the adapter can't tell. |
 | `vault` | The vault's `id`, `mountPath` and public `site` settings. |
 | `base` | The path the plugin answers under, without a trailing slash, such as `/_svartz/hello`. |
@@ -69,7 +73,7 @@ Never put a secret in options. Name its environment variable with `{ env: "NAME"
 - A request reaches plugin `<id>` only when its path starts with `<base><mountPath>/_svartz/<id>/`, where `<base>` is the deployment base (`target.basePath` or SvelteKit's `paths.base`). The id must match a whole path segment.
 - Every other path renders as usual and never reaches a plugin.
 - An unknown id, or a handler that returns `undefined`, answers 404 with `{ "error": "not_found", "message": "…" }`.
-- Svartz URLs end in a slash. A request without one, such as `/_svartz/hello/ping`, is redirected with a 308 to `/_svartz/hello/ping/` before it reaches the handler; the method, body and query survive the redirect.
+- Svartz URLs end in a slash. A request without one, such as `/_svartz/hello/ping`, is redirected with a 308 to `/_svartz/hello/ping/` before it reaches the handler; clients resend the method and body, and the query is kept.
 - While prerendering, plugin paths answer 404 without running the plugin, so build-time env never reaches a handler.
 
 A plugin id that serves requests may hold only lowercase letters, digits and hyphens.

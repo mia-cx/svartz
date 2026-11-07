@@ -12,7 +12,7 @@ function event(path: string, platform?: unknown, clientAddress: () => string = (
   };
 }
 
-function setup({ basePath = "", building = false, privateEnv = { SECRET: "from-process" } } = {}) {
+function setup({ basePath = "", building = false, dev = false, privateEnv = { SECRET: "from-process" } } = {}) {
   const seen: Array<{ id: string; pathname: string; context: ServerContext }> = [];
   const factory = (id: string) => vi.fn((options: unknown) => (request: Request, context: ServerContext) => {
     const { pathname } = new URL(request.url);
@@ -30,7 +30,7 @@ function setup({ basePath = "", building = false, privateEnv = { SECRET: "from-p
     ],
   };
   const resolve = vi.fn(async () => new Response("page"));
-  const handle = createServerHandle(registry, { privateEnv, building });
+  const handle = createServerHandle(registry, { privateEnv, building, dev });
   return { handle, resolve, seen, hello };
 }
 
@@ -77,6 +77,15 @@ describe("server plugin routing", () => {
     expect(resolve).not.toHaveBeenCalled();
   });
 
+  it("redirects plugin paths without a trailing slash, keeping the query", async () => {
+    const { handle, resolve, hello } = setup();
+
+    const response = await handle({ event: event("/_svartz/hello/ping?x=1"), resolve });
+
+    expect([response.status, response.headers.get("location")]).toEqual([308, "/_svartz/hello/ping/?x=1"]);
+    expect(hello).not.toHaveBeenCalled();
+  });
+
   it("serves below the deployment base and vault mount", async () => {
     const { handle, resolve, seen } = setup({ basePath: "/site/docs" });
 
@@ -113,6 +122,15 @@ describe("server plugin context", () => {
 
     expect(seen[0]!.context).toMatchObject({ env: { SECRET: "from-platform" }, clientAddress: "203.0.113.7", vault, base: "/_svartz/hello" });
     expect(waitUntil).toHaveBeenCalledWith(task);
+  });
+
+  it("reads the private env in dev, where the Cloudflare emulator's prerender platform throws on env access", async () => {
+    const { handle, resolve, seen } = setup({ dev: true });
+    const restricted = { env: Object.defineProperty({}, "SECRET", { get: () => { throw new Error("prerenderable route"); } }) };
+
+    await handle({ event: event("/_svartz/hello/", restricted), resolve });
+
+    expect(seen[0]!.context.env.SECRET).toBe("from-process");
   });
 
   it("reports a missing Cloudflare client address as unknown", async () => {

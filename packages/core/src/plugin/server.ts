@@ -31,7 +31,7 @@ export interface ServerVaultSettings {
 
 /** Per-request facilities handed to a server plugin's handler. */
 export interface ServerContext {
-  /** The platform's env (Cloudflare vars, secrets and bindings), else the server's private env vars (Node). */
+  /** The platform's env (Cloudflare vars, secrets and bindings), else the server's private env vars (Node, and every target in dev). */
   readonly env: Readonly<Record<string, unknown>>;
   /** The client's IP address, when the adapter reports one. */
   readonly clientAddress: string | undefined;
@@ -77,6 +77,11 @@ export interface ServerHandleRuntime {
   readonly privateEnv: Readonly<Record<string, unknown>>;
   /** `$app/environment`'s `building`: plugin routes answer 404 while prerendering. */
   readonly building: boolean;
+  /**
+   * `$app/environment`'s `dev`: `context.env` is then always `privateEnv` (the dev server's env and `.env`), because
+   * adapter-cloudflare's dev emulator withholds `platform.env` from prerenderable routes, which plugin URLs fall under.
+   */
+  readonly dev: boolean;
 }
 
 type WaitUntilHost = { waitUntil(promise: Promise<unknown>): void };
@@ -140,8 +145,13 @@ export function createServerHandle(registry: ServerRegistry, runtime: ServerHand
     event: Event;
     resolve: (event: Event) => MaybePromise<Response>;
   }): Promise<Response> => {
+    // Read nothing but the pathname before the prefix check: SvelteKit forbids `url.search` while prerendering.
     const { pathname } = event.url;
     if (!pathname.startsWith(root)) return resolve(event);
+    // Svartz URLs end in a slash. SvelteKit redirects in dev but not for routes a production build prerendered away.
+    if (!pathname.endsWith("/")) {
+      return new Response(null, { status: 308, headers: { location: `${pathname}/${event.url.search}` } });
+    }
 
     const id = pathname.slice(root.length).split("/", 1)[0]!;
     const route = routes.get(id);
@@ -150,7 +160,7 @@ export function createServerHandle(registry: ServerRegistry, runtime: ServerHand
     const handler = await handlerFor(route);
     const waitUntilHost = platformWaitUntil(event.platform);
     const response = await handler(event.request, {
-      env: platformEnv(event.platform) ?? runtime.privateEnv,
+      env: (!runtime.dev && platformEnv(event.platform)) || runtime.privateEnv,
       clientAddress: clientAddress(event),
       vault: registry.vault,
       base: `${root}${id}`,

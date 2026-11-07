@@ -58,7 +58,7 @@ async function build(target: Record<string, unknown>) {
         id: "hello",
         server: {
           module: ${JSON.stringify(path.join(root, "plugins/hello.mjs"))},
-          options: { greeting: "hi", token: { env: "HELLO_TOKEN" } },
+          options: JSON.parse('{ "greeting": "hi", "token": { "env": "HELLO_TOKEN" }, "__proto__": { "own": true } }'),
         },
       }],
     }],
@@ -87,6 +87,7 @@ beforeAll(async () => {
       marker: ${JSON.stringify(HANDLER_MARKER)},
       method: request.method,
       greeting: options.greeting,
+      ownProto: Object.hasOwn(options, "__proto__"),
       token: context.env[options.token.env] ?? null,
       base: context.base,
       vault: context.vault.id,
@@ -137,11 +138,14 @@ describe("standalone builds with a server plugin", () => {
         marker: HANDLER_MARKER,
         method: "POST",
         greeting: "hi",
+        ownProto: true,
         token: "s3cret",
         base: "/_svartz/hello",
         vault: "site",
         clientAddress: "127.0.0.1",
       });
+      const unslashed = await fetch(`${origin}/_svartz/hello?x=1`, { method: "POST", body: "hi", redirect: "manual" });
+      expect([unslashed.status, unslashed.headers.get("location")]).toEqual([308, "/_svartz/hello/?x=1"]);
       expect((await fetch(`${origin}/_svartz/hello/elsewhere/`)).status).toBe(404);
       expect((await fetch(`${origin}/_svartz/nope/`)).status).toBe(404);
       const home = await fetch(`${origin}/`);

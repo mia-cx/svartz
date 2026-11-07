@@ -68,7 +68,9 @@ function createServerRegistrySource(
   const servers = plugins.flatMap(({ id, server }) => {
     if (!server) return [];
     const specifier = server.module.startsWith("file:") ? fileURLToPath(server.module) : server.module;
-    return [`  { id: ${JSON.stringify(id)}, load: () => import(${JSON.stringify(specifier)}), options: ${JSON.stringify(server.options) ?? "undefined"} },`];
+    // Parsed at runtime: an object literal would turn an own `__proto__` key into a prototype.
+    const options = server.options === undefined ? "undefined" : `JSON.parse(${JSON.stringify(JSON.stringify(server.options))})`;
+    return [`  { id: ${JSON.stringify(id)}, load: () => import(${JSON.stringify(specifier)}), options: ${options} },`];
   });
   const { favicon: _faviconSource, ...site } = config.site;
   const registry = [
@@ -82,11 +84,11 @@ function createServerRegistrySource(
   if (servers.length === 0) return `${registry}\nexport const handle = ({ event, resolve }) => resolve(event);\n`;
   return [
     `import { env } from "$env/dynamic/private";`,
-    `import { building } from "$app/environment";`,
+    `import { building, dev } from "$app/environment";`,
     `import { createServerHandle } from ${JSON.stringify(resolveCoreModuleId())};`,
     "",
     registry,
-    "export const handle = createServerHandle(registry, { privateEnv: env, building });",
+    "export const handle = createServerHandle(registry, { privateEnv: env, building, dev });",
     "",
   ].join("\n");
 }
