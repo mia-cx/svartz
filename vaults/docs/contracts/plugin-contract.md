@@ -40,6 +40,10 @@ Transformers can register remark or rehype plugins with `getCompilerContribution
 
 `.md` and `.mdx` compile as Markdown into inert HTML. Only `.svx` runs authored Svelte markup, scripts, and expressions.
 
+## Server modules
+
+`server: { module, options }` makes a plugin answer requests at runtime under `/_svartz/<plugin-id>/`. The module default-exports a factory that receives `options` and returns `(request, context) => Response | undefined`. Options are JSON; secrets are named as `{ env: "NAME" }` and read from `context.env`. The vault needs a `cloudflare-workers`, `cloudflare-pages` or `node` target; a `static` vault fails the build. The repository's `docs/server-plugins.md` has the full contract.
+
 ## Merge and validation
 
 Svartz merges core, theme preset, config defaults, then vault plugins. A later plugin with the same ID replaces the earlier one in its original position. `{ id: "core:transform-latex", disabled: true }` removes that optional built-in. Disabling a required stage needs another active provider. Theme capabilities do not require plugins; `requiredFeatures` does.
