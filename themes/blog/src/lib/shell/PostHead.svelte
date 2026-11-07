@@ -23,7 +23,7 @@
 			{#if date}<time datetime={isoDate(date)}>{formatDate(date)}</time>{/if}
 			<span>{readingTime(post.readingTimeMinutes)}</span>
 		</p>
-		{#if post.markdownHref}<PageActions href={post.markdownHref} />{/if}
+		<PageActions href={post.markdownHref} />
 	</header>
 	{#if cover}
 		<figure class="post-cover">

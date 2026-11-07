@@ -75,7 +75,7 @@ export interface RendererProps<T> extends RegionProps {
 	readonly children: Snippet;
 	/** The parts of `children`, for a renderer that places them apart: the description, */
 	readonly summary: Snippet;
-	/** the Copy page and View as Markdown actions, */
+	/** the page actions (Copy page, View as Markdown, and the page-actions region plugins fill), */
 	readonly actions: Snippet;
 	/** and the page's Markdown. */
 	readonly content: Snippet;

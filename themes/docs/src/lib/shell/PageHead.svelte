@@ -21,7 +21,7 @@
 	<header class="page-head">
 		<h1>{entry.title}</h1>
 		{#if entry.description}<p class="summary">{entry.description}</p>{/if}
-		{#if entry.markdownHref}<PageActions href={entry.markdownHref} />{/if}
+		<PageActions href={entry.markdownHref} />
 	</header>
 {/if}
 

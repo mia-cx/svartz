@@ -1,4 +1,8 @@
-<!-- An article's title over a rule, with the "From <site>" tagline and anything passed in (page actions). -->
+<!--
+	An article's title over a rule, with the "From <site>" tagline. Anything
+	passed in (page actions) sits beside the title, like Wikipedia's Edit tab,
+	and wraps under it when the title fills the line.
+-->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 
@@ -6,9 +10,11 @@
 </script>
 
 <header class="article-head" id="top">
-	<h1>{title}</h1>
+	<div class="title-row">
+		<h1>{title}</h1>
+		{@render children?.()}
+	</div>
 	<p class="tagline">From {site}</p>
-	{@render children?.()}
 </header>
 
 <style>
@@ -16,6 +22,18 @@
 		margin-block-end: var(--sv-space-3);
 		padding-block-end: var(--sv-space-2);
 		border-block-end: var(--sv-rule-width) solid var(--sv-rule-strong);
+	}
+
+	.title-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: end;
+		justify-content: space-between;
+		gap: var(--sv-space-2) var(--sv-space-4);
+	}
+
+	.title-row :global(.sv-page-actions) {
+		margin: 0;
 	}
 
 	h1 {

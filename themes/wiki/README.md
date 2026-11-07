@@ -17,7 +17,7 @@ vaults: [{ id: "wiki", path: "vault", target: { type: "static" }, theme: { base:
 | All pages | `/folders/` lists every page A–Z; `/folders/:path/` lists one folder |
 | Recent changes | `/feed/`, grouped by day |
 
-The rail also has a Random page button. On narrow screens the rail becomes a menu drawer and the infobox leads the article.
+The rail also has a Random page button. Page actions (Copy page, View as Markdown, and a plugin's Edit) sit beside the article title like Wikipedia's tabs, and a plugin's site actions (New page) follow Random page in the rail. On narrow screens the rail becomes a menu drawer and the infobox leads the article.
 
 The wiki extends `@svartz/theme-minimal`, which supplies search, the drawer, contents, and the footer. A note with an `infobox` or a `hatnote` renders as a wiki article in any site that composes the wiki, and `theme: wiki` in a note's frontmatter picks it explicitly.
 

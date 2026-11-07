@@ -184,7 +184,7 @@
 	{#if props.entry?.description}<p class="summary"><DescText value={props.entry.description} entries={props.vault.entries} /></p>{/if}
 {/snippet}
 {#snippet actions()}
-	{#if props.entry?.markdownHref}<PageActions href={props.entry.markdownHref} />{/if}
+	{#if props.entry}<PageActions href={props.entry.markdownHref} />{/if}
 {/snippet}
 {#snippet sourceLinks()}
 	{#if sources.length > 0}<SourceLinks {sources} />{/if}

@@ -14,6 +14,7 @@ export type { ContentComponentProps } from './runtime/content-components.js';
 export { default as ColorModeToggle } from './ColorModeToggle.svelte';
 export { default as LinkPreviews } from './LinkPreviews.svelte';
 export { default as PageActions } from './PageActions.svelte';
+export { default as SiteActions } from './SiteActions.svelte';
 export { default as SearchDialog } from './SearchDialog.svelte';
 export { default as DescText } from './DescText.svelte';
 export * from './content/index.js';

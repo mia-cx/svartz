@@ -14,12 +14,14 @@ export default defineConfig({
 
 | Area | Contents |
 | --- | --- |
-| Left | Site name, search (Ctrl/⌘ K, `#tag` filter), light/dark toggle, reader mode, explorer |
-| Centre | Breadcrumbs, title, date and reading time, tags, the note, previous and next pages in explorer order, Giscus comments when configured |
+| Left | Site name, search (Ctrl/⌘ K, `#tag` filter), light/dark toggle, reader mode, site actions, explorer |
+| Centre | Breadcrumbs, title, date and reading time, tags, page actions, the note, previous and next pages in explorer order, Giscus comments when configured |
 | Right | Local graph (the expand button opens the whole vault), contents with scroll tracking, backlinks |
 | Lists | `/tags/`, `/tags/:tag/`, `/folders/`, `/folders/:path/`, `/feed/`, and a 404 page |
 
 The explorer lists folders, then notes, each by title. An `order` number in a note's frontmatter sorts it first, lowest first; a folder takes the `order` of its folder note (`index.md` or `_index.md`).
+
+Page actions are Copy page and View as Markdown, followed by any a plugin adds, such as Edit. Site actions, such as New page, come only from plugins; with none, nothing shows. Plugins fill both through their browser scripts ([Create a plugin](../../vaults/docs/guides/create-plugin.md#add-actions-to-every-page)), and every theme that extends minimal keeps them.
 
 Below 1200px the right column moves under the note and the contents hide. Below 800px the left column becomes a top bar and the explorer a drawer. Internal links show a preview on hover.
 

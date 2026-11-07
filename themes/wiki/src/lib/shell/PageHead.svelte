@@ -9,6 +9,6 @@
 
 {#if shell.entry && !shell.headed}
 	<ArticleHead title={shell.entry.title} site={shell.site.title}>
-		{#if shell.entry.markdownHref}<PageActions href={shell.entry.markdownHref} />{/if}
+		<PageActions href={shell.entry.markdownHref} />
 	</ArticleHead>
 {/if}
