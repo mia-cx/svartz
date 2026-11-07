@@ -27,10 +27,16 @@ const HookObjectSchema = Schema.Struct({
 
 const HookInputSchema = Schema.Union(FnSchema, HookObjectSchema);
 
+const ServerModuleSchema = Schema.Struct({
+  module: Schema.String.pipe(Schema.minLength(1)),
+  options: Schema.optional(Schema.Unknown),
+});
+
 const PluginSchema = Schema.Struct({
   id: Schema.String.pipe(Schema.minLength(1)),
   contractVersion: Schema.optional(Schema.String),
   disabled: Schema.optional(Schema.Boolean),
+  server: Schema.optional(ServerModuleSchema),
   buildStart: Schema.optional(HookInputSchema),
   configResolved: Schema.optional(HookInputSchema),
   buildEnd: Schema.optional(HookInputSchema),
@@ -55,6 +61,7 @@ const KNOWN_KEYS = new Set<string>([
   "id",
   "contractVersion",
   "disabled",
+  "server",
   ...STAGE_NAMES,
   "handleChange",
 ]);
@@ -130,6 +137,13 @@ function validatePluginShape(
         }
       }
     }
+  }
+
+  if (raw.server !== undefined && Either.isLeft(Schema.decodeUnknownEither(ServerModuleSchema)(raw.server))) {
+    throw new PluginValidationError({
+      pluginId,
+      message: `"server" must be { module: string, options? }`,
+    });
   }
 
   throw new PluginValidationError({

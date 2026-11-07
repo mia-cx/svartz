@@ -57,6 +57,24 @@ export type {
 export { STAGE_NAMES } from "./plugin/types";
 export { getCompilerContributions } from "./plugin/compiler";
 export type { BrowserResource, CompilerContributions } from "./plugin/compiler";
+export {
+  createServerHandle,
+  SECRET_ENV_NAME_PATTERN,
+  SERVER_PLUGIN_ID_PATTERN,
+  SERVER_ROUTE_SEGMENT,
+} from "./plugin/server";
+export type {
+  EnvReference,
+  ServerContext,
+  ServerHandleEvent,
+  ServerHandleRuntime,
+  ServerHandler,
+  ServerModuleFactory,
+  ServerModuleSpec,
+  ServerRegistry,
+  ServerRoute,
+  ServerVaultSettings,
+} from "./plugin/server";
 
 // Plugin contract — utilities
 export { definePlugin, type PluginFactory } from "./plugin/define-plugin";

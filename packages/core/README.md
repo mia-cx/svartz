@@ -18,6 +18,8 @@ export const upperCase = definePlugin(() => ({
 }));
 ```
 
+A plugin with `server: { module, options }` answers requests under `/_svartz/<plugin-id>/` at runtime. Its module default-exports a `ServerModuleFactory`; `createServerHandle` builds the SvelteKit `handle` that routes to it. See [server plugins](../../docs/server-plugins.md).
+
 The runner receives one `ResolvedConfig` per vault. `ProcessedFile` carries the candidate note through discovery, frontmatter, publication, route allocation, and transforms. The final `Index` contains published entries, search documents, graph, backlinks, tags, folders, routes, and reachable assets. `createVaultView` exposes that published index to host routes and themes.
 
 ## Theme contract
