@@ -37,7 +37,7 @@ Every first-party theme renders two action regions. A browser script fills them 
 | Page actions | `[data-svartz-region="page-actions"]` | The note header, after Copy page and View as Markdown | Notes |
 | Site actions | `[data-svartz-region="site-actions"]` | The rail or site navigation; the menu drawer on phones | Every page |
 
-Svartz calls `mount(pathname)` after each navigation has rendered, so the regions for that page are already in the document. Look them up there, never at import time, and skip a region the page lacks: list pages have no page actions, and a host app's own pages have neither. Return a cleanup that removes what you added and every listener you attached. The next page mounts afresh.
+Svartz calls `mount(pathname)` after each navigation has rendered, and again after unlocking or locking a password-protected note changes the page, so the regions for that page are already in the document. Look them up there, never at import time, and skip a region the page lacks: list pages have no page actions, and a host app's own pages have neither. Return a cleanup that removes what you added and every listener you attached. The next page mounts afresh.
 
 ```ts
 /** Edit on every note, New page on every page. */
