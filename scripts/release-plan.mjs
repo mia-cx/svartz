@@ -7,15 +7,36 @@ import { BASE_BRANCH, RELEASE_PACKAGES, readReleasePackages } from './release-pa
 import { registryManifest } from './release-registry.mjs';
 import { changedChangesets, validateChangeset } from './check-changesets.mjs';
 
-/** Only the exact merged same-repository Changesets PR authorizes publication. */
-export function isReleaseMerge(pullRequests, { sha, repository }) {
-  return pullRequests.some((pr) =>
+/** The exact merged same-repository Changesets PR supplies the head whose checks can be reused. */
+export function releasePullRequest(pullRequests, { sha, repository }) {
+  return pullRequests.find((pr) =>
     typeof pr.merged_at === 'string' &&
     pr.merge_commit_sha === sha &&
     pr.base?.ref === BASE_BRANCH &&
     pr.base?.repo?.full_name === repository &&
     pr.head?.ref === `changeset-release/${BASE_BRANCH}` &&
     pr.head?.repo?.full_name === repository
+  );
+}
+
+/** Only the exact merged same-repository Changesets PR authorizes publication. */
+export function isReleaseMerge(pullRequests, context) {
+  return Boolean(releasePullRequest(pullRequests, context));
+}
+
+/**
+ * Only this release PR head's successful validation workflow authorizes reuse.
+ * GitHub empties pull_requests after merge, so match the run's head branch and repository.
+ */
+export function releaseValidated(workflowRuns, pullRequest) {
+  return workflowRuns.some((run) =>
+    run.event === 'pull_request' &&
+    run.path?.split('@')[0] === '.github/workflows/release-validation.yml' &&
+    run.head_sha === pullRequest.head.sha &&
+    run.head_branch === pullRequest.head.ref &&
+    run.head_repository?.full_name === pullRequest.head.repo.full_name &&
+    run.status === 'completed' &&
+    run.conclusion === 'success'
   );
 }
 
@@ -81,7 +102,36 @@ export async function planCurrentRelease(pullRequests, { retry = false, sha = pr
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const sha = process.env.SVARTZ_RELEASE_SHA ?? process.env.GITHUB_SHA;
-  if (process.argv[2] === 'current') {
+  if (process.argv[2] === 'validated') {
+    let validated = false;
+    try {
+      const repository = process.env.GITHUB_REPOSITORY;
+      // Manual retries always run fresh checks, even when their target passed on a PR.
+      if (process.env.GITHUB_EVENT_NAME === 'push' &&
+          process.env.GITHUB_REF === `refs/heads/${BASE_BRANCH}` && repository === 'mia-cx/svartz') {
+        assert.match(sha ?? '', /^[a-f0-9]{40}$/);
+        const pullRequests = JSON.parse(readFileSync(0, 'utf8')).flat();
+        const pullRequest = releasePullRequest(pullRequests, { sha, repository });
+        if (pullRequest?.head?.sha) {
+          const head = pullRequest.head.sha;
+          const { workflow_runs: workflowRuns } = JSON.parse(execFileSync('gh', [
+            'api',
+            `repos/${repository}/actions/workflows/release-validation.yml/runs?event=pull_request&head_sha=${head}&status=success&per_page=100`,
+          ], { encoding: 'utf8' }));
+          if (releaseValidated(workflowRuns, pullRequest)) {
+            // Squash merges and branch deletion can leave the PR head outside the checkout.
+            git('fetch', '--no-tags', 'origin', `refs/pull/${pullRequest.number}/head`);
+            validated = git('rev-parse', `${sha}^{tree}`) === git('rev-parse', `${head}^{tree}`);
+          }
+        }
+      }
+    } catch (cause) {
+      console.warn('Unable to reuse release PR validation; requiring fresh validation.', cause.message);
+    }
+    const line = `validated=${validated}\n`;
+    process.stdout.write(line);
+    if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, line);
+  } else if (process.argv[2] === 'current') {
     assert.match(sha ?? '', /^[a-f0-9]{40}$/);
     git('fetch', '--no-tags', 'origin', `+refs/heads/${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}`);
     git('merge-base', '--is-ancestor', sha, `origin/${BASE_BRANCH}`);
