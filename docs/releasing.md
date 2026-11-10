@@ -46,6 +46,11 @@ Pending changesets block publication.
 A package version missing from npm counts as publishable.
 
 Release validation runs `pnpm build`, `pnpm test`, and `pnpm release:check` before publication.
+On a push merging the release PR, Release reuses its successful `release-validation.yml` pull-request run
+only when the run matches the PR head SHA, branch, and repository, and both commits have the same Git tree.
+The plan fetches `refs/pull/<number>/head` so squash merges and deleted branches still work.
+Missing evidence, a different tree, or lookup errors require fresh validation.
+Manual Release dispatches always validate again.
 The reusable publish workflow uses the `npm-publish` environment and npm `11.17.0`.
 It builds the merged commit and packs with `pnpm pack`.
 pnpm rewrites workspace dependency ranges. `npm pack` does not.

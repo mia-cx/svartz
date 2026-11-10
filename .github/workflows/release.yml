@@ -31,11 +31,13 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      actions: read
     outputs:
       release: ${{ steps.plan.outputs.release }}
       publish: ${{ steps.plan.outputs.publish }}
       pending: ${{ steps.plan.outputs.pending }}
       sha: ${{ steps.target.outputs.sha }}
+      validated: ${{ steps.validate.outputs.validated }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -72,12 +74,19 @@ jobs:
           SVARTZ_RELEASE_RETRY: ${{ inputs.retry_release_commit != '' && 'true' || '' }}
           RETRY_SHA: ${{ inputs.retry_release_commit }}
         run: |
-          plan="$(gh api "repos/$GITHUB_REPOSITORY/commits/$SVARTZ_RELEASE_SHA/pulls" --paginate --slurp | node scripts/release-plan.mjs)"
+          plan="$(gh api "repos/$GITHUB_REPOSITORY/commits/$SVARTZ_RELEASE_SHA/pulls" --paginate --slurp | tee "$RUNNER_TEMP/pulls.json" | node scripts/release-plan.mjs)"
           printf '%s\n' "$plan"
           if [ -n "$RETRY_SHA" ]; then
             test "$(printf '%s\n' "$plan" | grep '^release=')" = release=true
             node scripts/release-plan.mjs current
           fi
+      - name: Check whether the merged release passed validation
+        id: validate
+        if: steps.plan.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SVARTZ_RELEASE_SHA: ${{ steps.target.outputs.sha }}
+        run: node scripts/release-plan.mjs validated < "$RUNNER_TEMP/pulls.json"
 
   release-pr:
     needs: plan
@@ -113,14 +122,16 @@ jobs:
 
   validation:
     needs: plan
-    if: needs.plan.outputs.publish == 'true'
+    if: needs.plan.outputs.publish == 'true' && needs.plan.outputs.validated != 'true'
     uses: ./.github/workflows/release-validation.yml
     with:
       sha: ${{ needs.plan.outputs.sha }}
 
   publish:
     needs: [plan, validation]
-    if: needs.plan.outputs.publish == 'true' && needs.validation.result == 'success'
+    if: >-
+      !cancelled() && needs.plan.outputs.publish == 'true' &&
+      (needs.validation.result == 'success' || needs.validation.result == 'skipped')
     uses: ./.github/workflows/package-publish.yml
     with:
       sha: ${{ needs.plan.outputs.sha }}
