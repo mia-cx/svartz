@@ -129,9 +129,11 @@ jobs:
 
   publish:
     needs: [plan, validation]
+    # The status check permits skipped dependencies, so require successful planning explicitly.
     if: >-
-      !cancelled() && needs.plan.outputs.publish == 'true' &&
-      (needs.validation.result == 'success' || needs.validation.result == 'skipped')
+      !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.publish == 'true' &&
+      (needs.validation.result == 'success' ||
+      (needs.validation.result == 'skipped' && needs.plan.outputs.validated == 'true'))
     uses: ./.github/workflows/package-publish.yml
     with:
       sha: ${{ needs.plan.outputs.sha }}

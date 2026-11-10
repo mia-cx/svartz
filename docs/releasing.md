@@ -51,6 +51,7 @@ only when the run matches the PR head SHA, branch, and repository, and both comm
 The plan fetches `refs/pull/<number>/head` so squash merges and deleted branches still work.
 Missing evidence, a different tree, or lookup errors require fresh validation.
 Manual Release dispatches always validate again.
+Publishing requires a successful plan and either successful validation or verified reuse of the PR's validation.
 The reusable publish workflow uses the `npm-publish` environment and npm `11.17.0`.
 It builds the merged commit and packs with `pnpm pack`.
 pnpm rewrites workspace dependency ranges. `npm pack` does not.

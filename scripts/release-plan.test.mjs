@@ -180,8 +180,27 @@ test('release publishing accepts reused validation and preserves its artifact bu
   assert.match(validation, /uses: \.\/\.github\/workflows\/release-validation\.yml/);
   const publish = workflow.split('\n  publish:\n')[1];
   assert.match(publish, /needs: \[plan, validation\]/);
-  assert.match(publish, /!cancelled\(\) && needs\.plan\.outputs\.publish == 'true' &&\s*\(needs\.validation\.result == 'success' \|\| needs\.validation\.result == 'skipped'\)/);
   assert.match(publish, /uses: \.\/\.github\/workflows\/package-publish\.yml/);
+  const condition = publish.match(/if: >-\n((?: {6}[^\n]*\n)+)/)[1].trim();
+  // The workflow uses the same boolean operators as JavaScript; evaluate its actual gate.
+  const publishes = new Function('needs', 'cancelled', `return (${condition});`);
+  for (const [planResult, publishOutput, validated, validationResult, cancelled, expected] of [
+    ['success', 'true', 'false', 'success', false, true],
+    ['success', 'true', 'true', 'skipped', false, true],
+    ['failure', 'true', '', 'skipped', false, false],
+    ['failure', 'true', 'true', 'skipped', false, false],
+    ['success', 'true', '', 'skipped', false, false],
+    ['success', 'true', 'false', 'failure', false, false],
+    ['success', 'true', 'true', 'cancelled', false, false],
+    ['success', 'true', 'true', 'skipped', true, false],
+    ['success', 'false', 'true', 'skipped', false, false],
+  ]) {
+    assert.equal(publishes({
+      plan: { result: planResult, outputs: { publish: publishOutput, validated } },
+      validation: { result: validationResult },
+    }, () => cancelled), expected,
+    JSON.stringify({ planResult, publishOutput, validated, validationResult, cancelled }));
+  }
   const publishing = await readFile(new URL('../.github/workflows/package-publish.yml', import.meta.url), 'utf8');
   assert.match(publishing, /run: pnpm build[\s\S]*run: node scripts\/release-publish\.mjs publish[\s\S]*run: node scripts\/release-github\.mjs/);
 });

@@ -20,5 +20,6 @@ alwaysApply: false
 - Every public package declares `repository` with `url` `https://github.com/mia-cx/svartz.git` and its own `directory`; npm provenance requires the URL, and the packed manifest is checked.
 - Before changing versioning or workflows, read `docs/releasing.md` for bootstrap, OIDC setup, and release authorization.
 - Match reusable PR validation by run head branch and repository; GitHub empties a run's `pull_requests` after merge. Require the exact workflow, head SHA, successful completion, and equal Git trees. Fetch the PR head ref because squash merges can omit it from the checkout. Lookup failures and manual retries require fresh checks; publication still builds its own artifacts.
+- A job status function disables GitHub's implicit dependency-success guard. Require successful planning and verified reuse before publishing with skipped validation.
 - Theme manifest package versions follow Changesets. Keep exactly one `version: 'x.y.z',` field in each theme's `src/lib/manifest.ts`, shared by its build and runtime extensions; `scripts/release-version.mjs` synchronizes that path. Keep their v1 contract versions separate.
 - Release checks must accept later fixed-group versions and build the packed Vite 8 Cloudflare host, including Worker and mounted note output.
