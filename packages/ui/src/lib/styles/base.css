@@ -185,6 +185,46 @@ a.sv-tag:hover {
 	block-size: 1.1rem;
 }
 
+/*
+ * An action button or link, such as Copy page. Links and buttons that plugin
+ * browser scripts mount in an action region (`[data-svartz-region]`, rendered by
+ * `PageActions` and `SiteActions`) look the same without a class of their own.
+ */
+.sv-action,
+[data-svartz-region] > :is(a, button) {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--sv-space-1);
+	padding: var(--sv-space-1) var(--sv-space-2);
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	border-radius: var(--sv-radius-m);
+	background: transparent;
+	color: var(--sv-muted);
+	font-family: var(--sv-font-sans);
+	font-size: var(--sv-label-size);
+	font-weight: 600;
+	line-height: 1.4;
+	text-decoration: none;
+	text-transform: uppercase;
+	cursor: pointer;
+	transition:
+		border-color var(--sv-duration-fast) var(--sv-ease),
+		color var(--sv-duration-fast) var(--sv-ease);
+}
+
+.sv-action:hover,
+[data-svartz-region] > :is(a, button):hover {
+	border-color: var(--sv-accent);
+	color: var(--sv-accent-text);
+}
+
+.sv-action svg,
+[data-svartz-region] > :is(a, button) svg {
+	inline-size: 1.1em;
+	block-size: 1.1em;
+	stroke-width: 1.75;
+}
+
 /* Keyboard hint. */
 .sv-kbd {
 	display: inline-block;

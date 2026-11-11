@@ -1,13 +1,14 @@
 <!--
-	The blog's header: the site name, the header links, search, and colour
-	mode. On phones the links fold into the shell's drawer, which is why the
-	nav carries the drawer's `explorer-panel` id.
+	The blog's header: the site name, the header links and site actions,
+	search, and colour mode. On phones the links and site actions fold into the
+	shell's drawer, which is why the nav carries the drawer's `explorer-panel`
+	id.
 -->
 <script lang="ts">
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import type { RegionProps } from '@svartz/theme-minimal/runtime';
-	import { ColorModeToggle, SearchDialog, SiteLogo, themeSettings } from '@svartz/ui';
+	import { ColorModeToggle, SearchDialog, SiteActions, SiteLogo, themeSettings } from '@svartz/ui';
 	import { headerLinks } from '../blog.js';
 
 	let { shell }: RegionProps = $props();
@@ -23,6 +24,7 @@
 				<li><a href={link.href} aria-current={shell.currentHref === link.href ? 'page' : undefined}>{link.label}</a></li>
 			{/each}
 		</ul>
+		<SiteActions />
 	</nav>
 	<div class="tools">
 		<SearchDialog documents={shell.vault.search} searchIndex={shell.searchIndex} searchOptions={shell.searchOptions} variant="icon" />
@@ -49,7 +51,10 @@
 	}
 
 	.nav {
+		display: flex;
 		flex: 1;
+		align-items: center;
+		gap: var(--sv-space-5);
 	}
 
 	.nav ul {

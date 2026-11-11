@@ -72,6 +72,13 @@ Markdown `.md` and `.mdx` files compile to inert content. Write a `.svx` note wh
 
 Content plugins contribute remark or rehype steps and optional CSS, assets, or browser scripts. Browser script modules export `mount(pathname)` and may return a cleanup function. Svartz calls cleanup on navigation, vault changes, and unmount. Do not attach global listeners at module import time.
 
+Plugins mount actions into two regions a theme renders from `@svartz/ui` (see [[guides/create-plugin#Add actions to every page]]):
+
+- `<PageActions href={entry.markdownHref} />` in every note's header, even when `markdownHref` is unset. It holds Copy page, View as Markdown, and the page-actions region.
+- `<SiteActions />` once on every page, in the rail or site navigation, inside the phone drawer.
+
+Render each exactly once per page and let Svelte leave them empty: plugins own their children. Both take no space while empty, and base.css styles the links and buttons plugins mount in them like Copy page.
+
 ## Best practices
 
 Keep layouts and route pages in the theme. Use content components for the five Markdown slots. Keep custom note logic in `.svx` files. Test both SSR output and navigation when a theme adds browser scripts. Make every page in `runtime.ts` eager: a lazy page that shares modules with eager ones stalls the Vite build (#62).

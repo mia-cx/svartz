@@ -1,7 +1,8 @@
 <!--
 	The article renderer's body, for a note with an `infobox` or a `hatnote`:
-	the article head, the hatnote, then the note with its infobox floated beside
-	it. Narrow columns put the infobox first.
+	the article head with the page actions beside the title, the hatnote, then
+	the note with its infobox floated beside it. Narrow columns put the infobox
+	first.
 -->
 <script lang="ts">
 	import '../article.css';
@@ -11,7 +12,7 @@
 	import ArticleHead from './ArticleHead.svelte';
 	import Infobox from './Infobox.svelte';
 
-	let { shell, data, entry, children }: RendererProps<Article> = $props();
+	let { shell, data, entry, summary, actions, content }: RendererProps<Article> = $props();
 
 	// The pipeline publishes attachments named by top-level `image`, so that is the portable field.
 	const imageName = $derived(data.infobox?.image ?? (typeof entry.properties.image === 'string' ? entry.properties.image : undefined));
@@ -19,10 +20,11 @@
 </script>
 
 <div class="article wiki-prose">
-	<ArticleHead title={entry.title} site={shell.site.title} />
+	<ArticleHead title={entry.title} site={shell.site.title}>{@render actions()}</ArticleHead>
 	{#if data.hatnote}<p class="hatnote"><DescText value={data.hatnote} entries={shell.vault.entries} /></p>{/if}
 	{#if data.infobox}<Infobox infobox={data.infobox} title={entry.title} {imageSrc} entries={shell.vault.entries} />{/if}
-	{@render children()}
+	{@render summary()}
+	{@render content()}
 </div>
 
 <style>

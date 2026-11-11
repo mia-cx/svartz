@@ -7,12 +7,15 @@
 	With the theme's `explorerFilter`, a filter above the tree narrows it to
 	matches, each with its folders open; clearing the filter brings back the
 	reader's own open folders. Enter opens the first match.
+
+	The site-actions region sits above the tree, so plugin actions such as
+	New page show in the left column and, on phones, in the drawer.
 -->
 <script lang="ts">
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import type { IndexEntry } from '@svartz/core';
-	import { Badge, BreakAfterSlashes, explorerOpenIds, type ExplorerNode } from '@svartz/ui';
+	import { Badge, BreakAfterSlashes, explorerOpenIds, SiteActions, type ExplorerNode } from '@svartz/ui';
 	import { onMount, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { RegionProps } from '../extension.js';
@@ -104,6 +107,7 @@
 	</ul>
 {/snippet}
 
+<SiteActions />
 <nav class="explorer" aria-labelledby="explorer-heading">
 	<button
 		class="sv-section-title explorer-toggle"
@@ -142,6 +146,10 @@
 <style>
 	.explorer {
 		font-size: var(--sv-step--1);
+	}
+
+	:global([data-svartz-region='site-actions']:not(:empty)) + .explorer {
+		margin-block-start: var(--sv-space-5);
 	}
 
 	.explorer-toggle {

@@ -45,7 +45,7 @@
 		artifacts: runtimeArtifacts,
 		contentComponents: hostContentComponents
 	}));
-	useBrowserResources(() => ({ artifacts: runtimeArtifacts, pathname }));
+	useBrowserResources(() => ({ artifacts: runtimeArtifacts, pathname, noteHref: state.entry?.href }));
 
 	const theme = $derived(state.theme);
 	const index = $derived(state.index);

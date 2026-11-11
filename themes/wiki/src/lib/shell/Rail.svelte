@@ -1,11 +1,13 @@
 <!--
-	The left rail: the portal (main page, list pages, a random page) and the
-	article's numbered contents. In the phone drawer the section menu leads it,
+	The left rail: the portal (main page, list pages, a random page, then the
+	site actions plugins mount, such as New page) and the article's numbered
+	contents. In the phone drawer the section menu leads it,
 	and an open section takes the drawer over.
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import type { RegionProps } from '@svartz/theme-minimal/runtime';
+	import { SiteActions } from '@svartz/ui';
 	import Contents from '../components/Contents.svelte';
 	import DrawerMenu from '../components/DrawerMenu.svelte';
 	import { sectionMenu, wikiRoutes, type MenuFolder } from '../wiki.js';
@@ -49,6 +51,7 @@
 			{/each}
 			<li><button type="button" onclick={randomPage}>Random page</button></li>
 		</ul>
+		<SiteActions />
 	</nav>
 	<Contents items={shell.toc} />
 </div>
@@ -86,6 +89,28 @@
 
 	.portal a:hover,
 	.portal button:hover {
+		color: var(--sv-accent-text);
+	}
+
+	/* Site actions read as more portal links, one per line under Random page. */
+	.portal :global(.sv-site-actions:not(:empty)) {
+		display: grid;
+		gap: var(--sv-space-1);
+		margin-block-start: var(--sv-space-1);
+		font-size: var(--sv-step--1);
+	}
+
+	.portal :global([data-svartz-region] > :is(a, button)) {
+		justify-self: start;
+		padding: 0;
+		border: 0;
+		border-radius: 0;
+		color: var(--sv-text);
+		font: inherit;
+		text-transform: none;
+	}
+
+	.portal :global([data-svartz-region] > :is(a, button):hover) {
 		color: var(--sv-accent-text);
 	}
 

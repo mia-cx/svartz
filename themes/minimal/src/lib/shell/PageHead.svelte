@@ -43,7 +43,7 @@
 				{/each}
 			</ul>
 		{/if}
-		{#if entry.markdownHref}<PageActions href={entry.markdownHref} />{/if}
+		<PageActions href={entry.markdownHref} />
 	</header>
 {/if}
 
