@@ -118,16 +118,14 @@ describe("PR writer", () => {
     expect(github.pending).toEqual([]);
   });
 
-  it("deletes the branch when GitHub refuses the pull request", async () => {
+  it("keeps the branch when GitHub refuses the pull request, for a retry to reuse", async () => {
+    // No DELETE follows: another attempt at this submission may be opening a pull request from the branch.
     const github = replayGitHub([
       ...editUntil("POST /pulls"),
       {
         request: { method: "POST", url: `${API}/pulls`, body: expect.objectContaining({ head: branch }) },
         response: { status: 422, json: { message: "Validation Failed", errors: [{ resource: "PullRequest", field: "base", code: "invalid" }] } },
       },
-      // No concurrent attempt opened one from the branch meanwhile.
-      pullLookup(branch),
-      { request: { method: "DELETE", url: `${API}/git/refs/heads/${branch}` }, response: { status: 204 } },
     ]);
 
     await expect(openSubmission(target, submission)).rejects.toMatchObject({ code: "github_failed", status: 502 });
@@ -136,7 +134,7 @@ describe("PR writer", () => {
 
   const PULL_7 = { url: `https://github.com/${REPO}/pull/7`, number: 7 };
   it.each([
-    ["the attempt that created the branch", 0, [PULL_7, PULL_7]],
+    ["the attempt that created the branch", 0, ["github_forbidden", PULL_7]],
     ["an attempt that reused the branch", 1, [PULL_7, "github_forbidden"]],
   ] as const)("keeps a branch whose pull request a concurrent attempt opened, when GitHub refuses %s", async (_case, refuse, outcomes) => {
     const github = sharedGitHub({

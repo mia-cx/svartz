@@ -155,32 +155,13 @@ async function alreadyOpened(response: Response): Promise<boolean> {
   return body?.errors?.some(({ message }) => typeof message === "string" && message.startsWith("A pull request already exists")) ?? false;
 }
 
-/**
- * Point `branch` at `sha`: a new branch, or one an earlier attempt left without a pull request. True when this call
- * created the branch; false when it moved one another attempt created, which that attempt may still be using.
- */
-async function writeBranch(target: GitHubTarget, branch: string, sha: string): Promise<boolean> {
+/** Point `branch` at `sha`: a new branch, or one an earlier attempt left without a pull request. */
+async function writeBranch(target: GitHubTarget, branch: string, sha: string): Promise<void> {
   const created = await send(target, "POST", "/git/refs", { ref: `refs/heads/${branch}`, sha });
-  if (created.ok) return true;
+  if (created.ok) return;
   if (created.status !== 422) throw await failure(target, created);
   // 422: the branch exists. No pull request used it when this attempt looked, so it holds an earlier attempt's commit.
   await call(target, "PATCH", `/git/refs/heads/${branch}`, { sha, force: true });
-  return false;
-}
-
-/**
- * Delete the branch this attempt created after GitHub refused its pull request, unless a concurrent attempt at the same
- * submission opened one from it since: that pull request is returned instead. A lookup that fails keeps the branch.
- *
- * Still open: a concurrent attempt's pull request opening between the lookup and the delete. Deleting the branch then
- * closes it, after that attempt reported it opened. The window is one round trip, and needs two attempts at once.
- */
-async function dropBranch(target: GitHubTarget, branch: string): Promise<PullRequest | undefined> {
-  const pull = await openPull(target, branch);
-  if (pull) return pull;
-  const deleted = await send(target, "DELETE", `/git/refs/heads/${branch}`).catch(() => undefined);
-  if (!deleted?.ok) console.error(`[submissions] couldn't delete branch ${branch} after GitHub refused its pull request`);
-  return undefined;
 }
 
 /**
@@ -188,9 +169,9 @@ async function dropBranch(target: GitHubTarget, branch: string): Promise<PullReq
  * commit, so when the page changed since, GitHub shows a conflict instead of the edit overwriting it.
  *
  * Safe to retry with the same `submission.id`: the branch is named after it, so a pull request an earlier attempt
- * opened is returned instead of a second one. A pull request GitHub refused takes the branch with it when this attempt
- * created the branch and no concurrent attempt opened one from it; otherwise, or when the outcome is unknown, the
- * branch stays for the retry to find.
+ * opened is returned instead of a second one. Branches are never deleted: when GitHub refuses a pull request, another
+ * attempt at the same submission may be opening one from that branch, and no lookup can rule that out race-free.
+ * A refused attempt's branch stays, and a retry reuses it.
  */
 export async function openSubmission(target: GitHubTarget, submission: Submission): Promise<EditResponse> {
   const branch = submissionBranch(submission);
@@ -222,21 +203,13 @@ async function createPull(target: GitHubTarget, submission: Submission, branch: 
     tree: tree.sha,
     parents: [target.commit],
   });
-  const created = await writeBranch(target, branch, commit.sha);
-  // No answer (`github_unavailable`) throws here and keeps the branch: the pull request may exist.
+  await writeBranch(target, branch, commit.sha);
+  // No answer (`github_unavailable`) throws here; the branch stays for a retry, and the pull request may exist.
   const response = await send(target, "POST", "/pulls", { title, head: branch, base, body: pullRequestBody(submission, target.commit) });
   if (response.ok) return await response.json() as PullRequest;
   if (await alreadyOpened(response)) {
     // A concurrent attempt at this submission opened it first.
     const pull = await openPull(target, branch);
-    if (pull) return pull;
-  } else if (response.status < 500 && created) {
-    // A 4xx means GitHub opened nothing for this request, so the branch goes. A 5xx may not mean that, and a branch
-    // this attempt only moved belongs to another attempt too; both stay for a retry.
-    const pull = await dropBranch(target, branch).catch((error: unknown) => {
-      console.error(`[submissions] kept branch ${branch}: couldn't check it for a pull request`, error);
-      return undefined;
-    });
     if (pull) return pull;
   }
   throw await failure(target, response);

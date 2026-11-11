@@ -45,7 +45,7 @@ Every published Markdown note gets an **Edit** action beside Copy page. It opens
 - A branch `svartz/submission/edit/<page>-<submission id>` from the commit the site was built from, with one commit replacing the note. When the page changed since, GitHub shows a conflict instead of the edit overwriting it.
 - A pull request titled `Edit <path>` with the configured labels, the reader's note, and the page it came from.
 
-Each opened editor makes a random submission id and sends it with every attempt. When GitHub's answer is lost, a retry finds the pull request the first attempt opened instead of opening a second one. When GitHub refuses the pull request, the server deletes the branch it made. Every GitHub request gives up after 10 seconds, and the reader is told to try again.
+Each opened editor makes a random submission id and sends it with every attempt. When GitHub's answer is lost, a retry finds the pull request the first attempt opened instead of opening a second one. When GitHub refuses the pull request, the branch stays: another attempt at the same edit may be opening a pull request from it, and a retry reuses it. Every GitHub request gives up after 10 seconds, and the reader is told to try again.
 
 Readers can edit only published `.md` notes; password-protected notes, other files and paths outside the vault are refused by the server. A page's source is capped at 512 KB and the note at 2,000 characters.
 
