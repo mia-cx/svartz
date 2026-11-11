@@ -5,7 +5,7 @@ import { readIdentity } from "../src/server";
 const ORIGIN = "https://notes.test";
 const AUTH = "/notes/_svartz/auth";
 const ENV = {
-  SVARTZ_SESSION_SECRET: "test-secret-0123456789-abcdefghijklmnop",
+  PRIVATE_SVARTZ_SESSION_SECRET: "test-secret-0123456789-abcdefghijklmnop",
   PRIVATE_GITHUB_SECRET: "fake-client-secret",
 };
 const OCTOCAT = {
@@ -153,6 +153,7 @@ describe("signing in with GitHub", () => {
     ["another origin", "https://evil.test/"],
     ["a protocol-relative URL", "//evil.test/"],
     ["a backslash the URL parser reads as a host", "/\\evil.test/"],
+    ["a path that normalises to a protocol-relative URL", "/a/..//evil.test/"],
     ["a script URL", "javascript:alert(1)"],
   ])("refuses to return the reader to %s", async (_case, returnTo) => {
     const response = await site()(`${AUTH}/start/github/?returnTo=${encodeURIComponent(returnTo)}`);
@@ -163,11 +164,11 @@ describe("signing in with GitHub", () => {
 });
 
 describe("auth configuration", () => {
-  it("answers 503 naming SVARTZ_SESSION_SECRET when it is missing", async () => {
+  it("answers 503 naming PRIVATE_SVARTZ_SESSION_SECRET when it is missing", async () => {
     const response = await site({ PRIVATE_GITHUB_SECRET: "fake-client-secret" })(`${AUTH}/start/github/`);
 
     expect(response.status).toBe(503);
-    expect((await response.json()).message).toContain("SVARTZ_SESSION_SECRET");
+    expect((await response.json()).message).toContain("PRIVATE_SVARTZ_SESSION_SECRET");
   });
 
   it("answers 404 for a provider the vault doesn't list", async () => {

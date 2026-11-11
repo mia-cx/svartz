@@ -66,7 +66,7 @@ function isFlow(value: unknown): value is Flow {
 
 /**
  * Who sent `request`, from its session cookie, or `null` when nobody is signed in.
- * `env` is the handler's `context.env`. Without a usable `SVARTZ_SESSION_SECRET` nobody can be signed in, so this
+ * `env` is the handler's `context.env`. Without a usable `PRIVATE_SVARTZ_SESSION_SECRET` nobody can be signed in, so this
  * answers `null`; the auth routes report the missing secret with a 503.
  */
 export async function readIdentity(request: Request, env: Env): Promise<Identity | null> {
@@ -100,7 +100,9 @@ function sameOriginPath(candidate: string, url: URL): string | undefined {
   // Only paths: a scheme or `//host` is refused before parsing, and parsing catches `/\host` and friends.
   if (!candidate.startsWith("/") || candidate.startsWith("//")) return undefined;
   const target = new URL(candidate, url.origin);
-  return target.origin === url.origin ? `${target.pathname}${target.search}${target.hash}` : undefined;
+  // Dot segments can normalise `/a/..//evil.test/` into a path that reads as `//host` once relative again.
+  if (target.origin !== url.origin || target.pathname.startsWith("//")) return undefined;
+  return `${target.pathname}${target.search}${target.hash}`;
 }
 
 /** Every provider returns to this vault's callback. */
