@@ -50,6 +50,12 @@ interface PluginContext {
   compiler?: CompilerContributions;
 }
 
+/** Every vault in the config, and the one a {@link SvartzPlugin.forVault} call resolves the plugin for. */
+interface SiteVaults {
+  readonly vault: ResolvedConfig;
+  readonly vaults: readonly ResolvedConfig[];
+}
+
 // --- Pipeline stage names (canonical execution order) ---
 
 const STAGE_NAMES = [
@@ -82,6 +88,11 @@ interface SvartzPlugin {
   readonly disabled?: boolean;
   /** Answers requests under `/_svartz/<id>/` at runtime. Needs a server target; the id must be a URL path segment. */
   readonly server?: ServerModuleSpec;
+  /**
+   * For plugins that span vaults: runs once per vault at config resolution, after every vault resolves, and returns
+   * the plugin that vault runs. Throw to fail config resolution, naming the vault.
+   */
+  readonly forVault?: (site: SiteVaults) => SvartzPlugin;
 
   // Lifecycle hooks
   buildStart?: PluginHookInput;
@@ -113,6 +124,7 @@ interface NormalizedSvartzPlugin {
   readonly contractVersion?: string;
   readonly disabled?: boolean;
   readonly server?: ServerModuleSpec;
+  readonly forVault?: SvartzPlugin["forVault"];
 
   // Lifecycle hooks
   buildStart?: PluginHook;
@@ -144,6 +156,7 @@ export type {
   PluginHookInput,
   PluginChangeHookInput,
   PluginContext,
+  SiteVaults,
   SvartzPlugin,
   NormalizedSvartzPlugin,
   StageName,

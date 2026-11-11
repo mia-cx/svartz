@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { mergePlugins } from "@svartz/core";
+import { mergePlugins, type SvartzPlugin } from "@svartz/core";
 import { lstat, readlink, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import type {
@@ -19,7 +19,7 @@ import type {
   VaultConfig,
   VaultThemeConfig,
 } from "./types/index";
-import { VaultBuildRootConflict, VaultBuildRootResolutionFailed, VaultIdConflict, VaultIdNotFound, VaultMountConflict, VaultPathInvalid } from "./types/index";
+import { VaultBuildRootConflict, VaultBuildRootResolutionFailed, VaultIdConflict, VaultIdNotFound, VaultMountConflict, VaultPathInvalid, VaultPluginInvalid } from "./types/index";
 
 // --- Hardcoded defaults ---
 
@@ -278,12 +278,32 @@ const resolveVaultConfig = (
     };
   });
 
+// --- Plugins that span vaults ---
+
+/** Swap each plugin with a `forVault` hook for the plugin it returns for `vault`, now that every vault is known. */
+const resolvePluginsForVault = (
+  vault: ResolvedConfig,
+  vaults: readonly ResolvedConfig[],
+): Effect.Effect<ResolvedConfig, VaultPluginInvalid> =>
+  Effect.forEach(vault.plugins as readonly SvartzPlugin[], (plugin) => {
+    const { forVault } = plugin;
+    if (!forVault) return Effect.succeed(plugin);
+    return Effect.try({
+      try: () => forVault({ vault, vaults }),
+      catch: (cause) => new VaultPluginInvalid({
+        vaultId: vault.id,
+        pluginId: plugin.id,
+        message: cause instanceof Error ? cause.message : String(cause),
+      }),
+    });
+  }).pipe(Effect.map((plugins) => ({ ...vault, plugins })));
+
 // --- Main resolver ---
 
 export const resolveConfig = (
   config: SvartzConfig,
   configDir: string,
-): Effect.Effect<ResolvedConfigSet, VaultPathInvalid | VaultMountConflict | VaultBuildRootConflict | VaultBuildRootResolutionFailed | VaultIdConflict> =>
+): Effect.Effect<ResolvedConfigSet, VaultPathInvalid | VaultMountConflict | VaultBuildRootConflict | VaultBuildRootResolutionFailed | VaultIdConflict | VaultPluginInvalid> =>
   Effect.gen(function* () {
     const buildDefaults = resolveBuildDefaults(config.build);
     const vaults = yield* Effect.forEach(
@@ -357,7 +377,7 @@ export const resolveConfig = (
       configDir,
       build: buildDefaults,
       passwordGroups: config.passwordGroups,
-      vaults,
+      vaults: yield* Effect.forEach(vaults, (vault) => resolvePluginsForVault(vault, vaults)),
     };
   });
 
