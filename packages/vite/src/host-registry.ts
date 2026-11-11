@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { ResolvedConfig } from "@svartz/core";
 import {
   getGeneratedIndexModulePath,
   getGeneratedRuntimeArtifactsModulePath,
+  getGeneratedRuntimeServerModulePath,
   getGeneratedRuntimeThemeModulePath,
 } from "./artifacts";
 
@@ -94,4 +97,33 @@ export function getGeneratedHostStylesPath(hostRegistryPath: string, vaultId: st
 
 export function getGeneratedHostRegistryPath(configDir: string): string {
   return join(configDir, ".svartz", "host", "runtime.ts");
+}
+
+export function getGeneratedHostServerPath(configDir: string): string {
+  return join(configDir, ".svartz", "host", "server.ts");
+}
+
+/** `virtual:svartz/server` in a host app: `svartzHandle` runs every host vault's generated handle in turn. */
+export function createHostServerSource(vaults: readonly ResolvedConfig[]): string {
+  return [
+    ...vaults.map((vault, index) =>
+      `import { svartzHandle as vault${index} } from ${JSON.stringify(getGeneratedRuntimeServerModulePath(vault))};`),
+    `const handles = [${vaults.map((_vault, index) => `vault${index}`).join(", ")}];`,
+    "// Mounts never overlap, so at most one vault answers; the others pass the request on.",
+    "export const svartzHandle = ({ event, resolve }) =>",
+    "  handles.reduceRight((next, handle) => (request) => handle({ event: request, resolve: next }), resolve)(event);",
+    "",
+  ].join("\n");
+}
+
+/** The host app's `kit.adapter.name`, read from `svelte.config.js` or `.ts` in `root`, as SvelteKit finds it. */
+export async function readHostAdapterName(root: string): Promise<string | undefined> {
+  const file = ["js", "ts"].map((extension) => join(root, `svelte.config.${extension}`)).find((path) => existsSync(path));
+  if (!file) return undefined;
+  // Bust the import cache so a dev restart sees an edited adapter, as SvelteKit does.
+  const config = await import(`${pathToFileURL(file).href}?svartz=${Date.now()}`) as {
+    default?: { kit?: { adapter?: { name?: unknown } } };
+  };
+  const name = config.default?.kit?.adapter?.name;
+  return typeof name === "string" ? name : undefined;
 }

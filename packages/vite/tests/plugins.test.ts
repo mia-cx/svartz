@@ -108,8 +108,11 @@ describe("server plugins", () => {
     expect(() => resolveRuntimePlugins(vault("static", [{ ...hello(), disabled: true }]))).not.toThrow();
   });
 
-  it("fails a host vault until hosts can route plugin requests", () => {
-    expect(() => resolveRuntimePlugins(vault("host"))).toThrow('Vault "wiki" is a host vault, but plugin "hello" serves requests');
+  it("accepts a host vault unless the host app uses adapter-static", () => {
+    expect(() => resolveRuntimePlugins(vault("host"), undefined, "@sveltejs/adapter-node")).not.toThrow();
+    expect(() => resolveRuntimePlugins(vault("host"), undefined, "@sveltejs/adapter-static")).toThrow(
+      'Vault "wiki" is mounted in a host app that uses @sveltejs/adapter-static, but plugin "hello" serves requests.',
+    );
   });
 
   it("names secrets by server-only env vars", () => {

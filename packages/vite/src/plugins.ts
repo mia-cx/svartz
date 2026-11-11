@@ -85,15 +85,24 @@ function serverOptionsProblem(value: unknown, path: string): string | undefined 
   }
 }
 
-/** A server plugin needs a server target, a path-segment id, an importable module and JSON options. */
-function assertServerPlugins(config: ResolvedConfig, plugins: readonly NormalizedSvartzPlugin[]): void {
+const STATIC_ADAPTER = "@sveltejs/adapter-static";
+
+/**
+ * A server plugin needs a server target (or a host app whose adapter isn't `adapter-static`), a path-segment id,
+ * an importable module and JSON options. `hostAdapter` is the host's `kit.adapter.name`.
+ */
+function assertServerPlugins(
+  config: ResolvedConfig,
+  plugins: readonly NormalizedSvartzPlugin[],
+  hostAdapter?: string,
+): void {
   for (const { id, server } of plugins) {
     if (!server) continue;
     const target = config.target.type;
-    if (target === "host") {
-      throw new Error(`Vault "${config.id}" is a host vault, but plugin "${id}" serves requests, which host apps can't route yet.`);
+    if (target === "host" && hostAdapter === STATIC_ADAPTER) {
+      throw new Error(`Vault "${config.id}" is mounted in a host app that uses ${STATIC_ADAPTER}, but plugin "${id}" serves requests. Use a server adapter, such as @sveltejs/adapter-node or @sveltejs/adapter-cloudflare, or disable the plugin.`);
     }
-    if (!(SERVER_TARGETS as readonly string[]).includes(target)) {
+    if (target !== "host" && !(SERVER_TARGETS as readonly string[]).includes(target)) {
       throw new Error(`Vault "${config.id}" targets "${target}", but plugin "${id}" serves requests. Use a server target (${SERVER_TARGETS.join(", ")}) or disable the plugin.`);
     }
     if (!SERVER_PLUGIN_ID_PATTERN.test(id)) {
@@ -110,10 +119,12 @@ function assertServerPlugins(config: ResolvedConfig, plugins: readonly Normalize
 /**
  * Merge runtime plugins in specificity order.
  * `config.plugins` is already the defaults→vault merge from @svartz/config.
+ * `hostAdapter` is the host app's `kit.adapter.name` when the vault targets `host`.
  */
 function resolveRuntimePlugins(
   config: ResolvedConfig,
   theme?: SvartzTheme,
+  hostAdapter?: string,
 ): NormalizedSvartzPlugin[] {
   const merged = mergePlugins(
     createCorePlugins(),
@@ -124,7 +135,7 @@ function resolveRuntimePlugins(
   const normalized = merged.map((plugin) => normalizePlugin(plugin as SvartzPlugin));
   assertRequiredStages(normalized);
   assertThemeRequirements(theme, normalized);
-  assertServerPlugins(config, normalized);
+  assertServerPlugins(config, normalized, hostAdapter);
   return normalized;
 }
 

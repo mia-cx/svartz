@@ -19,8 +19,10 @@ import {
   getGeneratedPagesRoot,
   getGeneratedRuntimeThemeModulePath,
   createHostRegistrySource,
+  createHostServerSource,
   getGeneratedHostStylesPath,
   getGeneratedHostRegistryPath,
+  getGeneratedHostServerPath,
   svelteKitBasePath,
   getVaultBuildRoot,
   resolveThemeModuleIds,
@@ -483,6 +485,7 @@ const createAppConfig = (
     process.env["SVARTZ_THEME_MODULE_PATH"] = getGeneratedRuntimeThemeModulePath(vault);
     process.env["SVARTZ_ARTIFACTS_MODULE_PATH"] = getGeneratedRuntimeArtifactsModulePath(vault);
     const hostRegistryPath = getGeneratedHostRegistryPath(projectRoot);
+    const hostServerPath = getGeneratedHostServerPath(projectRoot);
     process.env["SVARTZ_HOST_MODULE_PATH"] = hostRegistryPath;
     const styleManifests = vaults.map((item) => ({
       modules: [getGeneratedRuntimeArtifactsModulePath(item), getGeneratedRuntimeThemeModulePath(item)],
@@ -502,6 +505,7 @@ const createAppConfig = (
           await writeFile(stylesPath, '{"shared":[],"notes":{}}\n');
         }));
         await writeFile(hostRegistryPath, createHostRegistrySource(vaults));
+        if (hostApp) await writeFile(hostServerPath, createHostServerSource(vaults));
         if (!hostApp) await writeFile(standalonePluginPath, [
           `import { hostStylesPlugin, publicAssetsPlugin } from ${JSON.stringify(import.meta.resolve("@svartz/vite/host"))};`,
           `export default [hostStylesPlugin(${JSON.stringify(styleManifests)}), publicAssetsPlugin()];`,
@@ -564,7 +568,13 @@ const createAppConfig = (
           },
         },
       ],
-      resolve: { alias: { "virtual:svartz/host": hostRegistryPath } },
+      resolve: {
+        alias: {
+          "virtual:svartz/host": hostRegistryPath,
+          // The standalone shell's `virtual:svartz/server` is its one vault's module, aliased by the svartz plugin.
+          ...(hostApp ? { "virtual:svartz/server": hostServerPath } : {}),
+        },
+      },
       server: {
         fs: {
           allow: [projectRoot, ...themeRoots],
