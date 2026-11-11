@@ -1,13 +1,13 @@
 # Releasing Svartz packages
 
-Svartz ships thirteen public npm packages in one fixed Changesets version group.
+Svartz ships fourteen public npm packages in one fixed Changesets version group.
 Private workspace packages receive no version bumps or release tags.
 All public archives include the repository LICENSE and use MCX v1.0.
 
 Publish in this dependency order:
 
 1. `@svartz/core`.
-2. `@svartz/plugins`, `@svartz/auth`, `@svartz/config`, then `@svartz/ui`.
+2. `@svartz/plugins`, `@svartz/auth`, `@svartz/plugin-annotations`, `@svartz/config`, then `@svartz/ui`.
 3. `@svartz/theme-minimal`, `@svartz/theme-wiki`, `@svartz/theme-blog`, `@svartz/theme-docs`, `@svartz/theme-api-docs`, then `@svartz/theme-mcp-docs`.
 4. `@svartz/vite`, then `svartz`.
 
@@ -21,7 +21,7 @@ CI requires a changeset for public `packages/*/src/**`, `packages/cli/template/*
 The `no changeset` label exempts changes that need no release note.
 CI still validates added or modified changesets when that label is present.
 
-The fixed group keeps all thirteen versions equal.
+The fixed group keeps all fourteen versions equal.
 `pnpm release:version` runs Changesets, synchronizes theme versions, and updates the lockfile.
 Each theme keeps its package `version` in `src/lib/manifest.ts`, shared by its build and runtime extensions; the synchronization script updates that file.
 Theme contract versions remain independent of package versions.

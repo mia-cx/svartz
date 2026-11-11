@@ -15,6 +15,7 @@ export const RELEASE_PACKAGES = [
   ['@svartz/core', 'packages/core'],
   ['@svartz/plugins', 'packages/plugins'],
   ['@svartz/auth', 'packages/auth'],
+  ['@svartz/plugin-annotations', 'packages/plugin-annotations'],
   ['@svartz/config', 'packages/config'],
   ['@svartz/ui', 'packages/ui'],
   ['@svartz/theme-minimal', 'themes/minimal'],
