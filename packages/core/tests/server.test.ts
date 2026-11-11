@@ -73,10 +73,10 @@ function event(path: string, platform?: unknown, clientAddress: () => string = (
 
 function setup({ basePath = "", building = false, dev = false, privateEnv = { SECRET: "from-process" } } = {}) {
   const seen: Array<{ id: string; pathname: string; context: ServerContext }> = [];
-  const factory = (id: string) => vi.fn((options: unknown) => (request: Request, context: ServerContext) => {
+  const factory = (id: string) => vi.fn((options: unknown, data: unknown) => (request: Request, context: ServerContext) => {
     const { pathname } = new URL(request.url);
     seen.push({ id, pathname, context });
-    return pathname.endsWith("/missing/") ? undefined : Response.json({ id, options });
+    return pathname.endsWith("/missing/") ? undefined : Response.json({ id, options, data });
   });
   const hello = factory("hello");
   const helloWorld = factory("hello-world");
@@ -84,7 +84,7 @@ function setup({ basePath = "", building = false, dev = false, privateEnv = { SE
     basePath,
     vault,
     servers: [
-      { id: "hello", load: async () => ({ default: hello }), options: { greeting: "hi" } },
+      { id: "hello", load: async () => ({ default: hello }), options: { greeting: "hi" }, data: { commit: "abc123" } },
       { id: "hello-world", load: async () => ({ default: helloWorld }) },
     ],
   };
@@ -94,12 +94,12 @@ function setup({ basePath = "", building = false, dev = false, privateEnv = { SE
 }
 
 describe("server plugin routing", () => {
-  it("sends requests under /_svartz/<id>/ to that plugin only, with its options", async () => {
+  it("sends requests under /_svartz/<id>/ to that plugin only, with its options and build data", async () => {
     const { handle, resolve, seen } = setup();
 
     const response = await handle({ event: event("/_svartz/hello/ping/"), resolve });
 
-    expect(await response.json()).toEqual({ id: "hello", options: { greeting: "hi" } });
+    expect(await response.json()).toEqual({ id: "hello", options: { greeting: "hi" }, data: { commit: "abc123" } });
     expect(seen.map(({ id, pathname }) => [id, pathname])).toEqual([["hello", "/_svartz/hello/ping/"]]);
     expect(resolve).not.toHaveBeenCalled();
   });

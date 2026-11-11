@@ -56,23 +56,30 @@ function resolveCoreModuleId(): string {
     : resolve(dirname(fileURLToPath(import.meta.url)), "../node_modules/@svartz/core/dist/index.js");
 }
 
+/** A JSON value as a source expression. Parsed at runtime: an object literal would turn an own `__proto__` key into a prototype. */
+function jsonExpression(value: unknown): string {
+  return value === undefined ? "undefined" : `JSON.parse(${JSON.stringify(JSON.stringify(value))})`;
+}
+
 /**
  * The vault's server-only module: its active server plugins as a registry, and `svartzHandle`, the SvelteKit `handle`
  * that routes `/_svartz/<id>/` to them. `virtual:svartz/server` is this module in the standalone shell; host apps get
  * one that chains every vault's. `$env/dynamic/private` keeps it out of client bundles.
+ * `serverData` is what each plugin's hooks recorded for its server module this build, keyed by plugin id.
  */
 function createServerRegistrySource(
   config: ResolvedConfig,
   plugins: readonly NormalizedSvartzPlugin[],
   deploymentBasePath = "",
   markdown: Readonly<Record<string, string>> = {},
+  serverData: ReadonlyMap<string, unknown> = new Map(),
 ): string {
   const servers = plugins.flatMap(({ id, server }) => {
     if (!server) return [];
     const specifier = server.module.startsWith("file:") ? fileURLToPath(server.module) : server.module;
-    // Parsed at runtime: an object literal would turn an own `__proto__` key into a prototype.
-    const options = server.options === undefined ? "undefined" : `JSON.parse(${JSON.stringify(JSON.stringify(server.options))})`;
-    return [`  { id: ${JSON.stringify(id)}, load: () => import(${JSON.stringify(specifier)}), options: ${options} },`];
+    const options = jsonExpression(server.options);
+    const data = jsonExpression(serverData.get(id));
+    return [`  { id: ${JSON.stringify(id)}, load: () => import(${JSON.stringify(specifier)}), options: ${options}, data: ${data} },`];
   });
   // With no runtime routes the handle passes through, so the server bundle gains nothing else.
   if (servers.length === 0 && Object.keys(markdown).length === 0) return "export const svartzHandle = ({ event, resolve }) => resolve(event);\n";
@@ -155,7 +162,7 @@ function createArtifactsVirtualModuleSource(
     `const browserScripts = [\n${scriptLoaders}\n];`,
     "export async function mountBrowserResources(pathname) {",
     "  if (import.meta.env.SSR) return () => {};",
-    "  return mountBrowserScripts(browserScripts, pathname);",
+    `  return mountBrowserScripts(browserScripts, pathname, { base: ${JSON.stringify(deploymentBasePath)} });`,
     "}",
     `const protectedBridgeLoaders = {\n${bridgeLoaders}\n};`,
     "export async function loadProtectedBridgeUrls(ids) {",

@@ -57,14 +57,19 @@ export interface ServerContext {
 /** Answers a request under the plugin's prefix. `undefined` answers 404. */
 export type ServerHandler = (request: Request, context: ServerContext) => MaybePromise<Response | undefined>;
 
-/** A server module's default export: builds the handler once from the plugin's options. */
-export type ServerModuleFactory<Options = unknown> = (options: Options) => ServerHandler;
+/**
+ * A server module's default export: builds the handler once from the plugin's options and the build data its hooks
+ * set in `getCompilerContributions(ctx).serverData` (`undefined` when they set none).
+ */
+export type ServerModuleFactory<Options = unknown, Data = unknown> = (options: Options, data: Data) => ServerHandler;
 
 /** One active server plugin in a generated registry. */
 export interface ServerRoute {
   readonly id: string;
   readonly load: () => Promise<unknown>;
   readonly options?: unknown;
+  /** What the plugin's hooks recorded for its server module during this build. */
+  readonly data?: unknown;
 }
 
 /** What a build knows about its server plugins; `virtual:svartz/server` exports one per vault. */
@@ -138,7 +143,7 @@ async function loadHandler(route: ServerRoute): Promise<ServerHandler> {
   if (typeof module.default !== "function") {
     throw new Error(`[svartz:server] plugin "${route.id}" server module must default-export a factory`);
   }
-  const handler: unknown = module.default(route.options);
+  const handler: unknown = module.default(route.options, route.data);
   if (typeof handler !== "function") {
     throw new Error(`[svartz:server] plugin "${route.id}" server factory must return a handler`);
   }
