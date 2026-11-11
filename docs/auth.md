@@ -66,7 +66,7 @@ export default defineConfig({
 
 Here a reader who signs in on a `/work/` page goes through `/journal/_svartz/auth/`, the provider calls back to `/journal/_svartz/auth/callback/github/`, and the reader lands back on the `/work/` page. The session cookie is set for the whole origin, so every vault reads them as signed in. The other vaults' `start/` routes forward to the callback vault's, and their `callback/` routes answer 404.
 
-A vault may offer fewer providers than the callback vault, but not more. Config loading fails, naming the vault, when `callbackVault` names no vault, a vault without auth, or a vault missing one of this vault's providers. Each standalone vault is its own app, so it runs its own sign-in and can't set `callbackVault` to another vault.
+A vault may offer fewer providers than the callback vault, but not more. Config loading fails, naming the vault, when `callbackVault` names no vault, a vault without auth, a vault missing one of this vault's providers, or a vault that sends its own sign-in elsewhere. The simplest setup sets the same `callbackVault` on every host vault, or leaves it unset everywhere. Each standalone vault is its own app, so it runs its own sign-in and can't set `callbackVault` to another vault.
 
 ## Google setup
 

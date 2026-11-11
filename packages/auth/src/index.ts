@@ -81,6 +81,11 @@ function callbackVaultFor(options: AuthOptions, providers: readonly ProviderId[]
   if (!targetOptions) fail(`vault "${vault.id}" sets callbackVault "${id}", which must be a host vault that enables auth`);
   const missing = providers.find((provider) => !targetOptions.providers[provider]);
   if (missing) fail(`vault "${vault.id}" offers ${missing}, but its callbackVault "${id}" doesn't list it under providers`);
+  // The target forwards nothing itself, or sign-in could bounce between vaults forever (or hop through a chain).
+  const targetOwner = targetOptions.callbackVault ?? host[0]!.id;
+  if (targetOwner !== target.id) {
+    fail(`vault "${vault.id}" sends sign-in to "${id}", but "${id}" sends its own to "${targetOwner}"; set the same callbackVault on every host vault`);
+  }
   return target;
 }
 

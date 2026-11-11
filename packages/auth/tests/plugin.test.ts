@@ -89,4 +89,15 @@ describe("one sign-in per host app", () => {
   ])("fails config resolution when the callbackVault %s", (_case, vaults, error) => {
     expect(() => resolve(site(...vaults), "work")).toThrow(error);
   });
+
+  it("refuses callback vaults that forward to each other, which would loop sign-in forever", () => {
+    // journal comes first, so work's default is journal, while journal names work.
+    const vaults = site(
+      { id: "journal", plugins: [auth({ providers: { github }, callbackVault: "work" })] },
+      { id: "work", plugins: [auth({ providers: { github } })] },
+    );
+
+    expect(() => resolve(vaults, "journal")).toThrow(/vault "journal" sends sign-in to "work", but "work" sends its own to "journal"/);
+    expect(() => resolve(vaults, "work")).toThrow(/vault "work" sends sign-in to "journal", but "journal" sends its own to "work"/);
+  });
 });
