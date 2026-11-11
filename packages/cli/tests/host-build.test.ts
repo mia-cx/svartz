@@ -272,8 +272,14 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
         await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
         // Proves SSR note styles and shared stylesheet links survive catchall hydration.
         await page.goto(`http://127.0.0.1:${builtPort}/blog/styled`);
-        await page.getByRole("button", { name: /^Search/ }).click();
-        await page.getByRole("combobox", { name: "Search notes" }).waitFor();
+        // The SSR Search button is enabled before hydration attaches its handler, and this is the cold first load,
+        // so a single click can land on nothing. Retry until the search opens, which also proves the page hydrated.
+        const search = page.getByRole("combobox", { name: "Search notes" });
+        for (let attempt = 0; !(await search.isVisible()); attempt++) {
+          if (attempt === 50) throw new Error("Search never opened: the page did not hydrate");
+          await page.getByRole("button", { name: /^Search/ }).click();
+          await search.waitFor({ timeout: 250 }).catch(() => undefined);
+        }
         expect(await page.locator("head link[rel=stylesheet]").evaluateAll((links) =>
           links.map((link) => (link as HTMLLinkElement).href)))
           .toEqual(expect.arrayContaining(stylesheets.map((href) => new URL(href, page.url()).href)));
