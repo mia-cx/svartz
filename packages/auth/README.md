@@ -17,4 +17,4 @@ import { readIdentity } from "@svartz/auth/server";
 const reader = await readIdentity(request, context.env); // Identity | null
 ```
 
-Set `SVARTZ_SESSION_SECRET` (32+ random characters) and the client secret on the server. Setup, routes and the sign-in dialog: [docs/auth.md](../../docs/auth.md).
+Set `PRIVATE_SVARTZ_SESSION_SECRET` (32+ random characters) and the client secret on the server. Setup, routes and the sign-in dialog: [docs/auth.md](../../docs/auth.md).

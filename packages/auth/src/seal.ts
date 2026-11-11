@@ -3,8 +3,11 @@
  * Each purpose gets its own key, so a value sealed for one cookie never opens as another.
  */
 
-/** The environment variable every Svartz plugin reads the session secret from. */
-export const SESSION_SECRET_ENV = "SVARTZ_SESSION_SECRET";
+/**
+ * The environment variable every Svartz plugin reads the session secret from. `PRIVATE_` keeps it in
+ * `$env/dynamic/private` on hosts whose `env.privatePrefix` is `PRIVATE_`, and on hosts with no prefix.
+ */
+export const SESSION_SECRET_ENV = "PRIVATE_SVARTZ_SESSION_SECRET";
 /** Shorter secrets are refused: HKDF stretches entropy, it doesn't create it. */
 export const SESSION_SECRET_MIN_LENGTH = 32;
 

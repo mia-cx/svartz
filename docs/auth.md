@@ -33,12 +33,12 @@ The vault needs a server target (`cloudflare-workers`, `cloudflare-pages` or `no
 
 Set two secrets on the server, never in config:
 
-- `SVARTZ_SESSION_SECRET`: a random value of at least 32 characters, such as the output of `openssl rand -base64 32`. Every Svartz plugin reads sessions with it. Changing it signs everyone out.
+- `PRIVATE_SVARTZ_SESSION_SECRET`: a random value of at least 32 characters, such as the output of `openssl rand -base64 32`. Every Svartz plugin reads sessions with it. Changing it signs everyone out. The `PRIVATE_` prefix keeps it visible to hosts that set SvelteKit's `env.privatePrefix` to `PRIVATE_`.
 - The provider's client secret, under the name `clientSecret.env` gives.
 
-On Workers, `wrangler secret put SVARTZ_SESSION_SECRET`. On Node, set them in the process environment, along with `ORIGIN` (such as `ORIGIN=https://notes.example`) so the callback URL GitHub sees uses your real origin. Under `svartz dev`, put them in `.env`.
+On Workers, `wrangler secret put PRIVATE_SVARTZ_SESSION_SECRET`. On Node, set them in the process environment, along with `ORIGIN` (such as `ORIGIN=https://notes.example`) so the callback URL GitHub sees uses your real origin. Under `svartz dev`, put them in `.env`.
 
-Without `SVARTZ_SESSION_SECRET`, every auth route answers 503 naming it.
+Without `PRIVATE_SVARTZ_SESSION_SECRET`, every auth route answers 503 naming it.
 
 ## GitHub setup
 
@@ -65,7 +65,7 @@ A signed-in reader is an identity and nothing more:
 }
 ```
 
-The identity is encrypted with AES-GCM into the `__Host-svartz-session` cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`) for 30 days, under a key HKDF derives from `SVARTZ_SESSION_SECRET`. GitHub's access token is used once, to read the profile, and then dropped; it is never stored or sent to the browser. A tampered, expired or wrong-key cookie reads as signed out. There is no server-side session store, so signing out clears the cookie in that browser only.
+The identity is encrypted with AES-GCM into the `__Host-svartz-session` cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`) for 30 days, under a key HKDF derives from `PRIVATE_SVARTZ_SESSION_SECRET`. GitHub's access token is used once, to read the profile, and then dropped; it is never stored or sent to the browser. A tampered, expired or wrong-key cookie reads as signed out. There is no server-side session store, so signing out clears the cookie in that browser only.
 
 Local development over `http://localhost` works in Chrome and Firefox, which accept `Secure` cookies there.
 
@@ -107,4 +107,4 @@ const guestbook: ServerModuleFactory = () => async (request, context) => {
 export default guestbook;
 ```
 
-`readIdentity(request, env)` answers the `Identity`, or `null` when nobody is signed in or `SVARTZ_SESSION_SECRET` is unset. The plugin must be on a vault served from the same origin, since the cookie is.
+`readIdentity(request, env)` answers the `Identity`, or `null` when nobody is signed in or `PRIVATE_SVARTZ_SESSION_SECRET` is unset. The plugin must be on a vault served from the same origin, since the cookie is.
