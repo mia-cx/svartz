@@ -9,7 +9,7 @@
     "node": "^20.19.0 || >=22.12.0"
   },
   "type": "module",
-  "description": "Readers edit a Svartz page from the site and get a GitHub pull request",
+  "description": "Readers edit or add a Svartz page from the site and get a GitHub pull request",
   "exports": {
     ".": {
       "import": "./dist/index.js",
