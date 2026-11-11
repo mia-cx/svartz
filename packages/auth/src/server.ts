@@ -54,7 +54,8 @@ function cookie(name: string, value: string, maxAge: number): string {
 function isIdentity(value: unknown): value is Identity {
   if (!value || typeof value !== "object") return false;
   const identity = value as Record<string, unknown>;
-  return ["id", "name", "handle", "avatarUrl", "profileUrl"].every((key) => typeof identity[key] === "string")
+  return ["id", "name"].every((key) => typeof identity[key] === "string")
+    && ["handle", "avatarUrl", "profileUrl"].every((key) => identity[key] === undefined || typeof identity[key] === "string")
     && typeof identity.provider === "string" && isProviderId(identity.provider);
 }
 

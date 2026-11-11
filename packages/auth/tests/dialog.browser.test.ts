@@ -21,7 +21,7 @@ describe("the sign-in dialog", () => {
     history.replaceState(null, "", "/notes/garden/?view=all#reply");
     const trigger = page({
       endpoint: "/notes/_svartz/auth",
-      providers: [{ id: "github", label: "GitHub" }],
+      providers: [{ id: "google", label: "Google" }, { id: "discord", label: "Discord" }, { id: "github", label: "GitHub" }],
       privacyNotice: "/notes/privacy/",
     });
 
@@ -30,10 +30,15 @@ describe("the sign-in dialog", () => {
     const dialog = document.querySelector("dialog")!;
     expect(dialog.open).toBe(true);
     expect(document.getElementById(dialog.getAttribute("aria-labelledby")!)?.textContent).toBe("Sign in");
-    const github = [...dialog.querySelectorAll("a")].find((link) => link.textContent === "Continue with GitHub")!;
-    expect(github.getAttribute("href")).toBe(`/notes/_svartz/auth/start/github/?returnTo=${encodeURIComponent("/notes/garden/?view=all#reply")}`);
+    const providers = [...dialog.querySelectorAll<HTMLAnchorElement>(".sv-auth-provider")];
+    const returnTo = encodeURIComponent("/notes/garden/?view=all#reply");
+    expect(providers.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
+      ["Continue with Google", `/notes/_svartz/auth/start/google/?returnTo=${returnTo}`],
+      ["Continue with Discord", `/notes/_svartz/auth/start/discord/?returnTo=${returnTo}`],
+      ["Continue with GitHub", `/notes/_svartz/auth/start/github/?returnTo=${returnTo}`],
+    ]);
     // SvelteKit's router listens on the whole document; sign-in must reach the server, not a client route.
-    expect(github.hasAttribute("data-sveltekit-reload")).toBe(true);
+    expect(providers.every((link) => link.hasAttribute("data-sveltekit-reload"))).toBe(true);
     expect([...dialog.querySelectorAll("a")].find((link) => link.textContent === "Privacy notice")?.getAttribute("href")).toBe("/notes/privacy/");
   });
 
