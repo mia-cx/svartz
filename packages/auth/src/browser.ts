@@ -67,6 +67,8 @@ function render({ endpoint, providers, privacyNotice }: SignInConfig, returnTo: 
     if (mark) link.append(icon([mark], { fill: "currentColor" }));
     link.append(`Continue with ${label}`);
     link.href = `${endpoint}/start/${encodeURIComponent(id)}/?returnTo=${encodeURIComponent(returnTo)}`;
+    // SvelteKit's router handles clicks anywhere in the document; sign-in has to reach the server.
+    link.setAttribute("data-sveltekit-reload", "");
     list.append(element("li", "", link));
   }
   // Land on the first provider rather than Close, the first control in the dialog.

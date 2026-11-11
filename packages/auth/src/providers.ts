@@ -29,6 +29,9 @@ type GitHubUser = { id?: unknown; login?: unknown; name?: unknown; avatar_url?: 
 
 const text = (value: unknown): string | undefined => typeof value === "string" && value ? value : undefined;
 
+/** How long the callback waits for the provider's profile, body included, before failing the sign-in. */
+const PROFILE_TIMEOUT_MS = 10_000;
+
 export const PROVIDERS: Readonly<Record<ProviderId, ProviderDefinition>> = {
   github: {
     label: "GitHub",
@@ -44,6 +47,8 @@ export const PROVIDERS: Readonly<Record<ProviderId, ProviderDefinition>> = {
           // GitHub's API refuses requests without one.
           "user-agent": "svartz-auth",
         },
+        // Also bounds reading the body below; a hung API would otherwise hold the callback open.
+        signal: AbortSignal.timeout(PROFILE_TIMEOUT_MS),
       });
       if (!response.ok) throw new Error(`GitHub answered ${response.status} when asked for the signed-in user`);
       const user = await response.json() as GitHubUser;

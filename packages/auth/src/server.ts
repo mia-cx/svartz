@@ -138,7 +138,7 @@ async function callback({ request, url, provider, client, secret }: Step): Promi
     return failure(400, "invalid_state", "This sign-in expired or began in another browser. Sign in again.",
       { "set-cookie": clearFlow });
   }
-  // The reader declined at the provider: back where they were, still signed out.
+  // The reader declined at the provider: back where they were, with any existing session untouched.
   if (url.searchParams.has("error")) return redirect(flow.returnTo, [clearFlow]);
   const code = url.searchParams.get("code");
   if (!code) return failure(400, "invalid_request", "The provider sent no authorization code.", { "set-cookie": clearFlow });

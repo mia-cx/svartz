@@ -32,6 +32,8 @@ describe("the sign-in dialog", () => {
     expect(document.getElementById(dialog.getAttribute("aria-labelledby")!)?.textContent).toBe("Sign in");
     const github = [...dialog.querySelectorAll("a")].find((link) => link.textContent === "Continue with GitHub")!;
     expect(github.getAttribute("href")).toBe(`/notes/_svartz/auth/start/github/?returnTo=${encodeURIComponent("/notes/garden/?view=all#reply")}`);
+    // SvelteKit's router listens on the whole document; sign-in must reach the server, not a client route.
+    expect(github.hasAttribute("data-sveltekit-reload")).toBe(true);
     expect([...dialog.querySelectorAll("a")].find((link) => link.textContent === "Privacy notice")?.getAttribute("href")).toBe("/notes/privacy/");
   });
 

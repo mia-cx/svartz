@@ -71,12 +71,12 @@ Local development over `http://localhost` works in Chrome and Firefox, which acc
 
 ## Routes
 
-Under `<mount>/_svartz/auth/`:
+Under `<base><mount>/_svartz/auth/`, where `<base>` is the deployment base path, if any:
 
 | Route | Does |
 | --- | --- |
 | `GET start/github/?returnTo=<path>` | Redirects to GitHub. The OAuth state and PKCE verifier wait in a 10-minute sealed cookie. `returnTo` must be a path on the same site; anything else answers 400. Without it, the reader returns to the vault's home. |
-| `GET callback/github/` | Completes sign-in and redirects to `returnTo`. A reader who declines at GitHub returns there signed out. |
+| `GET callback/github/` | Completes sign-in and redirects to `returnTo`. A reader who declines at GitHub returns there, and any session they already had stays as it was. |
 | `GET me/` | The identity, or `null`. |
 | `POST sign-out/` | Clears the session; answers 204. Refused from another origin. |
 

@@ -135,6 +135,27 @@ describe("signing in with GitHub", () => {
     expect(cookiesFrom(callback)).toEqual(["__Host-svartz-oauth="]);
   });
 
+  it("gives up on a GitHub profile request that never answers, without signing the reader in", async () => {
+    const github = stubGitHub();
+    const answer = globalThis.fetch;
+    // GitHub's API hangs. Only a request carrying a deadline ever settles, when that deadline fires.
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+      // Read the URL without wrapping a Request: that would consume the token request's body.
+      const url = input instanceof Request ? input.url : String(input);
+      if (url !== "https://api.github.com/user") return answer(input, init);
+      return new Promise((_resolve, reject) => {
+        if (init?.signal) reject(new DOMException("The operation timed out.", "TimeoutError"));
+      });
+    });
+    const request = site();
+    const { state, flowCookies } = await authorize(request, github, "/notes/");
+
+    const callback = await request(`${AUTH}/callback/github/?code=issued-code&state=${state}`, { cookies: flowCookies });
+
+    expect(callback.status).toBe(502);
+    expect(cookiesFrom(callback).some((pair) => pair.startsWith("__Host-svartz-session="))).toBe(false);
+  });
+
   it("refuses a callback whose state doesn't match the sign-in this browser started", async () => {
     const github = stubGitHub();
     const request = site();

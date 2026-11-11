@@ -23,4 +23,8 @@ describe("the auth plugin", () => {
   it("fails the build for a provider it doesn't support", () => {
     expect(() => auth({ providers: { gitlab: github } } as unknown as AuthOptions)).toThrow(/unknown provider "gitlab"/);
   });
+
+  it.each(["", "  "])("fails the build when the client secret's variable name is %j", (env) => {
+    expect(() => auth({ providers: { github: { ...github, clientSecret: { env } } } })).toThrow(/clientSecret must name its environment variable/);
+  });
 });

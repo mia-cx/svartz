@@ -32,7 +32,7 @@ function validate(options: AuthOptions): ProviderId[] {
     if (!isProviderId(name)) fail(`unknown provider "${name}"; choose from ${Object.keys(PROVIDERS).join(", ")}`);
     const app = options.providers[name];
     if (typeof app?.clientId !== "string" || !app.clientId) fail(`providers.${name}.clientId must be the OAuth app's client ID`);
-    if (typeof app.clientSecret?.env !== "string") {
+    if (typeof app.clientSecret?.env !== "string" || !app.clientSecret.env.trim()) {
       fail(`providers.${name}.clientSecret must name its environment variable: { env: "NAME" }`);
     }
   }
