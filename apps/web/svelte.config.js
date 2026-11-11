@@ -45,8 +45,9 @@ const config = {
 		adapter: negotiatedAdapter,
 		csp: {
 			directives: {
-				// Themes pin the reader's colour mode with an inline script before first paint.
-				'script-src': ['self', 'blob:', COLOR_MODE_SCRIPT_HASH],
+				// Themes pin the reader's colour mode with an inline script before first paint. The submissions
+				// plugin's Turnstile challenge loads Cloudflare's script; its iframe needs no rule, since no frame-src is set.
+				'script-src': ['self', 'blob:', COLOR_MODE_SCRIPT_HASH, 'https://challenges.cloudflare.com'],
 				'style-src': ['self', 'blob:', 'unsafe-inline']
 			}
 		},

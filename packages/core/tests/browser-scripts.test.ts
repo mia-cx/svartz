@@ -53,7 +53,7 @@ describe("browser script lifecycle", () => {
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
-  it("passes resource settings without mixing mounts", async () => {
+  it("passes resource settings and the deployment base without mixing mounts", async () => {
     const calls: unknown[][] = [];
     const scripts = [{
       id: "analytics",
@@ -61,10 +61,10 @@ describe("browser script lifecycle", () => {
       load: async () => ({ mount: (...args: unknown[]) => { calls.push(args); } }),
     }];
     await mountBrowserScripts(scripts, "/blog/one/");
-    await mountBrowserScripts(scripts, "/blog/two/");
+    await mountBrowserScripts(scripts, "/docs/blog/two/", { base: "/docs" });
     expect(calls).toEqual([
-      ["/blog/one/", { provider: "google", tagId: "G-123" }],
-      ["/blog/two/", { provider: "google", tagId: "G-123" }],
+      ["/blog/one/", { provider: "google", tagId: "G-123" }, { base: "" }],
+      ["/docs/blog/two/", { provider: "google", tagId: "G-123" }, { base: "/docs" }],
     ]);
   });
 });

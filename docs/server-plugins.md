@@ -92,6 +92,23 @@ npx wrangler d1 execute DB --local --command "SELECT * FROM entries"
 
 The app needs `wrangler` installed; the standalone shell has it. Without a Wrangler config, `context.env` holds only the dev server's environment variables.
 
+## Build data
+
+Options come from config. For what only the build knows, such as which notes it published, a plugin hook sets JSON for its own server module, keyed by its plugin id:
+
+```ts
+emitArtifacts(ctx) {
+  const pages = ctx.index?.entries.map((entry) => entry.href) ?? [];
+  getCompilerContributions(ctx).serverData.set("hello", { pages });
+},
+```
+
+The factory receives it as its second argument, or `undefined` when the hooks set none: `const hello: ServerModuleFactory<Options, { pages: string[] }> = (options, data) => …`. Like options, it is written into the server bundle only.
+
+## Calling the server from the browser
+
+A plugin's [browser script](../vaults/docs/guides/create-plugin.md) gets the deployment base as `context.base` in `mount(pathname, options, context)`. Its server answers at `${context.base}${mountPath}/_svartz/<id>/`; pass the vault's `mountPath` (`ctx.config.mountPath`) in the script's options.
+
 ## Routing
 
 - A request reaches plugin `<id>` only when its path starts with `<base><mountPath>/_svartz/<id>/`, where `<base>` is the deployment base (`target.basePath` or SvelteKit's `paths.base`). The id must match a whole path segment.

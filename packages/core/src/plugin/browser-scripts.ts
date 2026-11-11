@@ -1,6 +1,16 @@
+/** Where the site is served, for scripts that build URLs, such as a server plugin's `<base>/_svartz/<id>/`. */
+export interface BrowserScriptContext {
+  /** SvelteKit's deployment base path (`paths.base`), without a trailing slash; `""` at the domain root. */
+  readonly base: string;
+}
+
 /** Lifecycle contract for a script contributed by a content plugin. */
 export interface BrowserScriptModule {
-  mount(pathname: string, options?: unknown): void | (() => void) | Promise<void | (() => void)>;
+  mount(
+    pathname: string,
+    options?: unknown,
+    context?: BrowserScriptContext,
+  ): void | (() => void) | Promise<void | (() => void)>;
 }
 
 export interface BrowserScriptLoader {
@@ -13,6 +23,7 @@ export interface BrowserScriptLoader {
 export async function mountBrowserScripts(
   scripts: readonly BrowserScriptLoader[],
   pathname: string,
+  context: BrowserScriptContext = { base: "" },
 ): Promise<() => void> {
   const disposers: Array<() => void> = [];
   const disposeAll = (): unknown[] => {
@@ -33,7 +44,7 @@ export async function mountBrowserScripts(
       if (!module || typeof module.mount !== "function") {
         throw new Error(`[svartz:plugin] browser script "${id}" must export mount(pathname)`);
       }
-      const dispose = await module.mount(pathname, options);
+      const dispose = await module.mount(pathname, options, context);
       if (typeof dispose === "function") disposers.push(dispose);
     }
   } catch (error) {

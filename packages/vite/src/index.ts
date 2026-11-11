@@ -125,6 +125,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   let emittedAssets = new Map<string, Artifact>();
   let markdownRoutes: Record<string, string> = {};
   let emittedBrowserResources: BrowserResource[] = [];
+  let emittedServerData: ReadonlyMap<string, unknown> = new Map();
   let protectedBridgeModules: ProtectedBridgeModule[] = [];
   let runnerMeta = new Map<string, unknown>();
   let devServer: ViteDevServer | undefined;
@@ -265,6 +266,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       .map((resource) => resource.importId.startsWith("@svartz/plugins/")
         ? { ...resource, importId: fileURLToPath(import.meta.resolve(resource.importId)) }
         : resource);
+    emittedServerData = runnerContext.compiler?.serverData ?? new Map();
     emittedAssets = new Map(emittedArtifacts
       .filter((artifact) => artifact.type === "asset" && artifact.key.startsWith("assets/"))
       .map((artifact) => [assetOutputPath(artifact), artifact]));
@@ -299,7 +301,9 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
           ),
           writeGeneratedModule(
             getGeneratedRuntimeServerModulePath(context.config),
-            createServerRegistrySource(context.config, plugins, deploymentBasePath(context.config, kitBasePath), markdownRoutes),
+            createServerRegistrySource(
+              context.config, plugins, deploymentBasePath(context.config, kitBasePath), markdownRoutes, emittedServerData,
+            ),
           ),
         ],
         { concurrency: "unbounded", discard: true },
@@ -509,7 +513,9 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       }
 
       if (id === RESOLVED_SERVER_VIRTUAL_ID) {
-        return createServerRegistrySource(context.config, plugins, deploymentBasePath(context.config, kitBasePath), markdownRoutes);
+        return createServerRegistrySource(
+          context.config, plugins, deploymentBasePath(context.config, kitBasePath), markdownRoutes, emittedServerData,
+        );
       }
 
       return loadVirtualModule(id) ?? null;

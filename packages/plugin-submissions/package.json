@@ -1,0 +1,56 @@
+{
+  "name": "@svartz/plugin-submissions",
+  "version": "2.3.0",
+  "private": true,
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "type": "module",
+  "description": "Readers edit a Svartz page from the site and get a GitHub pull request",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./server": {
+      "import": "./dist/server.js",
+      "types": "./dist/server.d.ts"
+    },
+    "./browser": {
+      "import": "./dist/browser.js",
+      "types": "./dist/browser.d.ts"
+    },
+    "./browser.css": "./dist/browser.css"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/server.ts src/browser.ts --format esm --dts && node -e \"require('node:fs').copyFileSync('src/browser.css', 'dist/browser.css')\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mia-cx/svartz.git",
+    "directory": "packages/plugin-submissions"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "@svartz/auth": "workspace:*",
+    "@svartz/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vitest/browser-playwright": "^4.0.18",
+    "playwright": "^1.58.2",
+    "svartz": "workspace:*",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^4.0.18"
+  }
+}

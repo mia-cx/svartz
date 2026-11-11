@@ -19,6 +19,11 @@ export interface CompilerContributions {
   /** Late source transforms for mdsvex's separate, older SVX parser. */
   svxSourceTransforms: Array<(source: string) => string>;
   browserResources: Map<string, BrowserResource>;
+  /**
+   * JSON a plugin's hooks hand its own server module for this build, keyed by plugin id. The module's factory
+   * receives it as its second argument. It ships in the server bundle only, never to the browser.
+   */
+  serverData: Map<string, unknown>;
 }
 
 export function getCompilerContributions(ctx: PluginContext): CompilerContributions {
@@ -27,5 +32,6 @@ export function getCompilerContributions(ctx: PluginContext): CompilerContributi
     rehypePlugins: [],
     svxSourceTransforms: [],
     browserResources: new Map(),
+    serverData: new Map(),
   };
 }

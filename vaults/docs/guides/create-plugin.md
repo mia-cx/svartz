@@ -57,6 +57,8 @@ export function mount(pathname: string) {
 
 Mount `<a>` or `<button>` elements as direct children of the region. Each needs a visible label or an `aria-label`. An empty region takes no space.
 
+`mount` also receives the resource's `options` and a `context` whose `base` is the deployment base path (`""` at the domain root). `pathname` includes it. Build URLs from it, such as `${context.base}${mountPath}/_svartz/<id>/` for a plugin's own server.
+
 ## Test
 
 Test the hook with `runStages` from `@svartz/core` and a small `PluginContext`. For compiler features, also test the generated `.svelte` artifact. `.md` and `.mdx` must keep authored Svelte inert; `.svx` may execute it. Check the disabled and same-ID replacement cases so they do not leave compiler steps or browser resources behind.

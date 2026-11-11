@@ -1,0 +1,217 @@
+/*
+ * The edit panel: a full-height sheet on the end edge over a scrim, built on the theme's tokens
+ * so it matches every Svartz theme. Phones get the full width.
+ */
+.svartz-submissions {
+	inline-size: 100vw;
+	block-size: 100dvh;
+	max-inline-size: none;
+	max-block-size: none;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--sv-text);
+	font-family: var(--sv-font-sans);
+}
+
+.svartz-submissions::backdrop {
+	background: var(--sv-scrim);
+	backdrop-filter: blur(4px);
+}
+
+.svartz-submissions-panel {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+	box-sizing: border-box;
+	inline-size: min(100%, 52rem);
+	block-size: 100%;
+	margin-inline-start: auto;
+	border-inline-start: var(--sv-rule-width) solid var(--sv-rule);
+	background: var(--sv-paper);
+	box-shadow: var(--sv-shadow);
+}
+
+.svartz-submissions[open] .svartz-submissions-panel {
+	animation: svartz-submissions-in var(--sv-duration-slow) var(--sv-ease);
+}
+
+@keyframes svartz-submissions-in {
+	from {
+		translate: 2rem 0;
+		opacity: 0;
+	}
+}
+
+.svartz-submissions-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--sv-space-3);
+	padding: var(--sv-space-3) var(--sv-space-3) var(--sv-space-3) var(--sv-space-5);
+	border-block-end: var(--sv-rule-width) solid var(--sv-rule);
+}
+
+.svartz-submissions-header h2 {
+	margin: 0;
+	color: var(--sv-ink);
+	font-size: var(--sv-step-1);
+	font-weight: 700;
+	line-height: var(--sv-leading-tight);
+}
+
+.svartz-submissions-form {
+	display: grid;
+	grid-template-rows: minmax(0, 1fr) auto auto auto;
+	gap: var(--sv-space-4);
+	min-block-size: 0;
+	padding: var(--sv-space-4) var(--sv-space-5) var(--sv-space-5);
+}
+
+.svartz-submissions-source {
+	display: flex;
+	min-block-size: 0;
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	border-radius: var(--sv-radius-m);
+	background: var(--sv-sunken);
+	overflow: hidden;
+}
+
+.svartz-submissions-source:focus-within {
+	border-color: var(--sv-rule-strong);
+}
+
+.svartz-submissions-status {
+	margin: auto;
+	color: var(--sv-muted);
+	font-size: var(--sv-step--1);
+}
+
+.svartz-submissions .cm-editor {
+	flex: 1;
+	min-inline-size: 0;
+	background: transparent;
+	color: var(--sv-text);
+	font-family: var(--sv-font-mono);
+	font-size: var(--sv-step--1);
+}
+
+.svartz-submissions .cm-editor.cm-focused {
+	outline: none;
+}
+
+.svartz-submissions .cm-scroller {
+	font-family: inherit;
+	line-height: 1.6;
+}
+
+.svartz-submissions .cm-content {
+	padding: var(--sv-space-3) var(--sv-space-4);
+	caret-color: var(--sv-ink);
+}
+
+.svartz-submissions .cm-cursor {
+	border-inline-start-color: var(--sv-ink);
+}
+
+.svartz-submissions .cm-selectionBackground,
+.svartz-submissions .cm-focused .cm-selectionBackground {
+	background: var(--sv-selection);
+}
+
+.svartz-submissions-note {
+	display: grid;
+	gap: var(--sv-space-2);
+}
+
+.svartz-submissions-note[hidden] {
+	display: none;
+}
+
+.svartz-submissions textarea {
+	box-sizing: border-box;
+	inline-size: 100%;
+	padding: var(--sv-space-2) var(--sv-space-3);
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	border-radius: var(--sv-radius-m);
+	background: var(--sv-paper);
+	color: var(--sv-text);
+	font: inherit;
+	font-size: var(--sv-step--1);
+	line-height: var(--sv-leading);
+	resize: vertical;
+	/* Host form resets (Tailwind forms) draw their own ring. */
+	appearance: none;
+}
+
+/* Turnstile's widget is 65px tall; holding the space keeps the buttons still while it loads. */
+.svartz-submissions-turnstile {
+	min-block-size: 65px;
+}
+
+.svartz-submissions-turnstile[hidden] {
+	display: none;
+}
+
+.svartz-submissions-error {
+	--sv-hue: var(--sv-hue-red);
+	margin: 0;
+	color: var(--sv-signal);
+	font-size: var(--sv-step--1);
+}
+
+.svartz-submissions-error[hidden] {
+	display: none;
+}
+
+.svartz-submissions-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--sv-space-2);
+}
+
+.svartz-submissions-opened {
+	flex-basis: 100%;
+	margin: 0;
+	color: var(--sv-ink);
+}
+
+/* The one filled action: Open pull request, then View pull request. */
+.svartz-submissions-primary {
+	display: inline-flex;
+	align-items: center;
+	padding: var(--sv-space-1) var(--sv-space-3);
+	/* `-accent-text` rather than `-accent`: on-accent text then clears 4.5:1 in both modes. */
+	border: var(--sv-rule-width) solid var(--sv-accent-text);
+	border-radius: var(--sv-radius-m);
+	background: var(--sv-accent-text);
+	color: var(--sv-on-accent);
+	font-family: var(--sv-font-sans);
+	font-size: var(--sv-label-size);
+	font-weight: 600;
+	line-height: 1.4;
+	text-decoration: none;
+	text-transform: uppercase;
+	cursor: pointer;
+	transition: opacity var(--sv-duration-fast) var(--sv-ease);
+}
+
+.svartz-submissions-primary:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+@media (max-width: 40rem) {
+	.svartz-submissions-panel {
+		border-inline-start: 0;
+	}
+
+	.svartz-submissions-header {
+		padding-inline-start: var(--sv-space-4);
+	}
+
+	.svartz-submissions-form {
+		padding-inline: var(--sv-space-4);
+	}
+}
