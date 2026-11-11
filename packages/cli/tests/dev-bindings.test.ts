@@ -164,7 +164,7 @@ describe("svartz dev hands server plugins the project's Wrangler bindings", () =
     await symlink(shellModules, path.join(root, "node_modules"), "dir");
     await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
     await mkdir(path.join(root, "src/routes/count"), { recursive: true });
-    for (const name of ["+page.svelte", "+page.ts"]) {
+    for (const name of ["+page.svelte", "+page.ts", "+page.server.ts"]) {
       await writeFile(path.join(root, "src/routes/[...slug]", name),
         await readFile(path.join(workspaceRoot, "packages/cli/template/src/routes/[...slug]", name)));
     }
