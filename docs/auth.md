@@ -24,12 +24,13 @@ export default defineConfig({
 });
 ```
 
-The vault needs a server target (`cloudflare-workers`, `cloudflare-pages` or `node`).
+The vault needs a server target (`cloudflare-workers`, `cloudflare-pages` or `node`), or a `host` target in an app that runs [`svartzHandle`](host-vaults.md#server-plugins).
 
 | Option | Value |
 | --- | --- |
 | `providers` | The providers readers may use, in the order the sign-in dialog lists them. Each takes the OAuth app's `clientId` and names its secret with `clientSecret: { env: "NAME" }`. Choose from `google`, `discord` and `github`. |
 | `privacyNotice` | Optional URL of the site's privacy notice. The sign-in dialog links to it. A site that stores readers' names and avatars owes them one. |
+| `callbackVault` | Optional id of the host vault that runs every sign-in in the app. Defaults to the first host vault that enables auth. See [several vaults](#several-vaults). |
 
 ## Secrets
 
@@ -42,7 +43,30 @@ On Workers, `wrangler secret put PRIVATE_SVARTZ_SESSION_SECRET`. On Node, set th
 
 Without `PRIVATE_SVARTZ_SESSION_SECRET`, every auth route answers 503 naming it.
 
-Each provider calls back to `https://<your host><base><mount>/_svartz/auth/callback/<provider>/`, such as `https://notes.example/_svartz/auth/callback/google/`. Register that URL with the provider, once per environment you deploy.
+Each provider calls back to `https://<your host><base><mount>/_svartz/auth/callback/<provider>/`, such as `https://notes.example/_svartz/auth/callback/google/`. Register that URL with the provider, once per environment you deploy. In a host app with several vaults, `<mount>` is the callback vault's.
+
+## Several vaults
+
+Host vaults share one app and one origin, so one sign-in covers all of them. Every vault's sign-in runs through one callback vault, so each provider needs a single callback URL, which matters for a GitHub OAuth App's single one. The callback vault is the first host vault that enables auth, or the one `callbackVault` names:
+
+```ts
+const signIn = {
+  providers: { github: { clientId: "Iv23liExample", clientSecret: { env: "PRIVATE_GITHUB_CLIENT_SECRET" } } },
+  callbackVault: "journal",
+};
+
+export default defineConfig({
+  version: "1.0.0",
+  vaults: [
+    { id: "journal", path: "./content/journal", mountPath: "/journal", target: { type: "host" }, plugins: [auth(signIn)] },
+    { id: "work", path: "./content/work", mountPath: "/work", target: { type: "host" }, plugins: [auth(signIn)] },
+  ],
+});
+```
+
+Here a reader who signs in on a `/work/` page goes through `/journal/_svartz/auth/`, the provider calls back to `/journal/_svartz/auth/callback/github/`, and the reader lands back on the `/work/` page. The session cookie is set for the whole origin, so every vault reads them as signed in. The other vaults' `start/` routes forward to the callback vault's, and their `callback/` routes answer 404.
+
+A vault may offer fewer providers than the callback vault, but not more. Config loading fails, naming the vault, when `callbackVault` names no vault, a vault without auth, or a vault missing one of this vault's providers. Each standalone vault is its own app, so it runs its own sign-in and can't set `callbackVault` to another vault.
 
 ## Google setup
 

@@ -47,7 +47,7 @@ function validate(options: AuthOptions): ProviderId[] {
 
 /**
  * The deployment base standalone shells give SvelteKit (`target.basePath` for `static` and `node`), so the browser
- * can reach the routes. Host vaults can't route server plugins yet.
+ * can reach the routes. A host app's `paths.base` isn't known here, so host vaults assume none.
  */
 function deploymentBase(config: ResolvedConfig): string {
   const { target } = config;
