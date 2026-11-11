@@ -20,6 +20,7 @@ import {
 import type { Plugin, ViteDevServer } from "vite";
 import {
   RESOLVED_ARTIFACTS_VIRTUAL_ID,
+  RESOLVED_SERVER_VIRTUAL_ID,
   RESOLVED_THEME_VIRTUAL_ID,
   loadVirtualModule,
   resolveVirtualModuleId,
@@ -28,11 +29,13 @@ import {
 } from "./virtual-modules";
 import {
   createArtifactsVirtualModuleSource,
+  createServerRegistrySource,
   getGeneratedArtifactsRoot,
   getGeneratedIndexModulePath,
   getGeneratedPageModulePath,
   getGeneratedPagesRoot,
   getGeneratedRuntimeArtifactsModulePath,
+  getGeneratedRuntimeServerModulePath,
   getGeneratedRuntimeThemeModulePath,
   getGeneratedSearchModulePath,
   getVaultBuildRoot,
@@ -52,6 +55,7 @@ import {
 } from "./theme-resolver";
 import {
   assertRequiredStages,
+  assertServerPlugins,
   getThemePresetPlugins,
   resolveRuntimePlugins,
 } from "./plugins";
@@ -161,6 +165,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     const generatedPaths = [
       getGeneratedRuntimeThemeModulePath(context.config),
       getGeneratedRuntimeArtifactsModulePath(context.config),
+      getGeneratedRuntimeServerModulePath(context.config),
       getGeneratedIndexModulePath(context.config),
       getGeneratedSearchModulePath(context.config),
       ...emittedArtifacts.map((artifact) => artifact.path),
@@ -245,6 +250,10 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
               deploymentBasePath(context.config, kitBasePath),
             ),
           ),
+          writeGeneratedModule(
+            getGeneratedRuntimeServerModulePath(context.config),
+            createServerRegistrySource(context.config, plugins, deploymentBasePath(context.config, kitBasePath)),
+          ),
         ],
         { concurrency: "unbounded", discard: true },
       ),
@@ -306,6 +315,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       const virtualModules = options.exposeVirtualModules === false ? [] : [
         { find: "virtual:svartz/theme", replacement: getGeneratedRuntimeThemeModulePath(options.config) },
         { find: "virtual:svartz/artifacts", replacement: getGeneratedRuntimeArtifactsModulePath(options.config) },
+        { find: "virtual:svartz/server", replacement: getGeneratedRuntimeServerModulePath(options.config) },
       ];
       return {
         resolve: {
@@ -430,6 +440,10 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
         );
       }
 
+      if (id === RESOLVED_SERVER_VIRTUAL_ID) {
+        return createServerRegistrySource(context.config, plugins, deploymentBasePath(context.config, kitBasePath));
+      }
+
       return loadVirtualModule(id) ?? null;
     },
   };
@@ -440,11 +454,13 @@ export { svartz };
 export { themeSourceAliases } from "./theme-aliases";
 export {
   createArtifactsVirtualModuleSource,
+  createServerRegistrySource,
   getGeneratedArtifactsRoot,
   getGeneratedIndexModulePath,
   getGeneratedPageModulePath,
   getGeneratedPagesRoot,
   getGeneratedRuntimeArtifactsModulePath,
+  getGeneratedRuntimeServerModulePath,
   getGeneratedRuntimeThemeModulePath,
   getGeneratedSearchModulePath,
   getVaultBuildRoot,
@@ -458,6 +474,7 @@ export {
   loadVirtualModule,
   resolveVirtualModuleId,
   assertRequiredStages,
+  assertServerPlugins,
   getThemePresetPlugins,
   resolveRuntimePlugins,
   createVaultChangeEvent,

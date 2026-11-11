@@ -7,6 +7,7 @@ import type {
   ResolvedConfig,
 } from "../types";
 import type { CompilerContributions } from "./compiler";
+import type { ServerModuleSpec } from "./server";
 
 // --- Hook options ---
 
@@ -79,6 +80,8 @@ interface SvartzPlugin {
   readonly id: string;
   readonly contractVersion?: string;
   readonly disabled?: boolean;
+  /** Answers requests under `/_svartz/<id>/` at runtime. Needs a server target; the id must be a URL path segment. */
+  readonly server?: ServerModuleSpec;
 
   // Lifecycle hooks
   buildStart?: PluginHookInput;
@@ -109,6 +112,7 @@ interface NormalizedSvartzPlugin {
   readonly id: string;
   readonly contractVersion?: string;
   readonly disabled?: boolean;
+  readonly server?: ServerModuleSpec;
 
   // Lifecycle hooks
   buildStart?: PluginHook;

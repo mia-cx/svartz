@@ -33,6 +33,7 @@ function legacyWarnUnknownKeys(plugin: SvartzPlugin): void {
     "id",
     "contractVersion",
     "disabled",
+    "server",
     ...STAGE_NAMES,
     "handleChange",
   ]);
@@ -155,6 +156,7 @@ function normalizePlugin(plugin: SvartzPlugin): NormalizedSvartzPlugin {
       contractVersion: plugin.contractVersion,
     }),
     ...(plugin.disabled !== undefined && { disabled: plugin.disabled }),
+    ...(plugin.server !== undefined && { server: plugin.server }),
 
     // Lifecycle hooks
     buildStart: normalizeHook(plugin.buildStart, plugin.id, "buildStart"),

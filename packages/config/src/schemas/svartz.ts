@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { SECRET_ENV_NAME_PATTERN } from "@svartz/core";
 import { WranglerConfigSchema } from "./wrangler";
 import { TailwindThemeConfigSchema } from "./tailwind";
 
@@ -214,7 +215,7 @@ const SemverSchema = Schema.String.pipe(
 const PasswordGroupsSchema = Schema.Record({
   key: Schema.String.pipe(Schema.pattern(/^[A-Za-z0-9_-]+$/)),
   value: Schema.Struct({
-    env: Schema.String.pipe(Schema.pattern(/^(?!(?:PUBLIC_|VITE_))[A-Za-z_][A-Za-z0-9_]*$/)),
+    env: Schema.String.pipe(Schema.pattern(SECRET_ENV_NAME_PATTERN)),
   }),
 });
 

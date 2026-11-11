@@ -79,3 +79,67 @@ describe("runtime plugin requirements", () => {
     expect(() => resolveRuntimePlugins(replacement, required)).not.toThrow();
   });
 });
+
+describe("server plugins", () => {
+  const hello = (server: Record<string, unknown> = {}): SvartzPlugin =>
+    ({ id: "hello", server: { module: "/plugins/hello/server.js", ...server } }) as SvartzPlugin;
+  const vault = (type: string, plugins: SvartzPlugin[] = [hello()]) =>
+    ({ id: "wiki", target: { type }, plugins }) as unknown as ResolvedConfig;
+
+  it("accepts a server plugin on every server target", () => {
+    for (const type of ["cloudflare-workers", "cloudflare-pages", "node"]) {
+      expect(resolveRuntimePlugins(vault(type)).find((plugin) => plugin.id === "hello")?.server)
+        .toEqual({ module: "/plugins/hello/server.js" });
+    }
+  });
+
+  it("fails a static vault, naming the vault and the plugin", () => {
+    expect(() => resolveRuntimePlugins(vault("static"))).toThrow(
+      'Vault "wiki" targets "static", but plugin "hello" serves requests.',
+    );
+  });
+
+  it("fails a static vault whose theme preset brings the server plugin", () => {
+    const theme = { id: "theme", pluginPreset: { plugins: [hello()] } } as SvartzTheme;
+    expect(() => resolveRuntimePlugins(vault("static", []), theme)).toThrow('plugin "hello" serves requests');
+  });
+
+  it("builds a static vault whose server plugin is disabled", () => {
+    expect(() => resolveRuntimePlugins(vault("static", [{ ...hello(), disabled: true }]))).not.toThrow();
+  });
+
+  it("fails a host vault until hosts can route plugin requests", () => {
+    expect(() => resolveRuntimePlugins(vault("host"))).toThrow('Vault "wiki" is a host vault, but plugin "hello" serves requests');
+  });
+
+  it("names secrets by server-only env vars", () => {
+    const withSecret = (options: unknown) => vault("node", [hello({ options })]);
+    expect(() => resolveRuntimePlugins(withSecret({ token: { env: "PRIVATE_GITHUB_TOKEN" } }))).not.toThrow();
+    for (const name of ["PUBLIC_TOKEN", "VITE_TOKEN", "not a name"]) {
+      expect(() => resolveRuntimePlugins(withSecret({ token: { env: name } }))).toThrow(
+        `server.options.token names "${name}"`,
+      );
+    }
+    expect(() => resolveRuntimePlugins(withSecret({ token: { env: "TOKEN", fallback: "x" } }))).toThrow(
+      "exactly { env: \"NAME\" }",
+    );
+  });
+
+  it("refuses options that aren't JSON", () => {
+    for (const [options, path] of [
+      [{ run: () => {} }, "server.options.run"],
+      [{ limit: Number.NaN }, "server.options.limit"],
+      [{ list: [1, undefined] }, "server.options.list[1]"],
+      [{ when: new Date(0) }, "server.options.when"],
+    ] as const) {
+      expect(() => resolveRuntimePlugins(vault("node", [hello({ options })]))).toThrow(`Plugin "hello": ${path}`);
+    }
+  });
+
+  it("refuses ids that can't be a URL path segment and relative modules", () => {
+    expect(() => resolveRuntimePlugins(vault("node", [{ ...hello(), id: "core:hello" } as SvartzPlugin])))
+      .toThrow('Plugin "core:hello" serves requests under /_svartz/<id>/');
+    expect(() => resolveRuntimePlugins(vault("node", [hello({ module: "./server.js" })])))
+      .toThrow('server module "./server.js" is relative');
+  });
+});

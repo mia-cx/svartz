@@ -3,6 +3,13 @@ const SVARTZ_ARTIFACTS_VIRTUAL_ID = "virtual:svartz/artifacts" as const;
 
 const RESOLVED_THEME_VIRTUAL_ID = "\0svartz:theme" as const;
 const RESOLVED_ARTIFACTS_VIRTUAL_ID = "\0svartz:artifacts" as const;
+const SVARTZ_SERVER_VIRTUAL_ID = "virtual:svartz/server" as const;
+const RESOLVED_SERVER_VIRTUAL_ID = "\0svartz:server" as const;
+
+const SERVER_PLACEHOLDER_SOURCE = [
+  'export const registry = { basePath: "", vault: { id: "default", mountPath: "", site: { title: "Svartz" } }, servers: [] };',
+  'export const handle = ({ event, resolve }) => resolve(event);',
+].join("\n");
 
 const THEME_PLACEHOLDER_SOURCE = [
   'export const theme = {',
@@ -53,11 +60,13 @@ const ARTIFACTS_PLACEHOLDER_SOURCE = [
 
 type SvartzVirtualModuleId =
   | typeof SVARTZ_THEME_VIRTUAL_ID
-  | typeof SVARTZ_ARTIFACTS_VIRTUAL_ID;
+  | typeof SVARTZ_ARTIFACTS_VIRTUAL_ID
+  | typeof SVARTZ_SERVER_VIRTUAL_ID;
 
 type ResolvedSvartzVirtualModuleId =
   | typeof RESOLVED_THEME_VIRTUAL_ID
-  | typeof RESOLVED_ARTIFACTS_VIRTUAL_ID;
+  | typeof RESOLVED_ARTIFACTS_VIRTUAL_ID
+  | typeof RESOLVED_SERVER_VIRTUAL_ID;
 
 function resolveVirtualModuleId(
   id: string,
@@ -67,6 +76,8 @@ function resolveVirtualModuleId(
       return RESOLVED_THEME_VIRTUAL_ID;
     case SVARTZ_ARTIFACTS_VIRTUAL_ID:
       return RESOLVED_ARTIFACTS_VIRTUAL_ID;
+    case SVARTZ_SERVER_VIRTUAL_ID:
+      return RESOLVED_SERVER_VIRTUAL_ID;
     default:
       return undefined;
   }
@@ -78,6 +89,8 @@ function loadVirtualModule(id: string): string | undefined {
       return THEME_PLACEHOLDER_SOURCE;
     case RESOLVED_ARTIFACTS_VIRTUAL_ID:
       return ARTIFACTS_PLACEHOLDER_SOURCE;
+    case RESOLVED_SERVER_VIRTUAL_ID:
+      return SERVER_PLACEHOLDER_SOURCE;
     default:
       return undefined;
   }
@@ -85,8 +98,10 @@ function loadVirtualModule(id: string): string | undefined {
 
 export {
   RESOLVED_ARTIFACTS_VIRTUAL_ID,
+  RESOLVED_SERVER_VIRTUAL_ID,
   RESOLVED_THEME_VIRTUAL_ID,
   SVARTZ_ARTIFACTS_VIRTUAL_ID,
+  SVARTZ_SERVER_VIRTUAL_ID,
   SVARTZ_THEME_VIRTUAL_ID,
   loadVirtualModule,
   resolveVirtualModuleId,
