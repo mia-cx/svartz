@@ -65,6 +65,7 @@ function createServerRegistrySource(
   config: ResolvedConfig,
   plugins: readonly NormalizedSvartzPlugin[],
   deploymentBasePath = "",
+  markdown: Readonly<Record<string, string>> = {},
 ): string {
   const servers = plugins.flatMap(({ id, server }) => {
     if (!server) return [];
@@ -73,14 +74,15 @@ function createServerRegistrySource(
     const options = server.options === undefined ? "undefined" : `JSON.parse(${JSON.stringify(JSON.stringify(server.options))})`;
     return [`  { id: ${JSON.stringify(id)}, load: () => import(${JSON.stringify(specifier)}), options: ${options} },`];
   });
-  // Without server plugins every request passes straight through, so the server bundle gains nothing else.
-  if (servers.length === 0) return "export const svartzHandle = ({ event, resolve }) => resolve(event);\n";
+  // With no runtime routes the handle passes through, so the server bundle gains nothing else.
+  if (servers.length === 0 && Object.keys(markdown).length === 0) return "export const svartzHandle = ({ event, resolve }) => resolve(event);\n";
   const { favicon: _faviconSource, ...site } = config.site;
   const registry = [
     `const registry = {`,
     `  basePath: ${JSON.stringify(`${deploymentBasePath}${config.mountPath}`)},`,
     `  vault: ${JSON.stringify({ id: config.id, mountPath: config.mountPath, site })},`,
     `  servers: [\n${servers.map((server) => `  ${server}`).join("\n")}\n  ],`,
+    `  markdown: ${JSON.stringify(markdown)},`,
     `};`,
   ].join("\n");
   return [
