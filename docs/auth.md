@@ -1,6 +1,6 @@
 # Reader sign-in
 
-`@svartz/auth` lets readers sign in with GitHub, and lets [server plugins](server-plugins.md) read who is signed in. It runs on Workers and Node with no hosted service: [Arctic](https://arcticjs.dev) handles OAuth, and the session lives in a sealed cookie.
+`@svartz/auth` lets readers sign in with Google, Discord or GitHub, and lets [server plugins](server-plugins.md) read who is signed in. It runs on Workers and Node with no hosted service: [Arctic](https://arcticjs.dev) handles OAuth, and the session lives in a sealed cookie.
 
 ```ts
 import { defineConfig } from "@svartz/config";
@@ -14,6 +14,8 @@ export default defineConfig({
     target: { type: "cloudflare-workers" },
     plugins: [auth({
       providers: {
+        google: { clientId: "1234-example.apps.googleusercontent.com", clientSecret: { env: "PRIVATE_GOOGLE_CLIENT_SECRET" } },
+        discord: { clientId: "1234567890123456789", clientSecret: { env: "PRIVATE_DISCORD_CLIENT_SECRET" } },
         github: { clientId: "Iv23liExample", clientSecret: { env: "PRIVATE_GITHUB_CLIENT_SECRET" } },
       },
       privacyNotice: "/privacy/",
@@ -26,7 +28,7 @@ The vault needs a server target (`cloudflare-workers`, `cloudflare-pages` or `no
 
 | Option | Value |
 | --- | --- |
-| `providers` | The providers readers may use, in the order the sign-in dialog lists them. Each takes the OAuth app's `clientId` and names its secret with `clientSecret: { env: "NAME" }`. Only `github` is supported so far. |
+| `providers` | The providers readers may use, in the order the sign-in dialog lists them. Each takes the OAuth app's `clientId` and names its secret with `clientSecret: { env: "NAME" }`. Choose from `google`, `discord` and `github`. |
 | `privacyNotice` | Optional URL of the site's privacy notice. The sign-in dialog links to it. A site that stores readers' names and avatars owes them one. |
 
 ## Secrets
@@ -34,16 +36,35 @@ The vault needs a server target (`cloudflare-workers`, `cloudflare-pages` or `no
 Set two secrets on the server, never in config:
 
 - `PRIVATE_SVARTZ_SESSION_SECRET`: a random value of at least 32 characters, such as the output of `openssl rand -base64 32`. Every Svartz plugin reads sessions with it. Changing it signs everyone out. The `PRIVATE_` prefix keeps it visible to hosts that set SvelteKit's `env.privatePrefix` to `PRIVATE_`.
-- The provider's client secret, under the name `clientSecret.env` gives.
+- Each provider's client secret, under the name its `clientSecret.env` gives.
 
-On Workers, `wrangler secret put PRIVATE_SVARTZ_SESSION_SECRET`. On Node, set them in the process environment, along with `ORIGIN` (such as `ORIGIN=https://notes.example`) so the callback URL GitHub sees uses your real origin. Under `svartz dev`, put them in `.env`.
+On Workers, `wrangler secret put PRIVATE_SVARTZ_SESSION_SECRET`. On Node, set them in the process environment, along with `ORIGIN` (such as `ORIGIN=https://notes.example`) so the callback URL the provider sees uses your real origin. Under `svartz dev`, put them in `.env`.
 
 Without `PRIVATE_SVARTZ_SESSION_SECRET`, every auth route answers 503 naming it.
+
+Each provider calls back to `https://<your host><base><mount>/_svartz/auth/callback/<provider>/`, such as `https://notes.example/_svartz/auth/callback/google/`. Register that URL with the provider, once per environment you deploy.
+
+## Google setup
+
+1. In the [Google Cloud console](https://console.cloud.google.com/auth/overview), open **Google Auth Platform** for your project and fill in **Branding** (app name, support email) and **Audience** (External).
+2. Under **Clients**, create a client of type **Web application**. Add the callback URL, ending in `/callback/google/`, under **Authorized redirect URIs**; a client takes several, so staging and production can share one.
+3. Copy the **Client ID** into `providers.google.clientId`, and store the **Client secret** under the env name you chose.
+4. Under **Audience**, publish the app. While it is in testing, only the test users you list can sign in.
+
+Sign-in asks Google for `openid profile`: the account's name and picture, not its email address. Google accounts have no username or public profile page, so a Google identity has no `handle` or `profileUrl`.
+
+## Discord setup
+
+1. In the [Discord Developer Portal](https://discord.com/developers/applications), create an application.
+2. Under **OAuth2 → Redirects**, add the callback URL, ending in `/callback/discord/`. An application takes several.
+3. Copy the **Client ID** into `providers.discord.clientId`, reset the **Client Secret**, and store it under the env name you chose.
+
+Sign-in asks Discord for `identify`: the account's username, display name and avatar, not its email address.
 
 ## GitHub setup
 
 1. Create an OAuth app on GitHub: **Settings → Developer settings → OAuth Apps → New OAuth App**.
-2. Set **Authorization callback URL** to `https://<your host><base><mount>/_svartz/auth/callback/github/`, such as `https://notes.example/_svartz/auth/callback/github/`.
+2. Set **Authorization callback URL** to the callback URL, ending in `/callback/github/`.
 3. Copy the **Client ID** into `providers.github.clientId`, generate a client secret, and store it under the env name you chose.
 
 An OAuth App takes exactly one callback URL, so it can't serve both staging and production. Either register one OAuth App per environment, or create a **GitHub App** instead (**Developer settings → GitHub Apps**), which accepts several callback URLs and signs readers in the same way. A GitHub App needs no permissions for sign-in.
@@ -65,7 +86,15 @@ A signed-in reader is an identity and nothing more:
 }
 ```
 
-The identity is encrypted with AES-GCM into the `__Host-svartz-session` cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`) for 30 days, under a key HKDF derives from `PRIVATE_SVARTZ_SESSION_SECRET`. GitHub's access token is used once, to read the profile, and then dropped; it is never stored or sent to the browser. A tampered, expired or wrong-key cookie reads as signed out. There is no server-side session store, so signing out clears the cookie in that browser only.
+| Provider | `id` | `handle` | `avatarUrl` | `profileUrl` |
+| --- | --- | --- | --- | --- |
+| Google | `google:<sub>` | none | the account's picture, when Google gives one | none |
+| Discord | `discord:<user id>` | username | the avatar, or Discord's default one | `https://discord.com/users/<user id>` |
+| GitHub | `github:<user id>` | login | the avatar | the profile page |
+
+`name` is always set: the display name, falling back to the handle, or to "Google user" when Google withholds the name. Check `handle`, `avatarUrl` and `profileUrl` before showing them.
+
+The identity is encrypted with AES-GCM into the `__Host-svartz-session` cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`) for 30 days, under a key HKDF derives from `PRIVATE_SVARTZ_SESSION_SECRET`. The provider's access token is used once, to read the profile, and then dropped; it is never stored or sent to the browser. A tampered, expired or wrong-key cookie reads as signed out. There is no server-side session store, so signing out clears the cookie in that browser only.
 
 Local development over `http://localhost` works in Chrome and Firefox, which accept `Secure` cookies there.
 
@@ -75,8 +104,8 @@ Under `<base><mount>/_svartz/auth/`, where `<base>` is the deployment base path,
 
 | Route | Does |
 | --- | --- |
-| `GET start/github/?returnTo=<path>` | Redirects to GitHub. The OAuth state and PKCE verifier wait in a 10-minute sealed cookie. `returnTo` must be a path on the same site; anything else answers 400. Without it, the reader returns to the vault's home. |
-| `GET callback/github/` | Completes sign-in and redirects to `returnTo`. A reader who declines at GitHub returns there, and any session they already had stays as it was. |
+| `GET start/<provider>/?returnTo=<path>` | Redirects to the provider. The OAuth state and PKCE verifier wait in a 10-minute sealed cookie. `returnTo` must be a path on the same site; anything else answers 400. Without it, the reader returns to the vault's home. |
+| `GET callback/<provider>/` | Completes sign-in and redirects to `returnTo`. A reader who declines at the provider returns there, and any session they already had stays as it was. |
 | `GET me/` | The identity, or `null`. |
 | `POST sign-out/` | Clears the session; answers 204. Refused from another origin. |
 
