@@ -287,4 +287,88 @@ describe("commenting on a selection", () => {
     expect(composer().querySelector("textarea")!.value).toBe("All of it.");
     expect(document.querySelectorAll(".sv-annotations-marker")).toHaveLength(2);
   });
+
+  it("lets Tab leave the toolbar after the first one brings focus to it", async () => {
+    const root = render();
+    const [dewPoint, pressure] = await attached(root);
+    const start = root.textContent!.indexOf(SHADE);
+    await select(rangeOf(root, { start, end: start + SHADE.length }));
+
+    await userEvent.keyboard("{Tab}");
+    expect(document.activeElement?.textContent).toBe("Comment");
+    await userEvent.keyboard("{Tab}");
+    expect(document.activeElement).toBe(dewPoint);
+    await userEvent.keyboard("{Tab}");
+    expect(document.activeElement).toBe(pressure);
+  });
+
+  it("holds the draft as it was sent until the site answers", async () => {
+    await commands.signIn(location.origin);
+    const root = render();
+    await attached(root);
+    const realFetch = globalThis.fetch;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    globalThis.fetch = async (input, init) => {
+      if (init?.method === "POST") await held;
+      return realFetch(input, init);
+    };
+    try {
+      const start = root.textContent!.indexOf(SHADE);
+      await select(rangeOf(root, { start, end: start + SHADE.length }));
+      await userEvent.click(document.querySelector(".sv-annotations-action")!);
+      await userEvent.keyboard("Mine sits under the eaves.");
+      await userEvent.click(composer().querySelector<HTMLButtonElement>("button[type=submit]")!);
+      const input = composer().querySelector("textarea")!;
+      expect(composer().getAttribute("aria-busy")).toBe("true");
+
+      // While it posts, the draft can't change or be thrown away, so the answer can't land on a different one.
+      await userEvent.click(input);
+      await userEvent.keyboard(" Edited.");
+      expect(input.value).toBe("Mine sits under the eaves.");
+      composer().querySelector<HTMLButtonElement>("button[type=button]")!.click();
+      await userEvent.keyboard("{Escape}");
+      expect(composer().matches(":popover-open")).toBe(true);
+      const other = root.textContent!.indexOf(PRESSURE);
+      getSelection()!.removeAllRanges();
+      getSelection()!.addRange(rangeOf(root, { start: other, end: other + PRESSURE.length }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(document.querySelector(".sv-annotations-toolbar:popover-open")).toBeNull();
+
+      release();
+      await expect.poll(() => document.querySelectorAll(".sv-annotations-marker").length).toBe(3);
+      expect(composer().matches(":popover-open")).toBe(false);
+      expect(input.readOnly).toBe(false);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("shows a comment once when it is posted before the page's comments load", async () => {
+    await commands.signIn(location.origin);
+    const root = render();
+    // Back from signing in with a draft, posted before the list arrives; the list then includes it too.
+    sessionStorage.setItem("svartz-annotations:draft", JSON.stringify({
+      endpoint: ENDPOINT, page: "hardware/sensors", action: "comment", anchor: anchorOf(root, SHADE), body: "Mine sits under the eaves.",
+    }));
+    const realFetch = globalThis.fetch;
+    let posted!: () => void;
+    const stored = new Promise<void>((resolve) => { posted = resolve; });
+    globalThis.fetch = async (input, init) => {
+      if (init?.method !== "POST") await stored;
+      const response = await realFetch(input, init);
+      if (init?.method === "POST") posted();
+      return response;
+    };
+    try {
+      detach = attach(root, { endpoint: ENDPOINT, page: "hardware/sensors" });
+      await userEvent.click(composer().querySelector<HTMLButtonElement>("button[type=submit]")!);
+
+      await expect.poll(() => document.querySelector(`[aria-label="Comment by Ada Lovelace on “${DEW_POINT}”"]`)).not.toBeNull();
+      expect([...document.querySelectorAll(".sv-annotations-marker")].map((marker) => marker.getAttribute("aria-label")))
+        .toEqual([`Comment by Ada Lovelace on “${SHADE}”`, `Comment by Ada Lovelace on “${DEW_POINT}”`, `Comment by Grace Hopper on “${PRESSURE}”`]);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
 });

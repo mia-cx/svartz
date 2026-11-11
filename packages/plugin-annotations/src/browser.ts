@@ -254,7 +254,7 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
   const prefix = `sv-annotations-${++attached}`;
   let cards = 0;
   /** In reading order, which is also tab order. */
-  const placed: Array<{ start: number; range: Range; marker: HTMLButtonElement; card: HTMLElement }> = [];
+  const placed: Array<{ id: string; start: number; range: Range; marker: HTMLButtonElement; card: HTMLElement }> = [];
 
   // Beside the content rather than in it, so its DOM and text stay the author's. Out of flow, so it never shifts the
   // layout; markers follow the content in tab order.
@@ -317,13 +317,20 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
   };
 
   let pointing = false;
+  /** While a comment posts, its draft is fixed: nothing may change, cancel or replace it until the site answers. */
+  let posting = false;
+  /** Whether the next Tab brings focus to the toolbar: once per showing, so later Tabs move through the page. */
+  let tabToToolbar = false;
   /** Offer the toolbar for a finished selection inside the content; a selection anywhere else, or none, takes it away. */
   const offerToolbar = () => {
     const selection = getSelection();
     const range = selection?.rangeCount && !selection.isCollapsed ? selection.getRangeAt(0) : undefined;
-    if (pointing || !range || !content.contains(range.commonAncestorContainer) || !range.toString().trim()) return hideToolbar();
+    if (pointing || posting || !range || !content.contains(range.commonAncestorContainer) || !range.toString().trim()) return hideToolbar();
     selected = range.cloneRange();
-    if (!toolbar.matches(":popover-open")) toolbar.showPopover();
+    if (!toolbar.matches(":popover-open")) {
+      toolbar.showPopover();
+      tabToToolbar = true;
+    }
     placeToolbar();
   };
   document.addEventListener("selectionchange", offerToolbar, { signal });
@@ -344,8 +351,9 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
   // The toolbar can't sit inside the note, so Tab after selecting goes straight to it, and Escape goes back.
   let returnFocus: Element | null = null;
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Tab" || event.shiftKey || !selected || toolbar.contains(document.activeElement)) return;
+    if (event.key !== "Tab" || event.shiftKey || !selected || !tabToToolbar) return;
     event.preventDefault();
+    tabToToolbar = false;
     returnFocus = document.activeElement;
     commentAction.focus();
   }, { signal });
@@ -388,6 +396,7 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
 
   // Cancel goes back to the selection the reader started from, toolbar and all.
   const cancelComposer = () => {
+    if (posting) return;
     const range = composing?.range;
     closeComposer();
     storeDraft(undefined);
@@ -401,7 +410,15 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
     else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) composer.requestSubmit();
   }, { signal });
 
-  let posting = false;
+  const setPosting = (on: boolean) => {
+    posting = on;
+    // Busy and read-only rather than disabled: disabling the focused Post button or text would drop keyboard focus.
+    if (on) composer.setAttribute("aria-busy", "true");
+    else composer.removeAttribute("aria-busy");
+    input.readOnly = on;
+    cancel.disabled = on;
+    if (on) hideToolbar();
+  };
   composer.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!composing || posting) return;
@@ -412,9 +429,7 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
       input.focus();
       return;
     }
-    // Busy rather than disabled: disabling the focused Post button would drop keyboard focus.
-    posting = true;
-    composer.setAttribute("aria-busy", "true");
+    setPosting(true);
     problem.textContent = "";
     try {
       const response = await fetch(`${base}/`, {
@@ -449,8 +464,7 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
       console.error("[svartz:annotations] couldn't post a comment", cause);
       problem.textContent = POST_FAILED;
     } finally {
-      posting = false;
-      composer.removeAttribute("aria-busy");
+      setPosting(false);
     }
   }, { signal });
 
@@ -491,8 +505,13 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
   addEventListener("resize", schedule, { signal });
   void document.fonts?.ready.then(() => signal.aborted || schedule());
 
-  /** Highlight `comment`'s passage at `position` and give it a marker and card, in reading order. */
+  /**
+   * Highlight `comment`'s passage at `position` and give it a marker and card, in reading order. A comment already
+   * shown keeps its marker: one posted before the page's list arrives comes back in both answers.
+   */
   function add(comment: Comment, position: Position): HTMLButtonElement {
+    const shown = placed.find(({ id }) => id === comment.id);
+    if (shown) return shown.marker;
     const range = rangeOf(content, position);
     const cardId = `${prefix}-${cards++}`;
     const markerNode = marker(comment, cardId);
@@ -507,7 +526,7 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
     }, { signal });
     // Looked up now, not held across a fetch: another element detaching meanwhile may have unregistered the shared one.
     highlightNamed(HIGHLIGHT)?.add(range);
-    const entry = { start: position.start, range, marker: markerNode, card: cardNode };
+    const entry = { id: comment.id, start: position.start, range, marker: markerNode, card: cardNode };
     const next = placed.findIndex(({ start }) => start > position.start);
     if (next === -1) {
       layer.append(markerNode, cardNode);
