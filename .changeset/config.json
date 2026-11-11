@@ -7,6 +7,7 @@
       "@svartz/core",
       "@svartz/plugins",
       "@svartz/auth",
+      "@svartz/plugin-annotations",
       "@svartz/config",
       "@svartz/ui",
       "@svartz/theme-minimal",

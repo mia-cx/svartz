@@ -1,0 +1,186 @@
+/*
+ * Annotations beside a note. Set these on `:root` (or any ancestor of the note) to restyle them:
+ *
+ *   --sv-annotations-highlight         passages with comments
+ *   --sv-annotations-highlight-active  the passage whose card is open
+ *   --sv-annotations-marker            the margin marker's colour
+ *   --sv-annotations-marker-size       the margin marker's size
+ *   --sv-annotations-card-width        the comment card's width
+ *
+ * Everything else follows theme-minimal's tokens (`--sv-*`), so it matches the theme; a host page without them falls
+ * back to system colours.
+ */
+:root {
+	--sv-annotations-highlight: color-mix(in oklch, var(--sv-accent, Highlight) 16%, transparent);
+	--sv-annotations-highlight-active: color-mix(in oklch, var(--sv-accent, Highlight) 34%, transparent);
+	--sv-annotations-marker: var(--sv-accent-text, var(--sv-accent, LinkText));
+	--sv-annotations-marker-size: 1.75rem;
+	--sv-annotations-card-width: 18rem;
+}
+
+::highlight(svartz-annotations) {
+	background-color: var(--sv-annotations-highlight);
+}
+
+::highlight(svartz-annotations-active) {
+	background-color: var(--sv-annotations-highlight-active);
+}
+
+/* Out of flow and zero-sized: markers are placed against it, and it never moves the page. */
+.sv-annotations {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	inline-size: 0;
+	block-size: 0;
+}
+
+.sv-annotations-marker {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	display: grid;
+	place-items: center;
+	inline-size: var(--sv-annotations-marker-size);
+	block-size: var(--sv-annotations-marker-size);
+	padding: 0;
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	border-radius: var(--sv-radius-pill, 999px);
+	background: var(--sv-paper, Canvas);
+	color: var(--sv-annotations-marker);
+	cursor: pointer;
+	transition: border-color var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out), background-color var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out);
+}
+
+.sv-annotations-marker svg {
+	inline-size: 55%;
+	block-size: 55%;
+}
+
+.sv-annotations-marker:hover,
+.sv-annotations-marker:has(+ :popover-open) {
+	border-color: currentColor;
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+}
+
+.sv-annotations-marker:focus-visible,
+.sv-annotations-card :focus-visible {
+	outline: var(--sv-focus-width, 2px) solid var(--sv-accent, Highlight);
+	outline-offset: var(--sv-focus-offset, 2px);
+}
+
+/* A popover in the top layer, placed against the document by script. */
+.sv-annotations-card {
+	position: absolute;
+	inset: auto;
+	box-sizing: border-box;
+	inline-size: min(var(--sv-annotations-card-width), calc(100vw - 2rem));
+	margin: 0;
+	padding: var(--sv-space-4, 1rem);
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	border-radius: var(--sv-radius-l, 10px);
+	background: var(--sv-paper, Canvas);
+	color: var(--sv-text, CanvasText);
+	box-shadow: var(--sv-shadow, 0 12px 32px -8px oklch(0 0 0 / 0.3));
+	font-family: var(--sv-font-sans, system-ui, sans-serif);
+	font-size: var(--sv-step--1, 0.875rem);
+	line-height: var(--sv-leading, 1.5);
+}
+
+.sv-annotations-card:popover-open {
+	animation: sv-annotations-in var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out);
+}
+
+@keyframes sv-annotations-in {
+	from {
+		opacity: 0;
+		translate: 0 -0.25rem;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sv-annotations-card:popover-open {
+		animation: none;
+	}
+}
+
+.sv-annotations-byline {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: center;
+	gap: var(--sv-space-3, 0.75rem);
+}
+
+.sv-annotations-avatar {
+	display: grid;
+	place-items: center;
+	inline-size: 2rem;
+	block-size: 2rem;
+	border-radius: var(--sv-radius-pill, 999px);
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+	color: var(--sv-muted, GrayText);
+	font-size: var(--sv-step--1, 0.875rem);
+	font-weight: 600;
+	object-fit: cover;
+}
+
+.sv-annotations-who {
+	display: grid;
+	min-inline-size: 0;
+}
+
+.sv-annotations-name {
+	overflow: hidden;
+	color: var(--sv-ink, CanvasText);
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+a.sv-annotations-name {
+	text-decoration: none;
+}
+
+a.sv-annotations-name:hover {
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+}
+
+.sv-annotations-handle,
+.sv-annotations-time {
+	color: var(--sv-muted, GrayText);
+	font-size: var(--sv-step--2, 0.8rem);
+}
+
+.sv-annotations-handle {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sv-annotations-time {
+	align-self: start;
+	white-space: nowrap;
+}
+
+.sv-annotations-body {
+	margin: var(--sv-space-3, 0.75rem) 0 0;
+	overflow-wrap: anywhere;
+	white-space: pre-line;
+}
+
+.sv-annotations-body a {
+	color: var(--sv-accent-text, LinkText);
+	text-underline-offset: 0.2em;
+}
+
+@media print {
+	[data-print-hide] {
+		display: none !important;
+	}
+
+	::highlight(svartz-annotations),
+	::highlight(svartz-annotations-active) {
+		background-color: transparent;
+	}
+}
