@@ -469,8 +469,12 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
           devServer = undefined;
         }
         // Each server stops only its own bindings; a replacement's registration survives (serveDevBindings checks).
-        await stopDevBindings?.();
-        await close();
+        // The server closes even when the proxy fails to stop, and that failure still surfaces.
+        try {
+          await stopDevBindings?.();
+        } finally {
+          await close();
+        }
       };
     },
     resolveId(id) {

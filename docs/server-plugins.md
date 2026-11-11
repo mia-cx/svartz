@@ -82,7 +82,7 @@ A vault that deploys to Cloudflare (`cloudflare-workers`, `cloudflare-pages`, or
 }
 ```
 
-On the first plugin request, `svartz dev` starts Wrangler's local platform and adds its bindings, `vars` and `.dev.vars` secrets to `context.env`, over the dev server's environment variables of the same name. A plugin then reads `context.env.DB` as it would in production.
+On the first plugin request, `svartz dev` starts Wrangler's local platform and adds its bindings, `vars` and `.dev.vars` secrets to `context.env`, over the dev server's environment variables of the same name. A plugin then reads `context.env.DB` as it would in production. To use a Wrangler environment's bindings, set `CLOUDFLARE_ENV` to its name, as you would for `wrangler dev`. A host app that picks an environment in its adapter options sets `CLOUDFLARE_ENV` too, so its routes and its plugins read the same bindings.
 
 Local data lives in `.wrangler/state` beside the Wrangler config and survives restarts. Inspect or seed it from the same directory:
 

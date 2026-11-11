@@ -13,7 +13,7 @@ interface PlatformProxy {
 }
 
 interface Wrangler {
-  getPlatformProxy(options: { configPath: string; persist: { path: string } }): Promise<PlatformProxy>;
+  getPlatformProxy(options: { configPath: string; environment?: string; persist: { path: string } }): Promise<PlatformProxy>;
 }
 
 type BindingsSlot = { [DEV_BINDINGS]?: DevBindings };
@@ -44,7 +44,10 @@ export function serveDevBindings(configDir: string, appRoot: string): () => Prom
   let proxy: Promise<PlatformProxy> | undefined;
   const bindings: DevBindings = async () => {
     if (!proxy) {
-      proxy = importWrangler(appRoot).then((wrangler) => wrangler.getPlatformProxy({ configPath, persist: { path: persistPath } }));
+      // CLOUDFLARE_ENV is how Wrangler selects an environment; a host that picks one in its adapter options sets it
+      // here too, or plugins read the top-level bindings.
+      const environment = process.env.CLOUDFLARE_ENV || undefined;
+      proxy = importWrangler(appRoot).then((wrangler) => wrangler.getPlatformProxy({ configPath, environment, persist: { path: persistPath } }));
       // A failed start (a bad config, a missing Wrangler) retries on the next request rather than sticking.
       proxy.catch(() => { proxy = undefined; });
     }
