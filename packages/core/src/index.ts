@@ -59,11 +59,13 @@ export { getCompilerContributions } from "./plugin/compiler";
 export type { BrowserResource, CompilerContributions } from "./plugin/compiler";
 export {
   createServerHandle,
+  DEV_BINDINGS,
   SECRET_ENV_NAME_PATTERN,
   SERVER_PLUGIN_ID_PATTERN,
   SERVER_ROUTE_SEGMENT,
 } from "./plugin/server";
 export type {
+  DevBindings,
   EnvReference,
   ServerContext,
   ServerHandleEvent,

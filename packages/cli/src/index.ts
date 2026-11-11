@@ -558,7 +558,7 @@ const createAppConfig = (
       // Workspace packages resolve compatible Vite runtimes at runtime, but their
       // published type graphs can diverge slightly inside the monorepo.
       plugins: [
-        ...vaults.map((item) => svartz({ config: item, mode, exposeVirtualModules: vaults.length === 1 }) as never),
+        ...vaults.map((item) => svartz({ config: item, mode, projectRoot, exposeVirtualModules: vaults.length === 1 }) as never),
         {
           name: "svartz:host-registry-base",
           async configResolved(resolved) {

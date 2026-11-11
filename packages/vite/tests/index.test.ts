@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -302,6 +302,26 @@ describe("@svartz/vite plugin", () => {
     expect(close).toHaveBeenCalled();
     for (const event of ["add", "change", "unlink"]) expect(server.watcher.listenerCount(event)).toBe(0);
     expect(runStagesMock).not.toHaveBeenCalled();
+  });
+
+  it("releases Cloudflare dev bindings when a middleware-mode server closes", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "svartz-dev-bindings-"));
+    try {
+      await writeFile(join(projectRoot, "wrangler.json"), "{}");
+      const plugin = svartz({ config: { ...testConfig, target: { type: "cloudflare-workers" } } as ResolvedConfig, env: {}, mode: "test", projectRoot });
+      await plugin.buildStart?.call({} as never);
+      const server = devServer();
+      const slot = globalThis as { [key: symbol]: unknown };
+      const bindings = Symbol.for("svartz.devBindings");
+
+      plugin.configureServer?.(server as never);
+      expect(slot[bindings]).toBeTypeOf("function");
+      await server.close();
+
+      expect(slot[bindings]).toBeUndefined();
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
   });
 
   it("keeps a restarted server watching when the old one closes", async () => {
