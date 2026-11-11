@@ -8,14 +8,16 @@ export class SubmissionError extends Error {
     message: string,
     /** Seconds until a rate-limited reader may submit again; sent as `retryAfter` and `Retry-After`. */
     readonly retryAfter?: number,
+    /** The URL of the published page a new page's title collides with; sent as `existing`. */
+    readonly existing?: string,
   ) {
     super(message);
     this.name = "SubmissionError";
   }
 
   toResponse(): Response {
-    const { code: error, message, status, retryAfter } = this;
-    if (retryAfter === undefined) return Response.json({ error, message } satisfies ErrorResponse, { status });
-    return Response.json({ error, message, retryAfter } satisfies ErrorResponse, { status, headers: { "retry-after": String(retryAfter) } });
+    const { code: error, message, status, retryAfter, existing } = this;
+    const body: ErrorResponse = { error, message, ...(retryAfter === undefined ? {} : { retryAfter }), ...(existing ? { existing } : {}) };
+    return Response.json(body, { status, headers: retryAfter === undefined ? {} : { "retry-after": String(retryAfter) } });
   }
 }

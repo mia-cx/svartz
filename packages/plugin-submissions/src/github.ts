@@ -22,16 +22,17 @@ export interface GitHubTarget {
   readonly commit: string;
 }
 
-/** One reader's edit of a published note. `kind` leaves room for new pages. */
+/** One reader's edit of a published note, or a new note. */
 export interface Submission {
-  readonly kind: "edit";
-  /** The editor's id for this edit, the same on every retry; names the branch. */
+  /** `edit` replaces a note; `new` adds one where the build commit has no file. */
+  readonly kind: "edit" | "new";
+  /** The editor's id for this submission, the same on every retry; names the branch. */
   readonly id: string;
   /** Repository-relative path of the note. */
   readonly path: string;
-  /** The page's URL route, such as `/guides/setup/`; names the branch. */
+  /** Names the branch: an edited page's route, such as `/guides/setup/`, or a new note's path in the vault. */
   readonly page: string;
-  /** Absolute URL of the page, for the pull request body. */
+  /** Absolute URL of the edited page, or of the site a new page was submitted from, for the pull request body. */
   readonly pageUrl: string;
   readonly markdown: string;
   readonly note: string;
@@ -165,8 +166,9 @@ async function writeBranch(target: GitHubTarget, branch: string, sha: string): P
 }
 
 /**
- * Open a pull request with one commit that replaces the note at `submission.path`. The branch starts at the build
- * commit, so when the page changed since, GitHub shows a conflict instead of the edit overwriting it.
+ * Open a pull request with one commit that replaces the note at `submission.path`, or adds it for a new page. The
+ * branch starts at the build commit, so when the page changed since, GitHub shows a conflict instead of the edit
+ * overwriting it. A new page whose path the build commit already holds is refused with `exists` (409).
  *
  * Safe to retry with the same `submission.id`: the branch is named after it, so a pull request an earlier attempt
  * opened is returned instead of a second one. Branches are never deleted: when GitHub refuses a pull request, another
@@ -185,7 +187,19 @@ export async function openSubmission(target: GitHubTarget, submission: Submissio
   return { url: pull.html_url, number: pull.number };
 }
 
+/** Whether anything is at `path` in the build commit. */
+async function existsAtBuild(target: GitHubTarget, path: string): Promise<boolean> {
+  const response = await send(target, "GET", `/contents/${encodePath(path)}?ref=${target.commit}`);
+  if (response.status === 404) return false;
+  if (!response.ok) throw await failure(target, response);
+  return true;
+}
+
 async function createPull(target: GitHubTarget, submission: Submission, branch: string): Promise<PullRequest> {
+  // A new note is added only where the build commit has nothing: the tree write below would replace a file silently.
+  if (submission.kind === "new" && await existsAtBuild(target, submission.path)) {
+    throw new SubmissionError("exists", 409, "A page with this title already exists. Choose another title.");
+  }
   const base = target.branch ?? (await call<{ default_branch: string }>(target, "GET", "")).default_branch;
   const parent = await call<{ tree: { sha: string } }>(target, "GET", `/git/commits/${target.commit}`);
   const tree = await call<{ sha: string }>(target, "POST", "/git/trees", {
@@ -196,7 +210,7 @@ async function createPull(target: GitHubTarget, submission: Submission, branch: 
     throw new SubmissionError("unchanged", 422, "Nothing has changed yet. Edit the page, then open the pull request.");
   }
 
-  const title = `Edit ${submission.path}`;
+  const title = `${submission.kind === "edit" ? "Edit" : "Add"} ${submission.path}`;
   const note = submission.note.trim();
   const commit = await call<{ sha: string }>(target, "POST", "/git/commits", {
     message: note ? `${title}\n\n${note}` : title,

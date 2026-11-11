@@ -3,11 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_MARKDOWN_BYTES } from "../src/api";
 import createHandler from "../src/server";
 import { GITHUB_TIMEOUT_MS } from "../src/github";
+import type { GuardOptions } from "../src/guard";
 import {
   branchFor,
   BUILD_COMMIT,
   editExchanges,
+  existenceCheck,
   GUIDE_SOURCE,
+  newPageExchanges,
+  pullLookup,
   REPO,
   replayGitHub,
   sourceExchange,
@@ -20,15 +24,18 @@ const ORIGIN = "https://wiki.example";
 // Deployed under /docs, vault mounted at /wiki.
 const BASE = "/docs/wiki/_svartz/submissions";
 
-const handler = createHandler(
-  { repo: REPO, labels: ["submission"], token: { env: "SVARTZ_GITHUB_TOKEN" }, guard: { rateLimit: { limit: 100, period: 60 } } },
-  { commit: BUILD_COMMIT, pages: { "/wiki/guide/": "content/guide.md" } },
+/** A vault at `content/` with the guide at its top level and a published `People` folder. */
+const handlerWith = (guard: GuardOptions) => createHandler(
+  { repo: REPO, labels: ["submission"], token: { env: "SVARTZ_GITHUB_TOKEN" }, guard },
+  { commit: BUILD_COMMIT, pages: { "/wiki/guide/": "content/guide.md" }, vaultRoot: "content", folders: ["", "People"] },
 );
+const handler = handlerWith({ rateLimit: { limit: 100, period: 60 } });
 
-function context(env: Record<string, unknown> = { SVARTZ_GITHUB_TOKEN: TOKEN }): ServerContext {
+/** `clientAddress: null` is a reader whose address the server can't see. */
+function context(env: Record<string, unknown> = { SVARTZ_GITHUB_TOKEN: TOKEN }, clientAddress: string | null = "203.0.113.7"): ServerContext {
   return {
     env,
-    clientAddress: "203.0.113.7",
+    clientAddress: clientAddress ?? undefined,
     vault: { id: "wiki", mountPath: "/wiki", site: { title: "Wiki" } },
     base: BASE,
     waitUntil: () => {},
@@ -43,8 +50,16 @@ const edit = (body: string | Record<string, unknown>) => new Request(`${ORIGIN}$
   body: typeof body === "string" ? body : JSON.stringify({ submissionId: SUBMISSION_ID, ...body }),
 });
 
-async function answer(request: Request, env?: Record<string, unknown>) {
-  const response = await handler(request, context(env));
+const ADA = "Ada Lovelace wrote the first published program.\n";
+/** A new page request, sent as JSON with this submission's id and Ada's page unless it names its own. */
+const newPage = (body: Record<string, unknown>) => new Request(`${ORIGIN}${BASE}/new/`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ submissionId: SUBMISSION_ID, markdown: ADA, ...body }),
+});
+
+async function answer(request: Request, env?: Record<string, unknown>, serve = handler, clientAddress?: string | null) {
+  const response = await serve(request, context(env, clientAddress));
   if (!response) throw new Error("The handler declined the request");
   return { status: response.status, body: await response.json() as Record<string, unknown> };
 }
@@ -138,5 +153,88 @@ describe("submissions server", () => {
         message: "This site can't open pull requests yet: its server has no SVARTZ_GITHUB_TOKEN set.",
       },
     });
+  });
+});
+
+describe("new pages", () => {
+  it("adds the note named after its title in the chosen section, branched from the build commit", async () => {
+    const github = replayGitHub(newPageExchanges({
+      path: "content/People/Ada Lovelace.md",
+      markdown: ADA,
+      note: "She deserves a page.",
+      pageUrl: `${ORIGIN}/docs/wiki/`,
+      branch: branchFor("people-ada-lovelace", "new"),
+    }));
+
+    expect(await answer(newPage({ folder: "People", title: " Ada Lovelace ", note: "She deserves a page." }))).toEqual({
+      status: 201,
+      body: { url: `https://github.com/${REPO}/pull/42`, number: 42 },
+    });
+    expect(github.pending).toEqual([]);
+  });
+
+  it.each([
+    ["a folder the build didn't publish", { folder: "Drafts", title: "Plans" }, 400, "not_a_section"],
+    ["a folder outside the vault", { folder: "../.github/workflows", title: "ci" }, 400, "not_a_section"],
+    ["a hidden folder", { folder: ".obsidian", title: "workspace" }, 400, "not_a_section"],
+    ["a title that climbs out of its folder", { folder: "People", title: "../../.github/workflows/ci" }, 400, "invalid_title"],
+    ["a title naming a hidden file", { folder: "", title: ".env" }, 400, "invalid_title"],
+    ["a blank title", { folder: "People", title: "  " }, 400, "invalid_title"],
+    ["a request without a section", { title: "Ada Lovelace" }, 400, "invalid_request"],
+  ])("rejects %s before calling GitHub", async (_case, body, status, error) => {
+    const github = replayGitHub([]);
+
+    expect(await answer(newPage(body))).toEqual({ status, body: { error, message: expect.any(String) } });
+    expect(github.requests).toEqual([]);
+  });
+
+  it("links the published page a title is already taken by, in any case, before calling GitHub", async () => {
+    const github = replayGitHub([]);
+
+    expect(await answer(newPage({ folder: "", title: "GUIDE" }))).toEqual({
+      status: 409,
+      body: {
+        error: "exists",
+        message: "A page with this title already exists. Choose another title, or edit that page.",
+        existing: `${ORIGIN}/docs/wiki/guide/`,
+      },
+    });
+    expect(github.requests).toEqual([]);
+  });
+
+  it("refuses a title whose file the build commit has, unpublished, and writes nothing", async () => {
+    const branch = branchFor("people-draft", "new");
+    const github = replayGitHub([pullLookup(branch), existenceCheck("content/People/Draft.md", true)]);
+
+    expect(await answer(newPage({ folder: "People", title: "Draft" }))).toEqual({
+      status: 409,
+      body: { error: "exists", message: "A page with this title already exists. Choose another title." },
+    });
+    expect(github.pending).toEqual([]);
+  });
+
+  it.each([
+    ["without a Turnstile token", { turnstile: { siteKey: "0x4AAAAAAAtest", secret: { env: "TURNSTILE_SECRET" } }, rateLimit: { limit: 5, period: 60 } }, "203.0.113.7", 403, "turnstile_required"],
+    ["from a reader the server can't see", { rateLimit: { limit: 5, period: 60 } }, null, 403, "sign_in_required"],
+  ] as const)("passes the guard first: refuses a new page %s before calling GitHub", async (_case, guard, ip, status, error) => {
+    const github = replayGitHub([]);
+
+    const response = await answer(newPage({ folder: "People", title: "Ada Lovelace" }), undefined, handlerWith(guard), ip);
+
+    expect(response).toEqual({ status, body: { error, message: expect.any(String) } });
+    expect(github.requests).toEqual([]);
+  });
+
+  it("counts new pages against the rate limit before calling GitHub", async () => {
+    const limited = handlerWith({ rateLimit: { limit: 1, period: 60 } });
+    // Without a token the first new page stops at GitHub's step, having been counted.
+    expect((await answer(newPage({ folder: "People", title: "Ada Lovelace" }), {}, limited)).status).toBe(503);
+    const github = replayGitHub([]);
+
+    expect(await answer(newPage({ folder: "People", title: "Ada Lovelace" }), undefined, limited)).toMatchObject({
+      status: 429,
+      body: { error: "rate_limited" },
+    });
+    expect(github.requests).toEqual([]);
   });
 });

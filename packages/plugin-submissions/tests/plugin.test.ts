@@ -35,6 +35,8 @@ async function build(options: Partial<Parameters<typeof submissions>[0]> = {}) {
         entry("/wiki/people/ada/", "people/Ada Lovelace.MD"),
         entry("/wiki/secret/", "secret.md", true),
         entry("/wiki/app/", "app.svx"),
+        entry("/wiki/tools/app/", "tools/app.svx"),
+        entry("/wiki/private/plans/", "private/plans.md", true),
       ],
     } as PluginContext["index"],
   };
@@ -50,10 +52,14 @@ describe("submissions build", () => {
     expect(ctx.compiler?.serverData.get("submissions")).toEqual({
       commit,
       pages: { "/wiki/guide/": "content/guide.md", "/wiki/people/ada/": "content/people/Ada Lovelace.MD" },
+      // Protected notes' folders stay out: a new page there would be public.
+      vaultRoot: "content",
+      folders: ["", "people", "tools"],
     });
     expect(ctx.compiler?.browserResources.get("submissions")?.options).toEqual({
       endpoint: "/wiki/_svartz/submissions",
       pages: ["/wiki/guide/", "/wiki/people/ada/"],
+      folders: ["", "people", "tools"],
     });
   });
 
@@ -74,6 +80,7 @@ describe("submissions guard config", () => {
     expect(ctx.compiler?.browserResources.get("submissions")?.options).toEqual({
       endpoint: "/wiki/_svartz/submissions",
       pages: ["/wiki/guide/", "/wiki/people/ada/"],
+      folders: ["", "people", "tools"],
       turnstileSiteKey: "0x4AAAAAAAtest",
     });
   });
