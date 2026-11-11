@@ -16,6 +16,7 @@ const releaseVersion = readReleasePackages(root)[0].version;
 const packages = [
   ['@svartz/core', 'packages/core', ['dist/index.js', 'dist/index.d.ts']],
   ['@svartz/plugins', 'packages/plugins', ['dist/index.js', 'dist/index.d.ts']],
+  ['@svartz/auth', 'packages/auth', ['dist/index.js', 'dist/server.js', 'dist/browser.js', 'dist/browser.css']],
   ['@svartz/config', 'packages/config', ['dist/index.js', 'dist/index.d.ts']],
   ['@svartz/ui', 'packages/ui', ['dist/index.js', 'dist/runtime/index.js', 'dist/stores.d.ts']],
   ['@svartz/theme-minimal', 'themes/minimal', ['dist/index.js', 'dist/runtime.js']],
