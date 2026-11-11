@@ -12,6 +12,7 @@ import {
   pullLookup,
   REPO,
   replayGitHub,
+  sharedGitHub,
   sourceExchange,
   SUBMISSION_ID,
   TOKEN,
@@ -124,6 +125,8 @@ describe("PR writer", () => {
         request: { method: "POST", url: `${API}/pulls`, body: expect.objectContaining({ head: branch }) },
         response: { status: 422, json: { message: "Validation Failed", errors: [{ resource: "PullRequest", field: "base", code: "invalid" }] } },
       },
+      // No concurrent attempt opened one from the branch meanwhile.
+      pullLookup(branch),
       { request: { method: "DELETE", url: `${API}/git/refs/heads/${branch}` }, response: { status: 204 } },
     ]);
 
@@ -131,8 +134,25 @@ describe("PR writer", () => {
     expect(github.pending).toEqual([]);
   });
 
+  const PULL_7 = { url: `https://github.com/${REPO}/pull/7`, number: 7 };
   it.each([
-    ["GitHub fails", { status: 502, json: { message: "Server Error" } }, "github_failed", 502, 0],
+    ["the attempt that created the branch", 0, [PULL_7, PULL_7]],
+    ["an attempt that reused the branch", 1, [PULL_7, "github_forbidden"]],
+  ] as const)("keeps a branch whose pull request a concurrent attempt opened, when GitHub refuses %s", async (_case, refuse, outcomes) => {
+    const github = sharedGitHub({
+      refuse,
+      refusal: { status: 403, json: { message: "You have exceeded a secondary rate limit. Please wait a few minutes before you try again." } },
+    });
+
+    const attempts = await Promise.allSettled([openSubmission(target, submission), openSubmission(target, submission)]);
+
+    expect(attempts.map((attempt) => attempt.status === "fulfilled" ? attempt.value : attempt.reason.code)).toEqual(outcomes);
+    expect(github.branches).toEqual(new Set([branch]));
+    expect(github.pulls).toEqual([expect.objectContaining({ number: 7, head: branch, state: "open" })]);
+  });
+
+  it.each([
+    ["GitHub fails",{ status: 502, json: { message: "Server Error" } }, "github_failed", 502, 0],
     ["GitHub never answers", { status: 0, hang: true }, "github_unavailable", 503, GITHUB_TIMEOUT_MS],
   ] as const)("keeps the branch for a retry when %s to the pull request", async (_case, response, code, status, wait) => {
     useFakeTimeouts();

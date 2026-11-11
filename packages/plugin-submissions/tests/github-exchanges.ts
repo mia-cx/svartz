@@ -121,6 +121,70 @@ export function replayGitHub(exchanges: readonly Exchange[]) {
 }
 
 /**
+ * Stub `fetch` with a GitHub that keeps its branches and pull requests, for attempts that run at the same time. Every
+ * pull request opened is #7. The `refuse`th request to open one (counting from 0) is answered `refusal`, but only once
+ * another attempt has opened its pull request, as when GitHub's answer to this one is slow.
+ */
+export function sharedGitHub({ refuse, refusal }: { refuse: number; refusal: Exchange["response"] }) {
+  const branches = new Set<string>();
+  const pulls: Array<{ number: number; html_url: string; head: string; state: "open" | "closed" }> = [];
+  const requests: Array<{ method: string; url: string }> = [];
+  let opened = () => {};
+  const pullOpened = new Promise<void>((resolve) => { opened = resolve; });
+  let pullRequests = 0;
+
+  const answer = async (method: string, path: string, body: Record<string, unknown> | undefined): Promise<Response> => {
+    const ref = path.match(/^\/git\/refs\/heads\/(.+)$/)?.[1];
+    if (method === "GET" && path.startsWith("/pulls?")) {
+      const head = new URLSearchParams(path.slice("/pulls?".length)).get("head")!.split(":")[1];
+      return Response.json(pulls.filter((pull) => pull.head === head && pull.state === "open"));
+    }
+    if (method === "GET" && path === "") return Response.json({ default_branch: "main" });
+    if (method === "GET" && path.startsWith("/git/commits/")) return Response.json({ tree: { sha: BASE_TREE } });
+    if (method === "POST" && path === "/git/trees") return Response.json({ sha: NEW_TREE }, { status: 201 });
+    if (method === "POST" && path === "/git/commits") return Response.json({ sha: NEW_COMMIT }, { status: 201 });
+    if (method === "POST" && path === "/git/refs") {
+      const branch = String(body!.ref).replace("refs/heads/", "");
+      if (branches.has(branch)) return Response.json({ message: "Reference already exists" }, { status: 422 });
+      branches.add(branch);
+      return Response.json({ ref: body!.ref }, { status: 201 });
+    }
+    if (method === "PATCH" && ref) return Response.json({ ref: `refs/heads/${ref}` }, { status: branches.has(ref) ? 200 : 422 });
+    if (method === "DELETE" && ref) {
+      branches.delete(ref);
+      // GitHub closes the pull requests a deleted branch heads.
+      for (const pull of pulls) if (pull.head === ref) pull.state = "closed";
+      return new Response(null, { status: 204 });
+    }
+    if (method === "POST" && path === "/pulls") {
+      if (pullRequests++ === refuse) {
+        await pullOpened;
+        const { status, json } = refusal;
+        return Response.json(json ?? null, { status });
+      }
+      const head = String(body!.head);
+      if (pulls.some((pull) => pull.head === head && pull.state === "open")) {
+        return Response.json({ errors: [{ message: `A pull request already exists for wikiplace:${head}.` }] }, { status: 422 });
+      }
+      const pull = { number: 7, html_url: `https://github.com/${REPO}/pull/7`, head, state: "open" as const };
+      pulls.push(pull);
+      opened();
+      return Response.json(pull, { status: 201 });
+    }
+    if (method === "POST" && path.startsWith("/issues/")) return Response.json([], { status: 200 });
+    throw new Error(`GitHub got an unexpected ${method} ${path}`);
+  };
+
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const method = init.method ?? "GET";
+    const path = String(input).slice(API.length);
+    requests.push({ method, url: String(input) });
+    return answer(method, path, init.body === undefined ? undefined : JSON.parse(String(init.body)));
+  }));
+  return { branches, pulls, requests };
+}
+
+/**
  * Fake timers that `AbortSignal.timeout` obeys too: it runs on Node's internal timers, so this one is rebuilt on
  * the faked clock. Undone by `vi.useRealTimers()` and `vi.restoreAllMocks()`.
  */
