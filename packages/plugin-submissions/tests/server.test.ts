@@ -9,7 +9,7 @@ const ORIGIN = "https://wiki.example";
 const BASE = "/docs/wiki/_svartz/submissions";
 
 const handler = createHandler(
-  { repo: REPO, labels: ["submission"], token: { env: "SVARTZ_GITHUB_TOKEN" } },
+  { repo: REPO, labels: ["submission"], token: { env: "SVARTZ_GITHUB_TOKEN" }, guard: { rateLimit: { limit: 100, period: 60 } } },
   { commit: BUILD_COMMIT, pages: { "/wiki/guide/": "content/guide.md" } },
 );
 

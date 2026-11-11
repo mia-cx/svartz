@@ -300,6 +300,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.15
         version: 6.43.15
+      '@svartz/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@svartz/core':
         specifier: workspace:*
         version: link:../core

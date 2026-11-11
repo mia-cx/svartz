@@ -2,11 +2,13 @@
  * The submissions server module, mounted at `<base><mount>/_svartz/submissions/`:
  *
  * - `GET source/?page=<route>` answers `{ markdown }`, the note's source at the build commit.
- * - `POST edit/` with `{ page, markdown, note? }` opens a pull request and answers 201 `{ url, number }`.
+ * - `POST edit/` with `{ page, markdown, note?, turnstileToken? }` opens a pull request and answers 201 `{ url, number }`.
  *
- * Only notes in the build's manifest can be read or edited; the client never names a file path.
+ * Only notes in the build's manifest can be read or edited; the client never names a file path. Every edit passes
+ * the guard (rate limit, and Turnstile when configured) before any GitHub call.
  * Failures answer `{ error, message }`.
  */
+import { readIdentity } from "@svartz/auth/server";
 import type { ServerContext, ServerModuleFactory } from "@svartz/core";
 import {
   MAX_MARKDOWN_BYTES,
@@ -18,6 +20,7 @@ import {
 } from "./api";
 import { SubmissionError } from "./errors";
 import { openSubmission, readSource, type GitHubTarget } from "./github";
+import { createGuard, type GuardOptions } from "./guard";
 
 /** The plugin's server options, as written into the server bundle. */
 export interface ServerOptions {
@@ -25,6 +28,7 @@ export interface ServerOptions {
   readonly branch?: string;
   readonly labels: readonly string[];
   readonly token: { readonly env: string };
+  readonly guard: GuardOptions;
 }
 
 /** What the build records for the server: never sent to the browser. */
@@ -64,6 +68,7 @@ async function readText(request: Request): Promise<string> {
 
 const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, data) => {
   const pages = new Map(Object.entries(data.pages));
+  const guard = createGuard(options.guard);
 
   function notePath(page: string | null): string {
     const path = page === null ? undefined : pages.get(page);
@@ -89,7 +94,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     return Response.json({ markdown } satisfies SourceResponse);
   }
 
-  async function readEdit(request: Request): Promise<Required<EditRequest>> {
+  async function readEdit(request: Request): Promise<EditRequest & { readonly note: string }> {
     const text = await readText(request);
     let body: Partial<Record<keyof EditRequest, unknown>> | null;
     try {
@@ -97,20 +102,29 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     } catch {
       body = null;
     }
-    const { page, markdown, note = "" } = body ?? {};
-    if (typeof page !== "string" || typeof markdown !== "string" || typeof note !== "string") {
+    const { page, markdown, note = "", turnstileToken } = body ?? {};
+    if (
+      typeof page !== "string" || typeof markdown !== "string" || typeof note !== "string"
+      || (turnstileToken !== undefined && typeof turnstileToken !== "string")
+    ) {
       throw new SubmissionError("invalid_request", 400, "The edit didn't arrive intact. Reload the page and try again.");
     }
     if (encoder.encode(markdown).byteLength > MAX_MARKDOWN_BYTES) throw tooLarge();
     if (note.length > MAX_NOTE_LENGTH) {
       throw new SubmissionError("note_too_long", 400, `Shorten the note to ${MAX_NOTE_LENGTH.toLocaleString("en")} characters or fewer.`);
     }
-    return { page, markdown, note };
+    return { page, markdown, note, turnstileToken };
   }
 
   async function edit(request: Request, context: ServerContext): Promise<Response> {
-    const { page, markdown, note } = await readEdit(request);
+    const { page, markdown, note, turnstileToken } = await readEdit(request);
     const path = notePath(page);
+    await guard({
+      token: turnstileToken,
+      identity: await readIdentity(request, context.env),
+      clientAddress: context.clientAddress,
+      env: context.env,
+    });
     // The page's public URL: the deployment base is what precedes `<mount>/_svartz/submissions`.
     const deploymentBase = context.base.slice(0, -`${context.vault.mountPath}/_svartz/${PLUGIN_ID}`.length);
     const pageUrl = new URL(`${deploymentBase}${page}`, request.url).href;
