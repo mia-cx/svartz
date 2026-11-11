@@ -144,13 +144,28 @@
 }
 
 .svartz-submissions textarea,
-.svartz-submissions input {
+.svartz-submissions input,
+.svartz-submissions select {
 	/* Host form resets (Tailwind forms) draw their own ring. */
 	appearance: none;
 }
 
 .svartz-submissions textarea {
 	resize: vertical;
+}
+
+/* The same box as the title field, with a chevron in the text colour so it reads as a picker in every theme. */
+.svartz-submissions select {
+	padding-inline-end: var(--sv-space-6);
+	background-image:
+		linear-gradient(45deg, transparent 50%, currentColor 50%),
+		linear-gradient(135deg, currentColor 50%, transparent 50%);
+	background-position:
+		calc(100% - 1.125rem) 55%,
+		calc(100% - 0.8125rem) 55%;
+	background-size: 0.3125rem 0.3125rem;
+	background-repeat: no-repeat;
+	cursor: pointer;
 }
 
 .svartz-submissions select:disabled {
