@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import "../src/browser.css";
+import type { BrowserOptions } from "../src/api";
 import { mount } from "../src/browser";
 
 // CRLF line endings and frontmatter: the edit must keep every byte it doesn't touch.
@@ -18,8 +19,8 @@ function serve(edit: () => Response | Promise<Response>) {
   return fetch;
 }
 
-async function openEditor() {
-  unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+async function openEditor(options: BrowserOptions = OPTIONS) {
+  unmount = mount("/docs/wiki/guide/", options, CONTEXT);
   await page.getByRole("button", { name: "Edit" }).click();
   const source = page.getByRole("textbox", { name: "Page source" });
   await expect.element(source).toHaveTextContent("# Guide");
@@ -85,6 +86,31 @@ describe("Edit", () => {
     await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
     expect(fetch).toHaveBeenCalledTimes(2);
     await expect.element(source).not.toHaveTextContent("Unsent.");
+  });
+
+  it("sends the edit only once the Turnstile check passes, with its token", async () => {
+    let token: string | undefined;
+    vi.stubGlobal("turnstile", {
+      render: (container: HTMLElement, { sitekey }: { sitekey: string }) => {
+        container.dataset.sitekey = sitekey;
+        return "widget-1";
+      },
+      getResponse: () => token,
+      reset: () => {},
+      remove: () => {},
+    });
+    const fetch = serve(() => Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
+    await openEditor({ ...OPTIONS, turnstileSiteKey: "0x4AAAAAAAtest" });
+    expect(document.querySelector(".svartz-submissions-turnstile")).toHaveProperty("dataset.sitekey", "0x4AAAAAAAtest");
+
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("alert")).toHaveTextContent("Finish the check that you're human, then open the pull request.");
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    token = "token-from-widget";
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+    expect(JSON.parse(String(fetch.mock.calls[1]![1]!.body))).toMatchObject({ turnstileToken: "token-from-widget" });
   });
 
   it("offers Edit when the URL percent-encodes the page's path", async () => {

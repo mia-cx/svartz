@@ -5,7 +5,7 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
-import { MAX_NOTE_LENGTH, type EditResponse, type ErrorResponse, type SourceResponse } from "./api";
+import { MAX_NOTE_LENGTH, type EditRequest, type EditResponse, type ErrorResponse, type SourceResponse } from "./api";
 
 export interface EditorInput {
   /** The note's route below the deployment base. */
@@ -14,6 +14,42 @@ export interface EditorInput {
   readonly endpoint: string;
   /** Focus returns here when the panel closes. */
   readonly opener: HTMLElement;
+  /** Show the Turnstile challenge with this site key, and send its token with the edit. */
+  readonly turnstileSiteKey?: string;
+}
+
+/** The parts of Turnstile's explicit-rendering API the panel uses. */
+interface Turnstile {
+  render(container: HTMLElement, options: { sitekey: string; theme: "auto"; size: "flexible" }): string | undefined;
+  getResponse(widgetId: string): string | undefined;
+  reset(widgetId: string): void;
+  remove(widgetId: string): void;
+}
+
+declare global {
+  interface Window {
+    turnstile?: Turnstile;
+  }
+}
+
+const UNVERIFIED = "Finish the check that you're human, then open the pull request.";
+const TURNSTILE_SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+let turnstileLoad: Promise<Turnstile> | undefined;
+
+/** Cloudflare's script, added to the page once and shared by every panel. */
+function loadTurnstile(): Promise<Turnstile> {
+  turnstileLoad ??= new Promise<Turnstile>((resolve, reject) => {
+    if (window.turnstile) return resolve(window.turnstile);
+    const script = Object.assign(document.createElement("script"), { src: TURNSTILE_SCRIPT, async: true });
+    script.addEventListener("load", () => (window.turnstile ? resolve(window.turnstile) : reject()));
+    script.addEventListener("error", () => reject());
+    document.head.append(script);
+  }).catch(() => {
+    // The next panel tries again.
+    turnstileLoad = undefined;
+    throw new Error("Couldn't load the check that you're human. Check your connection, then reopen the editor.");
+  });
+  return turnstileLoad;
 }
 
 // Lucide "x".
@@ -34,6 +70,7 @@ const PANEL = `
       <label class="sv-label" for="svartz-submissions-note">What changed</label>
       <textarea id="svartz-submissions-note" name="note" rows="3" maxlength="${MAX_NOTE_LENGTH}"></textarea>
     </div>
+    <div class="svartz-submissions-turnstile" hidden></div>
     <p class="svartz-submissions-error" data-sv-signal role="alert" hidden></p>
     <footer class="svartz-submissions-actions">
       <button type="submit" class="svartz-submissions-primary" disabled>Open pull request</button>
@@ -65,7 +102,7 @@ function query<E extends Element>(root: ParentNode, selector: string): E {
 }
 
 /** Open the panel for `page`. Returns a function that closes it without asking, for navigation cleanup. */
-export function openEditor({ page, endpoint, opener }: EditorInput): () => void {
+export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorInput): () => void {
   const dialog = document.createElement("dialog");
   dialog.className = "svartz-submissions";
   dialog.setAttribute("aria-labelledby", "svartz-submissions-title");
@@ -76,6 +113,8 @@ export function openEditor({ page, endpoint, opener }: EditorInput): () => void 
   const error = query<HTMLElement>(dialog, ".svartz-submissions-error");
   const actions = query<HTMLElement>(dialog, ".svartz-submissions-actions");
   const submit = query<HTMLButtonElement>(dialog, '[type="submit"]');
+  const challenge = query<HTMLElement>(dialog, ".svartz-submissions-turnstile");
+  let turnstile: { api: Turnstile; id: string } | undefined;
 
   const editable = new Compartment();
   let view: EditorView | undefined;
@@ -96,6 +135,7 @@ export function openEditor({ page, endpoint, opener }: EditorInput): () => void 
 
   function close() {
     view?.destroy();
+    if (turnstile) turnstile.api.remove(turnstile.id);
     dialog.close();
     dialog.remove();
     if (opener.isConnected) opener.focus();
@@ -119,6 +159,8 @@ export function openEditor({ page, endpoint, opener }: EditorInput): () => void 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!view || phase !== "editing" || !edited()) return;
+    const turnstileToken = turnstile?.api.getResponse(turnstile.id);
+    if (turnstileSiteKey && !turnstileToken) return showError(UNVERIFIED);
     phase = "sending";
     lock(true);
     error.hidden = true;
@@ -128,14 +170,17 @@ export function openEditor({ page, endpoint, opener }: EditorInput): () => void 
       const pull = await request<EditResponse>(`${endpoint}/edit/`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ page, markdown: view.state.sliceDoc(), note: note.value }),
+        body: JSON.stringify({ page, markdown: view.state.sliceDoc(), note: note.value, turnstileToken } satisfies EditRequest),
       });
       // The pull request holds this text now and the panel stays locked; further typing would go nowhere.
       phase = "sent";
+      challenge.hidden = true;
       showOpened(pull);
     } catch (cause) {
       phase = "editing";
       lock(false);
+      // The server spent the token; a retry needs a fresh one.
+      if (turnstile) turnstile.api.reset(turnstile.id);
       showError((cause as Error).message);
       submit.disabled = false;
       submit.textContent = "Open pull request";
@@ -192,8 +237,22 @@ export function openEditor({ page, endpoint, opener }: EditorInput): () => void 
     }
   }
 
+  async function showChallenge(sitekey: string) {
+    challenge.hidden = false;
+    try {
+      const api = await loadTurnstile();
+      if (!dialog.isConnected) return;
+      const id = api.render(challenge, { sitekey, theme: "auto", size: "flexible" });
+      if (id) turnstile = { api, id };
+    } catch (cause) {
+      challenge.hidden = true;
+      showError((cause as Error).message);
+    }
+  }
+
   document.body.append(dialog);
   dialog.showModal();
   void load();
+  if (turnstileSiteKey) void showChallenge(turnstileSiteKey);
   return close;
 }
