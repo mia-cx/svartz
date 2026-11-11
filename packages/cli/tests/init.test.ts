@@ -71,6 +71,7 @@ it("initializes the invocation directory with an editable shell and vault", asyn
   expect(await readFile(path.join(root, "src/routes/+layout.svelte"), "utf8"))
     .not.toContain("layout.css");
   await access(path.join(root, "src/routes/[...slug]/+page.ts"));
+  await access(path.join(root, "src/routes/[...slug]/+page.server.ts"));
   await expect(access(path.join(root, ".git"))).rejects.toMatchObject({
     code: "ENOENT",
   });
@@ -526,6 +527,8 @@ it("upgrades generated host routes to link SSR styles without changing custom ro
     .replace(/\n<svelte:head>[\s\S]*?<\/svelte:head>\n/, ""));
   // The loader as shipped before styles: it raised the 404 before preparing the theme.
   await writeFile(loadPath, load
+    .replace("async ({ url, data })", "async ({ url })")
+    .replace("  return data;\n", "")
     .replace(
       "  await prepareHostVault(pathname);\n  if (!routes.all.includes(pathname)) error(404);\n",
       "  if (!routes.all.includes(pathname)) error(404);\n  await prepareHostVault(pathname);\n",
@@ -537,6 +540,42 @@ it("upgrades generated host routes to link SSR styles without changing custom ro
   expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("integrated");
   expect(await readFile(pagePath, "utf8")).toBe(page);
   expect(await readFile(loadPath, "utf8")).toBe(load);
+});
+
+it.each(["none", "+page.server.ts", "+page.server.js"])("preserves host server loaders when migrating stylesheet data (%s)", async (serverFile) => {
+  const root = await fixture();
+  await mkdir(path.join(root, "src/routes"), { recursive: true });
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    name: "host-app", dependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+  await initProject({ cwd: root, install: false, git: false });
+
+  const route = path.join(root, "src/routes/[...slug]");
+  const page = await readFile(path.join(route, "+page.svelte"), "utf8");
+  const load = await readFile(path.join(route, "+page.ts"), "utf8");
+  const server = await readFile(path.join(route, "+page.server.ts"), "utf8");
+  const previous = load
+    .replace("import { base }", "import { assets, base }")
+    .replace("import { prepareHostVault, routes }", "import { hostStylesheets, prepareHostVault, routes }")
+    .replace("async ({ url, data })", "async ({ url })")
+    .replace("  return data;\n", "  return { svartzStylesheets: hostStylesheets(pathname).map((file) => `${assets}/${file}`) };\n");
+  const customServer = "export const load = () => ({ host: true });\n";
+  const conflict = serverFile !== "none";
+  await writeFile(path.join(route, "+page.ts"), previous);
+  await rm(path.join(route, "+page.server.ts"));
+  if (conflict) await writeFile(path.join(route, serverFile), customServer);
+
+  expect((await initProject({ cwd: root, install: false, git: false })).kind)
+    .toBe(conflict ? "already-configured" : "integrated");
+  expect(await readFile(path.join(route, "+page.ts"), "utf8")).toBe(conflict ? previous : load);
+  expect(await readFile(path.join(route, conflict ? serverFile : "+page.server.ts"), "utf8"))
+    .toBe(conflict ? customServer : server);
+  if (serverFile === "+page.server.js") {
+    await expect(access(path.join(route, "+page.server.ts"))).rejects.toMatchObject({ code: "ENOENT" });
+  }
+  expect(await readFile(path.join(route, "+page.svelte"), "utf8")).toBe(page);
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("already-configured");
 });
 
 it("preserves an old generated page when its loader was customized", async () => {
