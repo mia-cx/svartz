@@ -78,7 +78,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
     "export const prerender = true;",
     "export const GET = () => new Response(renderHostRss(vaults, ['notes', 'work'], { title: 'Combined', url: 'https://example.test' }), { headers: { 'content-type': 'application/rss+xml' } });",
   ].join("\n"));
-  for (const name of ["+page.svelte", "+page.ts"]) {
+  for (const name of ["+page.svelte", "+page.ts", "+page.server.ts"]) {
     await writeFile(path.join(root, "src/routes/[...slug]", name),
       await readFile(path.join(workspaceRoot, "packages/cli/template/src/routes/[...slug]", name)));
   }
@@ -270,6 +270,22 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
         page.on("response", (response) => { if (response.status() >= 400) browserErrors.push(`${response.status()} ${response.url()}`); });
         const cdp = await context.newCDPSession(page);
         await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+        // Proves SSR note styles and shared stylesheet links survive catchall hydration.
+        await page.goto(`http://127.0.0.1:${builtPort}/blog/styled`);
+        // The SSR Search button is enabled before hydration attaches its handler, and this is the cold first load,
+        // so a single click can land on nothing. Retry until the search opens, which also proves the page hydrated.
+        const search = page.getByRole("combobox", { name: "Search notes" });
+        for (let attempt = 0; !(await search.isVisible()); attempt++) {
+          if (attempt === 50) throw new Error("Search never opened: the page did not hydrate");
+          await page.getByRole("button", { name: /^Search/ }).click();
+          await search.waitFor({ timeout: 250 }).catch(() => undefined);
+        }
+        expect(await page.locator("head link[rel=stylesheet]").evaluateAll((links) =>
+          links.map((link) => (link as HTMLLinkElement).href)))
+          .toEqual(expect.arrayContaining(stylesheets.map((href) => new URL(href, page.url()).href)));
+        expect(await page.locator(".host-public-tone").evaluate((element) => getComputedStyle(element).color))
+          .toBe("rgb(17, 23, 91)");
+        expect(pageErrors).toEqual([]);
         await page.goto(`http://127.0.0.1:${builtPort}/blog/tags/guides`);
         await page.getByRole("heading", { level: 1, name: "guides" }).waitFor();
         await page.getByRole("button", { name: /^Search/ }).click();
