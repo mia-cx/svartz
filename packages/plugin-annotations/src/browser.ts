@@ -175,7 +175,6 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
   const controller = new AbortController();
   const { signal } = controller;
   const prefix = `sv-annotations-${++attached}`;
-  const highlight = highlightNamed(HIGHLIGHT);
   const placed: Array<{ range: Range; marker: HTMLButtonElement; card: HTMLElement }> = [];
 
   // Beside the content rather than in it, so its DOM and text stay the author's. Out of flow, so it never shifts the
@@ -220,6 +219,8 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
   void document.fonts?.ready.then(() => signal.aborted || schedule());
 
   const show = (comments: readonly Comment[]) => {
+    // Looked up now, not before the fetch: another element detaching meanwhile may have unregistered the shared one.
+    const highlight = highlightNamed(HIGHLIGHT);
     const text = content.textContent ?? "";
     const located = comments
       .map((comment) => ({ comment, position: locate(text, comment.anchor) }))
@@ -261,6 +262,8 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
     controller.abort();
     resizes.disconnect();
     if (frame) cancelAnimationFrame(frame);
+    // The registered highlight, which every live element shares; it goes only once none has ranges in it.
+    const highlight = CSS.highlights?.get(HIGHLIGHT);
     for (const { range } of placed) {
       highlight?.delete(range);
       if (CSS.highlights?.get(ACTIVE_HIGHLIGHT)?.has(range)) CSS.highlights.delete(ACTIVE_HIGHLIGHT);

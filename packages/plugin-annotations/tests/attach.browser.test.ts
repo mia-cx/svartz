@@ -125,6 +125,36 @@ describe("a page with comments, read signed out", () => {
     expect(grace.querySelector(".sv-annotations-body b")).toBeNull();
   });
 
+  it("keeps highlighting a note whose comments arrive after another note detaches", async () => {
+    document.body.innerHTML = `<main>${note}</main><aside>${note}</aside>`;
+    const [first, second] = [...document.querySelectorAll("article")] as HTMLElement[];
+    // Hold the second note's response until the first has detached.
+    const realFetch = globalThis.fetch;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let calls = 0;
+    globalThis.fetch = async (...args) => {
+      if (++calls === 2) await held;
+      return realFetch(...args);
+    };
+    try {
+      const detachFirst = attach(first!, { endpoint: ENDPOINT, page: "hardware/sensors" });
+      await expect.poll(() => first!.nextElementSibling?.querySelectorAll(".sv-annotations-marker").length).toBe(2);
+      detach = attach(second!, { endpoint: ENDPOINT, page: "hardware/sensors" });
+
+      detachFirst();
+      release();
+      await expect.poll(() => second!.nextElementSibling?.querySelectorAll(".sv-annotations-marker").length).toBe(2);
+
+      expect(highlighted().sort()).toEqual([DEW_POINT, PRESSURE].sort());
+      detach();
+      detach = undefined;
+      expect(CSS.highlights.has(HIGHLIGHT)).toBe(false);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   it("keeps markers that share a line apart when the margin pushes them on screen", async () => {
     await page.viewport(390, 800);
     const root = render();
