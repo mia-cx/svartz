@@ -85,7 +85,8 @@ beforeAll(async () => {
   await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "apps/web/node_modules"), "dir");
   await mkdir(path.join(root, "vault"));
   await mkdir(path.join(root, "plugins"));
-  await writeFile(path.join(root, "vault/source.md"), "---\nslug: guide\n---\n# Guide\n\nPublished guide.\n");
+  await writeFile(path.join(root, "vault/source.md"), "---\nslug: guide\n---\n# Guide\n\nPublished guide. Read [[other]].\n");
+  await writeFile(path.join(root, "vault/other.md"), "# Other\n\nLinked page.\n");
   await writeFile(path.join(root, "vault/private.md"), "---\nprivate: true\n---\n# PRIVATE_MARKER\n");
   await writeFile(path.join(root, "plugins/hello.mjs"), `export default (options) => (request, context) => {
     if (new URL(request.url).pathname !== context.base + "/") return undefined;
@@ -164,22 +165,23 @@ describe("standalone builds with a server plugin", () => {
       expect(await home.text()).toContain("Prerendered welcome.");
 
       // Proves page URLs negotiate the emitted copy ahead of adapter-node's static HTML middleware.
-      const markdown = await fetch(`${origin}/`, { headers: { accept: "text/markdown" } });
-      expect(markdown.status).toBe(200);
-      expect(markdown.headers.get("content-type")).toContain("text/markdown");
-      expect(markdown.headers.get("vary")).toContain("User-Agent");
-      expect(await markdown.text()).toBe(await readFile(path.join(dist, "client", prefix, "index.md"), "utf8"));
       const agent = await fetch(`${origin}/guide/`, { headers: { "user-agent": "ClaudeBot/1.0" } });
-      expect(await agent.text()).toBe(await readFile(path.join(dist, "client", prefix, "guide.md"), "utf8"));
+      expect(agent.headers.get("content-type")).toContain("text/markdown");
+      const copy = await agent.text();
+      expect(copy).toBe(await readFile(path.join(dist, "client", prefix, "guide.md"), "utf8"));
+      // Without site.url the copy's links are relative, so they must resolve against the URL the agent ends up at.
+      const link = /\]\(([^)]+)\)/.exec(copy.slice(copy.indexOf("Read")))?.[1];
+      const linked = await fetch(new URL(link!, agent.url));
+      expect([linked.status, await linked.text()]).toEqual([200, expect.stringContaining("Linked page.")]);
+      const markdown = await fetch(`${origin}/`, { headers: { accept: "text/markdown" }, redirect: "manual" });
+      expect([markdown.status, markdown.headers.get("location")]).toEqual([303, `${prefix}/index.md`]);
+      expect(markdown.headers.get("vary")).toContain("User-Agent");
       const head = await fetch(`${origin}/guide/`, { method: "HEAD", headers: { accept: "text/markdown" } });
       expect(head.headers.get("content-type")).toContain("text/markdown");
       expect(await head.text()).toBe("");
       const browser = await fetch(`${origin}/guide/`, { headers: { accept: "text/html, text/markdown;q=0.5" } });
       expect(browser.headers.get("content-type")).toContain("text/html");
       expect((await fetch(`${origin}/private/`, { headers: { accept: "text/markdown" } })).status).toBe(404);
-      await rm(path.join(dist, "client", prefix, "guide.md"));
-      const missingCopy = await fetch(`${origin}/guide/`, { headers: { accept: "text/markdown" } });
-      expect(missingCopy.headers.get("content-type")).toContain("text/html");
     } finally {
       server.kill("SIGTERM");
       if (server.exitCode === null) await once(server, "exit");
@@ -205,4 +207,19 @@ describe("standalone builds with a server plugin", () => {
       expect(filesContaining(await readTree(path.join(assets, "_app")), HANDLER_MARKER)).toEqual([]);
     }, BUILD_TIMEOUT);
   }
+
+  // Pages skips the worker for excluded paths, and those follow the routes' trailingSlash rather than Svartz's hrefs.
+  it("routes slashless prerendered pages through the Pages worker", async () => {
+    const layout = path.join(root, "apps/web/src/routes/+layout.ts");
+    const original = await readFile(layout, "utf8");
+    await writeFile(layout, original.replace("'always'", "'never'"));
+    try {
+      await build({ type: "cloudflare-pages" });
+    } finally {
+      await writeFile(layout, original);
+    }
+    const routes = JSON.parse(await readFile(path.join(root, ".svartz/vaults/site/.svelte-kit/cloudflare/_routes.json"), "utf8"));
+    expect(routes.exclude).toContain("/guide.md");
+    expect(routes.exclude.filter((pattern: string) => /^\/(?:guide|other)/.test(pattern) && !pattern.endsWith(".md"))).toEqual([]);
+  }, BUILD_TIMEOUT);
 });

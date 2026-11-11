@@ -1,6 +1,7 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { build } from "vite";
+import { markdownCopyFor } from "@svartz/core";
 import { getMarkdownRoutes } from "./public-assets";
 
 interface MarkdownBuilder {
@@ -26,7 +27,7 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
       const entry = node ? "handler.js" : "_worker.js";
       const original = node ? "svartz-handler.js" : "svartz-worker.js";
       const common = `
-        import { createServerHandle } from ${JSON.stringify(import.meta.resolve("@svartz/core"))};
+        import { createServerHandle, markdownCopyFor } from ${JSON.stringify(import.meta.resolve("@svartz/core"))};
         const markdown = ${JSON.stringify(markdown)};
         const handle = createServerHandle({
           basePath: "", vault: { id: "", mountPath: "", site: {} }, servers: [],
@@ -35,12 +36,10 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
       `;
       const source = node ? `${common}
         import { handler as original } from "./${original}";
-        import { readFile } from "node:fs/promises";
-        const client = new URL("./client/", import.meta.url);
         export async function handler(req, res, next) {
           try {
             const url = new URL(req.url, "http://svartz.local");
-            if (!["GET", "HEAD"].includes(req.method) || !Object.hasOwn(markdown, url.pathname.endsWith("/") ? url.pathname : url.pathname + "/")) {
+            if (!["GET", "HEAD"].includes(req.method) || !markdownCopyFor(markdown, url.pathname)) {
               return original(req, res, next);
             }
             const request = new Request(url, { method: req.method, headers: {
@@ -49,15 +48,7 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
             }});
             let passed = false;
             const response = await handle({
-              event: { request, url, getClientAddress: () => req.socket.remoteAddress,
-                fetch: async (url) => {
-                  try { return new Response(await readFile(new URL("." + url.pathname, client))); }
-                  catch (error) {
-                    if (error.code === "ENOENT") return new Response(null, { status: 404 });
-                    throw error;
-                  }
-                },
-              },
+              event: { request, url, getClientAddress: () => req.socket.remoteAddress },
               resolve: () => { passed = true; return new Response(null); },
             });
             if (passed) {
@@ -83,13 +74,12 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
           ...original,
           fetch(request, env, ctx) {
             const url = new URL(request.url);
-            if (!["GET", "HEAD"].includes(request.method) || !Object.hasOwn(markdown, url.pathname.endsWith("/") ? url.pathname : url.pathname + "/")) {
+            if (!["GET", "HEAD"].includes(request.method) || !markdownCopyFor(markdown, url.pathname)) {
               return original.fetch(request, env, ctx);
             }
             return handle({
               event: { request, url, platform: { env, ctx },
                 getClientAddress: () => request.headers.get("cf-connecting-ip"),
-                fetch: (url) => env.ASSETS.fetch(new Request(url)),
               },
               resolve: () => original.fetch(request, env, ctx),
             });
@@ -121,8 +111,10 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
         const routesPath = join(directory, "_routes.json");
         const routes = JSON.parse(await readFile(routesPath, "utf8")) as { exclude: string[] };
         // Pages otherwise bypasses the worker for prerendered pages before negotiation can run.
-        routes.exclude = routes.exclude.filter((pattern) => !Object.keys(markdown).some((href) =>
-          href === pattern || (pattern.endsWith("*") && href.startsWith(pattern.slice(0, -1)))));
+        // Exclusions follow the routes' `trailingSlash`, so match them the way negotiation matches requests.
+        routes.exclude = routes.exclude.filter((pattern) => pattern.endsWith("*")
+          ? !Object.keys(markdown).some((href) => href.startsWith(pattern.slice(0, -1)))
+          : !markdownCopyFor(markdown, pattern));
         await writeFile(routesPath, JSON.stringify(routes, null, 2));
       }
     },

@@ -85,8 +85,6 @@ export interface ServerHandleEvent {
   /** The route SvelteKit matched, whose `trailingSlash` it applied before hooks ran; `id` is `null` when none did. */
   readonly route?: { readonly id: string | null };
   getClientAddress(): string;
-  /** Reads public assets for content negotiation. SvelteKit supplies its request-local fetch. */
-  fetch?(input: URL): Promise<Response>;
 }
 
 /** Runtime inputs SvelteKit supplies to the generated registry. */
@@ -173,6 +171,22 @@ function wantsMarkdown(request: Request): boolean {
     : false;
 }
 
+/**
+ * The emitted Markdown copy of the page at a request `pathname`, if it has one. Map keys are decoded and end in a
+ * slash; request paths arrive percent-encoded, and without the slash under `trailingSlash: 'never'`.
+ */
+export function markdownCopyFor(markdown: Readonly<Record<string, string>> | undefined, pathname: string): string | undefined {
+  if (!markdown) return undefined;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return undefined;
+  }
+  const key = decoded.endsWith("/") ? decoded : `${decoded}/`;
+  return Object.hasOwn(markdown, key) ? markdown[key] : undefined;
+}
+
 function varyRepresentation(response: Response): Response {
   const result = new Response(response.body, response);
   const vary = new Set((result.headers.get("vary") ?? "").split(",").map((name) => name.trim()).filter(Boolean));
@@ -191,7 +205,7 @@ function varyRepresentation(response: Response): Response {
 
 /**
  * Build a SvelteKit `handle` that sends `<basePath>/_svartz/<id>/…` to plugin `<id>` and every other request to `resolve`.
- * Published page GET/HEAD requests negotiate their emitted Markdown copy before resolving HTML.
+ * Published page GET/HEAD requests that prefer Markdown get a 303 to the page's emitted copy; others resolve HTML.
  * Unknown ids, and handlers answering `undefined`, return 404. Each factory runs once, on its plugin's first request.
  */
 export function createServerHandle(registry: ServerRegistry, runtime: ServerHandleRuntime) {
@@ -214,17 +228,12 @@ export function createServerHandle(registry: ServerRegistry, runtime: ServerHand
   }): Promise<Response> => {
     // Read nothing but the pathname before the prefix check: SvelteKit forbids `url.search` while prerendering.
     const { pathname } = event.url;
-    const markdownHref = registry.markdown?.[pathname.endsWith("/") ? pathname : `${pathname}/`];
+    const markdownHref = markdownCopyFor(registry.markdown, pathname);
     if (!runtime.building && markdownHref && ["GET", "HEAD"].includes(event.request.method)) {
-      if (wantsMarkdown(event.request) && event.fetch) {
-        const asset = await event.fetch(new URL(markdownHref, event.url));
-        if (asset.ok) {
-          if (event.request.method === "HEAD") await asset.body?.cancel();
-          const response = new Response(event.request.method === "HEAD" ? null : asset.body, asset);
-          response.headers.set("content-type", "text/markdown; charset=utf-8");
-          return varyRepresentation(response);
-        }
-        await asset.body?.cancel();
+      // Redirect instead of serving the copy here: without `site.url` its links are relative to the `.md` URL.
+      if (wantsMarkdown(event.request)) {
+        const location = new URL(markdownHref, event.url).pathname;
+        return varyRepresentation(new Response(null, { status: 303, headers: { location } }));
       }
       return varyRepresentation(await resolve(event));
     }

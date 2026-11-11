@@ -28,23 +28,37 @@ describe("page representation negotiation", () => {
       markdown: { "/site/docs/guide/": "/site/docs/guide.md" },
     }, { privateEnv: {}, dev: false, building });
     const response = await handle({
-      event: {
-        request, url: new URL(request.url), getClientAddress: () => "",
-        fetch: async (url) => {
-          expect(url.href).toBe("https://wiki.test/site/docs/guide.md");
-          return new Response("# Guide");
-        },
-      },
+      event: { request, url: new URL(request.url), getClientAddress: () => "" },
       resolve: () => new Response("<h1>Guide</h1>", { headers: { vary: "Accept-Encoding" } }),
     });
-    expect(await response.text()).toBe(markdown ? method === "HEAD" ? "" : "# Guide" : "<h1>Guide</h1>");
-    if (markdown) expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    // The copy's links are relative to its own URL, so agents are sent there rather than served it at the page URL.
+    expect(response.status).toBe(markdown ? 303 : 200);
+    expect(response.headers.get("location")).toBe(markdown ? "/site/docs/guide.md" : null);
+    if (!markdown) expect(await response.text()).toBe("<h1>Guide</h1>");
     if (!building && method !== "POST") {
       expect(response.headers.get("vary")).toContain("Accept");
       expect(response.headers.get("vary")).toContain("User-Agent");
       expect(response.headers.get("cache-control")).toBe("private, no-cache");
       if (!markdown) expect(response.headers.get("vary")).toContain("Accept-Encoding");
     }
+  });
+
+  // Proves non-ASCII pages negotiate although request paths arrive percent-encoded, and malformed escapes fall through.
+  it.each([
+    ["/caf%C3%A9/", "/caf%C3%A9.md"],
+    ["/%E6%97%A5%E6%9C%AC%E8%AA%9E", "/%E6%97%A5%E6%9C%AC%E8%AA%9E.md"],
+    ["/caf%E9/", null],
+  ])("negotiates %s", async (path, location) => {
+    const handle = createServerHandle({
+      basePath: "", vault, servers: [],
+      markdown: { "/café/": "/café.md", "/日本語/": "/日本語.md" },
+    }, { privateEnv: {}, dev: false, building: false });
+    const request = new Request(`https://wiki.test${path}`, { headers: { accept: "text/markdown" } });
+    const response = await handle({
+      event: { request, url: new URL(request.url), getClientAddress: () => "" },
+      resolve: () => new Response("<h1>Page</h1>"),
+    });
+    expect(response.headers.get("location")).toBe(location);
   });
 });
 
