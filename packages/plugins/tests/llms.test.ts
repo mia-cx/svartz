@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PluginContext, ProcessedFile, ResolvedConfig } from "@svartz/core";
+import type { IndexEntry, PluginContext, ProcessedFile, ResolvedConfig } from "@svartz/core";
 import { parseFrontmatter } from "../src/parse-frontmatter";
 import { filterUnpublished } from "../src/filter-unpublished";
 import { allocateRoutesPlugin } from "../src/allocate-routes";
@@ -32,7 +32,11 @@ const setup = [
   "```",
 ].join("\n");
 
-function build(vault: ProcessedFile[], config: { url?: string; enabled?: boolean } = {}) {
+function build(vault: ProcessedFile[], config: {
+  url?: string;
+  enabled?: boolean;
+  frontmatter?: Partial<ResolvedConfig["frontmatter"]>;
+} = {}) {
   const ctx: PluginContext = {
     config: {
       version: "1.0.0",
@@ -52,6 +56,7 @@ function build(vault: ProcessedFile[], config: { url?: string; enabled?: boolean
         createdAtField: "created_at",
         updatedAtField: "updated_at",
         publishedField: "published_at",
+        ...config.frontmatter,
       },
       site: { title: "Docs", description: "How to use it.", url: config.url },
       mountPath: "/docs",
@@ -91,6 +96,73 @@ const vault = () => [
 ];
 
 describe("Markdown copies for LLM agents", () => {
+  it.each([
+    { name: "missing", fields: "", properties: {}, title: "Note", description: "Body text." },
+    { name: "authored", fields: "title: Authored\ndescription: Summary.\n", properties: { title: "Authored", description: "Summary." }, title: "Authored", description: "Summary." },
+    { name: "empty", fields: 'title: ""\ndescription: ""\n', properties: { title: "", description: "" }, title: "Note", description: "Body text." },
+    { name: "non-string", fields: "title: 42\ndescription: false\n", properties: { title: 42, description: false }, title: "Note", description: "Body text." },
+    { name: "null", fields: "title: null\ndescription: null\n", properties: { title: null, description: null }, title: "Note", description: "Body text." },
+    { name: "authored title", fields: "title: Authored\n", properties: { title: "Authored" }, title: "Authored", description: "Body text." },
+    { name: "authored description", fields: "description: Summary.\n", properties: { description: "Summary." }, title: "Note", description: "Summary." },
+  ])("keeps $name properties authored while copies retain display metadata", async ({ fields, properties, title, description }) => {
+    const ctx = build([file("Note.md", `---\n${fields}category: guide\n---\nBody text.`)]);
+    const asset = await emit(ctx);
+    const entry = ctx.index!.entries[0]!;
+    expect(entry.properties).toEqual({ ...properties, category: "guide" });
+    expect(entry.title).toBe(title);
+    expect(entry.description).toBe(description);
+    expect(asset("note.md")).toContain(`title: ${title}\n`);
+    expect(asset("note.md")).toContain(`description: ${description}\n`);
+    expect(asset("note.md")).toContain("category: guide\n");
+  });
+
+  it("respects configured fields and retains metadata added by later plugins", async () => {
+    const ctx = build([file("Note.md", '---\nheading: ""\ntitle: Ordinary property\n---\nBody text.')], {
+      frontmatter: { titleField: "heading", descriptionField: "summary" },
+    });
+    ctx.files[0]!.frontmatter!.plugin = "Added later";
+    const asset = await emit(ctx);
+    const entry = ctx.index!.entries[0]!;
+    expect(entry.properties).toEqual({ heading: "", title: "Ordinary property", plugin: "Added later" });
+    expect(entry.title).toBe("Note");
+    expect(entry.description).toBe("Body text.");
+    expect(asset("note.md")).toContain("heading: Note\n");
+    expect(asset("note.md")).toContain("summary: Body text.\n");
+    expect(asset("note.md")).toContain("plugin: Added later\n");
+  });
+
+  it("publishes a later plugin's title and description overrides", async () => {
+    const ctx = build([file("Note.md", "Body text.")]);
+    Object.assign(ctx.files[0]!.frontmatter!, { title: "Plugin title", description: "Plugin summary." });
+    const asset = await emit(ctx);
+    expect(ctx.index!.entries[0]!.properties).toEqual({ title: "Plugin title", description: "Plugin summary." });
+    expect(asset("note.md")).toContain("title: Plugin title\ndescription: Plugin summary.\n");
+  });
+
+  it("does not apply stale defaults when a rebuild disables the description transform", async () => {
+    const ctx = build([file("Note.md", "Body text.")]);
+    await emit(ctx);
+    ctx.files = [file("Note.md", "---\ntitle: Note\ndescription: Body text.\n---\nNew body.")];
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    const asset = await emit(ctx);
+    expect(ctx.index!.entries[0]!.properties).toEqual({ title: "Note", description: "Body text." });
+    expect(asset("note.md")).toContain("title: Note\ndescription: Body text.\n");
+  });
+
+  it("preserves authored properties in protected entries and redacts their public shells", async () => {
+    const ctx = build([file("Note.md", '---\ntitle: ""\ncategory: staff\n---\nSecret text.')]);
+    ctx.files[0]!.protection = { group: "staff", hidden: false };
+    const asset = await emit(ctx);
+    const protectedEntries = ctx.meta.get("svartz:protectedEntries") as Map<string, IndexEntry[]>;
+    expect(protectedEntries.get("staff")![0]).toMatchObject({
+      title: "Note",
+      description: "Secret text.",
+      properties: { title: "", category: "staff" },
+    });
+    expect(ctx.index!.entries[0]!.properties).toEqual({});
+    expect(asset("note.md")).toBeUndefined();
+  });
+
   it("writes each public page as Markdown with links to the other copies", async () => {
     const asset = await emit(build(vault()));
     expect(asset("guides/setup.md")).toBe([

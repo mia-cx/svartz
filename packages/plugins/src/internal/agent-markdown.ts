@@ -153,10 +153,10 @@ export function portableMarkdown(file: ProcessedFile, source: string, links: Age
 }
 
 /**
- * One page's Markdown copy: its published properties as YAML front matter, the title
+ * One page's Markdown copy: its transformed frontmatter (including display defaults), the title
  * as a heading unless the body opens with one, then the source with links rewritten.
  * Structured themes (API models, symbol docs) render from those properties, so the
- * copy keeps them. The index already publishes them, so they reveal nothing new.
+ * copy keeps them alongside the generated title and description.
  */
 export function agentMarkdown(
   file: ProcessedFile,
