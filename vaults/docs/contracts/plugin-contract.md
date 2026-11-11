@@ -42,7 +42,7 @@ Transformers can register remark or rehype plugins with `getCompilerContribution
 
 ## Server modules
 
-`server: { module, options }` makes a plugin answer requests at runtime under `/_svartz/<plugin-id>/`. The module default-exports a factory that receives `options` and returns `(request, context) => Response | undefined`. Options are JSON; secrets are named as `{ env: "NAME" }` and read from `context.env`. The vault needs a `cloudflare-workers`, `cloudflare-pages` or `node` target; a `static` vault fails the build. The repository's `docs/server-plugins.md` has the full contract.
+`server: { module, options }` makes a plugin answer requests at runtime under `/_svartz/<plugin-id>/`. The module default-exports a factory that receives `options` and returns `(request, context) => Response | undefined`. Options are JSON; secrets are named as `{ env: "NAME" }` and read from `context.env`. The vault needs a `cloudflare-workers`, `cloudflare-pages` or `node` target, or a host app whose hooks run `svartzHandle`; a `static` vault, or a host on `adapter-static`, fails the build. The repository's `docs/server-plugins.md` has the full contract.
 
 ## Merge and validation
 

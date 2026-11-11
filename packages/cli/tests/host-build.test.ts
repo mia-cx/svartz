@@ -3,7 +3,7 @@ import { createServer } from "node:net";
 import { once } from "node:events";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
-import { access, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -408,3 +408,95 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   expect(rebuiltIndex).not.toContain('"slug": "guides/deep", "title": "Deep"');
   expect(rebuiltIndex).not.toContain('"/blog/folders/guides/deep/"');
 }, 90_000);
+
+it("routes server plugins through svartzHandle for every host vault, and fails a host that can't run them", async () => {
+  // SvelteKit writes relative imports from the kit dir; macOS's /var symlink would break them.
+  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "svartz-host-server-")));
+  roots.push(root);
+  await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "node_modules"), "dir");
+  await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
+  for (const name of ["+page.svelte", "+page.ts"]) {
+    await writeFile(path.join(root, "src/routes/[...slug]", name),
+      await readFile(path.join(workspaceRoot, "packages/cli/template/src/routes/[...slug]", name)));
+  }
+  await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "svartz-host-server", private: true, type: "module", devDependencies: { "@sveltejs/kit": "^2.0.0" } }));
+  await writeFile(path.join(root, "vite.config.ts"), [
+    "import { sveltekit } from '@sveltejs/kit/vite';",
+    "import { defineConfig } from 'vite';",
+    `import { withSvartzHost } from ${JSON.stringify(path.join(workspaceRoot, "packages/vite/dist/host.js"))};`,
+    "export default withSvartzHost(defineConfig({ plugins: [sveltekit()] }));",
+  ].join("\n"));
+  // The prerender setup docs/host-vaults.md gives hosts: crawled plugin links answer 404 and are skipped.
+  const svelteConfig = (adapter: string) => `import adapter from '@sveltejs/${adapter}';
+export default { kit: { adapter: adapter(), prerender: { handleHttpError: ({ status, path, message }) => {
+  if (status === 404 && path.includes('/_svartz/')) return;
+  throw new Error(message);
+} } } };\n`;
+  await writeFile(path.join(root, "svelte.config.js"), svelteConfig("adapter-node"));
+  await writeFile(path.join(root, "src/app.html"), "<!doctype html><html lang=\"en\"><head>%sveltekit.head%</head><body><div style=\"display: contents\">%sveltekit.body%</div></body></html>\n");
+  await writeFile(path.join(root, "src/hooks.server.ts"),
+    "import { svartzHandle } from 'virtual:svartz/server';\nexport const handle = svartzHandle;\n");
+  await writeFile(path.join(root, "hello.mjs"), `export default (options) => (request, context) => {
+    if (new URL(request.url).pathname !== context.base + "/") return undefined;
+    return Response.json({ greeting: options.greeting, token: context.env.HELLO_TOKEN ?? null, base: context.base, vault: context.vault.id });
+  };\n`);
+  const vaults = ["docs", "wiki"];
+  for (const id of vaults) {
+    await mkdir(path.join(root, id));
+    await writeFile(path.join(root, id, "index.md"), `# ${id} home\n\nPrerendered ${id}. [Say hello](/${id}/_svartz/hello/).\n`);
+  }
+  await writeFile(path.join(root, "svartz.config.ts"), `export default {
+    version: "1.0.0",
+    vaults: ${JSON.stringify(vaults.map((id) => ({
+      id,
+      path: id,
+      mountPath: `/${id}`,
+      theme: path.join(workspaceRoot, "themes/minimal"),
+      target: { type: "host" },
+      plugins: [{ id: "hello", server: { module: path.join(root, "hello.mjs"), options: { greeting: `hi from ${id}` } } }],
+    })))},
+  };\n`);
+  const build = () => execFileAsync(process.execPath, [
+    path.join(workspaceRoot, "packages/cli/dist/index.js"), "build", "--config", path.join(root, "svartz.config.ts"),
+  ], { cwd: root, maxBuffer: 20_000_000 });
+  const buildFailure = () => build().then(() => undefined, (error: { stderr?: string }) => error.stderr ?? String(error));
+
+  await build();
+  const port = await freePort();
+  const server = spawn(process.execPath, [path.join(root, "build/index.js")], {
+    cwd: root,
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), HELLO_TOKEN: "s3cret" },
+    stdio: "pipe",
+  });
+  let stderr = "";
+  server.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+  const origin = `http://127.0.0.1:${port}`;
+  try {
+    let ready = false;
+    for (let attempt = 0; attempt < 100 && !ready; attempt++) {
+      ready = await fetch(`${origin}/docs/`).then(() => true, () => false);
+      if (!ready) await sleep(100);
+    }
+    expect(ready, stderr).toBe(true);
+    for (const id of vaults) {
+      const answer = await fetch(`${origin}/${id}/_svartz/hello/`, { method: "POST" });
+      expect(answer.status, stderr).toBe(200);
+      expect(await answer.json()).toEqual({ greeting: `hi from ${id}`, token: "s3cret", base: `/${id}/_svartz/hello`, vault: id });
+      expect(await (await fetch(`${origin}/${id}/`)).text()).toContain(`Prerendered ${id}.`);
+    }
+    expect((await fetch(`${origin}/_svartz/hello/`)).status).toBe(404);
+  } finally {
+    server.kill("SIGTERM");
+    if (server.exitCode === null) await once(server, "exit");
+  }
+
+  await writeFile(path.join(root, "src/hooks.server.ts"), "export const handle = ({ event, resolve }) => resolve(event);\n");
+  const unrouted = await buildFailure();
+  expect(unrouted).toContain(`Vault "docs" activates plugin "hello", which serves requests, but the host app's server hooks don't run svartzHandle.`);
+  expect(unrouted).toContain("import { svartzHandle } from 'virtual:svartz/server';");
+
+  await writeFile(path.join(root, "svelte.config.js"), svelteConfig("adapter-static"));
+  expect(await buildFailure()).toContain(
+    'Vault "docs" is mounted in a host app that uses @sveltejs/adapter-static, but plugin "hello" serves requests.',
+  );
+}, 300_000);

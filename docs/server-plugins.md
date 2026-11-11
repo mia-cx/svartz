@@ -73,7 +73,7 @@ Never put a secret in options. Name its environment variable with `{ env: "NAME"
 - A request reaches plugin `<id>` only when its path starts with `<base><mountPath>/_svartz/<id>/`, where `<base>` is the deployment base (`target.basePath` or SvelteKit's `paths.base`). The id must match a whole path segment.
 - Every other path renders as usual and never reaches a plugin.
 - An unknown id, or a handler that returns `undefined`, answers 404 with `{ "error": "not_found", "message": "…" }`.
-- Svartz URLs end in a slash. A request without one, such as `/_svartz/hello/ping`, is redirected with a 308 to `/_svartz/hello/ping/` before it reaches the handler; clients resend the method and body, and the query is kept.
+- Svartz URLs end in a slash, and the handler always sees one. A request without one, such as `/_svartz/hello/ping`, is redirected with a 308 to `/_svartz/hello/ping/`; clients resend the method and body, and the query is kept. When a SvelteKit route in the app matches the path, SvelteKit applies that route's `trailingSlash` first, so a host app's default `'never'` serves `/_svartz/hello/ping` without a redirect and hands the handler `/_svartz/hello/ping/`.
 - While prerendering, plugin paths answer 404 without running the plugin, so build-time env never reaches a handler. Notes may link to plugin URLs: the crawler skips them instead of failing the build, and writes no static page for them.
 
 A plugin id that serves requests may hold only lowercase letters, digits and hyphens.
@@ -88,6 +88,8 @@ A vault with an active server plugin needs a server target:
 | `cloudflare-pages` | `@sveltejs/adapter-cloudflare` | `.svartz/vaults/<id>/.svelte-kit/cloudflare/` |
 | `node` | `@sveltejs/adapter-node` | `<outDir>/index.js`; run it with `node` |
 
-Notes, lists and theme pages are still prerendered and served as static files. A `static` vault with a server plugin fails the build, naming the vault and the plugin. So does a host vault, because a host app can't route plugin requests yet. A plugin that is `disabled`, or replaced by a same-id plugin without `server`, doesn't count.
+Notes, lists and theme pages are still prerendered and served as static files. A `static` vault with a server plugin fails the build, naming the vault and the plugin. A plugin that is `disabled`, or replaced by a same-id plugin without `server`, doesn't count.
 
-The standalone shell routes plugin requests from `src/hooks.server.ts`. Its `handle` runs `handle` from `virtual:svartz/server` before its own. That server-only module exports the vault's `registry` (base path, vault settings and server plugins) and the SvelteKit `handle` built from it with `createServerHandle` from `@svartz/core`.
+A `host` vault uses the host app's adapter, which must not be `@sveltejs/adapter-static`, and the app adds `svartzHandle` to its hooks. See [server plugins in a host app](host-vaults.md#server-plugins).
+
+`svartzHandle`, from the server-only module `virtual:svartz/server`, is the SvelteKit `handle` that routes plugin requests. The standalone shell's `src/hooks.server.ts` runs it before its own handle. Each vault's version is built with `createServerHandle` from `@svartz/core`; a host app's runs every host vault's in turn.

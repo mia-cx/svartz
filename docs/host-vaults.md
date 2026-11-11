@@ -30,6 +30,45 @@ When the CLI builds one local workspace theme, its source manifest supplies buil
 
 An existing host can use `vite.config.ts`, `.mts`, `.cts`, `.js`, `.mjs`, or `.cjs`. During `svartz dev`, edits to local files imported by that config restart the host runner. Explicit directory themes may use package exports without a root `index.js`; the built-in theme resolves from Svartz's installation.
 
+## Server plugins
+
+A host vault can use [server plugins](server-plugins.md). Svartz routes their requests from the app's own hooks, so add `svartzHandle` to `src/hooks.server.ts`:
+
+```ts
+// src/hooks.server.ts
+import type { Handle } from '@sveltejs/kit';
+import { sequence } from '@sveltejs/kit/hooks';
+import { svartzHandle } from 'virtual:svartz/server';
+
+const handleApp: Handle = ({ event, resolve }) => resolve(event);
+
+export const handle = sequence(svartzHandle, handleApp);
+```
+
+Put it first, so other handles never redirect or reject plugin requests; without other handles, `export const handle = svartzHandle;`. It routes `<base><mountPath>/_svartz/<plugin-id>/` to that vault's plugins, for every host vault, and passes every other request on. A build with an active server plugin fails when the hooks don't run `svartzHandle`, and prints the lines to add. `/// <reference types="@svartz/vite/virtual-modules" />` in `src/app.d.ts` types the import.
+
+The app needs a server adapter, such as `@sveltejs/adapter-node` or `@sveltejs/adapter-cloudflare`. With `@sveltejs/adapter-static`, the build fails naming the vault and plugin.
+
+While prerendering, plugin URLs answer 404. When a note links to one, tell SvelteKit's crawler to skip those 404s in `svelte.config.js`, or the build fails:
+
+```js
+// svelte.config.js
+import adapter from '@sveltejs/adapter-node';
+
+export default {
+  kit: {
+    adapter: adapter(),
+    prerender: {
+      handleHttpError: ({ status, path, message }) => {
+        // Server plugins answer under /_svartz/ at runtime only.
+        if (status === 404 && path.includes('/_svartz/')) return;
+        throw new Error(message);
+      }
+    }
+  }
+};
+```
+
 ## Render a note inside your own page
 
 `SvartzRuntimePage` draws the whole theme page. To keep your own layout, render only the note body with `SvartzNoteContent` from `@svartz/ui/runtime`. Read the title, properties, dates and backlinks from the [published vault view](vault-view.md).

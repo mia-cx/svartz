@@ -57,8 +57,9 @@ function resolveCoreModuleId(): string {
 }
 
 /**
- * The server-only module behind `virtual:svartz/server`: the vault's active server plugins as a registry, and the
- * SvelteKit `handle` that routes `/_svartz/<id>/` to them. `$env/dynamic/private` keeps it out of client bundles.
+ * The vault's server-only module: its active server plugins as a registry, and `svartzHandle`, the SvelteKit `handle`
+ * that routes `/_svartz/<id>/` to them. `virtual:svartz/server` is this module in the standalone shell; host apps get
+ * one that chains every vault's. `$env/dynamic/private` keeps it out of client bundles.
  */
 function createServerRegistrySource(
   config: ResolvedConfig,
@@ -72,23 +73,23 @@ function createServerRegistrySource(
     const options = server.options === undefined ? "undefined" : `JSON.parse(${JSON.stringify(JSON.stringify(server.options))})`;
     return [`  { id: ${JSON.stringify(id)}, load: () => import(${JSON.stringify(specifier)}), options: ${options} },`];
   });
+  // Without server plugins every request passes straight through, so the server bundle gains nothing else.
+  if (servers.length === 0) return "export const svartzHandle = ({ event, resolve }) => resolve(event);\n";
   const { favicon: _faviconSource, ...site } = config.site;
   const registry = [
-    `export const registry = {`,
+    `const registry = {`,
     `  basePath: ${JSON.stringify(`${deploymentBasePath}${config.mountPath}`)},`,
     `  vault: ${JSON.stringify({ id: config.id, mountPath: config.mountPath, site })},`,
     `  servers: [\n${servers.map((server) => `  ${server}`).join("\n")}\n  ],`,
     `};`,
   ].join("\n");
-  // Without server plugins every request passes straight through, so the server bundle gains nothing else.
-  if (servers.length === 0) return `${registry}\nexport const handle = ({ event, resolve }) => resolve(event);\n`;
   return [
     `import { env } from "$env/dynamic/private";`,
     `import { building, dev } from "$app/environment";`,
     `import { createServerHandle } from ${JSON.stringify(resolveCoreModuleId())};`,
     "",
     registry,
-    "export const handle = createServerHandle(registry, { privateEnv: env, building, dev });",
+    "export const svartzHandle = createServerHandle(registry, { privateEnv: env, building, dev });",
     "",
   ].join("\n");
 }

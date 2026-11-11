@@ -91,8 +91,7 @@ declare module "virtual:svartz/host" {
   export function hostStylesheets(pathname: string): readonly string[];
 }
 
-/** Server-only: the vault's server plugins and the `handle` that routes `/_svartz/<id>/` to them. */
+/** Server-only. Add `svartzHandle` to `hooks.server` to route `/_svartz/<id>/` to every vault's server plugins. */
 declare module "virtual:svartz/server" {
-  export const registry: import("@svartz/core").ServerRegistry;
-  export const handle: import("@sveltejs/kit").Handle;
+  export const svartzHandle: import("@sveltejs/kit").Handle;
 }

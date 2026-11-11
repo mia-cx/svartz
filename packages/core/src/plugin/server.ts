@@ -68,6 +68,8 @@ export interface ServerHandleEvent {
   readonly request: Request;
   readonly url: URL;
   readonly platform?: unknown;
+  /** The route SvelteKit matched, whose `trailingSlash` it applied before hooks ran; `id` is `null` when none did. */
+  readonly route?: { readonly id: string | null };
   getClientAddress(): string;
 }
 
@@ -151,9 +153,17 @@ export function createServerHandle(registry: ServerRegistry, runtime: ServerHand
     // Plugins answer only at runtime. A crawled plugin link gets a 404 the shell's prerender config lets through;
     // a redirect here would be written out as a static page that shadows the live route.
     if (runtime.building) return notFound(pathname);
-    // Svartz URLs end in a slash. SvelteKit redirects in dev but not for routes a production build prerendered away.
+    // Svartz URLs end in a slash, and handlers always see one. SvelteKit redirects to it in dev but not for routes a
+    // production build prerendered away, so the router does. When a route matched, SvelteKit already applied that
+    // route's `trailingSlash` (a host app's default is 'never'); redirecting back would loop, so re-address instead.
+    let { request } = event;
     if (!pathname.endsWith("/")) {
-      return new Response(null, { status: 308, headers: { location: `${pathname}/${event.url.search}` } });
+      if (!event.route?.id) {
+        return new Response(null, { status: 308, headers: { location: `${pathname}/${event.url.search}` } });
+      }
+      const url = new URL(request.url);
+      url.pathname = `${url.pathname}/`;
+      request = new Request(url, request);
     }
 
     const id = pathname.slice(root.length).split("/", 1)[0]!;
@@ -162,7 +172,7 @@ export function createServerHandle(registry: ServerRegistry, runtime: ServerHand
 
     const handler = await handlerFor(route);
     const waitUntilHost = platformWaitUntil(event.platform);
-    const response = await handler(event.request, {
+    const response = await handler(request, {
       env: (!runtime.dev && platformEnv(event.platform)) || runtime.privateEnv,
       clientAddress: clientAddress(event),
       vault: registry.vault,

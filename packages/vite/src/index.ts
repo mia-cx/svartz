@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import {
   mkdir,
   writeFile,
@@ -17,7 +18,7 @@ import {
   type StageName,
   type SvartzTheme,
 } from "@svartz/core";
-import type { Plugin, ViteDevServer } from "vite";
+import { normalizePath, type Plugin, type Rollup, type ViteDevServer } from "vite";
 import {
   RESOLVED_ARTIFACTS_VIRTUAL_ID,
   RESOLVED_SERVER_VIRTUAL_ID,
@@ -61,7 +62,16 @@ import {
 } from "./plugins";
 import { createVaultChangeEvent } from "./watch";
 import { isHostRouteFile, staticHostRoutes } from "./manual-routes";
-import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath, getGeneratedHostStylesPath, svelteKitBasePath } from "./host-registry";
+import {
+  createHostRegistrySource,
+  createHostServerSource,
+  deploymentBasePath,
+  getGeneratedHostRegistryPath,
+  getGeneratedHostServerPath,
+  getGeneratedHostStylesPath,
+  readHostAdapterName,
+  svelteKitBasePath,
+} from "./host-registry";
 import { emitProtectedGroupArtifacts } from "./protected-payload";
 import { clearPublicAssets, recordPublicAssets } from "./public-assets";
 import { writeProtectedBridgeModules, type ProtectedBridgeModule } from "./protected-bridge";
@@ -102,6 +112,7 @@ function selectedThemeSources(config: ResolvedConfig): ThemeSources {
 function svartz(options: SvartzVitePluginOptions): Plugin {
   let context = createSvartzViteContext(options);
   let kitBasePath: string | undefined;
+  let hostAdapter: string | undefined;
   // Bare ids until `configResolved` resolves them from the app root.
   const { base } = context.config.theme;
   let themeImport: ThemeImport = typeof base === "string" ? base : { compose: "@svartz/theme-minimal/runtime", themes: base };
@@ -133,6 +144,32 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     const prefix = base === "/" ? "/" : `${base.replace(/\/$/, "")}/`;
     if (!pathname.startsWith(prefix)) return;
     return emittedAssets.get(pathname.slice(prefix.length));
+  }
+
+  /**
+   * A host app routes plugin requests only when its server hooks run `svartzHandle`. Unused, the import is
+   * tree-shaken, so this vault's handle is missing from the server bundle.
+   */
+  function missingHostServerHandle(bundle: Rollup.OutputBundle): string | undefined {
+    if (context.config.target.type !== "host") return;
+    const server = plugins.find((plugin) => plugin.server);
+    if (!server) return;
+    const id = normalizePath(realpathSync(getGeneratedRuntimeServerModulePath(context.config)));
+    const routed = Object.values(bundle).some((item) =>
+      item.type === "chunk" && item.modules[id]?.renderedExports.includes("svartzHandle"));
+    if (routed) return;
+    return [
+      `Vault "${context.config.id}" activates plugin "${server.id}", which serves requests, but the host app's server hooks don't run svartzHandle.`,
+      "Add it to src/hooks.server.ts (or .js):",
+      "",
+      "  import { svartzHandle } from 'virtual:svartz/server';",
+      "  export const handle = svartzHandle;",
+      "",
+      "If it already exports a handle, put svartzHandle first in a sequence:",
+      "",
+      "  import { sequence } from '@sveltejs/kit/hooks';",
+      "  export const handle = sequence(svartzHandle, yourHandle);",
+    ].join("\n");
   }
 
   function publicAssets(): Artifact[] {
@@ -195,7 +232,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     theme = await loadThemeModule(
       (id) => import(id), context.config, context.root, selectedThemeSources(context.config),
     );
-    plugins = resolveRuntimePlugins(context.config, theme);
+    plugins = resolveRuntimePlugins(context.config, theme, hostAdapter);
     const runnerContext = createRunnerContext();
     runnerContext.meta.set("svartz:mode", context.mode);
     runnerContext.meta.set("svartz:theme", theme);
@@ -315,7 +352,10 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       const virtualModules = options.exposeVirtualModules === false ? [] : [
         { find: "virtual:svartz/theme", replacement: getGeneratedRuntimeThemeModulePath(options.config) },
         { find: "virtual:svartz/artifacts", replacement: getGeneratedRuntimeArtifactsModulePath(options.config) },
-        { find: "virtual:svartz/server", replacement: getGeneratedRuntimeServerModulePath(options.config) },
+        // A host app's `virtual:svartz/server` chains every host vault's handle; the CLI aliases it.
+        ...(options.config.target.type === "host"
+          ? []
+          : [{ find: "virtual:svartz/server", replacement: getGeneratedRuntimeServerModulePath(options.config) }]),
       ];
       return {
         resolve: {
@@ -323,15 +363,21 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
         },
       };
     },
-    configResolved(resolved) {
+    async configResolved(resolved) {
       context = createSvartzViteContext(options, resolved);
       kitBasePath = svelteKitBasePath(resolved.define);
       themeImport = resolveThemeRuntimeImport(context.config, context.root, selectedThemeSources(context.config));
+      if (context.config.target.type === "host") hostAdapter = await readHostAdapterName(context.root);
     },
     async buildStart() {
       await executePipeline();
     },
-    generateBundle() {
+    generateBundle(_output, bundle) {
+      if (this.environment.name === "ssr") {
+        const problem = missingHostServerHandle(bundle);
+        if (problem) this.error(problem);
+        return;
+      }
       if (this.environment.name !== "client") return;
       for (const artifact of publicAssets()) {
         this.emitFile({
@@ -479,7 +525,9 @@ export {
   resolveRuntimePlugins,
   createVaultChangeEvent,
   createHostRegistrySource,
+  createHostServerSource,
   getGeneratedHostRegistryPath,
+  getGeneratedHostServerPath,
   getGeneratedHostStylesPath,
   svelteKitBasePath,
   clearPublicAssets,
