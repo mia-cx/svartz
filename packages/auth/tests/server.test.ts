@@ -154,6 +154,7 @@ describe("signing in with GitHub", () => {
     ["a protocol-relative URL", "//evil.test/"],
     ["a backslash the URL parser reads as a host", "/\\evil.test/"],
     ["a path that normalises to a protocol-relative URL", "/a/..//evil.test/"],
+    ["a dot segment that normalises to a protocol-relative URL", "/.//evil.test"],
     ["a script URL", "javascript:alert(1)"],
   ])("refuses to return the reader to %s", async (_case, returnTo) => {
     const response = await site()(`${AUTH}/start/github/?returnTo=${encodeURIComponent(returnTo)}`);

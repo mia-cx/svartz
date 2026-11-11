@@ -115,5 +115,11 @@ export function mount(_pathname: string, options: SignInConfig): () => void {
     openSignIn();
   };
   document.addEventListener("click", onClick);
-  return () => document.removeEventListener("click", onClick);
+  return () => {
+    document.removeEventListener("click", onClick);
+    // The dialog lives on <body>, outside the page, so client-side navigation alone would leave it open
+    // over the next page with this page's returnTo. Removing it (rather than close()) skips the focus
+    // hand-back, which would land on the previous page's opener.
+    document.querySelector("dialog.sv-auth")?.remove();
+  };
 }

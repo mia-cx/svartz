@@ -49,4 +49,15 @@ describe("the sign-in dialog", () => {
     expect(document.querySelector("dialog")).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
+
+  it("closes when the page unmounts, so it never follows the reader to the next page", async () => {
+    const trigger = page({ endpoint: "/_svartz/auth", providers: [{ id: "github", label: "GitHub" }] });
+    await userEvent.click(trigger);
+    expect(document.querySelector("dialog")?.open).toBe(true);
+
+    unmount?.();
+    unmount = undefined;
+
+    expect(document.querySelector("dialog")).toBeNull();
+  });
 });
