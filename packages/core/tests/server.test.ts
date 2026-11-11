@@ -86,6 +86,16 @@ describe("server plugin routing", () => {
     expect(hello).not.toHaveBeenCalled();
   });
 
+  it("serves a slashless path when the matched route already removed the slash", async () => {
+    // A host's catch-all route defaults to trailingSlash 'never', which SvelteKit applies before hooks run.
+    const { handle, resolve, seen } = setup();
+
+    const response = await handle({ event: { ...event("/_svartz/hello/ping?x=1"), route: { id: "/[...slug]" } }, resolve });
+
+    expect(response.status).toBe(200);
+    expect(seen.map(({ pathname }) => pathname)).toEqual(["/_svartz/hello/ping/"]);
+  });
+
   it("serves below the deployment base and vault mount", async () => {
     const { handle, resolve, seen } = setup({ basePath: "/site/docs" });
 
