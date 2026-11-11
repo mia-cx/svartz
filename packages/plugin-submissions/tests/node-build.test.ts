@@ -115,7 +115,8 @@ describe("a Node build with submissions", () => {
       const outside = await fetch(`${origin}/_svartz/submissions/edit/`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ page: "/../svartz.config.ts", markdown: "x" }),
+        // A well-formed request, so the refusal comes from the page check rather than request validation.
+        body: JSON.stringify({ submissionId: "0".repeat(32), page: "/../svartz.config.ts", markdown: "x" }),
       });
       expect([outside.status, (await outside.json() as { error: string }).error]).toEqual([404, "not_editable"]);
     } finally {
