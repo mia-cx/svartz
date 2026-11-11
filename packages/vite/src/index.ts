@@ -42,6 +42,7 @@ import {
   getVaultBuildRoot,
 } from "./artifacts";
 import { createSvartzViteContext, type SvartzViteContext } from "./context";
+import { serveDevBindings } from "./dev-bindings";
 import type { SvartzVitePluginOptions } from "./options";
 import {
   createThemeVirtualModuleSource,
@@ -102,6 +103,8 @@ function extractThemeConfig(theme: ResolvedConfig["theme"]): Record<string, unkn
   const { base: _base, ...rest } = theme;
   return rest;
 }
+
+const CLOUDFLARE_ADAPTER = "@sveltejs/adapter-cloudflare";
 
 /** The selected workspace theme sources among this vault's themes. */
 function selectedThemeSources(config: ResolvedConfig): ThemeSources {
@@ -400,6 +403,12 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     },
     configureServer(server) {
       devServer = server;
+      const target = context.config.target.type;
+      // Server plugins on Cloudflare read bindings; in dev those come from the project's Wrangler config.
+      if (target === "cloudflare-workers" || target === "cloudflare-pages" || hostAdapter === CLOUDFLARE_ADAPTER) {
+        const stopDevBindings = serveDevBindings(options.projectRoot ?? context.root, context.root);
+        server.httpServer?.once("close", () => void stopDevBindings());
+      }
       server.watcher.add(context.config.path);
       if (context.config.site.favicon) server.watcher.add(context.config.site.favicon);
       if (context.config.target.type === "host") server.watcher.add(join(context.root, "src/routes"));
