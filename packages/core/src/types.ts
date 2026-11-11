@@ -250,6 +250,7 @@ interface IndexEntry {
   readonly slug: string;
   readonly href: string;
   readonly path: string;
+  /** Published frontmatter, preserving authored values without generated title/description defaults. */
   readonly properties: Readonly<Record<string, unknown>>;
   readonly page: {
     readonly toc: boolean;

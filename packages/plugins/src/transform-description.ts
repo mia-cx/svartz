@@ -3,12 +3,19 @@
  *
  * If frontmatter has a description field, uses it directly.
  * Otherwise auto-generates from first sentences of body markdown.
- * Stores result in frontmatter.description for downstream consumers.
+ * Stores display values in frontmatter for downstream consumers, retaining the
+ * overwritten properties separately so the index can publish authored values.
  */
 
-import { definePlugin } from "@svartz/core";
+import { definePlugin, type ProcessedFile } from "@svartz/core";
 import { extractDescription } from "./internal/parse";
 import { deriveTitle } from "./internal/slug";
+
+export const DERIVED_PROPERTIES = "svartz:derivedProperties";
+export type DerivedProperties = WeakMap<ProcessedFile, {
+  original: Record<string, unknown>;
+  generated: Record<string, unknown>;
+}>;
 
 export const transformDescription = definePlugin(() => ({
   id: "core:transform-description",
@@ -17,11 +24,17 @@ export const transformDescription = definePlugin(() => ({
     run(ctx) {
       const descField = ctx.config.frontmatter.descriptionField;
       const titleField = ctx.config.frontmatter.titleField;
+      // ctx.meta can survive a rebuild; provenance belongs to this run's file objects.
+      const derived: DerivedProperties = new WeakMap();
+      ctx.meta.set(DERIVED_PROPERTIES, derived);
 
       for (const file of ctx.files) {
         if (!file.extension || ![".md", ".mdx", ".svx"].includes(file.extension)) continue;
 
         file.frontmatter ??= {};
+        const original = { ...file.frontmatter };
+        const generated: Record<string, unknown> = {};
+        derived.set(file, { original, generated });
 
         const existingTitle = file.frontmatter[titleField];
         if (typeof existingTitle !== "string" || existingTitle.length === 0) {
@@ -29,14 +42,14 @@ export const transformDescription = definePlugin(() => ({
           file.frontmatter[titleField] = deriveTitle(
             filename.replace(/\.[^.]+$/, ""),
           );
+          generated[titleField] = file.frontmatter[titleField];
         }
-
-        if (!file.frontmatter) continue;
 
         const existing = file.frontmatter[descField];
         if (typeof existing === "string" && existing.length > 0) continue;
 
         file.frontmatter[descField] = extractDescription(file.content);
+        generated[descField] = file.frontmatter[descField];
       }
     },
     options: { fatal: true },

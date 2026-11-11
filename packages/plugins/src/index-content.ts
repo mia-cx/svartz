@@ -28,6 +28,7 @@ import { normalizeSlugSegment } from "./internal/slug";
 import { portableMarkdown } from "./internal/agent-markdown";
 import { createAssetResolver } from "./internal/asset-references";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
+import { DERIVED_PROPERTIES, type DerivedProperties } from "./transform-description";
 
 const INDEX_VERSION = "1.0.0";
 const DEFAULT_INDEX_TIMESTAMP = new Date(0);
@@ -142,6 +143,7 @@ export const indexContent = definePlugin(() => ({
       const mountPath = ctx.config.mountPath ?? "";
       const reservedPaths = (ctx.meta.get("reservedRoutes") as ReadonlySet<string> | undefined) ?? new Set<string>();
       const entries: IndexEntry[] = [];
+      const derived = ctx.meta.get(DERIVED_PROPERTIES) as DerivedProperties | undefined;
       const protectedEntries = new Map<string, IndexEntry[]>();
       const search: SearchDocument[] = [];
       const tagCounts = new Map<string, number>();
@@ -162,6 +164,14 @@ export const indexContent = definePlugin(() => ({
         if (!isMarkdownFile(file.extension)) continue;
 
         const frontmatter = file.frontmatter ?? {};
+        const properties = { ...frontmatter };
+        const metadata = derived?.get(file);
+        // Restore only values this transform generated. Later plugin metadata stays published.
+        for (const [field, value] of Object.entries(metadata?.generated ?? {})) {
+          if (!metadata || properties[field] !== value) continue;
+          if (Object.hasOwn(metadata.original, field)) properties[field] = metadata.original[field];
+          else delete properties[field];
+        }
 
         const fmTitle = frontmatter[fm.titleField];
         const title =
@@ -214,7 +224,7 @@ export const indexContent = definePlugin(() => ({
           slug: file.slug,
           href: routeHref(file.slug, mountPath),
           path: file.path,
-          properties: frontmatter,
+          properties,
           page: {
             toc: frontmatter.enableToc !== false && frontmatter.toc !== false,
             comments: frontmatter.comments !== false,

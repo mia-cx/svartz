@@ -19,4 +19,6 @@ export const load: PageServerLoad = ({ url }) => {
 
 Search uses one MiniSearch schema in the artifact producer and browser. `searchOptions` and `searchIndex` are also exported by the virtual module. Use `vault.search` to map result IDs to final URLs, because a stored search index contains URLs before SvelteKit's deployment base is applied.
 
+`entry.properties` preserves authored title and description values, including empty and non-string values. Generated filename titles and extracted descriptions appear in `entry.title` and `entry.description`. Markdown copies include those display defaults in their frontmatter. Other plugin-provided properties remain published.
+
 This view belongs to one vault. A [multi-vault host](host-vaults.md) selects the view by mount.
