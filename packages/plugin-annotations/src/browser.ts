@@ -189,20 +189,25 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
     frame = 0;
     const origin = layer.getBoundingClientRect();
     const bounds = content.getBoundingClientRect();
-    const lines = new Map<number, number>();
+    // Markers on the same line sit side by side, so each line's row is placed as one.
+    const rows = new Map<number, Array<{ marker: HTMLButtonElement; card: HTMLElement }>>();
     for (const { range, marker: markerNode, card: cardNode } of placed) {
       const line = firstLine(range);
       if (!line) continue;
-      const size = markerNode.offsetWidth;
-      // Markers on the same line sit side by side.
-      const top = Math.round(line.top + (line.height - size) / 2 - origin.top);
-      const sharing = lines.get(top) ?? 0;
-      lines.set(top, sharing + 1);
-      const left = bounds.right + size / 2 + sharing * (size + size / 8);
-      // Keep the marker on screen when the margin is narrower than it.
-      const visible = Math.min(left, document.documentElement.clientWidth - size - 2);
-      markerNode.style.translate = `${visible - origin.left}px ${top}px`;
-      if (cardNode.matches(":popover-open")) place(cardNode, markerNode);
+      const top = Math.round(line.top + (line.height - markerNode.offsetWidth) / 2 - origin.top);
+      rows.set(top, [...rows.get(top) ?? [], { marker: markerNode, card: cardNode }]);
+    }
+    for (const [top, row] of rows) {
+      const size = row[0]!.marker.offsetWidth;
+      const step = size + size / 8;
+      // When the margin is narrower than the row, the whole row moves left to stay on screen, rather than each
+      // marker clamping to the same edge and covering the ones before it.
+      const end = document.documentElement.clientWidth - size - 2 - (row.length - 1) * step;
+      const start = Math.min(bounds.right + size / 2, end);
+      for (const [index, { marker: markerNode, card: cardNode }] of row.entries()) {
+        markerNode.style.translate = `${start + index * step - origin.left}px ${top}px`;
+        if (cardNode.matches(":popover-open")) place(cardNode, markerNode);
+      }
     }
   };
   const schedule = () => {

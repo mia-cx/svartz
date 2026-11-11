@@ -125,6 +125,24 @@ describe("a page with comments, read signed out", () => {
     expect(grace.querySelector(".sv-annotations-body b")).toBeNull();
   });
 
+  it("keeps markers that share a line apart when the margin pushes them on screen", async () => {
+    await page.viewport(390, 800);
+    const root = render();
+    // A second comment on the same line as the pressure one.
+    await commands.seedComments([
+      { id: "pressure", page: "hardware/sensors", author: GRACE, anchor: anchorOf(root, PRESSURE), createdAt: "2026-11-03T09:00:00.000Z", body: "Which model?" },
+      { id: "bmp390", page: "hardware/sensors", author: ADA, anchor: anchorOf(root, "BMP390"), createdAt: "2026-11-05T09:00:00.000Z", body: "Same as mine." },
+    ]);
+    detach = attach(root, { endpoint: ENDPOINT, page: "hardware/sensors" });
+    await expect.poll(() => document.querySelectorAll(".sv-annotations-marker").length).toBe(2);
+    const [first, second] = [...document.querySelectorAll<HTMLButtonElement>(".sv-annotations-marker")].map((marker) => marker.getBoundingClientRect());
+
+    expect(first!.top).toBe(second!.top);
+    // Side by side and both on screen: neither covers the other, so each can be tapped.
+    expect(second!.left).toBeGreaterThanOrEqual(first!.right);
+    expect(second!.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
+  });
+
   it("keeps markers and an open card on screen at phone width", async () => {
     await page.viewport(390, 800);
     const [dewPoint] = await attached();
