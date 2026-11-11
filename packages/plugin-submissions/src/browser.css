@@ -128,7 +128,9 @@
 	display: none;
 }
 
-.svartz-submissions textarea {
+.svartz-submissions textarea,
+.svartz-submissions input,
+.svartz-submissions select {
 	box-sizing: border-box;
 	inline-size: 100%;
 	padding: var(--sv-space-2) var(--sv-space-3);
@@ -139,9 +141,40 @@
 	font: inherit;
 	font-size: var(--sv-step--1);
 	line-height: var(--sv-leading);
-	resize: vertical;
+}
+
+.svartz-submissions textarea,
+.svartz-submissions input {
 	/* Host form resets (Tailwind forms) draw their own ring. */
 	appearance: none;
+}
+
+.svartz-submissions textarea {
+	resize: vertical;
+}
+
+.svartz-submissions select:disabled {
+	opacity: 1;
+}
+
+/* A new page's title and section sit above its source, which keeps the remaining height. */
+.svartz-submissions-form[data-kind="new"] {
+	grid-template-rows: auto minmax(0, 1fr);
+}
+
+.svartz-submissions-fields {
+	display: grid;
+	grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+	gap: var(--sv-space-3);
+}
+
+.svartz-submissions-field {
+	display: grid;
+	gap: var(--sv-space-2);
+}
+
+.svartz-submissions .cm-placeholder {
+	color: var(--sv-muted);
 }
 
 /* Turnstile's widget is 65px tall; holding the space keeps the buttons still while it loads. */
@@ -162,6 +195,11 @@
 
 .svartz-submissions-error[hidden] {
 	display: none;
+}
+
+.svartz-submissions-error a {
+	color: inherit;
+	text-decoration: underline;
 }
 
 .svartz-submissions-actions {
@@ -213,5 +251,9 @@
 
 	.svartz-submissions-form {
 		padding-inline: var(--sv-space-4);
+	}
+
+	.svartz-submissions-fields {
+		grid-template-columns: minmax(0, 1fr);
 	}
 }

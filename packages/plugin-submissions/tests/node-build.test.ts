@@ -82,22 +82,24 @@ describe("a Node build with submissions", () => {
     const client = await readTree(path.join(root, ".svartz/vaults/site/dist/client"));
 
     expect(client.some((file) => file.includes("Open pull request"))).toBe(true);
+    expect(client.some((file) => file.includes("New page"))).toBe(true);
     expect(client.filter((file) => file.includes("SVARTZ_GITHUB_TOKEN"))).toEqual([]);
     expect(client.filter((file) => file.includes(commit))).toEqual([]);
   });
 
-  it("serves the edit endpoints for published notes only", async () => {
+  it("serves edits of published notes, and new pages in published folders, only", async () => {
     const dist = path.join(root, ".svartz/vaults/site/dist");
     const port = await freePort();
     const { SVARTZ_GITHUB_TOKEN: _token, ...env } = process.env;
+    const origin = `http://127.0.0.1:${port}`;
     const server = spawn(process.execPath, [path.join(dist, "index.js")], {
       cwd: root,
-      env: { ...env, HOST: "127.0.0.1", PORT: String(port) },
+      // adapter-node's public origin, which page links in answers are built on.
+      env: { ...env, HOST: "127.0.0.1", PORT: String(port), ORIGIN: origin },
       stdio: "pipe",
     });
     let stderr = "";
     server.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
-    const origin = `http://127.0.0.1:${port}`;
     try {
       let ready = false;
       for (let attempt = 0; attempt < 100 && !ready; attempt++) {
@@ -119,6 +121,16 @@ describe("a Node build with submissions", () => {
         body: JSON.stringify({ submissionId: "0".repeat(32), page: "/../svartz.config.ts", markdown: "x" }),
       });
       expect([outside.status, (await outside.json() as { error: string }).error]).toEqual([404, "not_editable"]);
+
+      const create = (folder: string, title: string) => fetch(`${origin}/_svartz/submissions/new/`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ submissionId: "1".repeat(32), folder, title, markdown: "# Page\n" }),
+      }).then(async (response) => [response.status, await response.json()]);
+      // A new page in the vault's one published folder passes the path policy and the guard, then needs the token.
+      expect(await create("", "Setup")).toEqual([503, expect.objectContaining({ error: "misconfigured" })]);
+      expect(await create("..", "svartz.config")).toEqual([400, expect.objectContaining({ error: "not_a_section" })]);
+      expect(await create("", "Guide")).toEqual([409, expect.objectContaining({ error: "exists", existing: `${origin}/guide/` })]);
     } finally {
       server.kill("SIGTERM");
     }

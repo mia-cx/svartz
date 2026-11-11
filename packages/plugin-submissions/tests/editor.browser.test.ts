@@ -6,7 +6,7 @@ import { mount } from "../src/browser";
 
 // CRLF line endings and frontmatter: the edit must keep every byte it doesn't touch.
 const SOURCE = "---\r\ntitle: Guide\r\n---\r\n\r\n# Guide\r\n";
-const OPTIONS = { endpoint: "/wiki/_svartz/submissions", pages: ["/wiki/guide/"] };
+const OPTIONS = { endpoint: "/wiki/_svartz/submissions", pages: ["/wiki/guide/"], folders: ["", "People"] };
 const CONTEXT = { base: "/docs" };
 
 let unmount: (() => void) | void;
@@ -31,7 +31,7 @@ async function openEditor(options: BrowserOptions = OPTIONS) {
 }
 
 beforeEach(() => {
-  document.body.innerHTML = '<div class="sv-page-actions"><span data-svartz-region="page-actions"></span></div>';
+  document.body.innerHTML = '<nav data-svartz-region="site-actions"></nav><div class="sv-page-actions"><span data-svartz-region="page-actions"></span></div>';
 });
 
 afterEach(() => {
@@ -252,5 +252,70 @@ describe("Edit", () => {
     unmount = mount(pathname, OPTIONS, CONTEXT);
 
     expect(document.querySelector('[data-svartz-region="page-actions"]')?.children).toHaveLength(0);
+  });
+});
+
+describe("New page", () => {
+  /** Open New page from any page, then fill the title, the section, and the page itself. */
+  async function writeNewPage() {
+    unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+    await page.getByRole("button", { name: "New page" }).click();
+    await expect.element(page.getByRole("heading", { name: "New page" })).toBeVisible();
+    await expect.element(page.getByRole("combobox", { name: "Section" })).toHaveValue("");
+    // The panel opens on the title, so the reader types it first.
+    await userEvent.keyboard("Ada Lovelace");
+    await page.getByRole("combobox", { name: "Section" }).selectOptions("People");
+    await page.getByRole("textbox", { name: "Page source" }).click();
+    await userEvent.keyboard("# Ada Lovelace");
+  }
+
+  it("lists the published sections and opens a pull request adding the page", async () => {
+    const fetch = serve(() => Response.json({ url: "https://github.com/acme/wiki/pull/9", number: 9 }, { status: 201 }));
+    await writeNewPage();
+    await expect.element(page.getByRole("combobox", { name: "Section" })).toHaveTextContent("Top levelPeople");
+    await page.getByLabelText("Why add this page").fill("She deserves one.");
+    await page.getByRole("button", { name: "Open pull request" }).click();
+
+    await expect.element(page.getByRole("link", { name: "View pull request #9" }))
+      .toHaveAttribute("href", "https://github.com/acme/wiki/pull/9");
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual(["/docs/wiki/_svartz/submissions/new/"]);
+    expect(JSON.parse(String(fetch.mock.calls[0]![1]!.body))).toEqual({
+      submissionId: expect.stringMatching(/^[0-9a-f]{32}$/),
+      folder: "People",
+      title: "Ada Lovelace",
+      markdown: "# Ada Lovelace",
+      note: "She deserves one.",
+    });
+  });
+
+  it("links the existing page when the title is taken", async () => {
+    const message = "A page with this title already exists. Choose another title, or edit that page.";
+    serve(() => Response.json({ error: "exists", message, existing: "https://wiki.example/docs/wiki/people/ada-lovelace/" }, { status: 409 }));
+    await writeNewPage();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+
+    await expect.element(page.getByRole("alert")).toHaveTextContent(message);
+    await expect.element(page.getByRole("link", { name: "Open the existing page" }))
+      .toHaveAttribute("href", "https://wiki.example/docs/wiki/people/ada-lovelace/");
+    await expect.element(page.getByRole("textbox", { name: "Title" })).not.toHaveAttribute("readonly");
+  });
+
+  it("waits for a title and some content before it can be sent", async () => {
+    serve(() => Response.json({}));
+    unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+    await page.getByRole("button", { name: "New page" }).click();
+    const submit = page.getByRole("button", { name: "Open pull request" });
+
+    await page.getByRole("textbox", { name: "Page source" }).click();
+    await userEvent.keyboard("Some text.");
+    await expect.element(submit).toBeDisabled();
+    await page.getByRole("textbox", { name: "Title" }).fill("Notes");
+    await expect.element(submit).toBeEnabled();
+  });
+
+  it("isn't offered when the site has no published section", () => {
+    unmount = mount("/docs/wiki/guide/", { ...OPTIONS, folders: [] }, CONTEXT);
+
+    expect(document.querySelector('[data-svartz-region="site-actions"]')?.children).toHaveLength(0);
   });
 });
