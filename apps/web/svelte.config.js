@@ -9,6 +9,11 @@ const outDir = process.env.SVARTZ_OUT_DIR ?? "build";
 const kitOutDir = process.env.SVARTZ_KIT_OUT_DIR ?? ".svelte-kit";
 const basePath = process.env.SVARTZ_BASE_PATH ?? "";
 const targetType = process.env.SVARTZ_TARGET_TYPE ?? "static";
+const cliPluginModule = process.env.SVARTZ_VITE_PLUGINS_MODULE_PATH;
+const adapter = resolveAdapter(targetType);
+const negotiatedAdapter = cliPluginModule
+	? (await import(cliPluginModule)).withMarkdownNegotiation(adapter, targetType, outDir)
+	: adapter;
 // `SERVER_ROUTE_SEGMENT` in @svartz/core; plugin requests live under it.
 const pluginRoot = `${basePath}/_svartz/`;
 
@@ -37,7 +42,7 @@ function resolveAdapter(target) {
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	kit: {
-		adapter: resolveAdapter(targetType),
+		adapter: negotiatedAdapter,
 		csp: {
 			directives: {
 				// Themes pin the reader's colour mode with an inline script before first paint.

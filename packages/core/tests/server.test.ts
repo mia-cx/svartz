@@ -3,6 +3,65 @@ import { createServerHandle, DEV_BINDINGS, type DevBindings, type ServerContext,
 
 const vault = { id: "wiki", mountPath: "", site: { title: "Wiki" } };
 
+describe("page representation negotiation", () => {
+  // Proves agent defaults, explicit media preferences, methods and prerendering preserve the requested representation.
+  it.each([
+    ["text/markdown", "", "GET", false, true],
+    ["text/markdown; q=0.8, text/html; q=0.2", "", "GET", false, true],
+    ["text/markdown, */*", "", "HEAD", false, true],
+    ["*/*", "ChatGPT-User/1.0", "GET", false, true],
+    [undefined, "ClaudeBot/1.0", "GET", false, true],
+    ["*/*", "Mozilla/5.0", "GET", false, false],
+    ["text/html, */*", "GPTBot/1.0", "GET", false, false],
+    ["text/html, text/markdown;q=0.5", "ClaudeBot/1.0", "GET", false, false],
+    ["text/markdown;q=0, */*", "GPTBot/1.0", "GET", false, false],
+    ["text/markdown;q=invalid", "GPTBot/1.0", "GET", false, false],
+    ["text/html, text/markdown", "", "GET", false, false],
+    ["text/markdown", "", "POST", false, false],
+    ["text/markdown", "GPTBot/1.0", "GET", true, false],
+  ])("Accept %s, agent %s, %s, building %s", async (accept, agent, method, building, markdown) => {
+    const headers = new Headers({ "user-agent": agent });
+    if (accept !== undefined) headers.set("accept", accept);
+    const request = new Request("https://wiki.test/site/docs/guide?x=1", { method, headers });
+    const handle = createServerHandle({
+      basePath: "/site/docs", vault, servers: [],
+      markdown: { "/site/docs/guide/": "/site/docs/guide.md" },
+    }, { privateEnv: {}, dev: false, building });
+    const response = await handle({
+      event: { request, url: new URL(request.url), getClientAddress: () => "" },
+      resolve: () => new Response("<h1>Guide</h1>", { headers: { vary: "Accept-Encoding" } }),
+    });
+    // The copy's links are relative to its own URL, so agents are sent there rather than served it at the page URL.
+    expect(response.status).toBe(markdown ? 303 : 200);
+    expect(response.headers.get("location")).toBe(markdown ? "/site/docs/guide.md" : null);
+    if (!markdown) expect(await response.text()).toBe("<h1>Guide</h1>");
+    if (!building && method !== "POST") {
+      expect(response.headers.get("vary")).toContain("Accept");
+      expect(response.headers.get("vary")).toContain("User-Agent");
+      expect(response.headers.get("cache-control")).toBe("private, no-cache");
+      if (!markdown) expect(response.headers.get("vary")).toContain("Accept-Encoding");
+    }
+  });
+
+  // Proves non-ASCII pages negotiate although request paths arrive percent-encoded, and malformed escapes fall through.
+  it.each([
+    ["/caf%C3%A9/", "/caf%C3%A9.md"],
+    ["/%E6%97%A5%E6%9C%AC%E8%AA%9E", "/%E6%97%A5%E6%9C%AC%E8%AA%9E.md"],
+    ["/caf%E9/", null],
+  ])("negotiates %s", async (path, location) => {
+    const handle = createServerHandle({
+      basePath: "", vault, servers: [],
+      markdown: { "/café/": "/café.md", "/日本語/": "/日本語.md" },
+    }, { privateEnv: {}, dev: false, building: false });
+    const request = new Request(`https://wiki.test${path}`, { headers: { accept: "text/markdown" } });
+    const response = await handle({
+      event: { request, url: new URL(request.url), getClientAddress: () => "" },
+      resolve: () => new Response("<h1>Page</h1>"),
+    });
+    expect(response.headers.get("location")).toBe(location);
+  });
+});
+
 function event(path: string, platform?: unknown, clientAddress: () => string = () => "203.0.113.7"): ServerHandleEvent {
   return {
     request: new Request(`https://wiki.test${path}`, { method: "POST", body: "hi" }),

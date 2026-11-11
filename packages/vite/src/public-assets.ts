@@ -9,6 +9,7 @@ import { readFile } from "node:fs/promises";
 import type { Plugin } from "vite";
 
 const ENV = "SVARTZ_PUBLIC_ASSETS";
+const MARKDOWN_ENV = "SVARTZ_MARKDOWN_ROUTES";
 
 interface PublicAsset {
   /** Output path under the client root, including the vault mount. */
@@ -24,9 +25,22 @@ export function recordPublicAssets(vaultId: string, assets: readonly PublicAsset
   process.env[ENV] = JSON.stringify({ ...recorded(), [vaultId]: assets });
 }
 
+/** Replace one vault's negotiation map, retaining other mounts in a composed host build. */
+export function recordMarkdownRoutes(vaultId: string, routes: Readonly<Record<string, string>>): void {
+  const vaults: Record<string, Record<string, string>> = JSON.parse(process.env[MARKDOWN_ENV] ?? "{}");
+  process.env[MARKDOWN_ENV] = JSON.stringify({ ...vaults, [vaultId]: routes });
+}
+
+/** The platform adapter uses every vault's published page-to-copy mapping. */
+export function getMarkdownRoutes(): Record<string, string> {
+  const vaults: Record<string, Record<string, string>> = JSON.parse(process.env[MARKDOWN_ENV] ?? "{}");
+  return Object.fromEntries(Object.values(vaults).flatMap((routes) => Object.entries(routes)));
+}
+
 /** Forget every recorded file. The CLI calls this before each build, so one vault's files never ship in the next's. */
 export function clearPublicAssets(): void {
   delete process.env[ENV];
+  delete process.env[MARKDOWN_ENV];
 }
 
 /** Emit the recorded files in the client build, unless the Svartz plugin there already did. */

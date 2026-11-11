@@ -1,6 +1,6 @@
 # Server plugins
 
-A plugin can answer requests at runtime. Give it a `server` module, and Svartz routes every request under `/_svartz/<plugin-id>/` to that module's handler. Pages stay prerendered; only plugin requests reach the server.
+A plugin can answer requests at runtime. Give it a `server` module, and Svartz routes every request under `/_svartz/<plugin-id>/` to that module's handler. Pages stay prerendered. The platform also negotiates their [Markdown copies](discovery.md#markdown-for-llm-agents) before serving static HTML.
 
 ```ts
 import { fileURLToPath } from "node:url";

@@ -508,6 +508,7 @@ const createAppConfig = (
         if (hostApp) await writeFile(hostServerPath, createHostServerSource(vaults));
         if (!hostApp) await writeFile(standalonePluginPath, [
           `import { hostStylesPlugin, publicAssetsPlugin } from ${JSON.stringify(import.meta.resolve("@svartz/vite/host"))};`,
+          `export { withMarkdownNegotiation } from ${JSON.stringify(import.meta.resolve("@svartz/vite/host"))};`,
           `export default [hostStylesPlugin(${JSON.stringify(styleManifests)}), publicAssetsPlugin()];`,
         ].join("\n"));
       },

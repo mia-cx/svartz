@@ -74,7 +74,7 @@ import {
   svelteKitBasePath,
 } from "./host-registry";
 import { emitProtectedGroupArtifacts } from "./protected-payload";
-import { clearPublicAssets, recordPublicAssets } from "./public-assets";
+import { clearPublicAssets, recordMarkdownRoutes, recordPublicAssets } from "./public-assets";
 import { writeProtectedBridgeModules, type ProtectedBridgeModule } from "./protected-bridge";
 import { themeSourceAliases } from "./theme-aliases";
 
@@ -123,6 +123,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   let plugins: ReturnType<typeof resolveRuntimePlugins> = [];
   let emittedArtifacts: Artifact[] = [];
   let emittedAssets = new Map<string, Artifact>();
+  let markdownRoutes: Record<string, string> = {};
   let emittedBrowserResources: BrowserResource[] = [];
   let protectedBridgeModules: ProtectedBridgeModule[] = [];
   let runnerMeta = new Map<string, unknown>();
@@ -268,6 +269,12 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       .filter((artifact) => artifact.type === "asset" && artifact.key.startsWith("assets/"))
       .map((artifact) => [assetOutputPath(artifact), artifact]));
     recordPublicAssets(context.config.id, [...emittedAssets].map(([fileName, artifact]) => ({ fileName, path: artifact.path })));
+    const base = deploymentBasePath(context.config, kitBasePath);
+    markdownRoutes = Object.fromEntries((runnerContext.index?.entries ?? []).flatMap((entry) =>
+      entry.markdownHref && emittedAssets.has(entry.markdownHref.slice(1))
+        ? [[`${base}${entry.href}`, `${base}${entry.markdownHref}`]] : []));
+    // The standalone adapter runs in this build process, after prerendering, ahead of static serving.
+    recordMarkdownRoutes(context.config.id, markdownRoutes);
 
     await Effect.runPromise(
       Effect.all(
@@ -292,7 +299,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
           ),
           writeGeneratedModule(
             getGeneratedRuntimeServerModulePath(context.config),
-            createServerRegistrySource(context.config, plugins, deploymentBasePath(context.config, kitBasePath)),
+            createServerRegistrySource(context.config, plugins, deploymentBasePath(context.config, kitBasePath), markdownRoutes),
           ),
         ],
         { concurrency: "unbounded", discard: true },
@@ -502,7 +509,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       }
 
       if (id === RESOLVED_SERVER_VIRTUAL_ID) {
-        return createServerRegistrySource(context.config, plugins, deploymentBasePath(context.config, kitBasePath));
+        return createServerRegistrySource(context.config, plugins, deploymentBasePath(context.config, kitBasePath), markdownRoutes);
       }
 
       return loadVirtualModule(id) ?? null;

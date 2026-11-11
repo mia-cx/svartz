@@ -7,6 +7,7 @@ import { publicAssetsPlugin } from "./public-assets";
 import { themeSourceAliases } from "./theme-aliases";
 
 export { publicAssetsPlugin };
+export { withMarkdownNegotiation } from "./markdown-adapter";
 
 /** Generated runtime entry points and the CSS manifest for one host vault. */
 export interface HostStyleManifest {
