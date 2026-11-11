@@ -8,6 +8,8 @@
  *   returns the reader to `returnTo`. Provider tokens are dropped here.
  * - `GET me/` answers the identity, or `null`.
  * - `POST sign-out/` clears the session.
+ *
+ * On a vault whose `callbackVault` is another vault, `start` forwards to that vault's, and `callback` answers 404.
  */
 import { CodeChallengeMethod, generateCodeVerifier, generateState, OAuth2Client } from "arctic";
 import type { EnvReference, ServerContext, ServerModuleFactory } from "@svartz/core";
@@ -28,6 +30,17 @@ export interface AuthOptions {
   readonly providers: { readonly [Id in ProviderId]?: ProviderOptions };
   /** URL of the site's privacy notice; the sign-in dialog links to it. */
   readonly privacyNotice?: string;
+  /**
+   * The id of the host vault whose routes run every sign-in in this app, so each provider needs one callback URL.
+   * Default: the first host vault that enables auth. It must list every provider this vault does.
+   */
+  readonly callbackVault?: string;
+}
+
+/** What the server module receives: the options, plus where sign-in runs when another vault runs it. */
+export interface AuthServerOptions extends AuthOptions {
+  /** The callback vault's mount path; absent when this vault runs its own sign-ins. */
+  readonly callbackMountPath?: string;
 }
 
 // `__Host-` binds each cookie to this origin with `Path=/` and `Secure`, so no subdomain can set or read it.
@@ -106,6 +119,13 @@ function sameOriginPath(candidate: string, url: URL): string | undefined {
   return `${target.pathname}${target.search}${target.hash}`;
 }
 
+/** `context.base` for the same plugin on the vault mounted at `mountPath`. */
+function baseAt(context: ServerContext, mountPath: string): string {
+  const plugin = context.base.slice(context.base.lastIndexOf("/_svartz/"));
+  const deployment = context.base.slice(0, context.base.length - context.vault.mountPath.length - plugin.length);
+  return `${deployment}${mountPath}${plugin}`;
+}
+
 /** Every provider returns to this vault's callback. */
 function callbackUrl(url: URL, context: ServerContext, provider: ProviderId): string {
   return `${url.origin}${context.base}/callback/${provider}/`;
@@ -166,7 +186,7 @@ function signOut(request: Request, url: URL): Response {
 const ROUTE = /^\/(?:(start|callback)\/([^/]+)|(me)|(sign-out))\/$/;
 
 /** The `auth` server module: `server: { module, options }` with {@link AuthOptions}. */
-const authServer: ServerModuleFactory<AuthOptions> = (options) => async (request, context) => {
+const authServer: ServerModuleFactory<AuthServerOptions> = (options) => async (request, context) => {
   const url = new URL(request.url);
   const match = ROUTE.exec(url.pathname.slice(context.base.length));
   if (!match) return undefined;
@@ -177,6 +197,15 @@ const authServer: ServerModuleFactory<AuthOptions> = (options) => async (request
 
   const method = step || me ? "GET" : "POST";
   if (request.method !== method) return failure(405, "method_not_allowed", `Use ${method}.`, { allow: method });
+
+  // Another vault runs sign-in: providers only know its callback, so start there and come back here.
+  const { callbackMountPath } = options;
+  if (step && callbackMountPath !== undefined) {
+    if (step === "callback") return undefined;
+    const returnTo = url.searchParams.get("returnTo") ?? siteRoot(context);
+    const location = `${baseAt(context, callbackMountPath)}/start/${provider}/?returnTo=${encodeURIComponent(returnTo)}`;
+    return redirect(location, []);
+  }
 
   const secret = sessionSecret(context.env);
   if (!secret) {
