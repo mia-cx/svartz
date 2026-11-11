@@ -54,7 +54,7 @@ The handler receives a `context`:
 
 | Field | Value |
 | --- | --- |
-| `env` | The platform's env on Cloudflare (vars, secrets and bindings); the server's environment variables on Node, minus `PUBLIC_` ones. Under `svartz dev` it is always the dev server's environment variables and `.env`, because the Cloudflare emulator withholds `platform.env` from the prerendered routes plugin URLs fall under; bindings are absent there. |
+| `env` | The platform's env on Cloudflare (vars, secrets and bindings); the server's environment variables on Node, minus `PUBLIC_` ones. Under `svartz dev`, the dev server's environment variables and `.env`, plus the project's Wrangler bindings on Cloudflare (see [bindings under `svartz dev`](#bindings-under-svartz-dev)). |
 | `clientAddress` | The client's IP address, or `undefined` when the adapter can't tell. |
 | `vault` | The vault's `id`, `mountPath` and public `site` settings. |
 | `base` | The path the plugin answers under, without a trailing slash, such as `/_svartz/hello`. |
@@ -67,6 +67,30 @@ Errors the handler throws reach SvelteKit's `handleError` and answer 500.
 Options must be JSON: strings, finite numbers, booleans, `null`, arrays and plain objects. They are written into the server bundle and never into the browser bundle.
 
 Never put a secret in options. Name its environment variable with `{ env: "NAME" }` and read it per request from `context.env[name]`. An object with an `env` key must have no other keys. Names with the browser-public `PUBLIC_` or `VITE_` prefixes fail the build, as they do for [password groups](encrypted-notes.md). Set the value on the server: `wrangler secret put PRIVATE_HELLO_TOKEN` for Workers, or the process environment for Node.
+
+## Bindings under `svartz dev`
+
+A vault that deploys to Cloudflare (`cloudflare-workers`, `cloudflare-pages`, or `host` in an app on `@sveltejs/adapter-cloudflare`) reads its bindings in dev from the Wrangler config beside `svartz.config.ts`: `wrangler.json`, `wrangler.jsonc` or `wrangler.toml`.
+
+```jsonc
+// wrangler.jsonc
+{
+  "name": "wiki",
+  "compatibility_date": "2026-03-03",
+  "vars": { "GREETING": "Hi" },
+  "d1_databases": [{ "binding": "DB", "database_name": "wiki", "database_id": "<id>" }]
+}
+```
+
+On the first plugin request, `svartz dev` starts Wrangler's local platform and adds its bindings, `vars` and `.dev.vars` secrets to `context.env`, over the dev server's environment variables of the same name. A plugin then reads `context.env.DB` as it would in production.
+
+Local data lives in `.wrangler/state` beside the Wrangler config and survives restarts. Inspect or seed it from the same directory:
+
+```sh
+npx wrangler d1 execute DB --local --command "SELECT * FROM entries"
+```
+
+The app needs `wrangler` installed; the standalone shell has it. Without a Wrangler config, `context.env` holds only the dev server's environment variables.
 
 ## Routing
 
