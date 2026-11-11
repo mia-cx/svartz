@@ -65,3 +65,26 @@ describe("submissions build", () => {
     });
   });
 });
+
+describe("submissions guard config", () => {
+  it("gives the editor the Turnstile site key and keeps the secret's name on the server", async () => {
+    const turnstile = { siteKey: "0x4AAAAAAAtest", secret: { env: "TURNSTILE_SECRET" } };
+    const { ctx } = await build({ guard: { turnstile } });
+
+    expect(ctx.compiler?.browserResources.get("submissions")?.options).toEqual({
+      endpoint: "/wiki/_svartz/submissions",
+      pages: ["/wiki/guide/", "/wiki/people/ada/"],
+      turnstileSiteKey: "0x4AAAAAAAtest",
+    });
+  });
+
+  it.each([
+    ["a blank site key", { turnstile: { siteKey: " ", secret: { env: "TURNSTILE_SECRET" } } }, /siteKey/],
+    ["an inlined secret", { turnstile: { siteKey: "0x4AAAAAAAtest", secret: "0x4AAAAAAAsecret" } }, /secret must name/],
+    ["a blank secret name", { turnstile: { siteKey: "0x4AAAAAAAtest", secret: { env: "" } } }, /secret must name/],
+    ["a fractional limit", { rateLimit: { limit: 2.5, period: 60 } }, /rateLimit/],
+    ["a zero period", { rateLimit: { limit: 5, period: 0 } }, /rateLimit/],
+  ])("refuses %s when the config loads", (_case, guard, message) => {
+    expect(() => submissions({ repo: "acme/wiki", guard } as Parameters<typeof submissions>[0])).toThrow(message);
+  });
+});

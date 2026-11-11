@@ -31,7 +31,12 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
   button.innerHTML = `${PENCIL_ICON}Edit`;
   button.addEventListener("click", async () => {
     const { openEditor } = await import("./editor");
-    close = openEditor({ page, endpoint: `${context.base}${options.endpoint}`, opener: button });
+    close = openEditor({
+      page,
+      endpoint: `${context.base}${options.endpoint}`,
+      opener: button,
+      turnstileSiteKey: options.turnstileSiteKey,
+    });
   });
   region.append(button);
 

@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { definePlugin, getCompilerContributions, type EnvReference } from "@svartz/core";
 import { PLUGIN_ID, type BrowserOptions } from "./api";
+import type { GuardOptions, RateLimitOptions, TurnstileOptions } from "./guard";
 import type { BuildData, ServerOptions } from "./server";
 
 export interface SubmissionsOptions {
@@ -31,10 +32,41 @@ export interface SubmissionsOptions {
    * repository's Contents and Pull requests. Default: `{ env: "SVARTZ_GITHUB_TOKEN" }`.
    */
   readonly token?: EnvReference;
+  /** What every submission must pass before it reaches GitHub. */
+  readonly guard?: {
+    /** Show a Cloudflare Turnstile challenge in the editor and verify its token on the server. */
+    readonly turnstile?: TurnstileOptions;
+    /** Submissions allowed per signed-in identity, or per IP when anonymous. Default: 10 an hour. */
+    readonly rateLimit?: RateLimitOptions;
+  };
 }
 
 const DEFAULT_TOKEN: EnvReference = { env: "SVARTZ_GITHUB_TOKEN" };
+const DEFAULT_RATE_LIMIT: RateLimitOptions = { limit: 10, period: 60 * 60 };
 const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
+
+function fail(message: string): never {
+  throw new Error(`[submissions] ${message}`);
+}
+
+const isBlank = (value: unknown) => typeof value !== "string" || !value.trim();
+const isPositiveInteger = (value: unknown) => Number.isInteger(value) && (value as number) > 0;
+
+/** Refuse guard config the server could never apply, so a typo fails the build instead of every submission. */
+function guardOptions(guard: SubmissionsOptions["guard"] = {}): GuardOptions {
+  const { turnstile, rateLimit = DEFAULT_RATE_LIMIT } = guard;
+  if (turnstile) {
+    if (isBlank(turnstile.siteKey)) fail("guard.turnstile.siteKey must be the widget's site key");
+    if (isBlank(turnstile.secret?.env)) fail('guard.turnstile.secret must name its environment variable: { env: "NAME" }');
+  }
+  if (!isPositiveInteger(rateLimit.limit) || !isPositiveInteger(rateLimit.period)) {
+    fail("guard.rateLimit needs a whole number of submissions (limit) per whole number of seconds (period)");
+  }
+  return {
+    ...(turnstile ? { turnstile: { siteKey: turnstile.siteKey, secret: { env: turnstile.secret.env } } } : {}),
+    rateLimit: { limit: rateLimit.limit, period: rateLimit.period },
+  };
+}
 
 // Beside this module in dist.
 const SERVER_MODULE = fileURLToPath(new URL("./server.js", import.meta.url));
@@ -66,22 +98,23 @@ async function readCheckout(vaultPath: string): Promise<{ commit: string; vaultR
 function normalizeVaultRoot(value: string): string {
   const root = value.replaceAll("\\", "/").replace(/^(?:\.\/)+|^\/+|\/+$/g, "");
   if (isAbsolute(value) || root.split("/").includes("..")) {
-    throw new Error(`[submissions] vaultRoot "${value}" must be a folder inside the repository, such as "content".`);
+    fail(`vaultRoot "${value}" must be a folder inside the repository, such as "content".`);
   }
   return root === "." ? "" : root;
 }
 
 /** Let readers edit any published Markdown note and submit it as a pull request on `repo`. */
 export function submissions(options: SubmissionsOptions) {
-  if (!REPO_PATTERN.test(options.repo)) {
-    throw new Error(`[submissions] repo "${options.repo}" must be "owner/name".`);
-  }
+  if (!REPO_PATTERN.test(options.repo)) fail(`repo "${options.repo}" must be "owner/name".`);
+  if (options.token && isBlank(options.token.env)) fail('token must name its environment variable: { env: "NAME" }');
+  const guard = guardOptions(options.guard);
   const vaultRoot = options.vaultRoot === undefined ? undefined : normalizeVaultRoot(options.vaultRoot);
   const serverOptions: ServerOptions = {
     repo: options.repo,
     ...(options.branch ? { branch: options.branch } : {}),
     labels: [...(options.labels ?? [])],
     token: options.token ?? DEFAULT_TOKEN,
+    guard,
   };
 
   return definePlugin(() => ({
@@ -105,7 +138,11 @@ export function submissions(options: SubmissionsOptions) {
           id: PLUGIN_ID,
           kind: "script",
           importId: BROWSER_SCRIPT,
-          options: { endpoint: `${ctx.config.mountPath}/_svartz/${PLUGIN_ID}`, pages: Object.keys(pages) } satisfies BrowserOptions,
+          options: {
+            endpoint: `${ctx.config.mountPath}/_svartz/${PLUGIN_ID}`,
+            pages: Object.keys(pages),
+            ...(guard.turnstile ? { turnstileSiteKey: guard.turnstile.siteKey } : {}),
+          } satisfies BrowserOptions,
         });
         compiler.browserResources.set(`${PLUGIN_ID}:css`, { id: `${PLUGIN_ID}:css`, kind: "css", importId: STYLESHEET });
       },
@@ -114,3 +151,4 @@ export function submissions(options: SubmissionsOptions) {
 }
 
 export type { BrowserOptions, EditRequest, EditResponse, ErrorResponse, SourceResponse } from "./api";
+export type { RateLimitOptions, TurnstileOptions } from "./guard";

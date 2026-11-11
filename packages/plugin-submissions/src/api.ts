@@ -18,6 +18,8 @@ export interface EditRequest {
   readonly page: string;
   readonly markdown: string;
   readonly note?: string;
+  /** The Turnstile widget's token; required when the site configures `guard.turnstile`. */
+  readonly turnstileToken?: string;
 }
 
 /** `POST <endpoint>/edit/` answers 201 with this. */
@@ -30,6 +32,8 @@ export interface EditResponse {
 export interface ErrorResponse {
   readonly error: string;
   readonly message: string;
+  /** On a 429: seconds until the reader may submit again. */
+  readonly retryAfter?: number;
 }
 
 /** Settings the browser script receives. */
@@ -38,4 +42,6 @@ export interface BrowserOptions {
   readonly endpoint: string;
   /** URL paths (below the deployment base) of the notes readers can edit. */
   readonly pages: readonly string[];
+  /** The Turnstile site key, when the editor must show the widget. */
+  readonly turnstileSiteKey?: string;
 }

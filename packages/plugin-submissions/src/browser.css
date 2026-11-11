@@ -144,6 +144,15 @@
 	appearance: none;
 }
 
+/* Turnstile's widget is 65px tall; holding the space keeps the buttons still while it loads. */
+.svartz-submissions-turnstile {
+	min-block-size: 65px;
+}
+
+.svartz-submissions-turnstile[hidden] {
+	display: none;
+}
+
 .svartz-submissions-error {
 	--sv-hue: var(--sv-hue-red);
 	margin: 0;
