@@ -77,6 +77,29 @@ describe("submissions server", () => {
     expect(github.requests).toEqual([]);
   });
 
+  it("stops reading a streamed body without a length once it passes the limit", async () => {
+    const github = replayGitHub([]);
+    const CHUNK_BYTES = 64 * 1024;
+    const CHUNKS = 64;
+    let pulled = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled++ === CHUNKS) return controller.close();
+        controller.enqueue(new Uint8Array(CHUNK_BYTES));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const request = new Request(`${ORIGIN}${BASE}/edit/`, { method: "POST", body, duplex: "half" } as RequestInit);
+
+    expect(await answer(request)).toEqual({ status: 413, body: { error: "too_large", message: expect.any(String) } });
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThan(CHUNKS);
+    expect(github.requests).toEqual([]);
+  });
+
   it("names the missing token variable", async () => {
     expect(await answer(source("/wiki/guide/"), {})).toEqual({
       status: 503,

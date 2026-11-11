@@ -38,6 +38,29 @@ export interface BuildData {
 /** Room for a full note, the longest note and the JSON around them. */
 const MAX_REQUEST_BYTES = MAX_MARKDOWN_BYTES + MAX_NOTE_LENGTH * 4 + 4096;
 const encoder = new TextEncoder();
+const tooLarge = () => new SubmissionError("too_large", 413, "This page is too large to submit from the site.");
+
+/**
+ * The body as text, read chunk by chunk: past `MAX_REQUEST_BYTES` the stream is cancelled and nothing more is
+ * buffered, so a body without a Content-Length can't exhaust memory.
+ */
+async function readText(request: Request): Promise<string> {
+  if (Number(request.headers.get("content-length")) > MAX_REQUEST_BYTES) throw tooLarge();
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  let bytes = 0;
+  for (let read = await reader.read(); !read.done; read = await reader.read()) {
+    bytes += read.value.byteLength;
+    if (bytes > MAX_REQUEST_BYTES) {
+      await reader.cancel();
+      throw tooLarge();
+    }
+    text += decoder.decode(read.value, { stream: true });
+  }
+  return text + decoder.decode();
+}
 
 const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, data) => {
   const pages = new Map(Object.entries(data.pages));
@@ -67,11 +90,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
   }
 
   async function readEdit(request: Request): Promise<Required<EditRequest>> {
-    const tooLarge = new SubmissionError("too_large", 413, "This page is too large to submit from the site.");
-    if (Number(request.headers.get("content-length")) > MAX_REQUEST_BYTES) throw tooLarge;
-    const text = await request.text();
-    if (encoder.encode(text).byteLength > MAX_REQUEST_BYTES) throw tooLarge;
-
+    const text = await readText(request);
     let body: Partial<Record<keyof EditRequest, unknown>> | null;
     try {
       body = JSON.parse(text);
@@ -82,7 +101,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     if (typeof page !== "string" || typeof markdown !== "string" || typeof note !== "string") {
       throw new SubmissionError("invalid_request", 400, "The edit didn't arrive intact. Reload the page and try again.");
     }
-    if (encoder.encode(markdown).byteLength > MAX_MARKDOWN_BYTES) throw tooLarge;
+    if (encoder.encode(markdown).byteLength > MAX_MARKDOWN_BYTES) throw tooLarge();
     if (note.length > MAX_NOTE_LENGTH) {
       throw new SubmissionError("note_too_long", 400, `Shorten the note to ${MAX_NOTE_LENGTH.toLocaleString("en")} characters or fewer.`);
     }
