@@ -46,8 +46,8 @@ export interface AnnotationsServerOptions {
 
 /** Longest `page` accepted; note paths are far shorter. */
 const MAX_PAGE_LENGTH = 1024;
-/** Longest write body read: a full comment and quote fit several times over, even JSON-escaped. */
-const MAX_REQUEST_LENGTH = 32 * 1024;
+/** Most bytes of a write body read: a full comment and quote fit several times over, even JSON-escaped. */
+const MAX_REQUEST_BYTES = 32 * 1024;
 
 function json(body: unknown, status = 200, headers: HeadersInit = {}): Response {
   // Lists change with every write, so nothing may serve a stale copy.
@@ -71,6 +71,28 @@ async function databaseFor(context: ServerContext, options: AnnotationsServerOpt
   if (!isDatabase(db)) return failure(503, "misconfigured", `Bind a D1 database as ${options.database.env}.`);
   await migrate(db);
   return db;
+}
+
+/**
+ * The body as text, read chunk by chunk, or `undefined` once it passes `MAX_REQUEST_BYTES`: the stream is cancelled
+ * there and nothing more is buffered, so a body without a Content-Length can't exhaust memory.
+ */
+async function readText(request: Request): Promise<string | undefined> {
+  if (Number(request.headers.get("content-length")) > MAX_REQUEST_BYTES) return undefined;
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  let bytes = 0;
+  for (let read = await reader.read(); !read.done; read = await reader.read()) {
+    bytes += read.value.byteLength;
+    if (bytes > MAX_REQUEST_BYTES) {
+      await reader.cancel();
+      return undefined;
+    }
+    text += decoder.decode(read.value, { stream: true });
+  }
+  return text + decoder.decode();
 }
 
 /** The passage a write responds to, or why it can't be stored. Positions must agree with the quote they cover. */
@@ -112,11 +134,8 @@ async function create(request: Request, url: URL, context: ServerContext, option
   const author = await readIdentity(request, context.env);
   if (!author) return failure(401, "signed_out", "Sign in to comment.");
 
-  if (Number(request.headers.get("content-length") ?? 0) > MAX_REQUEST_LENGTH) {
-    return failure(413, "too_large", "This comment is too long to post.");
-  }
-  const text = await request.text();
-  if (text.length > MAX_REQUEST_LENGTH) return failure(413, "too_large", "This comment is too long to post.");
+  const text = await readText(request);
+  if (text === undefined) return failure(413, "too_large", "This comment is too long to post.");
   let input: unknown;
   try {
     input = JSON.parse(text);

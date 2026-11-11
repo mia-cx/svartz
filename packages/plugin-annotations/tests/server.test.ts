@@ -147,4 +147,49 @@ describe("POST", () => {
     expect(await response.json()).toEqual({ error, message });
     expect(await (await site(`${ENDPOINT}/?page=garden`)).json()).toEqual({ annotations: [] });
   });
+
+  describe("a body over 32 KiB, sent without a Content-Length", () => {
+    const CHUNK = 8 * 1024;
+    /** `chunks` chunks of `bytes`, streamed so no Content-Length is sent, counting how many the server pulled. */
+    function stream(chunks: Uint8Array[]) {
+      let pulled = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          const next = chunks[pulled++];
+          if (next) controller.enqueue(next);
+          else controller.close();
+        },
+      });
+      return { body, pulled: () => pulled };
+    }
+    const send = async (site: Site, body: ReadableStream<Uint8Array>) => site(`${ENDPOINT}/`, {
+      method: "POST", headers: { "content-type": "application/json", origin: ORIGIN, cookie: await signIn(site, ADA) }, body, duplex: "half",
+    } as RequestInit);
+
+    it("is refused, even when its characters fit, storing nothing", async () => {
+      const { db } = await database();
+      const site = createSite({ DB: db });
+      // 20,000 three-byte characters: under 32 Ki code units, over 32 KiB.
+      const bytes = new TextEncoder().encode(comment({ ignored: "界".repeat(20_000) }));
+      const { body } = stream(Array.from({ length: Math.ceil(bytes.length / CHUNK) }, (_, index) => bytes.subarray(index * CHUNK, (index + 1) * CHUNK)));
+
+      const response = await send(site, body);
+
+      expect(response.status).toBe(413);
+      expect(await response.json()).toEqual({ error: "too_large", message: "This comment is too long to post." });
+      expect(await (await site(`${ENDPOINT}/?page=garden`)).json()).toEqual({ annotations: [] });
+    });
+
+    it("is refused as soon as it passes the limit, without reading the rest", async () => {
+      const { db } = await database();
+      const site = createSite({ DB: db });
+      const { body, pulled } = stream(Array.from({ length: 100 }, () => new Uint8Array(CHUNK).fill(0x20)));
+
+      const response = await send(site, body);
+
+      expect(response.status).toBe(413);
+      // 32 KiB is four chunks; the fifth passes it. A stream may buffer one more ahead.
+      expect(pulled()).toBeLessThanOrEqual(6);
+    });
+  });
 });
