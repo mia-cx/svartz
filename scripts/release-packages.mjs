@@ -14,6 +14,7 @@ export const majorOf = (version) => Number(version.split('.')[0]);
 export const RELEASE_PACKAGES = [
   ['@svartz/core', 'packages/core'],
   ['@svartz/plugins', 'packages/plugins'],
+  ['@svartz/auth', 'packages/auth'],
   ['@svartz/config', 'packages/config'],
   ['@svartz/ui', 'packages/ui'],
   ['@svartz/theme-minimal', 'themes/minimal'],

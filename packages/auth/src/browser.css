@@ -1,0 +1,137 @@
+/*
+ * The sign-in dialog. It follows theme-minimal's tokens (`--sv-*`), so it matches the search dialog;
+ * a host page without them falls back to system colours.
+ */
+.sv-auth {
+	inline-size: min(22rem, calc(100vw - 2rem));
+	/* Page resets zero the UA margin that centres a modal dialog. */
+	margin: auto;
+	padding: 0;
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	border-radius: var(--sv-radius-l, 10px);
+	background: var(--sv-paper, Canvas);
+	color: var(--sv-text, CanvasText);
+	box-shadow: var(--sv-shadow, 0 12px 32px -8px oklch(0 0 0 / 0.3));
+	font-family: var(--sv-font-sans, system-ui, sans-serif);
+	font-size: var(--sv-step-0, 1rem);
+}
+
+.sv-auth::backdrop {
+	background: var(--sv-scrim, oklch(0 0 0 / 0.4));
+	backdrop-filter: blur(4px);
+}
+
+.sv-auth[open] {
+	animation: sv-auth-in var(--sv-duration, 200ms) var(--sv-ease, ease-out);
+}
+
+@keyframes sv-auth-in {
+	from {
+		opacity: 0;
+		translate: 0 -0.5rem;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sv-auth[open] {
+		animation: none;
+	}
+}
+
+.sv-auth :focus-visible {
+	outline: var(--sv-focus-width, 2px) solid var(--sv-accent, Highlight);
+	outline-offset: var(--sv-focus-offset, 2px);
+}
+
+.sv-auth-body {
+	display: grid;
+	gap: var(--sv-space-4, 1rem);
+	padding: var(--sv-space-5, 1.5rem);
+}
+
+.sv-auth-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--sv-space-3, 0.75rem);
+}
+
+.sv-auth-title {
+	margin: 0;
+	color: var(--sv-ink, CanvasText);
+	font-size: var(--sv-step-2, 1.44rem);
+	font-weight: 700;
+	line-height: var(--sv-leading-tight, 1.15);
+}
+
+.sv-auth-close {
+	display: inline-grid;
+	place-items: center;
+	inline-size: 2.25rem;
+	block-size: 2.25rem;
+	margin-inline-end: calc(-1 * var(--sv-space-2, 0.5rem));
+	padding: 0;
+	border: 0;
+	border-radius: var(--sv-radius-m, 6px);
+	background: transparent;
+	color: var(--sv-muted, GrayText);
+	cursor: pointer;
+	transition: color var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out), background-color var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out);
+}
+
+.sv-auth-close:hover {
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+	color: var(--sv-text, CanvasText);
+}
+
+.sv-auth svg {
+	flex: none;
+	inline-size: 1.25rem;
+	block-size: 1.25rem;
+}
+
+.sv-auth-providers {
+	display: grid;
+	gap: var(--sv-space-2, 0.5rem);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.sv-auth-provider {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--sv-space-3, 0.75rem);
+	min-block-size: 2.75rem;
+	padding-inline: var(--sv-space-4, 1rem);
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	border-radius: var(--sv-radius-m, 6px);
+	background: var(--sv-paper, Canvas);
+	color: var(--sv-ink, CanvasText);
+	font-weight: 600;
+	text-decoration: none;
+	transition: border-color var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out), background-color var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out);
+}
+
+.sv-auth-provider:hover {
+	border-color: var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+}
+
+.sv-auth-privacy {
+	margin: 0;
+	color: var(--sv-muted, GrayText);
+	font-size: var(--sv-step--1, 0.875rem);
+	text-align: center;
+}
+
+.sv-auth-privacy a {
+	color: inherit;
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+}
+
+.sv-auth-privacy a:hover {
+	color: var(--sv-text, CanvasText);
+}

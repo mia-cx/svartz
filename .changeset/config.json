@@ -6,6 +6,7 @@
     [
       "@svartz/core",
       "@svartz/plugins",
+      "@svartz/auth",
       "@svartz/config",
       "@svartz/ui",
       "@svartz/theme-minimal",
