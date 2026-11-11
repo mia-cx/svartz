@@ -24,6 +24,7 @@ const submission: Submission = {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("PR writer", () => {
@@ -43,6 +44,20 @@ describe("PR writer", () => {
     const ref = github.requests.find(({ url }) => url.endsWith("/git/refs"))?.body as { ref: string };
     const pullRequest = github.requests.find(({ url }) => url.endsWith("/pulls"))?.body as { head: string };
     expect(ref.ref).toBe(`refs/heads/${pullRequest.head}`);
+  });
+
+  it("returns the opened pull request when labelling it fails", async () => {
+    const exchanges = editExchanges({ markdown, note: submission.note, pageUrl });
+    const labels = exchanges.pop()!;
+    const github = replayGitHub([...exchanges, {
+      request: labels.request,
+      response: { status: 503, json: { message: "Service unavailable" } },
+    }]);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await openSubmission(target, submission)).toEqual({ url: `https://github.com/${REPO}/pull/42`, number: 42 });
+    expect(github.pending).toEqual([]);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("#42"), expect.anything());
   });
 
   it("stops before writing anything when the edit changes nothing", async () => {

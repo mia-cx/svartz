@@ -149,8 +149,11 @@ export async function openSubmission(target: GitHubTarget, submission: Submissio
     base,
     body: pullRequestBody(submission, target.commit),
   });
+  // The pull request exists now: a label failure must not read as a failed submission the reader would resend.
   if (target.labels.length > 0) {
-    await call(target, "POST", `/issues/${pull.number}/labels`, { labels: target.labels });
+    await call(target, "POST", `/issues/${pull.number}/labels`, { labels: target.labels }).catch((error: unknown) => {
+      console.error(`[submissions] opened pull request #${pull.number} but couldn't label it`, error);
+    });
   }
   return { url: pull.html_url, number: pull.number };
 }
