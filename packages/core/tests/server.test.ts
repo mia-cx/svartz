@@ -3,6 +3,51 @@ import { createServerHandle, DEV_BINDINGS, type DevBindings, type ServerContext,
 
 const vault = { id: "wiki", mountPath: "", site: { title: "Wiki" } };
 
+describe("page representation negotiation", () => {
+  // Proves agent defaults, explicit media preferences, methods and prerendering preserve the requested representation.
+  it.each([
+    ["text/markdown", "", "GET", false, true],
+    ["text/markdown; q=0.8, text/html; q=0.2", "", "GET", false, true],
+    ["text/markdown, */*", "", "HEAD", false, true],
+    ["*/*", "ChatGPT-User/1.0", "GET", false, true],
+    [undefined, "ClaudeBot/1.0", "GET", false, true],
+    ["*/*", "Mozilla/5.0", "GET", false, false],
+    ["text/html, */*", "GPTBot/1.0", "GET", false, false],
+    ["text/html, text/markdown;q=0.5", "ClaudeBot/1.0", "GET", false, false],
+    ["text/markdown;q=0, */*", "GPTBot/1.0", "GET", false, false],
+    ["text/markdown;q=invalid", "GPTBot/1.0", "GET", false, false],
+    ["text/html, text/markdown", "", "GET", false, false],
+    ["text/markdown", "", "POST", false, false],
+    ["text/markdown", "GPTBot/1.0", "GET", true, false],
+  ])("Accept %s, agent %s, %s, building %s", async (accept, agent, method, building, markdown) => {
+    const headers = new Headers({ "user-agent": agent });
+    if (accept !== undefined) headers.set("accept", accept);
+    const request = new Request("https://wiki.test/site/docs/guide?x=1", { method, headers });
+    const handle = createServerHandle({
+      basePath: "/site/docs", vault, servers: [],
+      markdown: { "/site/docs/guide/": "/site/docs/guide.md" },
+    }, { privateEnv: {}, dev: false, building });
+    const response = await handle({
+      event: {
+        request, url: new URL(request.url), getClientAddress: () => "",
+        fetch: async (url) => {
+          expect(url.href).toBe("https://wiki.test/site/docs/guide.md");
+          return new Response("# Guide");
+        },
+      },
+      resolve: () => new Response("<h1>Guide</h1>", { headers: { vary: "Accept-Encoding" } }),
+    });
+    expect(await response.text()).toBe(markdown ? method === "HEAD" ? "" : "# Guide" : "<h1>Guide</h1>");
+    if (markdown) expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    if (!building && method !== "POST") {
+      expect(response.headers.get("vary")).toContain("Accept");
+      expect(response.headers.get("vary")).toContain("User-Agent");
+      expect(response.headers.get("cache-control")).toBe("private, no-cache");
+      if (!markdown) expect(response.headers.get("vary")).toContain("Accept-Encoding");
+    }
+  });
+});
+
 function event(path: string, platform?: unknown, clientAddress: () => string = () => "203.0.113.7"): ServerHandleEvent {
   return {
     request: new Request(`https://wiki.test${path}`, { method: "POST", body: "hi" }),

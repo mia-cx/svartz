@@ -44,18 +44,22 @@ function filesContaining(tree: Map<string, string>, text: string): string[] {
 }
 
 /** Write a one-vault config for `target` whose `hello` plugin serves requests, then run `svartz build`. */
-async function build(target: Record<string, unknown>) {
+async function build(target: Record<string, unknown>, { serverPlugin = true, mountPath = "" } = {}) {
   await rm(path.join(root, ".svartz"), { recursive: true, force: true });
+  // Crawler links to runtime plugin URLs must neither fail the build nor become static pages.
+  await writeFile(path.join(root, "vault/index.md"), `# Home\n\nPrerendered welcome. ${serverPlugin ? "[Say hello](/_svartz/hello/) or [ping](/_svartz/hello/ping)." : ""}\n`);
   await writeFile(path.join(root, "svartz.config.ts"), `export default {
     version: "1.0.0",
     vaults: [{
       id: "site",
       path: "vault",
+      mountPath: ${JSON.stringify(mountPath)},
       theme: ${JSON.stringify(path.join(workspaceRoot, "themes/minimal"))},
       target: ${JSON.stringify(target)},
       site: { title: "Server site" },
       plugins: [{
         id: "hello",
+        disabled: ${!serverPlugin},
         server: {
           module: ${JSON.stringify(path.join(root, "plugins/hello.mjs"))},
           options: JSON.parse('{ "greeting": "hi", "token": { "env": "HELLO_TOKEN" }, "__proto__": { "own": true } }'),
@@ -72,6 +76,7 @@ async function build(target: Record<string, unknown>) {
 beforeAll(async () => {
   // SvelteKit writes relative imports from the kit dir; macOS's /var symlink would break them.
   root = await realpath(await mkdtemp(path.join(os.tmpdir(), "svartz-server-build-")));
+  await writeFile(path.join(root, "package.json"), '{"type":"module"}\n');
   // The standalone shell is the repository's apps/web; copy it so each build owns its .svelte-kit.
   await cp(path.join(workspaceRoot, "apps/web"), path.join(root, "apps/web"), {
     recursive: true,
@@ -80,8 +85,8 @@ beforeAll(async () => {
   await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "apps/web/node_modules"), "dir");
   await mkdir(path.join(root, "vault"));
   await mkdir(path.join(root, "plugins"));
-  // The crawler follows these links while prerendering; they must neither fail the build nor become static pages.
-  await writeFile(path.join(root, "vault/index.md"), "# Home\n\nPrerendered welcome. [Say hello](/_svartz/hello/) or [ping](/_svartz/hello/ping).\n");
+  await writeFile(path.join(root, "vault/source.md"), "---\nslug: guide\n---\n# Guide\n\nPublished guide.\n");
+  await writeFile(path.join(root, "vault/private.md"), "---\nprivate: true\n---\n# PRIVATE_MARKER\n");
   await writeFile(path.join(root, "plugins/hello.mjs"), `export default (options) => (request, context) => {
     if (new URL(request.url).pathname !== context.base + "/") return undefined;
     return Response.json({
@@ -107,11 +112,12 @@ describe("standalone builds with a server plugin", () => {
     expect(failure?.stderr).toContain('Vault "site" targets "static", but plugin "hello" serves requests.');
   }, BUILD_TIMEOUT);
 
-  it("serves the plugin from a Node build while notes stay prerendered", async () => {
-    await build({ type: "node" });
+  it.each([true, false])("negotiates prerendered pages in Node (server plugin %s)", async (serverPlugin) => {
+    const prefix = serverPlugin ? "" : "/site/docs";
+    await build({ type: "node", basePath: serverPlugin ? "" : "/site" }, { serverPlugin, mountPath: serverPlugin ? "" : "/docs" });
     const dist = path.join(root, ".svartz/vaults/site/dist");
     await access(path.join(dist, "index.js"));
-    expect(await readFile(path.join(dist, "prerendered/index.html"), "utf8")).toContain("Prerendered welcome.");
+    expect(await readFile(path.join(dist, "prerendered", prefix, "index.html"), "utf8")).toContain("Prerendered welcome.");
     expect([...(await readTree(path.join(dist, "prerendered"))).keys()].filter((file) => file.includes("_svartz"))).toEqual([]);
     const client = await readTree(path.join(dist, "client"));
     expect(filesContaining(client, HANDLER_MARKER)).toEqual([]);
@@ -125,7 +131,7 @@ describe("standalone builds with a server plugin", () => {
     });
     let stderr = "";
     server.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
-    const origin = `http://127.0.0.1:${port}`;
+    const origin = `http://127.0.0.1:${port}${prefix}`;
     try {
       let ready = false;
       for (let attempt = 0; attempt < 100 && !ready; attempt++) {
@@ -134,27 +140,58 @@ describe("standalone builds with a server plugin", () => {
       }
       expect(ready, stderr).toBe(true);
 
-      const answer = await fetch(`${origin}/_svartz/hello/`, { method: "POST", body: "hi" });
-      expect(answer.status).toBe(200);
-      expect(await answer.json()).toEqual({
-        marker: HANDLER_MARKER,
-        method: "POST",
-        greeting: "hi",
-        ownProto: true,
-        token: "s3cret",
-        base: "/_svartz/hello",
-        vault: "site",
-        clientAddress: "127.0.0.1",
-      });
-      const unslashed = await fetch(`${origin}/_svartz/hello?x=1`, { method: "POST", body: "hi", redirect: "manual" });
-      expect([unslashed.status, unslashed.headers.get("location")]).toEqual([308, "/_svartz/hello/?x=1"]);
-      expect((await fetch(`${origin}/_svartz/hello/elsewhere/`)).status).toBe(404);
-      expect((await fetch(`${origin}/_svartz/nope/`)).status).toBe(404);
+      if (serverPlugin) {
+        const answer = await fetch(`${origin}/_svartz/hello/`, { method: "POST", body: "hi" });
+        expect(answer.status).toBe(200);
+        expect(await answer.json()).toEqual({
+          marker: HANDLER_MARKER,
+          method: "POST",
+          greeting: "hi",
+          ownProto: true,
+          token: "s3cret",
+          base: "/_svartz/hello",
+          vault: "site",
+          clientAddress: "127.0.0.1",
+        });
+        const unslashed = await fetch(`${origin}/_svartz/hello?x=1`, { method: "POST", body: "hi", redirect: "manual" });
+        expect([unslashed.status, unslashed.headers.get("location")]).toEqual([308, "/_svartz/hello/?x=1"]);
+        expect((await fetch(`${origin}/_svartz/hello/elsewhere/`)).status).toBe(404);
+        expect((await fetch(`${origin}/_svartz/nope/`)).status).toBe(404);
+      }
       const home = await fetch(`${origin}/`);
+      expect(home.headers.get("vary")).toContain("Accept");
+      expect(home.headers.get("vary")).toContain("User-Agent");
       expect(await home.text()).toContain("Prerendered welcome.");
+
+      // Proves page URLs negotiate the emitted copy ahead of adapter-node's static HTML middleware.
+      const markdown = await fetch(`${origin}/`, { headers: { accept: "text/markdown" } });
+      expect(markdown.status).toBe(200);
+      expect(markdown.headers.get("content-type")).toContain("text/markdown");
+      expect(markdown.headers.get("vary")).toContain("User-Agent");
+      expect(await markdown.text()).toBe(await readFile(path.join(dist, "client", prefix, "index.md"), "utf8"));
+      const agent = await fetch(`${origin}/guide/`, { headers: { "user-agent": "ClaudeBot/1.0" } });
+      expect(await agent.text()).toBe(await readFile(path.join(dist, "client", prefix, "guide.md"), "utf8"));
+      const head = await fetch(`${origin}/guide/`, { method: "HEAD", headers: { accept: "text/markdown" } });
+      expect(head.headers.get("content-type")).toContain("text/markdown");
+      expect(await head.text()).toBe("");
+      const browser = await fetch(`${origin}/guide/`, { headers: { accept: "text/html, text/markdown;q=0.5" } });
+      expect(browser.headers.get("content-type")).toContain("text/html");
+      expect((await fetch(`${origin}/private/`, { headers: { accept: "text/markdown" } })).status).toBe(404);
+      await rm(path.join(dist, "client", prefix, "guide.md"));
+      const missingCopy = await fetch(`${origin}/guide/`, { headers: { accept: "text/markdown" } });
+      expect(missingCopy.headers.get("content-type")).toContain("text/html");
     } finally {
       server.kill("SIGTERM");
+      if (server.exitCode === null) await once(server, "exit");
     }
+  }, BUILD_TIMEOUT);
+
+  it("keeps Markdown copies in a static build without server plugins", async () => {
+    await build({ type: "static" }, { serverPlugin: false });
+    const dist = path.join(root, ".svartz/vaults/site/dist");
+    expect(await readFile(path.join(dist, "index.html"), "utf8")).toContain("Prerendered welcome.");
+    expect(await readFile(path.join(dist, "guide.md"), "utf8")).toContain("Published guide.");
+    await expect(access(path.join(dist, "private.md"))).rejects.toMatchObject({ code: "ENOENT" });
   }, BUILD_TIMEOUT);
 
   for (const type of ["cloudflare-workers", "cloudflare-pages"]) {
