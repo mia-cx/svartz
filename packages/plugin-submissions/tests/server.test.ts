@@ -1,0 +1,89 @@
+import type { ServerContext } from "@svartz/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { MAX_MARKDOWN_BYTES } from "../src/api";
+import createHandler from "../src/server";
+import { BUILD_COMMIT, editExchanges, GUIDE_SOURCE, REPO, replayGitHub, sourceExchange, TOKEN } from "./github-exchanges";
+
+const ORIGIN = "https://wiki.example";
+// Deployed under /docs, vault mounted at /wiki.
+const BASE = "/docs/wiki/_svartz/submissions";
+
+const handler = createHandler(
+  { repo: REPO, labels: ["submission"], token: { env: "SVARTZ_GITHUB_TOKEN" } },
+  { commit: BUILD_COMMIT, pages: { "/wiki/guide/": "content/guide.md" } },
+);
+
+function context(env: Record<string, unknown> = { SVARTZ_GITHUB_TOKEN: TOKEN }): ServerContext {
+  return {
+    env,
+    clientAddress: "203.0.113.7",
+    vault: { id: "wiki", mountPath: "/wiki", site: { title: "Wiki" } },
+    base: BASE,
+    waitUntil: () => {},
+  };
+}
+
+const source = (page: string) => new Request(`${ORIGIN}${BASE}/source/?page=${encodeURIComponent(page)}`);
+const edit = (body: unknown) => new Request(`${ORIGIN}${BASE}/edit/`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: typeof body === "string" ? body : JSON.stringify(body),
+});
+
+async function answer(request: Request, env?: Record<string, unknown>) {
+  const response = await handler(request, context(env));
+  if (!response) throw new Error("The handler declined the request");
+  return { status: response.status, body: await response.json() as Record<string, unknown> };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("submissions server", () => {
+  it("serves a published note's current source", async () => {
+    replayGitHub([sourceExchange]);
+
+    expect(await answer(source("/wiki/guide/"))).toEqual({ status: 200, body: { markdown: GUIDE_SOURCE } });
+  });
+
+  it("opens a pull request for an edit and answers its link", async () => {
+    const markdown = GUIDE_SOURCE.replace("Set up the wiki.", "Set up the wiki in five minutes.");
+    const note = "Added the time it takes.";
+    const github = replayGitHub(editExchanges({ markdown, note, pageUrl: `${ORIGIN}/docs/wiki/guide/` }));
+
+    expect(await answer(edit({ page: "/wiki/guide/", markdown, note }))).toEqual({
+      status: 201,
+      body: { url: `https://github.com/${REPO}/pull/42`, number: 42 },
+    });
+    expect(github.pending).toEqual([]);
+  });
+
+  it.each([
+    ["a page outside the build", source("/wiki/drafts/secret/"), 404, "not_editable"],
+    ["a path instead of a page", source("content/guide.md"), 404, "not_editable"],
+    ["traversal out of the vault", edit({ page: "/wiki/../.github/workflows/ci.yml", markdown: "x" }), 404, "not_editable"],
+    ["no page", source(""), 404, "not_editable"],
+    ["a body that isn't JSON", edit("page=/wiki/guide/"), 400, "invalid_request"],
+    ["a note over the limit", edit({ page: "/wiki/guide/", markdown: "x", note: "x".repeat(2001) }), 400, "note_too_long"],
+    ["an oversized page", edit({ page: "/wiki/guide/", markdown: "x".repeat(MAX_MARKDOWN_BYTES + 1) }), 413, "too_large"],
+    ["a GET to the edit route", new Request(`${ORIGIN}${BASE}/edit/`), 405, "method_not_allowed"],
+  ])("rejects %s before calling GitHub", async (_case, request, status, error) => {
+    const github = replayGitHub([]);
+
+    const response = await answer(request);
+
+    expect(response).toEqual({ status, body: { error, message: expect.any(String) } });
+    expect(github.requests).toEqual([]);
+  });
+
+  it("names the missing token variable", async () => {
+    expect(await answer(source("/wiki/guide/"), {})).toEqual({
+      status: 503,
+      body: {
+        error: "misconfigured",
+        message: "This site can't open pull requests yet: its server has no SVARTZ_GITHUB_TOKEN set.",
+      },
+    });
+  });
+});
