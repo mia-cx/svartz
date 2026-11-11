@@ -44,6 +44,10 @@ Transformers can register remark or rehype plugins with `getCompilerContribution
 
 `server: { module, options }` makes a plugin answer requests at runtime under `/_svartz/<plugin-id>/`. The module default-exports a factory that receives `options` and returns `(request, context) => Response | undefined`. Options are JSON; secrets are named as `{ env: "NAME" }` and read from `context.env`. The vault needs a `cloudflare-workers`, `cloudflare-pages` or `node` target, or a host app whose hooks run `svartzHandle`; a `static` vault, or a host on `adapter-static`, fails the build. The repository's `docs/server-plugins.md` has the full contract.
 
+## Plugins that span vaults
+
+`forVault({ vault, vaults })` runs once per vault while the config resolves, after every vault has resolved and merged its plugins. It returns the plugin that `vault` runs, so a plugin can read its sibling vaults, such as `@svartz/auth` finding the vault that runs sign-in for a host app. A throw fails config loading with a `VaultPluginInvalid` error naming the vault and plugin. It applies to plugins in the config, not theme presets.
+
 ## Merge and validation
 
 Svartz merges core, theme preset, config defaults, then vault plugins. A later plugin with the same ID replaces the earlier one in its original position. `{ id: "core:transform-latex", disabled: true }` removes that optional built-in. Disabling a required stage needs another active provider. Theme capabilities do not require plugins; `requiredFeatures` does.

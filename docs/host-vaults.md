@@ -47,6 +47,8 @@ export const handle = sequence(svartzHandle, handleApp);
 
 Put it first, so other handles never redirect or reject plugin requests; without other handles, `export const handle = svartzHandle;`. It routes `<base><mountPath>/_svartz/<plugin-id>/` to that vault's plugins, for every host vault, and passes every other request on. A build with an active server plugin fails when the hooks don't run `svartzHandle`, and prints the lines to add. `/// <reference types="@svartz/vite/virtual-modules" />` in `src/app.d.ts` types the import.
 
+With [`@svartz/auth`](auth.md#several-vaults) on several host vaults, one sign-in covers all of them.
+
 The app needs a server adapter, such as `@sveltejs/adapter-node` or `@sveltejs/adapter-cloudflare`. With `@sveltejs/adapter-static`, the build fails naming the vault and plugin.
 
 While prerendering, plugin URLs answer 404. When a note links to one, tell SvelteKit's crawler to skip those 404s in `svelte.config.js`, or the build fails:

@@ -16,6 +16,7 @@ import {
   VaultBuildRootResolutionFailed,
   VaultIdConflict,
   VaultPathInvalid,
+  VaultPluginInvalid,
 } from "./types/index";
 
 const CONFIG_FILENAMES = ["svartz.config", ".svartzrc"];
@@ -180,7 +181,7 @@ export const loadConfig = (
   configPath?: string,
 ): Effect.Effect<
   ResolvedSvartzConfig,
-  ConfigNotFound | ConfigImportFailed | ConfigDecodeFailed | VaultPathInvalid | VaultMountConflict | VaultBuildRootConflict | VaultBuildRootResolutionFailed | VaultIdConflict
+  ConfigNotFound | ConfigImportFailed | ConfigDecodeFailed | VaultPathInvalid | VaultMountConflict | VaultBuildRootConflict | VaultBuildRootResolutionFailed | VaultIdConflict | VaultPluginInvalid
 > =>
   Effect.gen(function* () {
     // Validate the config path and resolve it to an absolute path.

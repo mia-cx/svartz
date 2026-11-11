@@ -51,6 +51,13 @@ class VaultIdNotFound extends Data.TaggedError("VaultIdNotFound")<{
   readonly message: string;
 }> {}
 
+/** A plugin's `forVault` refused the site, such as an `auth` whose `callbackVault` names no vault with auth. */
+class VaultPluginInvalid extends Data.TaggedError("VaultPluginInvalid")<{
+  readonly vaultId: string;
+  readonly pluginId: string;
+  readonly message: string;
+}> {}
+
 type ConfigError =
   | ConfigNotFound
   | ConfigImportFailed
@@ -60,7 +67,8 @@ type ConfigError =
   | VaultBuildRootConflict
   | VaultBuildRootResolutionFailed
   | VaultIdConflict
-  | VaultIdNotFound;
+  | VaultIdNotFound
+  | VaultPluginInvalid;
 
 export {
   ConfigNotFound,
@@ -72,5 +80,6 @@ export {
   VaultBuildRootResolutionFailed,
   VaultIdConflict,
   VaultIdNotFound,
+  VaultPluginInvalid,
   type ConfigError,
 };

@@ -3,10 +3,10 @@
  * Server plugins read who is signed in with `readIdentity` from `@svartz/auth/server`.
  */
 import { fileURLToPath } from "node:url";
-import { definePlugin, getCompilerContributions, type ResolvedConfig } from "@svartz/core";
+import { definePlugin, getCompilerContributions, type ResolvedConfig, type NormalizedSvartzPlugin, type SiteVaults, type SvartzPlugin } from "@svartz/core";
 import type { SignInConfig } from "./browser";
 import { isProviderId, PROVIDERS, type ProviderId } from "./providers";
-import type { AuthOptions } from "./server";
+import type { AuthOptions, AuthServerOptions } from "./server";
 
 export type { Identity, ProviderId } from "./providers";
 export type { AuthOptions, ProviderOptions } from "./server";
@@ -39,12 +39,15 @@ function validate(options: AuthOptions): ProviderId[] {
   if (options.privacyNotice !== undefined && typeof options.privacyNotice !== "string") {
     fail("privacyNotice must be the URL of the site's privacy notice");
   }
+  if (options.callbackVault !== undefined && (typeof options.callbackVault !== "string" || !options.callbackVault)) {
+    fail("callbackVault must be the id of the vault whose routes run sign-in");
+  }
   return names as ProviderId[];
 }
 
 /**
  * The deployment base standalone shells give SvelteKit (`target.basePath` for `static` and `node`), so the browser
- * can reach the routes. Host vaults can't route server plugins yet.
+ * can reach the routes. A host app's `paths.base` isn't known here, so host vaults assume none.
  */
 function deploymentBase(config: ResolvedConfig): string {
   const { target } = config;
@@ -52,16 +55,54 @@ function deploymentBase(config: ResolvedConfig): string {
   return base.replace(/\/+$/, "");
 }
 
-/** The `auth` plugin: sign-in routes on the server and the sign-in dialog in the browser. */
-export function auth(options: AuthOptions) {
-  const providers = validate(options);
+/** The `auth` options a vault runs, or `undefined` when it doesn't enable auth. */
+function authOptionsOf(vault: ResolvedConfig): AuthOptions | undefined {
+  const plugin = (vault.plugins as readonly SvartzPlugin[]).find(({ id }) => id === AUTH_PLUGIN_ID);
+  const options = plugin?.server?.options as Partial<AuthOptions> | undefined;
+  return options?.providers ? options as AuthOptions : undefined;
+}
+
+/**
+ * The vault whose routes run every sign-in for `vault`: `callbackVault`, else the first host vault with auth.
+ * Host vaults share one app, so they share one callback URL per provider. A standalone vault is its own app and
+ * runs its own sign-in.
+ */
+function callbackVaultFor(options: AuthOptions, providers: readonly ProviderId[], { vault, vaults }: SiteVaults): ResolvedConfig {
+  const named = options.callbackVault;
+  if (vault.target.type !== "host") {
+    if (named === undefined || named === vault.id) return vault;
+    fail(`vault "${vault.id}" sets callbackVault "${named}", but only host vaults share a sign-in; "${vault.id}" runs its own`);
+  }
+  const host = vaults.filter((candidate) => candidate.target.type === "host" && authOptionsOf(candidate));
+  const id = named ?? host[0]!.id;
+  const target = vaults.find((candidate) => candidate.id === id);
+  if (!target) fail(`vault "${vault.id}" sets callbackVault "${id}", but no vault has that id`);
+  const targetOptions = target.target.type === "host" ? authOptionsOf(target) : undefined;
+  if (!targetOptions) fail(`vault "${vault.id}" sets callbackVault "${id}", which must be a host vault that enables auth`);
+  const missing = providers.find((provider) => !targetOptions.providers[provider]);
+  if (missing) fail(`vault "${vault.id}" offers ${missing}, but its callbackVault "${id}" doesn't list it under providers`);
+  // The target forwards nothing itself, or sign-in could bounce between vaults forever (or hop through a chain).
+  const targetOwner = targetOptions.callbackVault ?? host[0]!.id;
+  if (targetOwner !== target.id) {
+    fail(`vault "${vault.id}" sends sign-in to "${id}", but "${id}" sends its own to "${targetOwner}"; set the same callbackVault on every host vault`);
+  }
+  return target;
+}
+
+/** The plugin one vault runs; `callbackMountPath` is set when another vault runs its sign-ins. */
+function authPlugin(options: AuthOptions, providers: readonly ProviderId[], callbackMountPath?: string): NormalizedSvartzPlugin {
+  const serverOptions: AuthServerOptions = callbackMountPath === undefined ? options : { ...options, callbackMountPath };
   return definePlugin(() => ({
     id: AUTH_PLUGIN_ID,
-    server: { module: SERVER_MODULE, options },
+    server: { module: SERVER_MODULE, options: serverOptions },
+    forVault(site) {
+      const target = callbackVaultFor(options, providers, site);
+      return target.id === site.vault.id ? authPlugin(options, providers) : authPlugin(options, providers, target.mountPath);
+    },
     emitArtifacts: {
       run(ctx) {
         const browser: SignInConfig = {
-          endpoint: `${deploymentBase(ctx.config)}${ctx.config.mountPath}/_svartz/${AUTH_PLUGIN_ID}`,
+          endpoint: `${deploymentBase(ctx.config)}${callbackMountPath ?? ctx.config.mountPath}/_svartz/${AUTH_PLUGIN_ID}`,
           providers: providers.map((id) => ({ id, label: PROVIDERS[id].label })),
           ...options.privacyNotice ? { privacyNotice: options.privacyNotice } : {},
         };
@@ -72,4 +113,9 @@ export function auth(options: AuthOptions) {
       options: { fatal: true },
     },
   }))();
+}
+
+/** The `auth` plugin: sign-in routes on the server and the sign-in dialog in the browser. */
+export function auth(options: AuthOptions): NormalizedSvartzPlugin {
+  return authPlugin(options, validate(options));
 }

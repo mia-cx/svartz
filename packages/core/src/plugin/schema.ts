@@ -37,6 +37,7 @@ const PluginSchema = Schema.Struct({
   contractVersion: Schema.optional(Schema.String),
   disabled: Schema.optional(Schema.Boolean),
   server: Schema.optional(ServerModuleSchema),
+  forVault: Schema.optional(FnSchema),
   buildStart: Schema.optional(HookInputSchema),
   configResolved: Schema.optional(HookInputSchema),
   buildEnd: Schema.optional(HookInputSchema),
@@ -62,6 +63,7 @@ const KNOWN_KEYS = new Set<string>([
   "contractVersion",
   "disabled",
   "server",
+  "forVault",
   ...STAGE_NAMES,
   "handleChange",
 ]);

@@ -50,6 +50,7 @@ export type {
   PluginChangeHook,
   PluginHookInput,
   PluginChangeHookInput,
+  SiteVaults,
   SvartzPlugin,
   NormalizedSvartzPlugin,
   StageName,
