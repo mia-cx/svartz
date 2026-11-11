@@ -93,3 +93,7 @@ Notes, lists and theme pages are still prerendered and served as static files. A
 A `host` vault uses the host app's adapter, which must not be `@sveltejs/adapter-static`, and the app adds `svartzHandle` to its hooks. See [server plugins in a host app](host-vaults.md#server-plugins).
 
 `svartzHandle`, from the server-only module `virtual:svartz/server`, is the SvelteKit `handle` that routes plugin requests. The standalone shell's `src/hooks.server.ts` runs it before its own handle. Each vault's version is built with `createServerHandle` from `@svartz/core`; a host app's runs every host vault's in turn.
+
+## Signed-in readers
+
+To know who sent a request, add `@svartz/auth` to the vault and call `readIdentity(request, context.env)` from `@svartz/auth/server`. See [Reader sign-in](auth.md).
