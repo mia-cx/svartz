@@ -42,8 +42,10 @@ Every published Markdown note gets an **Edit** action beside Copy page. It opens
 
 ## What maintainers get
 
-- A branch `svartz/submission/edit/<page>-<random>` from the commit the site was built from, with one commit replacing the note. When the page changed since, GitHub shows a conflict instead of the edit overwriting it.
+- A branch `svartz/submission/edit/<page>-<submission id>` from the commit the site was built from, with one commit replacing the note. When the page changed since, GitHub shows a conflict instead of the edit overwriting it.
 - A pull request titled `Edit <path>` with the configured labels, the reader's note, and the page it came from.
+
+Each opened editor makes a random submission id and sends it with every attempt. When GitHub's answer is lost, a retry finds the pull request the first attempt opened instead of opening a second one. When GitHub refuses the pull request, the server deletes the branch it made. Every GitHub request gives up after 10 seconds, and the reader is told to try again.
 
 Readers can edit only published `.md` notes; password-protected notes, other files and paths outside the vault are refused by the server. A page's source is capped at 512 KB and the note at 2,000 characters.
 
@@ -70,6 +72,8 @@ The editor then shows the challenge above its buttons and sends its token with t
 
 Each signed-in reader (see [Reader sign-in](../../docs/auth.md)) gets `limit` submissions per `period` seconds; anonymous readers share that budget per IP. Past it, the server answers 429 with `retryAfter` in seconds and a `Retry-After` header, and the editor says when to try again, such as "Try again in 10 minutes."
 
+When the server can't see a reader's address, as behind a proxy that hides it, anonymous edits are refused with 403 `sign_in_required`: one shared budget would let one reader use it up for everyone. Such a site needs reader sign-in.
+
 By default the count lives in the server's memory. Each Node process and each Workers isolate keeps its own count, so a site with several instances allows up to `limit` per instance, and a restart clears it.
 
 On Cloudflare Workers, bind a [rate limiter](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) as `SVARTZ_SUBMISSIONS_RATE_LIMIT` to count across isolates instead. Its own `limit` and `period` then apply; set `guard.rateLimit.period` to the same period, because the binding doesn't report when its window resets and `retryAfter` is that period:
@@ -79,6 +83,8 @@ On Cloudflare Workers, bind a [rate limiter](https://developers.cloudflare.com/w
 "ratelimits": [{ "name": "SVARTZ_SUBMISSIONS_RATE_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }]
 ```
 
+When the binding fails, the edit answers 503 `rate_limit_unavailable`.
+
 ## Server API
 
 The plugin answers under `<base><mount>/_svartz/submissions/`. Failures answer `{ "error": "<code>", "message": "<for the reader>" }`.
@@ -86,6 +92,6 @@ The plugin answers under `<base><mount>/_svartz/submissions/`. Failures answer `
 | Request | Answer |
 | --- | --- |
 | `GET source/?page=/guides/setup/` | `{ "markdown": "…" }`, the note at the build commit. |
-| `POST edit/` with `{ "page", "markdown", "note"?, "turnstileToken"? }` | 201 `{ "url", "number" }` of the new pull request. 403 when Turnstile is missing or refused, 429 with `retryAfter` past the rate limit, 503 when Cloudflare can't be reached. |
+| `POST edit/` with `{ "submissionId", "page", "markdown", "note"?, "turnstileToken"? }` | 201 `{ "url", "number" }` of the pull request, new or opened by an earlier attempt with the same `submissionId`. 403 when Turnstile is missing or refused, or the reader is anonymous with no visible address; 429 with `retryAfter` past the rate limit; 503 when Cloudflare, the rate limiter or GitHub can't be reached. |
 
-`page` is the note's URL path below the deployment base, as it appears in the site's index.
+`page` is the note's URL path below the deployment base, as it appears in the site's index. `submissionId` is 32 lowercase hex digits the client picks at random and repeats on every retry of the same edit.

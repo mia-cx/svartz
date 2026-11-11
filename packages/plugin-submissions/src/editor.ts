@@ -95,6 +95,11 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+/** 128 random bits as hex. `getRandomValues`, unlike `randomUUID`, works on sites served without HTTPS. */
+function newSubmissionId(): string {
+  return [...crypto.getRandomValues(new Uint8Array(16))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 function query<E extends Element>(root: ParentNode, selector: string): E {
   const element = root.querySelector<E>(selector);
   if (!element) throw new Error(`[submissions] the edit panel has no ${selector}`);
@@ -114,18 +119,26 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
   const actions = query<HTMLElement>(dialog, ".svartz-submissions-actions");
   const submit = query<HTMLButtonElement>(dialog, '[type="submit"]');
   const challenge = query<HTMLElement>(dialog, ".svartz-submissions-turnstile");
+  const closers = dialog.querySelectorAll<HTMLButtonElement>("[data-close]");
+  // Every retry of this edit sends the same id, so the server can find a pull request an earlier attempt opened.
+  const submissionId = newSubmissionId();
   let turnstile: { api: Turnstile; id: string } | undefined;
 
   const editable = new Compartment();
   let view: EditorView | undefined;
   let original = "";
-  // The source and note are locked while sending, so the pull request holds exactly what the reader sees.
+  // The source and note are locked while sending, so the pull request holds exactly what the reader sees. The panel
+  // can't be dismissed then either: the reader would never see the pull request it opens.
   let phase: "editing" | "sending" | "sent" = "editing";
   const edited = () => view !== undefined && view.state.sliceDoc() !== original;
 
   function lock(locked: boolean) {
     view?.dispatch({ effects: editable.reconfigure(EditorView.editable.of(!locked)) });
     note.readOnly = locked;
+  }
+
+  function holdOpen(held: boolean) {
+    for (const button of closers) button.disabled = held;
   }
 
   const showError = (message: string) => {
@@ -141,8 +154,9 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
     if (opener.isConnected) opener.focus();
   }
 
-  /** Close on request, asking first when an unsubmitted edit would be lost. */
+  /** Close on request, asking first when an unsubmitted edit would be lost. Ignored while the edit is sending. */
   function dismiss(): boolean {
+    if (phase === "sending") return false;
     if (phase !== "sent" && (edited() || note.value.trim()) && !window.confirm("Discard your edit?")) return false;
     close();
     return true;
@@ -163,6 +177,7 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
     if (turnstileSiteKey && !turnstileToken) return showError(UNVERIFIED);
     phase = "sending";
     lock(true);
+    holdOpen(true);
     error.hidden = true;
     submit.disabled = true;
     submit.textContent = "Opening pull request…";
@@ -170,15 +185,17 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
       const pull = await request<EditResponse>(`${endpoint}/edit/`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ page, markdown: view.state.sliceDoc(), note: note.value, turnstileToken } satisfies EditRequest),
+        body: JSON.stringify({ submissionId, page, markdown: view.state.sliceDoc(), note: note.value, turnstileToken } satisfies EditRequest),
       });
       // The pull request holds this text now and the panel stays locked; further typing would go nowhere.
       phase = "sent";
       challenge.hidden = true;
+      holdOpen(false);
       showOpened(pull);
     } catch (cause) {
       phase = "editing";
       lock(false);
+      holdOpen(false);
       // The server spent the token; a retry needs a fresh one.
       if (turnstile) turnstile.api.reset(turnstile.id);
       showError((cause as Error).message);

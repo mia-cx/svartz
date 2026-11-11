@@ -2,7 +2,19 @@ import type { ServerContext } from "@svartz/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_MARKDOWN_BYTES } from "../src/api";
 import createHandler from "../src/server";
-import { BUILD_COMMIT, editExchanges, GUIDE_SOURCE, REPO, replayGitHub, sourceExchange, TOKEN } from "./github-exchanges";
+import { GITHUB_TIMEOUT_MS } from "../src/github";
+import {
+  branchFor,
+  BUILD_COMMIT,
+  editExchanges,
+  GUIDE_SOURCE,
+  REPO,
+  replayGitHub,
+  sourceExchange,
+  SUBMISSION_ID,
+  TOKEN,
+  useFakeTimeouts,
+} from "./github-exchanges";
 
 const ORIGIN = "https://wiki.example";
 // Deployed under /docs, vault mounted at /wiki.
@@ -24,10 +36,11 @@ function context(env: Record<string, unknown> = { SVARTZ_GITHUB_TOKEN: TOKEN }):
 }
 
 const source = (page: string) => new Request(`${ORIGIN}${BASE}/source/?page=${encodeURIComponent(page)}`);
-const edit = (body: unknown) => new Request(`${ORIGIN}${BASE}/edit/`, {
+/** An edit request; a non-string `body` is sent as JSON with this submission's id unless it names its own. */
+const edit = (body: string | Record<string, unknown>) => new Request(`${ORIGIN}${BASE}/edit/`, {
   method: "POST",
   headers: { "content-type": "application/json" },
-  body: typeof body === "string" ? body : JSON.stringify(body),
+  body: typeof body === "string" ? body : JSON.stringify({ submissionId: SUBMISSION_ID, ...body }),
 });
 
 async function answer(request: Request, env?: Record<string, unknown>) {
@@ -37,7 +50,9 @@ async function answer(request: Request, env?: Record<string, unknown>) {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("submissions server", () => {
@@ -50,7 +65,7 @@ describe("submissions server", () => {
   it("opens a pull request for an edit and answers its link", async () => {
     const markdown = GUIDE_SOURCE.replace("Set up the wiki.", "Set up the wiki in five minutes.");
     const note = "Added the time it takes.";
-    const github = replayGitHub(editExchanges({ markdown, note, pageUrl: `${ORIGIN}/docs/wiki/guide/` }));
+    const github = replayGitHub(editExchanges({ markdown, note, pageUrl: `${ORIGIN}/docs/wiki/guide/`, branch: branchFor("wiki-guide") }));
 
     expect(await answer(edit({ page: "/wiki/guide/", markdown, note }))).toEqual({
       status: 201,
@@ -65,6 +80,8 @@ describe("submissions server", () => {
     ["traversal out of the vault", edit({ page: "/wiki/../.github/workflows/ci.yml", markdown: "x" }), 404, "not_editable"],
     ["no page", source(""), 404, "not_editable"],
     ["a body that isn't JSON", edit("page=/wiki/guide/"), 400, "invalid_request"],
+    ["an edit without a submission id", edit({ submissionId: undefined, page: "/wiki/guide/", markdown: "x" }), 400, "invalid_request"],
+    ["a submission id that could name any branch", edit({ submissionId: "../../main", page: "/wiki/guide/", markdown: "x" }), 400, "invalid_request"],
     ["a note over the limit", edit({ page: "/wiki/guide/", markdown: "x", note: "x".repeat(2001) }), 400, "note_too_long"],
     ["an oversized page", edit({ page: "/wiki/guide/", markdown: "x".repeat(MAX_MARKDOWN_BYTES + 1) }), 413, "too_large"],
     ["a GET to the edit route", new Request(`${ORIGIN}${BASE}/edit/`), 405, "method_not_allowed"],
@@ -98,6 +115,19 @@ describe("submissions server", () => {
     expect(cancelled).toBe(true);
     expect(pulled).toBeLessThan(CHUNKS);
     expect(github.requests).toEqual([]);
+  });
+
+  it("tells the reader to try again when GitHub doesn't answer in time", async () => {
+    useFakeTimeouts();
+    replayGitHub([{ request: sourceExchange.request, response: { status: 0, hang: true } }]);
+
+    const response = answer(source("/wiki/guide/"));
+    await vi.advanceTimersByTimeAsync(GITHUB_TIMEOUT_MS);
+
+    expect(await response).toEqual({
+      status: 503,
+      body: { error: "github_unavailable", message: "Couldn't reach GitHub right now. Try again in a moment." },
+    });
   });
 
   it("names the missing token variable", async () => {

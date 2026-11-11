@@ -26,11 +26,14 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
   if (!region || !page) return;
 
   let close: (() => void) | undefined;
+  let unmounted = false;
   const button = document.createElement("button");
   button.type = "button";
   button.innerHTML = `${PENCIL_ICON}Edit`;
   button.addEventListener("click", async () => {
     const { openEditor } = await import("./editor");
+    // The page may have gone while the editor loaded; its panel would outlive the cleanup below.
+    if (unmounted) return;
     close = openEditor({
       page,
       endpoint: `${context.base}${options.endpoint}`,
@@ -41,6 +44,7 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
   region.append(button);
 
   return () => {
+    unmounted = true;
     close?.();
     button.remove();
   };

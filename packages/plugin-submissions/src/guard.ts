@@ -1,6 +1,7 @@
 /**
  * The submission guard. Every submission passes a rate limit, keyed by the signed-in identity or else the client's
- * IP; when Turnstile is configured, it must also carry a token Cloudflare verifies. Runs before any GitHub call.
+ * IP, and is refused when it has neither. When Turnstile is configured, it must also carry a token Cloudflare
+ * verifies. Runs before any GitHub call.
  */
 import type { Identity } from "@svartz/auth/server";
 import { SubmissionError } from "./errors";
@@ -95,6 +96,13 @@ const rateLimited = (retryAfter: number) =>
 const turnstileUnavailable = () =>
   new SubmissionError("turnstile_unavailable", 503, "Couldn't confirm you're human right now. Try again in a moment.");
 
+const rateLimitUnavailable = () =>
+  new SubmissionError("rate_limit_unavailable", 503, "Couldn't count your edits right now. Try again in a moment.");
+
+// Behind a proxy that hides client addresses, anonymous readers would all share one quota: one reader could use it up.
+const signInRequired = () =>
+  new SubmissionError("sign_in_required", 403, "Sign in to send edits from this site, then open the pull request.");
+
 /** Whether Cloudflare accepts `token`. Network failure, a timeout or an error status throw instead of answering. */
 async function verifyTurnstile(secret: string, token: string, clientAddress: string | undefined): Promise<boolean> {
   const form = new URLSearchParams({ secret, response: token });
@@ -119,7 +127,11 @@ export function createGuard({ turnstile, rateLimit }: GuardOptions) {
     const binding = env[RATE_LIMIT_BINDING];
     if (isRateLimitBinding(binding)) {
       // The binding doesn't say when its window resets; its period is at most this one.
-      if (!(await binding.limit({ key })).success) throw rateLimited(rateLimit.period);
+      const { success } = await binding.limit({ key }).catch((error: unknown) => {
+        console.error("[submissions] the rate-limiting binding failed", error);
+        throw rateLimitUnavailable();
+      });
+      if (!success) throw rateLimited(rateLimit.period);
       return;
     }
     const retryAfter = countInMemory(key);
@@ -128,7 +140,8 @@ export function createGuard({ turnstile, rateLimit }: GuardOptions) {
 
   /** Resolves when the submission may go ahead; otherwise throws the {@link SubmissionError} to answer. */
   return async function check({ token, identity, clientAddress, env }: GuardInput): Promise<void> {
-    const key = identity ? `identity:${identity.id}` : `ip:${clientAddress ?? "unknown"}`;
+    if (!identity && !clientAddress) throw signInRequired();
+    const key = identity ? `identity:${identity.id}` : `ip:${clientAddress}`;
     if (!turnstile) return limit(key, env);
     if (!token) throw new SubmissionError("turnstile_required", 403, "Finish the check that you're human, then open the pull request.");
     // Counted before verifying, so a flood of bad tokens spends its own quota rather than Cloudflare round trips.

@@ -7,6 +7,8 @@ import { SubmissionError } from "./errors";
 
 const API = "https://api.github.com";
 const MAX_BRANCH_SLUG = 48;
+/** Past this, a GitHub request counts as unanswered and the reader is told to try again. */
+export const GITHUB_TIMEOUT_MS = 10_000;
 
 /** The repository and credentials a submission is written with. */
 export interface GitHubTarget {
@@ -23,6 +25,8 @@ export interface GitHubTarget {
 /** One reader's edit of a published note. `kind` leaves room for new pages. */
 export interface Submission {
   readonly kind: "edit";
+  /** The editor's id for this edit, the same on every retry; names the branch. */
+  readonly id: string;
   /** Repository-relative path of the note. */
   readonly path: string;
   /** The page's URL route, such as `/guides/setup/`; names the branch. */
@@ -33,18 +37,37 @@ export interface Submission {
   readonly note: string;
 }
 
+interface PullRequest {
+  readonly html_url: string;
+  readonly number: number;
+}
+
+const unavailable = () =>
+  new SubmissionError("github_unavailable", 503, "Couldn't reach GitHub right now. Try again in a moment.");
+
+/**
+ * One GitHub request, its body read in full within {@link GITHUB_TIMEOUT_MS}. No answer in time, or none at all,
+ * throws `github_unavailable`; whether GitHub acted on the request is then unknown.
+ */
 async function send(target: GitHubTarget, method: string, path: string, body?: unknown, accept = "application/vnd.github+json") {
-  return fetch(`${API}/repos/${target.repo}${path}`, {
-    method,
-    headers: {
-      accept,
-      authorization: `Bearer ${target.token}`,
-      "user-agent": "svartz-submissions",
-      "x-github-api-version": "2022-11-28",
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  try {
+    const response = await fetch(`${API}/repos/${target.repo}${path}`, {
+      method,
+      headers: {
+        accept,
+        authorization: `Bearer ${target.token}`,
+        "user-agent": "svartz-submissions",
+        "x-github-api-version": "2022-11-28",
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
+    });
+    // Buffered under the same deadline, so a body that stalls counts as no answer too.
+    return new Response(response.body === null ? null : await response.arrayBuffer(), response);
+  } catch {
+    throw unavailable();
+  }
 }
 
 /** The reader-facing error for a GitHub response that failed. */
@@ -97,11 +120,10 @@ export async function readSource(target: GitHubTarget, path: string): Promise<st
   return new TextDecoder("utf-8", { ignoreBOM: true }).decode(await response.arrayBuffer());
 }
 
-/** `svartz/submission/edit/guides-setup-3fa9c1`: the kind, the page and a random suffix. */
-export function submissionBranch(kind: Submission["kind"], page: string): string {
+/** `svartz/submission/edit/guides-setup-<id>`: the kind, the page and the submission's id. */
+export function submissionBranch({ kind, page, id }: Pick<Submission, "kind" | "page" | "id">): string {
   const slug = page.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, MAX_BRANCH_SLUG).replace(/-+$/, "");
-  const suffix = [...crypto.getRandomValues(new Uint8Array(3))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `svartz/submission/${kind}/${slug || "home"}-${suffix}`;
+  return `svartz/submission/${kind}/${slug || "home"}-${id}`;
 }
 
 /** Keep a reader's note from notifying people: `@name` gets an invisible word joiner after the `@`. */
@@ -119,11 +141,50 @@ function pullRequestBody(submission: Submission, commit: string): string {
   ].join("\n");
 }
 
+/** The open pull request from `branch`, if an earlier attempt at this submission opened one. */
+async function openPull(target: GitHubTarget, branch: string): Promise<PullRequest | undefined> {
+  const [owner] = target.repo.split("/");
+  const [pull] = await call<PullRequest[]>(target, "GET", `/pulls?head=${encodeURIComponent(`${owner}:${branch}`)}&state=open`);
+  return pull;
+}
+
+/** GitHub's 422 when `head` already has an open pull request. */
+async function alreadyOpened(response: Response): Promise<boolean> {
+  if (response.status !== 422) return false;
+  const body = await response.clone().json().catch(() => undefined) as { errors?: Array<{ message?: unknown }> } | undefined;
+  return body?.errors?.some(({ message }) => typeof message === "string" && message.startsWith("A pull request already exists")) ?? false;
+}
+
+/** Point `branch` at `sha`: a new branch, or one an earlier attempt left without a pull request. */
+async function writeBranch(target: GitHubTarget, branch: string, sha: string): Promise<void> {
+  const created = await send(target, "POST", "/git/refs", { ref: `refs/heads/${branch}`, sha });
+  if (created.ok) return;
+  if (created.status !== 422) throw await failure(target, created);
+  // 422: the branch exists. No pull request uses it (checked first), so it holds an earlier attempt's commit.
+  await call(target, "PATCH", `/git/refs/heads/${branch}`, { sha, force: true });
+}
+
 /**
  * Open a pull request with one commit that replaces the note at `submission.path`. The branch starts at the build
  * commit, so when the page changed since, GitHub shows a conflict instead of the edit overwriting it.
+ *
+ * Safe to retry with the same `submission.id`: the branch is named after it, so a pull request an earlier attempt
+ * opened is returned instead of a second one. A pull request GitHub refused takes its branch with it; one whose
+ * outcome is unknown keeps it, for the retry to find.
  */
 export async function openSubmission(target: GitHubTarget, submission: Submission): Promise<EditResponse> {
+  const branch = submissionBranch(submission);
+  const pull = await openPull(target, branch) ?? await createPull(target, submission, branch);
+  // The pull request exists now: a label failure must not read as a failed submission the reader would resend.
+  if (target.labels.length > 0) {
+    await call(target, "POST", `/issues/${pull.number}/labels`, { labels: target.labels }).catch((error: unknown) => {
+      console.error(`[submissions] opened pull request #${pull.number} but couldn't label it`, error);
+    });
+  }
+  return { url: pull.html_url, number: pull.number };
+}
+
+async function createPull(target: GitHubTarget, submission: Submission, branch: string): Promise<PullRequest> {
   const base = target.branch ?? (await call<{ default_branch: string }>(target, "GET", "")).default_branch;
   const parent = await call<{ tree: { sha: string } }>(target, "GET", `/git/commits/${target.commit}`);
   const tree = await call<{ sha: string }>(target, "POST", "/git/trees", {
@@ -141,19 +202,18 @@ export async function openSubmission(target: GitHubTarget, submission: Submissio
     tree: tree.sha,
     parents: [target.commit],
   });
-  const branch = submissionBranch(submission.kind, submission.page);
-  await call(target, "POST", "/git/refs", { ref: `refs/heads/${branch}`, sha: commit.sha });
-  const pull = await call<{ html_url: string; number: number }>(target, "POST", "/pulls", {
-    title,
-    head: branch,
-    base,
-    body: pullRequestBody(submission, target.commit),
-  });
-  // The pull request exists now: a label failure must not read as a failed submission the reader would resend.
-  if (target.labels.length > 0) {
-    await call(target, "POST", `/issues/${pull.number}/labels`, { labels: target.labels }).catch((error: unknown) => {
-      console.error(`[submissions] opened pull request #${pull.number} but couldn't label it`, error);
-    });
+  await writeBranch(target, branch, commit.sha);
+  // No answer (`github_unavailable`) throws here and keeps the branch: the pull request may exist.
+  const response = await send(target, "POST", "/pulls", { title, head: branch, base, body: pullRequestBody(submission, target.commit) });
+  if (response.ok) return await response.json() as PullRequest;
+  if (await alreadyOpened(response)) {
+    // A concurrent attempt at this submission opened it first.
+    const pull = await openPull(target, branch);
+    if (pull) return pull;
+  } else if (response.status < 500) {
+    // A 4xx means GitHub opened nothing: drop the branch. A 5xx may not mean that, so the branch stays for a retry.
+    const deleted = await send(target, "DELETE", `/git/refs/heads/${branch}`).catch(() => undefined);
+    if (!deleted?.ok) console.error(`[submissions] couldn't delete branch ${branch} after GitHub refused its pull request`);
   }
-  return { url: pull.html_url, number: pull.number };
+  throw await failure(target, response);
 }

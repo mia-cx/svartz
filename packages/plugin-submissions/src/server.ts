@@ -2,7 +2,7 @@
  * The submissions server module, mounted at `<base><mount>/_svartz/submissions/`:
  *
  * - `GET source/?page=<route>` answers `{ markdown }`, the note's source at the build commit.
- * - `POST edit/` with `{ page, markdown, note?, turnstileToken? }` opens a pull request and answers 201 `{ url, number }`.
+ * - `POST edit/` with `{ submissionId, page, markdown, note?, turnstileToken? }` opens a pull request and answers 201 `{ url, number }`.
  *
  * Only notes in the build's manifest can be read or edited; the client never names a file path. Every edit passes
  * the guard (rate limit, and Turnstile when configured) before any GitHub call.
@@ -14,6 +14,7 @@ import {
   MAX_MARKDOWN_BYTES,
   MAX_NOTE_LENGTH,
   PLUGIN_ID,
+  SUBMISSION_ID_PATTERN,
   type EditRequest,
   type EditResponse,
   type SourceResponse,
@@ -102,9 +103,10 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     } catch {
       body = null;
     }
-    const { page, markdown, note = "", turnstileToken } = body ?? {};
+    const { submissionId, page, markdown, note = "", turnstileToken } = body ?? {};
     if (
-      typeof page !== "string" || typeof markdown !== "string" || typeof note !== "string"
+      typeof submissionId !== "string" || !SUBMISSION_ID_PATTERN.test(submissionId)
+      || typeof page !== "string" || typeof markdown !== "string" || typeof note !== "string"
       || (turnstileToken !== undefined && typeof turnstileToken !== "string")
     ) {
       throw new SubmissionError("invalid_request", 400, "The edit didn't arrive intact. Reload the page and try again.");
@@ -113,11 +115,11 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     if (note.length > MAX_NOTE_LENGTH) {
       throw new SubmissionError("note_too_long", 400, `Shorten the note to ${MAX_NOTE_LENGTH.toLocaleString("en")} characters or fewer.`);
     }
-    return { page, markdown, note, turnstileToken };
+    return { submissionId, page, markdown, note, turnstileToken };
   }
 
   async function edit(request: Request, context: ServerContext): Promise<Response> {
-    const { page, markdown, note, turnstileToken } = await readEdit(request);
+    const { submissionId, page, markdown, note, turnstileToken } = await readEdit(request);
     const path = notePath(page);
     await guard({
       token: turnstileToken,
@@ -128,7 +130,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     // The page's public URL: the deployment base is what precedes `<mount>/_svartz/submissions`.
     const deploymentBase = context.base.slice(0, -`${context.vault.mountPath}/_svartz/${PLUGIN_ID}`.length);
     const pageUrl = new URL(`${deploymentBase}${page}`, request.url).href;
-    const pull = await openSubmission(target(context), { kind: "edit", path, page, pageUrl, markdown, note });
+    const pull = await openSubmission(target(context), { kind: "edit", id: submissionId, path, page, pageUrl, markdown, note });
     return Response.json(pull satisfies EditResponse, { status: 201 });
   }
 

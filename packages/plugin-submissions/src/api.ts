@@ -12,8 +12,16 @@ export interface SourceResponse {
   readonly markdown: string;
 }
 
+/** A submission id: 32 lowercase hex digits, 128 random bits. */
+export const SUBMISSION_ID_PATTERN = /^[0-9a-f]{32}$/;
+
 /** `POST <endpoint>/edit/` takes this JSON body. */
 export interface EditRequest {
+  /**
+   * Names this edit across retries, matching {@link SUBMISSION_ID_PATTERN}. The editor makes one per opened panel;
+   * the server names the branch after it, so a retry finds the pull request an earlier attempt opened.
+   */
+  readonly submissionId: string;
   /** The note's URL path inside the deployment, such as `/guides/setup/`. */
   readonly page: string;
   readonly markdown: string;

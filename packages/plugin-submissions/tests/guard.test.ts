@@ -4,7 +4,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { seal } from "../../auth/src/seal";
 import { RATE_LIMIT_BINDING, SITEVERIFY_TIMEOUT_MS, type GuardOptions } from "../src/guard";
 import createHandler from "../src/server";
-import { BUILD_COMMIT, editExchanges, GUIDE_SOURCE, REPO, replayGitHub, TOKEN } from "./github-exchanges";
+import {
+  branchFor,
+  BUILD_COMMIT,
+  editExchanges,
+  GUIDE_SOURCE,
+  REPO,
+  replayGitHub,
+  SUBMISSION_ID,
+  TOKEN,
+  useFakeTimeouts,
+} from "./github-exchanges";
 
 const ORIGIN = "https://wiki.example";
 const BASE = "/wiki/_svartz/submissions";
@@ -27,12 +37,12 @@ async function sessionCookie(id: string): Promise<string> {
   return `__Host-svartz-session=${await seal(identity, SESSION_SECRET, "session", 60)}`;
 }
 
-/** POST an edit to `handler` as a reader at `ip`, optionally signed in, and read the answer. */
+/** POST an edit to `handler` as a reader at `ip` (`null`: an address the server can't see), optionally signed in. */
 async function submit(
   handler: ReturnType<typeof handlerWith>,
   { token, ip = "203.0.113.7", cookie, env = GUARD_ONLY_ENV }: {
     token?: string;
-    ip?: string;
+    ip?: string | null;
     cookie?: string;
     env?: Record<string, unknown>;
   } = {},
@@ -40,11 +50,11 @@ async function submit(
   const request = new Request(`${ORIGIN}${BASE}/edit/`, {
     method: "POST",
     headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
-    body: JSON.stringify({ page: "/wiki/guide/", markdown: MARKDOWN, note: "Timing.", turnstileToken: token }),
+    body: JSON.stringify({ submissionId: SUBMISSION_ID, page: "/wiki/guide/", markdown: MARKDOWN, note: "Timing.", turnstileToken: token }),
   });
   const context: ServerContext = {
     env,
-    clientAddress: ip,
+    clientAddress: ip ?? undefined,
     vault: { id: "wiki", mountPath: "/wiki", site: { title: "Wiki" } },
     base: BASE,
     waitUntil: () => {},
@@ -79,7 +89,7 @@ afterEach(() => {
 
 describe("submission guard", () => {
   it("opens the pull request once Cloudflare accepts the Turnstile token", async () => {
-    const github = replayGitHub(editExchanges({ markdown: MARKDOWN, note: "Timing.", pageUrl: `${ORIGIN}/wiki/guide/` }));
+    const github = replayGitHub(editExchanges({ markdown: MARKDOWN, note: "Timing.", pageUrl: `${ORIGIN}/wiki/guide/`, branch: branchFor("wiki-guide") }));
     const verifications = stubSiteverify(verdict(true));
 
     const answer = await submit(handlerWith({ turnstile: TURNSTILE, rateLimit: { limit: 5, period: 60 } }), {
@@ -114,13 +124,7 @@ describe("submission guard", () => {
   });
 
   it("gives up on Turnstile when Cloudflare doesn't answer in time", async () => {
-    vi.useFakeTimers();
-    // AbortSignal.timeout runs on Node's internal timers; this one runs on the faked clock.
-    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
-      const controller = new AbortController();
-      setTimeout(() => controller.abort(new DOMException("The operation timed out.", "TimeoutError")), ms);
-      return controller.signal;
-    });
+    useFakeTimeouts();
     const github = replayGitHub([]);
     // Cloudflare hangs: the request ends only when its signal aborts.
     stubSiteverify((signal) => new Promise((_, reject) => signal?.addEventListener("abort", () => reject(signal.reason))));
@@ -166,5 +170,28 @@ describe("submission guard", () => {
 
     expect(answer).toMatchObject({ status: 429, retryAfter: "60", body: { error: "rate_limited" } });
     expect(limit).toHaveBeenCalledWith({ key: "ip:203.0.113.7" });
+  });
+
+  it("asks the reader to try again when the rate-limiting binding fails", async () => {
+    const limit = vi.fn(async () => { throw new Error("rate limiter unreachable"); });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const answer = await submit(handlerWith({ rateLimit: { limit: 5, period: 60 } }), {
+      env: { ...GUARD_ONLY_ENV, [RATE_LIMIT_BINDING]: { limit } },
+    });
+
+    expect(answer).toMatchObject({ status: 503, body: { error: "rate_limit_unavailable", message: expect.any(String) } });
+  });
+
+  it("refuses anonymous edits when the server can't see the reader's address, but not signed-in ones", async () => {
+    const handler = handlerWith({ rateLimit: { limit: 1, period: 60 } });
+
+    expect(await submit(handler, { ip: null })).toMatchObject({
+      status: 403,
+      body: { error: "sign_in_required", message: "Sign in to send edits from this site, then open the pull request." },
+    });
+    // Another reader behind the same proxy isn't held to the first one's quota: they're refused for the same reason.
+    expect((await submit(handler, { ip: null })).body).toMatchObject({ error: "sign_in_required" });
+    expect((await submit(handler, { ip: null, cookie: await sessionCookie("github:1") })).status).toBe(503);
   });
 });

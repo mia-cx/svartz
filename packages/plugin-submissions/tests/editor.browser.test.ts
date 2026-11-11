@@ -53,6 +53,7 @@ describe("Edit", () => {
       "/docs/wiki/_svartz/submissions/edit/",
     ]);
     expect(JSON.parse(String(fetch.mock.calls[1]![1]!.body))).toEqual({
+      submissionId: expect.stringMatching(/^[0-9a-f]{32}$/),
       page: "/wiki/guide/",
       markdown: `${SOURCE}Welcome.`,
       note: "Greet readers.",
@@ -86,6 +87,52 @@ describe("Edit", () => {
     await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
     expect(fetch).toHaveBeenCalledTimes(2);
     await expect.element(source).not.toHaveTextContent("Unsent.");
+  });
+
+  it("stays open while the pull request opens, so the reader gets its link", async () => {
+    let answer!: (response: Response) => void;
+    serve(() => new Promise((resolve) => { answer = resolve; }));
+    // A reader who would confirm discarding the edit.
+    vi.stubGlobal("confirm", () => true);
+    await openEditor();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+
+    await userEvent.keyboard("{Escape}");
+    await expect.element(page.getByRole("button", { name: "Close editor" })).toBeDisabled();
+    await expect.element(page.getByRole("button", { name: "Cancel" })).toBeDisabled();
+
+    answer(Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Close editor" })).toBeEnabled();
+  });
+
+  it("sends the same submission id when the reader retries", async () => {
+    const answers = [
+      Response.json({ error: "github_failed", message: "GitHub answered 502. Try again in a moment." }, { status: 502 }),
+      Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }),
+    ];
+    const fetch = serve(() => answers.shift()!);
+    await openEditor();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("alert")).toHaveTextContent("GitHub answered 502.");
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+
+    const [first, retry] = fetch.mock.calls.slice(1).map(([, init]) => JSON.parse(String(init!.body)).submissionId);
+    expect(first).toMatch(/^[0-9a-f]{32}$/);
+    expect(retry).toBe(first);
+  });
+
+  it("opens no editor when the page unmounts while the editor loads", async () => {
+    serve(() => Response.json({}));
+    const cleanup = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+    document.querySelector<HTMLButtonElement>('[data-svartz-region="page-actions"] button')!.click();
+    cleanup!();
+    // The click's import settles first; then the panel would have opened.
+    await import("../src/editor");
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(document.querySelector("dialog")).toBeNull();
   });
 
   it("sends the edit only once the Turnstile check passes, with its token", async () => {
