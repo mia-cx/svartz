@@ -195,7 +195,9 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
         body: JSON.stringify({ submissionId, page, markdown: view.state.sliceDoc(), note: note.value, turnstileToken } satisfies EditRequest),
       });
       // The pull request holds this text now and the panel stays locked; further typing would go nowhere.
-      unconfirmed.delete(page);
+      // Confirmed only once the reader can see the link: if navigation already closed the panel, the next panel
+      // retries under this id and the server answers with the pull request this attempt opened.
+      if (dialog.isConnected) unconfirmed.delete(page);
       phase = "sent";
       challenge.hidden = true;
       holdOpen(false);

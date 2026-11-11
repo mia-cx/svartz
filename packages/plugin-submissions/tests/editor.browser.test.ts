@@ -150,6 +150,31 @@ describe("Edit", () => {
     expect(next).not.toBe(lost);
   });
 
+  it("keeps the id when the pull request lands after navigation closed the panel", async () => {
+    let land!: (response: Response) => void;
+    const answers: Array<Promise<Response>> = [
+      new Promise((resolve) => { land = resolve; }),
+      // The server finds the pull request the first attempt opened.
+      Promise.resolve(Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 })),
+    ];
+    const fetch = serve(() => answers.shift()!);
+    await openEditor();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    if (unmount) unmount();
+    // It succeeds, but the reader never saw the link.
+    land(Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    await openEditor();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+
+    const [first, retry] = fetch.mock.calls
+      .filter(([url]) => url.includes("/edit/"))
+      .map(([, init]) => JSON.parse(String(init!.body)).submissionId);
+    expect(retry).toBe(first);
+  });
+
   it("opens no editor when the page unmounts while the editor loads", async () => {
     serve(() => Response.json({}));
     const cleanup = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
