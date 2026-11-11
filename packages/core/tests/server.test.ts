@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createServerHandle, type ServerContext, type ServerHandleEvent, type ServerRegistry } from "../src/plugin/server";
+import { createServerHandle, DEV_BINDINGS, type DevBindings, type ServerContext, type ServerHandleEvent, type ServerRegistry } from "../src/plugin/server";
 
 const vault = { id: "wiki", mountPath: "", site: { title: "Wiki" } };
 
@@ -164,6 +164,20 @@ describe("server plugin context", () => {
     await handle({ event: event("/_svartz/hello/", restricted), resolve });
 
     expect(seen[0]!.context.env.SECRET).toBe("from-process");
+  });
+
+  it("adds the bindings svartz dev registers in dev, winning over the private env", async () => {
+    const { handle, resolve, seen } = setup({ dev: true, privateEnv: { SECRET: "from-process", TOKEN: "from-dotenv" } });
+    const db = { prepare: vi.fn() };
+    const slot = globalThis as { [DEV_BINDINGS]?: DevBindings };
+    slot[DEV_BINDINGS] = async () => ({ DB: db, TOKEN: "from-wrangler" });
+    try {
+      await handle({ event: event("/_svartz/hello/"), resolve });
+    } finally {
+      delete slot[DEV_BINDINGS];
+    }
+
+    expect(seen[0]!.context.env).toEqual({ SECRET: "from-process", TOKEN: "from-wrangler", DB: db });
   });
 
   it("reports a missing Cloudflare client address as unknown", async () => {

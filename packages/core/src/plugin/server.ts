@@ -9,6 +9,15 @@ export const SERVER_PLUGIN_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 /** Server-only environment variable names. Client-public `PUBLIC_` and `VITE_` names are refused. */
 export const SECRET_ENV_NAME_PATTERN = /^(?!(?:PUBLIC_|VITE_))[A-Za-z_][A-Za-z0-9_]*$/;
 
+/**
+ * `globalThis` slot through which `svartz dev` hands server plugins local Cloudflare bindings. The dev server (Node)
+ * sets it to a function resolving the bindings; the router (SSR, same process) reads it per request in dev.
+ */
+export const DEV_BINDINGS = Symbol.for("svartz.devBindings");
+
+/** What `svartz dev` stores in {@link DEV_BINDINGS}: resolves the bindings, vars and `.dev.vars` of the app's Wrangler config. */
+export type DevBindings = () => Promise<Readonly<Record<string, unknown>>>;
+
 /** Names a server environment variable in place of an inlined secret. */
 export interface EnvReference {
   readonly env: string;
@@ -31,7 +40,10 @@ export interface ServerVaultSettings {
 
 /** Per-request facilities handed to a server plugin's handler. */
 export interface ServerContext {
-  /** The platform's env (Cloudflare vars, secrets and bindings), else the server's private env vars (Node, and every target in dev). */
+  /**
+   * The platform's env (Cloudflare vars, secrets and bindings), else the server's private env vars (Node). In dev, the
+   * private env vars plus any {@link DEV_BINDINGS}, which win on a shared name.
+   */
   readonly env: Readonly<Record<string, unknown>>;
   /** The client's IP address, when the adapter reports one. */
   readonly clientAddress: string | undefined;
@@ -80,8 +92,9 @@ export interface ServerHandleRuntime {
   /** `$app/environment`'s `building`: plugin routes answer 404 while prerendering. */
   readonly building: boolean;
   /**
-   * `$app/environment`'s `dev`: `context.env` is then always `privateEnv` (the dev server's env and `.env`), because
-   * adapter-cloudflare's dev emulator withholds `platform.env` from prerenderable routes, which plugin URLs fall under.
+   * `$app/environment`'s `dev`: `context.env` is then `privateEnv` (the dev server's env and `.env`) plus the
+   * {@link DEV_BINDINGS}, because adapter-cloudflare's dev emulator withholds `platform.env` from prerenderable routes,
+   * which plugin URLs fall under.
    */
   readonly dev: boolean;
 }
@@ -91,6 +104,11 @@ type WaitUntilHost = { waitUntil(promise: Promise<unknown>): void };
 function platformEnv(platform: unknown): Readonly<Record<string, unknown>> | undefined {
   const env = (platform as { env?: unknown } | undefined)?.env;
   return env && typeof env === "object" ? env as Record<string, unknown> : undefined;
+}
+
+async function devEnv(privateEnv: Readonly<Record<string, unknown>>): Promise<Readonly<Record<string, unknown>>> {
+  const bindings = (globalThis as { [DEV_BINDINGS]?: DevBindings })[DEV_BINDINGS];
+  return bindings ? { ...privateEnv, ...await bindings() } : privateEnv;
 }
 
 function platformWaitUntil(platform: unknown): WaitUntilHost | undefined {
@@ -173,7 +191,7 @@ export function createServerHandle(registry: ServerRegistry, runtime: ServerHand
     const handler = await handlerFor(route);
     const waitUntilHost = platformWaitUntil(event.platform);
     const response = await handler(request, {
-      env: (!runtime.dev && platformEnv(event.platform)) || runtime.privateEnv,
+      env: runtime.dev ? await devEnv(runtime.privateEnv) : platformEnv(event.platform) ?? runtime.privateEnv,
       clientAddress: clientAddress(event),
       vault: registry.vault,
       base: `${root}${id}`,
