@@ -123,6 +123,30 @@ describe("Edit", () => {
     expect(retry).toBe(first);
   });
 
+  it("sends edited text under a new id after a failure that may have opened a pull request", async () => {
+    // The server may have opened a pull request with the first text before its answer was lost.
+    const lost = () => Response.json({ error: "github_unavailable", message: "Couldn't reach GitHub right now." }, { status: 503 });
+    const answers = [lost(), lost(), Response.json({ url: "https://github.com/acme/wiki/pull/8", number: 8 }, { status: 201 })];
+    const fetch = serve(() => answers.shift()!);
+    await openEditor();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("alert")).toHaveTextContent("Couldn't reach GitHub");
+
+    await page.getByRole("textbox", { name: "Page source" }).click();
+    await userEvent.keyboard(" Edited.");
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("button", { name: "Open pull request" })).toBeEnabled();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #8" })).toBeVisible();
+
+    const [original, edited, retry] = fetch.mock.calls
+      .filter(([url]) => url.includes("/edit/"))
+      .map(([, init]) => JSON.parse(String(init!.body)) as { submissionId: string; markdown: string });
+    expect(edited!.markdown).not.toBe(original!.markdown);
+    expect(edited!.submissionId).not.toBe(original!.submissionId);
+    expect(retry).toEqual(edited);
+  });
+
   it("retries under the same id after navigating away mid-send, and starts a new one once it lands", async () => {
     const answers: Array<Promise<Response>> = [
       new Promise(() => {}), // Lost: the reader navigated away before it answered.

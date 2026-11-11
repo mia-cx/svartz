@@ -96,10 +96,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * Ids of edits sent without a confirmed answer, by page. Navigation closes the panel mid-send; reopening it on the same
- * page retries under the same id, so the server finds the pull request the lost attempt may have opened.
+ * The last edit sent without a confirmed answer, by page: its id and the exact text and note sent under it. Sending the
+ * same payload again reuses the id, so the server finds the pull request a lost attempt may have opened, even after
+ * navigation closed the panel mid-send. Different text gets a new id: the server would answer with the earlier pull
+ * request, which doesn't hold it.
  */
-const unconfirmed = new Map<string, string>();
+const unconfirmed = new Map<string, { readonly id: string; readonly payload: string }>();
 
 /** 128 random bits as hex. `getRandomValues`, unlike `randomUUID`, works on sites served without HTTPS. */
 function newSubmissionId(): string {
@@ -126,8 +128,6 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
   const submit = query<HTMLButtonElement>(dialog, '[type="submit"]');
   const challenge = query<HTMLElement>(dialog, ".svartz-submissions-turnstile");
   const closers = dialog.querySelectorAll<HTMLButtonElement>("[data-close]");
-  // Every retry of this edit sends the same id, so the server can find a pull request an earlier attempt opened.
-  const submissionId = unconfirmed.get(page) ?? newSubmissionId();
   let turnstile: { api: Turnstile; id: string } | undefined;
 
   const editable = new Compartment();
@@ -187,12 +187,16 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
     error.hidden = true;
     submit.disabled = true;
     submit.textContent = "Opening pull request…";
-    unconfirmed.set(page, submissionId);
+    const markdown = view.state.sliceDoc();
+    const payload = JSON.stringify([markdown, note.value]);
+    const last = unconfirmed.get(page);
+    const submissionId = last?.payload === payload ? last.id : newSubmissionId();
+    unconfirmed.set(page, { id: submissionId, payload });
     try {
       const pull = await request<EditResponse>(`${endpoint}/edit/`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ submissionId, page, markdown: view.state.sliceDoc(), note: note.value, turnstileToken } satisfies EditRequest),
+        body: JSON.stringify({ submissionId, page, markdown, note: note.value, turnstileToken } satisfies EditRequest),
       });
       // The pull request holds this text now and the panel stays locked; further typing would go nowhere.
       // Confirmed only once the reader can see the link: if navigation already closed the panel, the next panel
