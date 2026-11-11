@@ -64,7 +64,7 @@ submissions({
 })
 ```
 
-The editor then shows the challenge above its buttons and sends its token with the edit. The server checks the token with Cloudflare before it calls GitHub, giving up after 5 seconds. An edit without a token, with a token Cloudflare refuses, or sent while Cloudflare can't be reached is refused, and the reader can retry.
+The editor then shows the challenge above its buttons and sends its token with the edit. The standalone shell's Content Security Policy allows Cloudflare's script; a host app with its own policy adds `https://challenges.cloudflare.com` to `script-src` and `frame-src`. The server checks the token with Cloudflare before it calls GitHub, giving up after 5 seconds. An edit without a token, with a token Cloudflare refuses, or sent while Cloudflare can't be reached is refused, and the reader can retry.
 
 ### Rate limit
 
