@@ -11,7 +11,7 @@ const CONTEXT = { base: "/docs" };
 let unmount: (() => void) | void;
 
 /** The site's server: source for the guide, and `edit` for the pull request answer. */
-function serve(edit: () => Response) {
+function serve(edit: () => Response | Promise<Response>) {
   const fetch = vi.fn(async (url: string, init?: RequestInit) =>
     url.includes("/source/") ? Response.json({ markdown: SOURCE }) : edit());
   vi.stubGlobal("fetch", fetch);
@@ -68,8 +68,39 @@ describe("Edit", () => {
     await expect.element(page.getByRole("button", { name: "Open pull request" })).toBeEnabled();
   });
 
-  it("stays off pages the build didn't make editable", () => {
-    unmount = mount("/docs/wiki/locked/", OPTIONS, CONTEXT);
+  it("holds the panel while the pull request opens, so it sends once and links what it sent", async () => {
+    let answer!: (response: Response) => void;
+    const fetch = serve(() => new Promise((resolve) => { answer = resolve; }));
+    await openEditor();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+
+    const source = page.getByRole("textbox", { name: "Page source" });
+    await source.click();
+    await userEvent.keyboard(" Unsent.");
+    await page.getByLabelText("What changed").click();
+    await userEvent.keyboard("Unsent.");
+    await expect.element(page.getByRole("button", { name: "Opening pull request…" })).toBeDisabled();
+
+    answer(Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await expect.element(source).not.toHaveTextContent("Unsent.");
+  });
+
+  it("offers Edit when the URL percent-encodes the page's path", async () => {
+    const fetch = serve(() => Response.json({}));
+    unmount = mount("/docs/wiki/caf%C3%A9/", { ...OPTIONS, pages: ["/wiki/café/"] }, CONTEXT);
+    await page.getByRole("button", { name: "Edit" }).click();
+
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("# Guide");
+    expect(fetch.mock.calls[0]![0]).toBe(`/docs/wiki/_svartz/submissions/source/?page=${encodeURIComponent("/wiki/café/")}`);
+  });
+
+  it.each([
+    ["a page the build didn't make editable", "/docs/wiki/locked/"],
+    ["a malformed escape", "/docs/wiki/caf%C3/"],
+  ])("stays off %s", (_case, pathname) => {
+    unmount = mount(pathname, OPTIONS, CONTEXT);
 
     expect(document.querySelector('[data-svartz-region="page-actions"]')?.children).toHaveLength(0);
   });

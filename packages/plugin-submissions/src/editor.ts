@@ -80,8 +80,14 @@ export function openEditor({ page, endpoint, opener }: EditorInput): () => void 
   const editable = new Compartment();
   let view: EditorView | undefined;
   let original = "";
-  let submitted = false;
+  // The source and note are locked while sending, so the pull request holds exactly what the reader sees.
+  let phase: "editing" | "sending" | "sent" = "editing";
   const edited = () => view !== undefined && view.state.sliceDoc() !== original;
+
+  function lock(locked: boolean) {
+    view?.dispatch({ effects: editable.reconfigure(EditorView.editable.of(!locked)) });
+    note.readOnly = locked;
+  }
 
   const showError = (message: string) => {
     error.textContent = message;
@@ -97,7 +103,7 @@ export function openEditor({ page, endpoint, opener }: EditorInput): () => void 
 
   /** Close on request, asking first when an unsubmitted edit would be lost. */
   function dismiss(): boolean {
-    if (!submitted && (edited() || note.value.trim()) && !window.confirm("Discard your edit?")) return false;
+    if (phase !== "sent" && (edited() || note.value.trim()) && !window.confirm("Discard your edit?")) return false;
     close();
     return true;
   }
@@ -112,7 +118,9 @@ export function openEditor({ page, endpoint, opener }: EditorInput): () => void 
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!view || !edited()) return;
+    if (!view || phase !== "editing" || !edited()) return;
+    phase = "sending";
+    lock(true);
     error.hidden = true;
     submit.disabled = true;
     submit.textContent = "Opening pull request…";
@@ -122,11 +130,12 @@ export function openEditor({ page, endpoint, opener }: EditorInput): () => void 
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ page, markdown: view.state.sliceDoc(), note: note.value }),
       });
-      submitted = true;
-      // The pull request holds this text now; further typing would go nowhere.
-      view.dispatch({ effects: editable.reconfigure(EditorView.editable.of(false)) });
+      // The pull request holds this text now and the panel stays locked; further typing would go nowhere.
+      phase = "sent";
       showOpened(pull);
     } catch (cause) {
+      phase = "editing";
+      lock(false);
       showError((cause as Error).message);
       submit.disabled = false;
       submit.textContent = "Open pull request";
@@ -171,7 +180,7 @@ export function openEditor({ page, endpoint, opener }: EditorInput): () => void 
             EditorView.contentAttributes.of({ "aria-label": "Page source" }),
             editable.of(EditorView.editable.of(true)),
             EditorView.updateListener.of((update) => {
-              if (update.docChanged && !submitted) submit.disabled = !edited();
+              if (update.docChanged && phase === "editing") submit.disabled = !edited();
             }),
           ],
         }),
