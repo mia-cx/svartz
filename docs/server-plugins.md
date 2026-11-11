@@ -74,7 +74,7 @@ Never put a secret in options. Name its environment variable with `{ env: "NAME"
 - Every other path renders as usual and never reaches a plugin.
 - An unknown id, or a handler that returns `undefined`, answers 404 with `{ "error": "not_found", "message": "…" }`.
 - Svartz URLs end in a slash. A request without one, such as `/_svartz/hello/ping`, is redirected with a 308 to `/_svartz/hello/ping/` before it reaches the handler; clients resend the method and body, and the query is kept.
-- While prerendering, plugin paths answer 404 without running the plugin, so build-time env never reaches a handler.
+- While prerendering, plugin paths answer 404 without running the plugin, so build-time env never reaches a handler. Notes may link to plugin URLs: the crawler skips them instead of failing the build, and writes no static page for them.
 
 A plugin id that serves requests may hold only lowercase letters, digits and hyphens.
 

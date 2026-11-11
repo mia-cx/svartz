@@ -9,6 +9,8 @@ const outDir = process.env.SVARTZ_OUT_DIR ?? "build";
 const kitOutDir = process.env.SVARTZ_KIT_OUT_DIR ?? ".svelte-kit";
 const basePath = process.env.SVARTZ_BASE_PATH ?? "";
 const targetType = process.env.SVARTZ_TARGET_TYPE ?? "static";
+// `SERVER_ROUTE_SEGMENT` in @svartz/core; plugin requests live under it.
+const pluginRoot = `${basePath}/_svartz/`;
 
 function resolveAdapter(target) {
 	switch (target) {
@@ -48,7 +50,15 @@ const config = {
 			base: basePath
 		},
 		prerender: {
-			handleMissingId: 'warn'
+			handleMissingId: 'warn',
+			// Server plugins answer /_svartz/<id>/ at runtime only, so a note linking there must not fail the crawl.
+			handleHttpError: ({ status, path, message }) => {
+				if (targetType !== 'static' && status === 404 && path.startsWith(pluginRoot)) {
+					console.warn(`[svartz] not prerendering plugin URL ${path}`);
+					return;
+				}
+				throw new Error(message);
+			}
 		}
 	},
 	preprocess: [mdsvex()],

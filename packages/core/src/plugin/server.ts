@@ -148,6 +148,9 @@ export function createServerHandle(registry: ServerRegistry, runtime: ServerHand
     // Read nothing but the pathname before the prefix check: SvelteKit forbids `url.search` while prerendering.
     const { pathname } = event.url;
     if (!pathname.startsWith(root)) return resolve(event);
+    // Plugins answer only at runtime. A crawled plugin link gets a 404 the shell's prerender config lets through;
+    // a redirect here would be written out as a static page that shadows the live route.
+    if (runtime.building) return notFound(pathname);
     // Svartz URLs end in a slash. SvelteKit redirects in dev but not for routes a production build prerendered away.
     if (!pathname.endsWith("/")) {
       return new Response(null, { status: 308, headers: { location: `${pathname}/${event.url.search}` } });
@@ -155,7 +158,7 @@ export function createServerHandle(registry: ServerRegistry, runtime: ServerHand
 
     const id = pathname.slice(root.length).split("/", 1)[0]!;
     const route = routes.get(id);
-    if (!route || runtime.building) return notFound(pathname);
+    if (!route) return notFound(pathname);
 
     const handler = await handlerFor(route);
     const waitUntilHost = platformWaitUntil(event.platform);

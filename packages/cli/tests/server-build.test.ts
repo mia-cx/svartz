@@ -80,7 +80,8 @@ beforeAll(async () => {
   await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "apps/web/node_modules"), "dir");
   await mkdir(path.join(root, "vault"));
   await mkdir(path.join(root, "plugins"));
-  await writeFile(path.join(root, "vault/index.md"), "# Home\n\nPrerendered welcome.\n");
+  // The crawler follows these links while prerendering; they must neither fail the build nor become static pages.
+  await writeFile(path.join(root, "vault/index.md"), "# Home\n\nPrerendered welcome. [Say hello](/_svartz/hello/) or [ping](/_svartz/hello/ping).\n");
   await writeFile(path.join(root, "plugins/hello.mjs"), `export default (options) => (request, context) => {
     if (new URL(request.url).pathname !== context.base + "/") return undefined;
     return Response.json({
@@ -111,6 +112,7 @@ describe("standalone builds with a server plugin", () => {
     const dist = path.join(root, ".svartz/vaults/site/dist");
     await access(path.join(dist, "index.js"));
     expect(await readFile(path.join(dist, "prerendered/index.html"), "utf8")).toContain("Prerendered welcome.");
+    expect([...(await readTree(path.join(dist, "prerendered"))).keys()].filter((file) => file.includes("_svartz"))).toEqual([]);
     const client = await readTree(path.join(dist, "client"));
     expect(filesContaining(client, HANDLER_MARKER)).toEqual([]);
     expect(filesContaining(client, "HELLO_TOKEN")).toEqual([]);

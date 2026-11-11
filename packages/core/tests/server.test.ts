@@ -98,6 +98,8 @@ describe("server plugin routing", () => {
     const { handle, resolve, hello } = setup({ building: true });
 
     expect((await handle({ event: event("/_svartz/hello/"), resolve })).status).toBe(404);
+    // No redirect while prerendering: SvelteKit would write it out as a static page.
+    expect((await handle({ event: event("/_svartz/hello/ping"), resolve })).status).toBe(404);
     expect(hello).not.toHaveBeenCalled();
   });
 
