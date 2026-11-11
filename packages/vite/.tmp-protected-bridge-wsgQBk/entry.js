@@ -1,1 +1,0 @@
-export const load = () => import("/Volumes/Daedalus/Worktrees/svartz/feat-plugin-server-hooks/packages/vite/.tmp-protected-bridge-wsgQBk/artifacts/bridge/72e13abe4ef6fe438711.ts");
