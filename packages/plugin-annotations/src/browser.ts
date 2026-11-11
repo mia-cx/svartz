@@ -3,10 +3,16 @@
  * highlights each passage with the CSS Custom Highlight API, so `element`'s DOM is never rewritten, and puts a marker
  * in the margin on the passage's first line. Each marker opens a card with the comment and its author.
  *
+ * Selecting text inside `element` shows a toolbar beside it; **Comment** opens a composer that posts to the plugin's
+ * route. A signed-out reader gets `@svartz/auth`'s sign-in dialog, and the draft waits in `sessionStorage` until they
+ * come back.
+ *
  * Style it with `@svartz/plugin-annotations/browser.css` and the custom properties it documents.
  */
 import type { Identity } from "@svartz/auth";
-import { locate, rangeOf } from "./anchor";
+import { openSignIn } from "@svartz/auth/browser";
+import { describe, locate, rangeOf, type Anchor, type Position } from "./anchor";
+import { COMMENT_MAX_LENGTH } from "./limits";
 import type { Annotation } from "./store";
 
 export interface AttachOptions {
@@ -29,8 +35,48 @@ const COMMENT_ICON = "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2
 const LABEL_QUOTE_LENGTH = 48;
 /** Viewport space a card keeps clear of on each side. */
 const VIEWPORT_GUTTER = 16;
+/** Space between a selection or passage and the toolbar or composer beside it. */
+const GAP = 8;
 const URL_PATTERN = /\bhttps?:\/\/[^\s<>"]+/g;
 const TRAILING_PUNCTUATION = /[.,;:!?'")\]}]+$/;
+const POST_FAILED = "Couldn't post your comment. Try again.";
+
+/**
+ * A comment being written, kept in `sessionStorage` while its author signs in so the composer reopens on the same
+ * passage when they return. `action` is what to resume.
+ */
+interface Draft {
+  readonly endpoint: string;
+  readonly page: string;
+  readonly action: "comment";
+  readonly anchor: Anchor;
+  readonly body: string;
+}
+
+const DRAFT_KEY = "svartz-annotations:draft";
+
+/** The draft saved for this page, removed from storage as it's taken. */
+function takeDraft(endpoint: string, page: string): Draft | undefined {
+  try {
+    const draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? "null") as Draft | null;
+    if (draft?.endpoint !== endpoint || draft.page !== page || draft.action !== "comment" || typeof draft.body !== "string") return undefined;
+    sessionStorage.removeItem(DRAFT_KEY);
+    return draft;
+  } catch {
+    // Storage is blocked or holds something else under the key: there is no draft to resume.
+    return undefined;
+  }
+}
+
+/** Save `draft`, or forget the saved one. */
+function storeDraft(draft: Draft | undefined): void {
+  try {
+    if (draft) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    else sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // Storage is blocked: the draft still sits in the open composer, it just won't survive leaving the page.
+  }
+}
 
 let attached = 0;
 
@@ -146,25 +192,55 @@ function highlightNamed(name: string): Highlight | undefined {
   return created;
 }
 
+/** Mark `range` as the passage being read or answered. */
+function activate(range: Range): void {
+  if (typeof CSS !== "undefined" && "highlights" in CSS) CSS.highlights.set(ACTIVE_HIGHLIGHT, new Highlight(range));
+}
+
+/** Unmark `range`, unless another passage has become the active one since. */
+function deactivate(range: Range): void {
+  if (CSS.highlights?.get(ACTIVE_HIGHLIGHT)?.has(range)) CSS.highlights.delete(ACTIVE_HIGHLIGHT);
+}
+
 /** The first rect of `range` that has width: a range starting at a line end also covers that empty stretch. */
 function firstLine(range: Range): DOMRect | undefined {
   const rects = [...range.getClientRects()];
   return rects.find(({ width }) => width > 0) ?? rects[0];
 }
 
-/** Put an open card beside its marker in the margin, or under the marker's line when the margin is too narrow. */
-function place(cardNode: HTMLElement, markerNode: HTMLElement): void {
-  const anchor = markerNode.getBoundingClientRect();
+/** The last rect of `range` that has width: a range ending at a line start also covers that empty stretch. */
+function lastLine(range: Range): DOMRect | undefined {
+  const rects = [...range.getClientRects()].reverse();
+  return rects.find(({ width }) => width > 0) ?? rects[0];
+}
+
+/** Put `node` at viewport point (`left`, `top`). Popovers live in the top layer, placed against the document, so they scroll with the page. */
+function moveTo(node: HTMLElement, left: number, top: number): void {
+  node.style.left = `${left + scrollX}px`;
+  node.style.top = `${top + scrollY}px`;
+}
+
+/**
+ * Put an open card or composer beside `anchor` in the margin, or under it when the margin is too narrow. `anchor` is
+ * a marker's box, or the margin edge along a passage.
+ */
+function place(node: HTMLElement, anchor: DOMRect, gap = anchor.width / 4): void {
   const viewport = document.documentElement.clientWidth;
-  const width = cardNode.offsetWidth;
-  const gap = anchor.width / 4;
+  const width = node.offsetWidth;
   const beside = anchor.right + gap + width <= viewport - VIEWPORT_GUTTER;
-  // Too narrow: hang it from the marker over the text, its right edge under the marker's.
+  // Too narrow: hang it from the anchor over the text, its right edge under the anchor's.
   const left = beside ? anchor.right + gap : Math.max(VIEWPORT_GUTTER, Math.min(anchor.right - width, viewport - VIEWPORT_GUTTER - width));
-  const top = beside ? anchor.top : anchor.bottom + gap;
-  // Cards live in the top layer, positioned against the document, so they scroll with the passage.
-  cardNode.style.left = `${left + scrollX}px`;
-  cardNode.style.top = `${top + scrollY}px`;
+  moveTo(node, left, beside ? anchor.top : anchor.bottom + gap);
+}
+
+function popover<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, className: string, label: string, ...children: (Node | string)[]) {
+  const node = create(tag, className, ...children);
+  // Manual: neither closes when a card opens or the sign-in dialog takes over, and a stray click can't lose a draft.
+  node.popover = "manual";
+  // Popovers render in the top layer, outside the hidden layer, so each hides itself.
+  node.setAttribute("data-print-hide", "");
+  node.setAttribute("aria-label", label);
+  return node;
 }
 
 /**
@@ -174,14 +250,209 @@ function place(cardNode: HTMLElement, markerNode: HTMLElement): void {
 export function attach(content: HTMLElement, { endpoint, page }: AttachOptions): () => void {
   const controller = new AbortController();
   const { signal } = controller;
+  const base = endpoint.replace(/\/+$/, "");
   const prefix = `sv-annotations-${++attached}`;
-  const placed: Array<{ range: Range; marker: HTMLButtonElement; card: HTMLElement }> = [];
+  let cards = 0;
+  /** In reading order, which is also tab order. */
+  const placed: Array<{ start: number; range: Range; marker: HTMLButtonElement; card: HTMLElement }> = [];
 
   // Beside the content rather than in it, so its DOM and text stay the author's. Out of flow, so it never shifts the
   // layout; markers follow the content in tab order.
   const layer = create("div", "sv-annotations");
   layer.setAttribute("data-print-hide", "");
+
+  const commentAction = create("button", "sv-annotations-action", commentIcon(), "Comment");
+  commentAction.type = "button";
+  const toolbar = popover("div", "sv-annotations-toolbar", "Selected text", commentAction);
+  toolbar.setAttribute("role", "toolbar");
+
+  const input = create("textarea", "sv-annotations-input");
+  input.rows = 4;
+  input.maxLength = COMMENT_MAX_LENGTH;
+  input.placeholder = "Write a comment…";
+  input.setAttribute("aria-label", "Comment");
+  // Why the last post failed, read out as it appears.
+  const problem = create("p", "sv-annotations-problem");
+  problem.id = `${prefix}-problem`;
+  problem.setAttribute("role", "alert");
+  input.setAttribute("aria-describedby", problem.id);
+  const cancel = create("button", "sv-annotations-button", "Cancel");
+  cancel.type = "button";
+  const submit = create("button", "sv-annotations-button sv-annotations-primary", "Post comment");
+  submit.type = "submit";
+  const composer = popover("form", "sv-annotations-composer", "Comment", input, problem, create("div", "sv-annotations-actions", cancel, submit));
+  composer.setAttribute("role", "dialog");
+
+  layer.append(toolbar, composer);
   content.after(layer);
+
+  /** The reader's selection the toolbar answers, copied so it outlives the selection itself. */
+  let selected: Range | undefined;
+  /** The passage the open composer answers. */
+  let composing: { anchor: Anchor; position: Position; range: Range } | undefined;
+
+  const placeToolbar = () => {
+    const first = selected && firstLine(selected);
+    const last = selected && lastLine(selected);
+    if (!first || !last) return;
+    const viewport = document.documentElement.clientWidth;
+    // Above the selection's first line, clear of the reader's pointer; below its last when the viewport cuts it off.
+    const above = first.top - toolbar.offsetHeight - GAP;
+    const left = Math.max(VIEWPORT_GUTTER, Math.min(first.left, viewport - VIEWPORT_GUTTER - toolbar.offsetWidth));
+    moveTo(toolbar, left, above >= GAP ? above : last.bottom + GAP);
+  };
+
+  const placeComposer = () => {
+    const first = composing && firstLine(composing.range);
+    const last = composing && lastLine(composing.range);
+    if (!first || !last) return;
+    // In the margin where the passage's marker will be, or under the passage when there's no room.
+    const edge = content.getBoundingClientRect().right;
+    place(composer, new DOMRect(edge, first.top, 0, last.bottom - first.top), GAP);
+  };
+
+  const hideToolbar = () => {
+    selected = undefined;
+    if (toolbar.matches(":popover-open")) toolbar.hidePopover();
+  };
+
+  let pointing = false;
+  /** Offer the toolbar for a finished selection inside the content; a selection anywhere else, or none, takes it away. */
+  const offerToolbar = () => {
+    const selection = getSelection();
+    const range = selection?.rangeCount && !selection.isCollapsed ? selection.getRangeAt(0) : undefined;
+    if (pointing || !range || !content.contains(range.commonAncestorContainer) || !range.toString().trim()) return hideToolbar();
+    selected = range.cloneRange();
+    if (!toolbar.matches(":popover-open")) toolbar.showPopover();
+    placeToolbar();
+  };
+  document.addEventListener("selectionchange", offerToolbar, { signal });
+  // Wait for a drag to end, so the toolbar doesn't chase the pointer.
+  document.addEventListener("pointerdown", (event) => {
+    if (event.target instanceof Node && toolbar.contains(event.target)) return;
+    pointing = true;
+    hideToolbar();
+  }, { signal });
+  document.addEventListener("pointerup", () => {
+    if (!pointing) return;
+    pointing = false;
+    offerToolbar();
+  }, { signal });
+  // Pressing the toolbar must neither clear the selection nor move focus, so copying still works until an action runs.
+  toolbar.addEventListener("pointerdown", (event) => event.preventDefault(), { signal });
+
+  // The toolbar can't sit inside the note, so Tab after selecting goes straight to it, and Escape goes back.
+  let returnFocus: Element | null = null;
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab" || event.shiftKey || !selected || toolbar.contains(document.activeElement)) return;
+    event.preventDefault();
+    returnFocus = document.activeElement;
+    commentAction.focus();
+  }, { signal });
+  toolbar.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    hideToolbar();
+    if (returnFocus instanceof HTMLElement) returnFocus.focus();
+  }, { signal });
+
+  /** Open the composer on `anchor`'s passage with `body` in it. */
+  const compose = (anchor: Anchor, body: string) => {
+    const position = locate(content.textContent ?? "", anchor);
+    if (!position) return;
+    if (composing) deactivate(composing.range);
+    const range = rangeOf(content, position);
+    // Described afresh, so a draft whose passage moved posts where it is now.
+    composing = { anchor: describe(content, range), position, range };
+    // The selection goes when the composer takes focus; the passage stays marked.
+    activate(range);
+    hideToolbar();
+    composer.setAttribute("aria-label", `Comment on “${quote(anchor.exact)}”`);
+    input.value = body;
+    problem.textContent = "";
+    if (!composer.matches(":popover-open")) composer.showPopover();
+    placeComposer();
+    input.focus();
+  };
+
+  const closeComposer = () => {
+    if (composing) deactivate(composing.range);
+    composing = undefined;
+    input.value = "";
+    problem.textContent = "";
+    if (composer.matches(":popover-open")) composer.hidePopover();
+  };
+
+  commentAction.addEventListener("click", () => {
+    if (selected) compose(describe(content, selected), composing ? input.value : "");
+  }, { signal });
+
+  // Cancel goes back to the selection the reader started from, toolbar and all.
+  const cancelComposer = () => {
+    const range = composing?.range;
+    closeComposer();
+    storeDraft(undefined);
+    if (!range) return;
+    getSelection()?.removeAllRanges();
+    getSelection()?.addRange(range);
+  };
+  cancel.addEventListener("click", cancelComposer, { signal });
+  composer.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") cancelComposer();
+    else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) composer.requestSubmit();
+  }, { signal });
+
+  let posting = false;
+  composer.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!composing || posting) return;
+    const { anchor, position } = composing;
+    const body = input.value;
+    if (!body.trim()) {
+      problem.textContent = "Write a comment before posting.";
+      input.focus();
+      return;
+    }
+    // Busy rather than disabled: disabling the focused Post button would drop keyboard focus.
+    posting = true;
+    composer.setAttribute("aria-busy", "true");
+    problem.textContent = "";
+    try {
+      const response = await fetch(`${base}/`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ kind: "comment", page, anchor, body }),
+        signal,
+      });
+      const answer = await response.json().catch(() => ({})) as { annotation?: Comment; message?: string };
+      if (response.status === 401) {
+        // Signing in leaves the page; the draft waits here and reopens on return.
+        storeDraft({ endpoint: base, page, action: "comment", anchor, body });
+        try {
+          openSignIn();
+        } catch (cause) {
+          console.error("[svartz:annotations] couldn't open sign-in", cause);
+          problem.textContent = answer.message ?? "Sign in to comment.";
+        }
+        return;
+      }
+      if (!response.ok || !answer.annotation) {
+        problem.textContent = answer.message ?? POST_FAILED;
+        return;
+      }
+      storeDraft(undefined);
+      closeComposer();
+      const markerNode = add(answer.annotation, position);
+      layout();
+      markerNode.focus();
+    } catch (cause) {
+      if (signal.aborted) return;
+      console.error("[svartz:annotations] couldn't post a comment", cause);
+      problem.textContent = POST_FAILED;
+    } finally {
+      posting = false;
+      composer.removeAttribute("aria-busy");
+    }
+  }, { signal });
 
   let frame = 0;
   const layout = () => {
@@ -205,9 +476,11 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
       const start = Math.min(bounds.right + size / 2, end);
       for (const [index, { marker: markerNode, card: cardNode }] of row.entries()) {
         markerNode.style.translate = `${start + index * step - origin.left}px ${top}px`;
-        if (cardNode.matches(":popover-open")) place(cardNode, markerNode);
+        if (cardNode.matches(":popover-open")) place(cardNode, markerNode.getBoundingClientRect());
       }
     }
+    placeToolbar();
+    placeComposer();
   };
   const schedule = () => {
     if (!frame) frame = requestAnimationFrame(layout);
@@ -218,36 +491,44 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
   addEventListener("resize", schedule, { signal });
   void document.fonts?.ready.then(() => signal.aborted || schedule());
 
-  const show = (comments: readonly Comment[]) => {
-    // Looked up now, not before the fetch: another element detaching meanwhile may have unregistered the shared one.
-    const highlight = highlightNamed(HIGHLIGHT);
-    const text = content.textContent ?? "";
-    const located = comments
-      .map((comment) => ({ comment, position: locate(text, comment.anchor) }))
-      .filter((entry): entry is { comment: Comment; position: NonNullable<typeof entry.position> } => entry.position !== null)
-      // Reading order, which is also tab order.
-      .sort((a, b) => a.position.start - b.position.start);
-    for (const [index, { comment, position }] of located.entries()) {
-      const range = rangeOf(content, position);
-      const cardId = `${prefix}-${index}`;
-      const markerNode = marker(comment, cardId);
-      const cardNode = card(comment, cardId);
-      cardNode.addEventListener("toggle", (event) => {
-        if ((event as ToggleEvent).newState === "open") {
-          place(cardNode, markerNode);
-          if (highlight) CSS.highlights.set(ACTIVE_HIGHLIGHT, new Highlight(range));
-        } else if (CSS.highlights?.get(ACTIVE_HIGHLIGHT)?.has(range)) {
-          CSS.highlights.delete(ACTIVE_HIGHLIGHT);
-        }
-      }, { signal });
-      highlight?.add(range);
+  /** Highlight `comment`'s passage at `position` and give it a marker and card, in reading order. */
+  function add(comment: Comment, position: Position): HTMLButtonElement {
+    const range = rangeOf(content, position);
+    const cardId = `${prefix}-${cards++}`;
+    const markerNode = marker(comment, cardId);
+    const cardNode = card(comment, cardId);
+    cardNode.addEventListener("toggle", (event) => {
+      if ((event as ToggleEvent).newState === "open") {
+        place(cardNode, markerNode.getBoundingClientRect());
+        activate(range);
+      } else {
+        deactivate(range);
+      }
+    }, { signal });
+    // Looked up now, not held across a fetch: another element detaching meanwhile may have unregistered the shared one.
+    highlightNamed(HIGHLIGHT)?.add(range);
+    const entry = { start: position.start, range, marker: markerNode, card: cardNode };
+    const next = placed.findIndex(({ start }) => start > position.start);
+    if (next === -1) {
       layer.append(markerNode, cardNode);
-      placed.push({ range, marker: markerNode, card: cardNode });
+      placed.push(entry);
+    } else {
+      placed[next]!.marker.before(markerNode, cardNode);
+      placed.splice(next, 0, entry);
+    }
+    return markerNode;
+  }
+
+  const show = (comments: readonly Comment[]) => {
+    const text = content.textContent ?? "";
+    for (const comment of comments) {
+      const position = locate(text, comment.anchor);
+      if (position) add(comment, position);
     }
     layout();
   };
 
-  const url = `${endpoint.replace(/\/+$/, "")}/?page=${encodeURIComponent(page)}`;
+  const url = `${base}/?page=${encodeURIComponent(page)}`;
   fetch(url, { signal, headers: { accept: "application/json" } })
     .then(async (response) => {
       if (!response.ok) throw new Error(`${url} answered ${response.status}`);
@@ -258,15 +539,20 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
       if (!signal.aborted) console.error("[svartz:annotations] couldn't load this page's comments", error);
     });
 
+  // Back from signing in: the composer reopens on the passage with the draft as it was.
+  const draft = takeDraft(base, page);
+  if (draft) compose(draft.anchor, draft.body);
+
   return () => {
     controller.abort();
     resizes.disconnect();
     if (frame) cancelAnimationFrame(frame);
+    if (composing) deactivate(composing.range);
     // The registered highlight, which every live element shares; it goes only once none has ranges in it.
     const highlight = CSS.highlights?.get(HIGHLIGHT);
     for (const { range } of placed) {
       highlight?.delete(range);
-      if (CSS.highlights?.get(ACTIVE_HIGHLIGHT)?.has(range)) CSS.highlights.delete(ACTIVE_HIGHLIGHT);
+      deactivate(range);
     }
     if (highlight?.size === 0) CSS.highlights.delete(HIGHLIGHT);
     layer.remove();

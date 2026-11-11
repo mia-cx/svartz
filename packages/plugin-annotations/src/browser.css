@@ -5,7 +5,7 @@
  *   --sv-annotations-highlight-active  the passage whose card is open
  *   --sv-annotations-marker            the margin marker's colour
  *   --sv-annotations-marker-size       the margin marker's size
- *   --sv-annotations-card-width        the comment card's width
+ *   --sv-annotations-card-width        the comment card's and composer's width
  *
  * Everything else follows theme-minimal's tokens (`--sv-*`), so it matches the theme; a host page without them falls
  * back to system colours.
@@ -99,7 +99,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.sv-annotations-card:popover-open {
+	.sv-annotations-card:popover-open,
+	.sv-annotations-toolbar:popover-open,
+	.sv-annotations-composer:popover-open {
 		animation: none;
 	}
 }
@@ -172,6 +174,135 @@ a.sv-annotations-name:hover {
 .sv-annotations-body a {
 	color: var(--sv-accent-text, LinkText);
 	text-underline-offset: 0.2em;
+}
+
+/* The toolbar beside a selection, and the composer beside its passage: popovers placed by script, like cards. */
+.sv-annotations-toolbar,
+.sv-annotations-composer {
+	position: absolute;
+	inset: auto;
+	box-sizing: border-box;
+	margin: 0;
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	background: var(--sv-paper, Canvas);
+	color: var(--sv-text, CanvasText);
+	box-shadow: var(--sv-shadow, 0 12px 32px -8px oklch(0 0 0 / 0.3));
+	font-family: var(--sv-font-sans, system-ui, sans-serif);
+	font-size: var(--sv-step--1, 0.875rem);
+	line-height: var(--sv-leading, 1.5);
+}
+
+.sv-annotations-toolbar {
+	display: flex;
+	padding: var(--sv-space-1, 0.25rem);
+	border-radius: var(--sv-radius-pill, 999px);
+}
+
+.sv-annotations-toolbar:popover-open,
+.sv-annotations-composer:popover-open {
+	animation: sv-annotations-in var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out);
+}
+
+.sv-annotations-action,
+.sv-annotations-button {
+	min-block-size: 2.25rem;
+	padding-inline: var(--sv-space-3, 0.75rem);
+	border: 0;
+	border-radius: var(--sv-radius-pill, 999px);
+	background: transparent;
+	color: var(--sv-ink, CanvasText);
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out);
+}
+
+.sv-annotations-action {
+	display: flex;
+	align-items: center;
+	gap: var(--sv-space-2, 0.5rem);
+}
+
+.sv-annotations-action svg {
+	inline-size: 1rem;
+	block-size: 1rem;
+	color: var(--sv-annotations-marker);
+}
+
+.sv-annotations-action:hover,
+.sv-annotations-button:hover {
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+}
+
+.sv-annotations-toolbar :focus-visible,
+.sv-annotations-composer :focus-visible {
+	outline: var(--sv-focus-width, 2px) solid var(--sv-accent, Highlight);
+	outline-offset: var(--sv-focus-offset, 2px);
+}
+
+.sv-annotations-composer {
+	display: grid;
+	gap: var(--sv-space-3, 0.75rem);
+	inline-size: min(var(--sv-annotations-card-width), calc(100vw - 2rem));
+	padding: var(--sv-space-3, 0.75rem);
+	border-radius: var(--sv-radius-l, 10px);
+}
+
+/* Their own `display` would otherwise override the hidden popover's. */
+.sv-annotations-toolbar:not(:popover-open),
+.sv-annotations-composer:not(:popover-open) {
+	display: none;
+}
+
+.sv-annotations-input {
+	box-sizing: border-box;
+	inline-size: 100%;
+	min-block-size: 6rem;
+	padding: var(--sv-space-2, 0.5rem) var(--sv-space-3, 0.75rem);
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
+	border-radius: var(--sv-radius-m, 6px);
+	background: var(--sv-sunken, Field);
+	color: var(--sv-ink, FieldText);
+	font: inherit;
+	resize: vertical;
+}
+
+.sv-annotations-input::placeholder {
+	color: var(--sv-muted, GrayText);
+}
+
+/* Outlined on focus like the page's other fields, so the ring doesn't sit inside the composer's padding. */
+.sv-annotations-composer .sv-annotations-input:focus-visible {
+	outline-offset: 0;
+}
+
+.sv-annotations-problem {
+	margin: 0;
+	color: light-dark(oklch(0.53 0.15 var(--sv-hue-red, 25)), oklch(0.76 0.12 var(--sv-hue-red, 25)));
+}
+
+.sv-annotations-problem:empty {
+	display: none;
+}
+
+.sv-annotations-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--sv-space-2, 0.5rem);
+}
+
+.sv-annotations-primary {
+	background: var(--sv-accent, AccentColor);
+	color: var(--sv-on-accent, AccentColorText);
+}
+
+.sv-annotations-primary:hover {
+	background: color-mix(in oklch, var(--sv-accent, AccentColor) 88%, var(--sv-ink, CanvasText));
+}
+
+.sv-annotations-composer[aria-busy="true"] .sv-annotations-primary {
+	cursor: progress;
+	opacity: 0.6;
 }
 
 @media print {

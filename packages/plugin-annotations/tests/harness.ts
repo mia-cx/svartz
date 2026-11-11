@@ -60,7 +60,8 @@ export function createSite(env: Record<string, unknown>, { vault = "notes", orig
     ],
   }, { privateEnv: {}, building: false, dev: false });
   return (path: string, init?: RequestInit) => {
-    const request = new Request(`${origin}${path}`, init);
+    // A full URL, from the browser tests' middleware, names its own origin.
+    const request = new Request(new URL(path, origin), init);
     return handle({
       event: { request, url: new URL(request.url), getClientAddress: () => "203.0.113.7", platform: { env: { ...AUTH_ENV, ...env } } },
       resolve: async () => new Response("page"),

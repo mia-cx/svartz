@@ -1,15 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
+import { mount as mountSignIn } from "@svartz/auth/browser";
 import "../src/browser.css";
 // The body of vaults/showcase/hardware/sensors.md as theme-minimal renders it.
 import note from "./fixtures/sensors.html?raw";
 import { describe as describeRange, rangeOf } from "../src/anchor";
-import { attach, HIGHLIGHT } from "../src/browser";
+import { ACTIVE_HIGHLIGHT, attach, HIGHLIGHT } from "../src/browser";
 import { ADA, ENDPOINT, GRACE, type SeedComment } from "./data";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
     seedComments(comments: SeedComment[]): Promise<void>;
+    /** Sign the browser in as Ada at `origin`, as GitHub sending her back would; `null` signs it out. */
+    signIn(origin: string | null): Promise<void>;
   }
 }
 
@@ -17,6 +20,7 @@ const DEW_POINT = "Combined with temperature it gives the dew point";
 const PRESSURE = "Bosch BMP390";
 
 let detach: (() => void) | undefined;
+let unmountSignIn: (() => void) | undefined;
 
 function render(): HTMLElement {
   document.body.innerHTML = `<main style="max-inline-size: 42rem; margin: 2rem auto; padding-inline: 1rem; font: 16px/1.6 system-ui">${note}</main>`;
@@ -50,7 +54,12 @@ beforeEach(async () => {
 afterEach(async () => {
   detach?.();
   detach = undefined;
+  unmountSignIn?.();
+  unmountSignIn = undefined;
+  getSelection()?.removeAllRanges();
+  sessionStorage.clear();
   document.body.innerHTML = "";
+  await commands.signIn(null);
   await page.viewport(1440, 900);
 });
 
@@ -185,5 +194,97 @@ describe("a page with comments, read signed out", () => {
     expect(card.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
     expect(card.getBoundingClientRect().right).toBeLessThanOrEqual(width);
     expect(card.getBoundingClientRect().top).toBeGreaterThan(dewPoint!.getBoundingClientRect().bottom);
+  });
+});
+
+describe("commenting on a selection", () => {
+  const SHADE = "It needs shade and airflow";
+
+  /** Select `range` as a reader would, and wait for the toolbar it brings up. */
+  async function select(range: Range) {
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(range);
+    await expect.poll(() => document.querySelector(".sv-annotations-toolbar:popover-open")).not.toBeNull();
+    return document.querySelector<HTMLElement>(".sv-annotations-toolbar")!;
+  }
+
+  const composer = () => document.querySelector<HTMLFormElement>(".sv-annotations-composer")!;
+  const active = () => [...CSS.highlights.get(ACTIVE_HIGHLIGHT) ?? []].map((range) => range.toString());
+
+  it("takes a signed-out reader's comment through sign-in and posts it beside its passage", async () => {
+    unmountSignIn = mountSignIn(location.pathname, { endpoint: "/notes/_svartz/auth", providers: [{ id: "github", label: "GitHub" }] });
+    let root = render();
+    await attached(root);
+    const start = root.textContent!.indexOf(SHADE);
+
+    const toolbar = await select(rangeOf(root, { start, end: start + SHADE.length }));
+
+    // Still a plain selection, so copying works, with the toolbar above it.
+    expect(getSelection()!.toString()).toBe(SHADE);
+    expect(toolbar.getAttribute("role")).toBe("toolbar");
+    expect(toolbar.getBoundingClientRect().bottom).toBeLessThanOrEqual(getSelection()!.getRangeAt(0).getClientRects()[0]!.top);
+
+    // Keyboard only: Tab reaches the toolbar, Enter opens the composer on the passage.
+    await userEvent.keyboard("{Tab}");
+    expect(document.activeElement?.textContent).toBe("Comment");
+    await userEvent.keyboard("{Enter}");
+    expect(composer().matches(":popover-open")).toBe(true);
+    expect(composer().getAttribute("aria-label")).toBe(`Comment on “${SHADE}”`);
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Comment");
+    expect(active()).toEqual([SHADE]);
+    await userEvent.keyboard("Mine sits under the eaves.");
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+
+    // Signed out: sign-in, returning here.
+    await expect.poll(() => document.querySelector<HTMLDialogElement>("dialog.sv-auth")?.open).toBe(true);
+    expect(document.querySelector(".sv-auth-provider")?.getAttribute("href"))
+      .toBe(`/notes/_svartz/auth/start/github/?returnTo=${encodeURIComponent(location.pathname + location.search + location.hash)}`);
+
+    // GitHub signs the reader in and sends them back: a fresh page, with the composer open on the same passage.
+    await commands.signIn(location.origin);
+    detach!();
+    root = render();
+    detach = attach(root, { endpoint: ENDPOINT, page: "hardware/sensors" });
+    expect(composer().matches(":popover-open")).toBe(true);
+    expect(composer().querySelector("textarea")!.value).toBe("Mine sits under the eaves.");
+    expect(active()).toEqual([SHADE]);
+
+    await userEvent.click(composer().querySelector<HTMLButtonElement>("button[type=submit]")!);
+
+    await expect.poll(() => document.querySelectorAll(".sv-annotations-marker").length).toBe(3);
+    expect(composer().matches(":popover-open")).toBe(false);
+    expect(highlighted()).toContain(SHADE);
+    const posted = document.activeElement as HTMLButtonElement;
+    expect(posted.getAttribute("aria-label")).toBe(`Comment by Ada Lovelace on “${SHADE}”`);
+    // Beside its passage's line, in the margin.
+    const line = [...CSS.highlights.get(HIGHLIGHT)!].find((range) => range.toString() === SHADE)!.getClientRects()[0]!;
+    const marker = posted.getBoundingClientRect();
+    expect(marker.left).toBeGreaterThanOrEqual(root.getBoundingClientRect().right);
+    expect(Math.abs((marker.top + marker.bottom) / 2 - (line.top + line.bottom) / 2)).toBeLessThanOrEqual(1);
+    await userEvent.keyboard("{Enter}");
+    expect(document.getElementById(posted.getAttribute("popovertarget")!)?.querySelector(".sv-annotations-body")?.textContent)
+      .toBe("Mine sits under the eaves.");
+    // Posted, so nothing reopens on the next visit.
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it("keeps the draft and says why when the site refuses it", async () => {
+    await commands.signIn(location.origin);
+    const root = render();
+    await attached(root);
+    const whole = document.createRange();
+    whole.selectNodeContents(root);
+    expect(whole.toString().length).toBeGreaterThan(1000);
+
+    await select(whole);
+    await userEvent.click(document.querySelector(".sv-annotations-action")!);
+    await userEvent.keyboard("All of it.");
+    await userEvent.click(composer().querySelector<HTMLButtonElement>("button[type=submit]")!);
+
+    const problem = composer().querySelector("[role=alert]")!;
+    await expect.poll(() => problem.textContent).toBe("Select up to 1,000 characters to respond to.");
+    expect(composer().matches(":popover-open")).toBe(true);
+    expect(composer().querySelector("textarea")!.value).toBe("All of it.");
+    expect(document.querySelectorAll(".sv-annotations-marker")).toHaveLength(2);
   });
 });
