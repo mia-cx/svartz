@@ -422,6 +422,7 @@ const initProjectEffect = (
       }
       const catchallPagePath = path.join(catchallRoot, "+page.svelte");
       const catchallLoadPath = path.join(catchallRoot, "+page.ts");
+      const catchallServerPath = path.join(catchallRoot, "+page.server.ts");
       const installCatchall = !(yield* operation("inspect host catchall", () =>
         hasHostCatchall(root),
       ));
@@ -459,9 +460,20 @@ const initProjectEffect = (
             "utf8",
           ),
       );
+      const catchallServerTemplate = yield* operation("read catchall server load template", () =>
+        readFile(path.join(templateRoot, "src", "routes", "[...slug]", "+page.server.ts"), "utf8"),
+      );
+      const existingCatchallServer = existsSync(catchallServerPath)
+        ? yield* operation("read host catchall server load", () => readFile(catchallServerPath, "utf8"))
+        : undefined;
+      const previousUniversalStylesLoad = catchallLoadTemplate
+        .replace("import { base }", "import { assets, base }")
+        .replace("import { prepareHostVault, routes }", "import { hostStylesheets, prepareHostVault, routes }")
+        .replace("async ({ url, data })", "async ({ url })")
+        .replace("  return data;\n", "  return { svartzStylesheets: hostStylesheets(pathname).map((file) => `${assets}/${file}`) };\n");
       // Older templates raised the 404 before preparing the theme the error page renders.
       const prepareThen404 = "  await prepareHostVault(pathname);\n  if (!routes.all.includes(pathname)) error(404);\n";
-      const previousOrderedCatchallLoad = catchallLoadTemplate.replace(
+      const previousOrderedCatchallLoad = previousUniversalStylesLoad.replace(
         prepareThen404,
         "  if (!routes.all.includes(pathname)) error(404);\n  await prepareHostVault(pathname);\n",
       );
@@ -477,9 +489,12 @@ const initProjectEffect = (
         ? yield* operation("read host catchall", () =>
           readFile(catchallLoadPath, "utf8"),
         ) : undefined;
-      const migrateCatchall = existingCatchallLoad !== undefined &&
-        [previousOrderedCatchallLoad, previousStyledCatchallLoad, previousCatchallLoad].includes(existingCatchallLoad);
-      const compatibleCatchallLoad = migrateCatchall || existingCatchallLoad === catchallLoadTemplate;
+      const compatibleCatchallLoad = existingCatchallLoad !== undefined &&
+        [catchallLoadTemplate, previousUniversalStylesLoad, previousOrderedCatchallLoad, previousStyledCatchallLoad, previousCatchallLoad].includes(existingCatchallLoad) &&
+        !existsSync(path.join(catchallRoot, "+page.server.js")) &&
+        (existingCatchallServer === undefined || existingCatchallServer === catchallServerTemplate);
+      const migrateCatchall = compatibleCatchallLoad && existingCatchallLoad !== catchallLoadTemplate;
+      const installCatchallServer = compatibleCatchallLoad && existingCatchallServer === undefined;
       const catchallPageUpdate =
         compatibleCatchallLoad && [previousStyledCatchallPage, previousCatchallPage].includes(existingCatchallPage ?? "")
           ? catchallPageTemplate
@@ -509,6 +524,7 @@ const initProjectEffect = (
         !installCatchall &&
         !migrateRootLayout &&
         !migrateCatchallPage &&
+        !installCatchallServer &&
         !migrateCatchall
       ) {
         return { kind: "already-configured", packageManager: manager };
@@ -558,7 +574,7 @@ const initProjectEffect = (
           );
       }
       if (installCatchall) {
-        for (const name of ["+page.svelte", "+page.ts"]) {
+        for (const name of ["+page.svelte", "+page.ts", "+page.server.ts"]) {
           const source = yield* operation(`read ${name} template`, () =>
             readFile(
               path.join(templateRoot, "src", "routes", "[...slug]", name),
@@ -570,6 +586,10 @@ const initProjectEffect = (
           );
         }
       }
+      if (installCatchallServer)
+        yield* operation("write catchall server load", () =>
+          writeNewFile(catchallServerPath, catchallServerTemplate),
+        );
       if (migrateCatchall)
         yield* operation("update host catchall load", () =>
           writeFile(catchallLoadPath, catchallLoadTemplate),
