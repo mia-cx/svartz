@@ -1,33 +1,91 @@
 import { createServerHandle, type ServerHandler } from "@svartz/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readIdentity } from "../src/server";
+import { readIdentity, type ProviderId } from "../src/server";
 
 const ORIGIN = "https://notes.test";
 const AUTH = "/notes/_svartz/auth";
 const ENV = {
   PRIVATE_SVARTZ_SESSION_SECRET: "test-secret-0123456789-abcdefghijklmnop",
   PRIVATE_GITHUB_SECRET: "fake-client-secret",
+  PRIVATE_GOOGLE_SECRET: "fake-client-secret",
+  PRIVATE_DISCORD_SECRET: "fake-client-secret",
 };
-const OCTOCAT = {
-  id: 583231,
-  login: "octocat",
-  name: "The Octocat",
-  avatar_url: "https://avatars.githubusercontent.com/u/583231",
-  html_url: "https://github.com/octocat",
-};
+const ALL_PROVIDERS: ProviderId[] = ["github", "google", "discord"];
+
+/** Each provider at its HTTP edge: where it sends the reader, where it trades the code, and the profile it answers. */
+const PROVIDERS = {
+  github: {
+    authorize: "https://github.com/login/oauth/authorize",
+    scope: null,
+    token: "https://github.com/login/oauth/access_token",
+    userinfo: "https://api.github.com/user",
+    user: {
+      id: 583231,
+      login: "octocat",
+      name: "The Octocat",
+      avatar_url: "https://avatars.githubusercontent.com/u/583231",
+      html_url: "https://github.com/octocat",
+    },
+    identity: {
+      id: "github:583231",
+      provider: "github",
+      name: "The Octocat",
+      handle: "octocat",
+      avatarUrl: "https://avatars.githubusercontent.com/u/583231",
+      profileUrl: "https://github.com/octocat",
+    },
+  },
+  google: {
+    authorize: "https://accounts.google.com/o/oauth2/v2/auth",
+    // OpenID Connect's name and picture, and no email address.
+    scope: "openid profile",
+    token: "https://oauth2.googleapis.com/token",
+    userinfo: "https://openidconnect.googleapis.com/v1/userinfo",
+    user: {
+      sub: "110169484474386276334",
+      name: "Ada Lovelace",
+      given_name: "Ada",
+      family_name: "Lovelace",
+      picture: "https://lh3.googleusercontent.com/a/ada",
+    },
+    // Google accounts have no username or public profile page.
+    identity: {
+      id: "google:110169484474386276334",
+      provider: "google",
+      name: "Ada Lovelace",
+      avatarUrl: "https://lh3.googleusercontent.com/a/ada",
+    },
+  },
+  discord: {
+    authorize: "https://discord.com/oauth2/authorize",
+    scope: "identify",
+    token: "https://discord.com/api/oauth2/token",
+    userinfo: "https://discord.com/api/v10/users/@me",
+    user: { id: "80351110224678912", username: "nelly", global_name: "Nelly", discriminator: "0", avatar: null },
+    identity: {
+      id: "discord:80351110224678912",
+      provider: "discord",
+      name: "Nelly",
+      handle: "nelly",
+      // No avatar of their own: Discord's default picture number (80351110224678912 >> 22) % 6 = 5.
+      avatarUrl: "https://cdn.discordapp.com/embed/avatars/5.png",
+      profileUrl: "https://discord.com/users/80351110224678912",
+    },
+  },
+} as const;
 
 /** A vault mounted at /notes with the auth plugin and a plugin that greets whoever is signed in. */
-function site(env: Record<string, string> = ENV) {
+function site(env: Record<string, string> = ENV, providers: ProviderId[] = ALL_PROVIDERS) {
   const greeter = (): ServerHandler => async (request, context) => Response.json({ signedIn: await readIdentity(request, context.env) });
+  const apps = Object.fromEntries(providers.map((id) => [id, {
+    clientId: "fake-client-id",
+    clientSecret: { env: `PRIVATE_${id.toUpperCase()}_SECRET` },
+  }]));
   const handle = createServerHandle({
     basePath: "/notes",
     vault: { id: "notes", mountPath: "/notes", site: { title: "Notes" } },
     servers: [
-      {
-        id: "auth",
-        load: () => import("../src/server"),
-        options: { providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } } },
-      },
+      { id: "auth", load: () => import("../src/server"), options: { providers: apps } },
       { id: "greeter", load: async () => ({ default: greeter }) },
     ],
   }, { privateEnv: env, building: false, dev: false });
@@ -50,54 +108,56 @@ async function s256(verifier: string): Promise<string> {
   return btoa(String.fromCharCode(...digest)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
-/** GitHub at the HTTP edge: it grants a token only for the code it issued and a verifier matching the challenge. */
-function stubGitHub() {
-  const github = { challenge: "", redirectUri: "" };
+/** A provider that grants a token only for the code it issued and a verifier matching the challenge. */
+function stubProvider(id: ProviderId) {
+  const { token, userinfo, user } = PROVIDERS[id];
+  const provider = { id, challenge: "", redirectUri: "" };
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
-    if (request.url === "https://github.com/login/oauth/access_token") {
+    if (request.url === token) {
       const body = new URLSearchParams(await request.text());
       const valid = body.get("code") === "issued-code"
-        && body.get("redirect_uri") === github.redirectUri
-        && await s256(body.get("code_verifier") ?? "") === github.challenge
+        && body.get("redirect_uri") === provider.redirectUri
+        && await s256(body.get("code_verifier") ?? "") === provider.challenge
         && request.headers.get("authorization") === `Basic ${btoa("fake-client-id:fake-client-secret")}`;
       return valid
-        ? Response.json({ access_token: "gho_fake_token", token_type: "bearer", scope: "" })
-        : Response.json({ error: "bad_verification_code" }, { status: 400 });
+        ? Response.json({ access_token: "fake-access-token", token_type: "Bearer" })
+        : Response.json({ error: "invalid_grant" }, { status: 400 });
     }
-    if (request.url === "https://api.github.com/user" && request.headers.get("authorization") === "Bearer gho_fake_token") {
-      return Response.json(OCTOCAT);
+    if (request.url === userinfo && request.headers.get("authorization") === "Bearer fake-access-token") {
+      return Response.json(user);
     }
     return new Response(null, { status: 401 });
   });
-  return github;
+  return provider;
 }
 
-/** Start sign-in and let GitHub authorize it, as the reader's browser would. */
-async function authorize(request: ReturnType<typeof site>, github: ReturnType<typeof stubGitHub>, returnTo: string) {
-  const start = await request(`${AUTH}/start/github/?returnTo=${encodeURIComponent(returnTo)}`);
+/** Start sign-in and let the provider authorize it, as the reader's browser would. */
+async function authorize(request: ReturnType<typeof site>, provider: ReturnType<typeof stubProvider>, returnTo: string) {
+  const start = await request(`${AUTH}/start/${provider.id}/?returnTo=${encodeURIComponent(returnTo)}`);
   const authorization = new URL(start.headers.get("location")!);
-  github.challenge = authorization.searchParams.get("code_challenge")!;
-  github.redirectUri = authorization.searchParams.get("redirect_uri")!;
+  provider.challenge = authorization.searchParams.get("code_challenge")!;
+  provider.redirectUri = authorization.searchParams.get("redirect_uri")!;
   return { start, authorization, state: authorization.searchParams.get("state")!, flowCookies: cookiesFrom(start) };
 }
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("signing in with GitHub", () => {
+describe.each(ALL_PROVIDERS)("signing in with %s", (id) => {
   it("returns the reader to their page signed in, and other plugins read who they are", async () => {
-    const github = stubGitHub();
+    const provider = stubProvider(id);
     const request = site();
 
-    const { start, authorization, state, flowCookies } = await authorize(request, github, "/notes/garden/?view=all#reply");
+    const { start, authorization, state, flowCookies } = await authorize(request, provider, "/notes/garden/?view=all#reply");
     expect(start.status).toBe(302);
-    expect(authorization.origin + authorization.pathname).toBe("https://github.com/login/oauth/authorize");
+    expect(authorization.origin + authorization.pathname).toBe(PROVIDERS[id].authorize);
     expect(authorization.searchParams.get("client_id")).toBe("fake-client-id");
+    expect(authorization.searchParams.get("scope")).toBe(PROVIDERS[id].scope);
     expect(authorization.searchParams.get("code_challenge_method")).toBe("S256");
-    expect(github.redirectUri).toBe(`${ORIGIN}${AUTH}/callback/github/`);
+    expect(provider.redirectUri).toBe(`${ORIGIN}${AUTH}/callback/${id}/`);
     expect(start.headers.getSetCookie()).toEqual([expect.stringMatching(/^__Host-svartz-oauth=.+; Path=\/; Max-Age=600; HttpOnly; Secure; SameSite=Lax$/)]);
 
-    const callback = await request(`${AUTH}/callback/github/?code=issued-code&state=${state}`, { cookies: flowCookies });
+    const callback = await request(`${AUTH}/callback/${id}/?code=issued-code&state=${state}`, { cookies: flowCookies });
     expect(callback.status).toBe(302);
     expect(callback.headers.get("location")).toBe("/notes/garden/?view=all#reply");
     expect(callback.headers.getSetCookie()).toEqual([
@@ -106,26 +166,20 @@ describe("signing in with GitHub", () => {
     ]);
     const session = cookiesFrom(callback).filter((pair) => pair.startsWith("__Host-svartz-session="));
 
-    const identity = {
-      id: "github:583231",
-      provider: "github",
-      name: "The Octocat",
-      handle: "octocat",
-      avatarUrl: "https://avatars.githubusercontent.com/u/583231",
-      profileUrl: "https://github.com/octocat",
-    };
     const me = await request(`${AUTH}/me/`, { cookies: session });
-    expect(await me.json()).toEqual(identity);
-    expect(await (await request("/notes/_svartz/greeter/", { cookies: session })).json()).toEqual({ signedIn: identity });
+    expect(await me.json()).toEqual(PROVIDERS[id].identity);
+    expect(await (await request("/notes/_svartz/greeter/", { cookies: session })).json()).toEqual({ signedIn: PROVIDERS[id].identity });
 
     const signOut = await request(`${AUTH}/sign-out/`, { cookies: session, method: "POST", origin: ORIGIN });
     expect(signOut.status).toBe(204);
     const afterSignOut = await request(`${AUTH}/me/`, { cookies: cookiesFrom(signOut) });
     expect(await afterSignOut.json()).toBeNull();
   });
+});
 
-  it("sends a reader who declines at GitHub back to their page, still signed out", async () => {
-    const github = stubGitHub();
+describe("a sign-in that goes wrong", () => {
+  it("sends a reader who declines at the provider back to their page, still signed out", async () => {
+    const github = stubProvider("github");
     const request = site();
     const { state, flowCookies } = await authorize(request, github, "/notes/garden/");
 
@@ -135,8 +189,8 @@ describe("signing in with GitHub", () => {
     expect(cookiesFrom(callback)).toEqual(["__Host-svartz-oauth="]);
   });
 
-  it("gives up on a GitHub profile request that never answers, without signing the reader in", async () => {
-    const github = stubGitHub();
+  it("gives up on a profile request that never answers, without signing the reader in", async () => {
+    const github = stubProvider("github");
     const answer = globalThis.fetch;
     // GitHub's API hangs. Only a request carrying a deadline ever settles, when that deadline fires.
     vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
@@ -157,7 +211,7 @@ describe("signing in with GitHub", () => {
   });
 
   it("refuses a callback whose state doesn't match the sign-in this browser started", async () => {
-    const github = stubGitHub();
+    const github = stubProvider("github");
     const request = site();
     const { flowCookies } = await authorize(request, github, "/notes/");
 
@@ -168,6 +222,17 @@ describe("signing in with GitHub", () => {
       expect(response.status).toBe(400);
       expect(cookiesFrom(response).some((pair) => pair.startsWith("__Host-svartz-session="))).toBe(false);
     }
+  });
+
+  it("refuses a callback for a different provider than the one the sign-in started with", async () => {
+    const github = stubProvider("github");
+    const request = site();
+    const { state, flowCookies } = await authorize(request, github, "/notes/");
+
+    const callback = await request(`${AUTH}/callback/discord/?code=issued-code&state=${state}`, { cookies: flowCookies });
+
+    expect(callback.status).toBe(400);
+    expect(cookiesFrom(callback).some((pair) => pair.startsWith("__Host-svartz-session="))).toBe(false);
   });
 
   it.each([
@@ -194,6 +259,6 @@ describe("auth configuration", () => {
   });
 
   it("answers 404 for a provider the vault doesn't list", async () => {
-    expect((await site()(`${AUTH}/start/google/`)).status).toBe(404);
+    expect((await site(ENV, ["github"])(`${AUTH}/start/google/`)).status).toBe(404);
   });
 });
