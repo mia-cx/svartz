@@ -95,6 +95,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+/**
+ * Ids of edits sent without a confirmed answer, by page. Navigation closes the panel mid-send; reopening it on the same
+ * page retries under the same id, so the server finds the pull request the lost attempt may have opened.
+ */
+const unconfirmed = new Map<string, string>();
+
 /** 128 random bits as hex. `getRandomValues`, unlike `randomUUID`, works on sites served without HTTPS. */
 function newSubmissionId(): string {
   return [...crypto.getRandomValues(new Uint8Array(16))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -121,7 +127,7 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
   const challenge = query<HTMLElement>(dialog, ".svartz-submissions-turnstile");
   const closers = dialog.querySelectorAll<HTMLButtonElement>("[data-close]");
   // Every retry of this edit sends the same id, so the server can find a pull request an earlier attempt opened.
-  const submissionId = newSubmissionId();
+  const submissionId = unconfirmed.get(page) ?? newSubmissionId();
   let turnstile: { api: Turnstile; id: string } | undefined;
 
   const editable = new Compartment();
@@ -181,6 +187,7 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
     error.hidden = true;
     submit.disabled = true;
     submit.textContent = "Opening pull request…";
+    unconfirmed.set(page, submissionId);
     try {
       const pull = await request<EditResponse>(`${endpoint}/edit/`, {
         method: "POST",
@@ -188,6 +195,7 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
         body: JSON.stringify({ submissionId, page, markdown: view.state.sliceDoc(), note: note.value, turnstileToken } satisfies EditRequest),
       });
       // The pull request holds this text now and the panel stays locked; further typing would go nowhere.
+      unconfirmed.delete(page);
       phase = "sent";
       challenge.hidden = true;
       holdOpen(false);

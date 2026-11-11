@@ -123,6 +123,33 @@ describe("Edit", () => {
     expect(retry).toBe(first);
   });
 
+  it("retries under the same id after navigating away mid-send, and starts a new one once it lands", async () => {
+    const answers: Array<Promise<Response>> = [
+      new Promise(() => {}), // Lost: the reader navigated away before it answered.
+      Promise.resolve(Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 })),
+      Promise.resolve(Response.json({ url: "https://github.com/acme/wiki/pull/8", number: 8 }, { status: 201 })),
+    ];
+    const fetch = serve(() => answers.shift()!);
+    await openEditor();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    // Navigation closes the panel without asking.
+    if (unmount) unmount();
+
+    await openEditor();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+    if (unmount) unmount();
+    await openEditor();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #8" })).toBeVisible();
+
+    const [lost, retry, next] = fetch.mock.calls
+      .filter(([url]) => url.includes("/edit/"))
+      .map(([, init]) => JSON.parse(String(init!.body)).submissionId);
+    expect(retry).toBe(lost);
+    expect(next).not.toBe(lost);
+  });
+
   it("opens no editor when the page unmounts while the editor loads", async () => {
     serve(() => Response.json({}));
     const cleanup = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
