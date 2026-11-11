@@ -32,3 +32,6 @@ vaults/vault/
 
 # Local git worktrees
 .worktrees/
+
+# Test scratch directories
+**/.tmp-*
