@@ -1154,12 +1154,16 @@ describe("Rich text", () => {
   });
 
   it("keeps text that looks like a boolean or a date as text, and a boolean as a boolean", async () => {
-    const note = "---\ntitle: Guide\nfeatured: true\n---\n# Guide\n";
+    const note = "---\ntitle: Guide\nedition: Spring\nfeatured: true\n---\n# Guide\n";
     await openRich(note);
     await page.getByRole("textbox", { name: "title", exact: true }).fill("true");
+    await page.getByRole("textbox", { name: "edition" }).fill("2026-08-02");
     await page.getByRole("textbox", { name: "featured" }).fill("false");
 
-    expect(await sendFromSource()).toBe(note.replace("title: Guide", 'title: "true"').replace("featured: true", "featured: false"));
+    expect(await sendFromSource()).toBe(note
+      .replace("title: Guide", 'title: "true"')
+      .replace("edition: Spring", 'edition: "2026-08-02"')
+      .replace("featured: true", "featured: false"));
   });
 
   it("renames a property", async () => {
