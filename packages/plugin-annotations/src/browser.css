@@ -472,6 +472,54 @@ a.sv-annotations-name:hover {
 	}
 }
 
+/* Comments whose passage is gone: after the note, closed until the reader opens them. */
+.sv-annotations-orphans {
+	margin-block-start: var(--sv-space-6, 2rem);
+	padding-block-start: var(--sv-space-2, 0.5rem);
+	border-block-start: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	color: var(--sv-text, CanvasText);
+	font-family: var(--sv-font-sans, system-ui, sans-serif);
+	font-size: var(--sv-step--1, 0.875rem);
+	line-height: var(--sv-leading, 1.5);
+}
+
+.sv-annotations-orphans-summary {
+	inline-size: fit-content;
+	padding-block: var(--sv-space-2, 0.5rem);
+	color: var(--sv-muted, GrayText);
+	font-weight: 600;
+	cursor: pointer;
+	transition: color var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out);
+}
+
+.sv-annotations-orphans-summary:hover,
+.sv-annotations-orphans[open] > .sv-annotations-orphans-summary {
+	color: var(--sv-ink, CanvasText);
+}
+
+.sv-annotations-orphans-summary:focus-visible {
+	outline: var(--sv-focus-width, 2px) solid var(--sv-accent, Highlight);
+	outline-offset: var(--sv-focus-offset, 2px);
+	border-radius: var(--sv-radius-s, 3px);
+}
+
+.sv-annotations-orphan-list {
+	display: grid;
+	gap: var(--sv-space-5, 1.5rem);
+	margin: var(--sv-space-3, 0.75rem) 0 var(--sv-space-2, 0.5rem);
+	padding: 0;
+	list-style: none;
+}
+
+/* The passage as it was, set apart from the comment on it. */
+.sv-annotations-quote {
+	margin: var(--sv-space-3, 0.75rem) 0 0;
+	padding-inline-start: var(--sv-space-3, 0.75rem);
+	border-inline-start: 2px solid var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
+	color: var(--sv-muted, GrayText);
+	overflow-wrap: anywhere;
+}
+
 @media print {
 	[data-print-hide] {
 		display: none !important;
