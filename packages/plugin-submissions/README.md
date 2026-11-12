@@ -62,6 +62,18 @@ The server signs a short-lived token with the key, finds the App's installation 
 
 Every published Markdown note gets an **Edit** action beside Copy page. It opens a panel with the page's Markdown source, frontmatter included, and a **What changed** field. **Open pull request** submits it, and the panel links the new pull request.
 
+### The editor
+
+The source opens in **Live Preview**, as in Obsidian: headings, bold, italics, links, wikilinks, inline code, callouts, embeds and task checkboxes show formatted, and the line holding the cursor shows its Markdown. Clicking a task's checkbox ticks it. **Source** shows the raw Markdown throughout. The switch is remembered in the browser, and neither mode changes a byte the reader didn't edit.
+
+Typing `[[` suggests the site's published notes. Arrow keys choose one, Enter inserts it as `[[Name]]`, or `[[folder/Name]]` when another note shares its name, and Escape closes the list. Password-protected and hidden notes are never suggested.
+
+### Drafts
+
+The editor saves what a reader writes in the browser's `localStorage` as they write it, per page (and one new page per vault), so a closed tab or a crash loses nothing. The next time they open the editor on that page, it offers the draft back above the source with **Restore edit** and **Discard edit** (**Restore page** and **Discard page** for a new page). A draft is forgotten once its pull request opens, or when the reader discards it or closes the editor and confirms discarding their changes.
+
+### New page
+
 Every page gets a **New page** action in the site actions (the rail or site navigation). Its panel asks for a **Title** and a **Section**, then opens on a blank page with a **Why add this page** field. The sections are the vault's folders that hold a published note, plus its top level when that does. The page is saved as `<section>/<title>.md`, so the title is the note's name as in Obsidian, and its URL follows the vault's usual slug rules. A title that a page in that section already has is refused, with a link to that page.
 
 ## What maintainers get
@@ -96,7 +108,7 @@ plugins: [
 
 The server then refuses anonymous edits and new pages with 401 `sign_in_required` before it calls GitHub, and Turnstile is skipped: the editor shows no challenge and the server verifies none. A vault that requires sign-in without the `auth` plugin fails the build.
 
-Readers can open the editor and write while signed out. When they send, the editor keeps their edit for the browser tab and opens the sign-in dialog. Signing in brings them back to the same page, where the editor reopens with their source, note, title and section as they left them, ready to send. If the page's source fails to load then, the edit stays kept until the editor next opens on it. If the browser blocks storage, the editor says so and asks them to copy their changes before signing in.
+Readers can open the editor and write while signed out. When they send, the editor saves their [draft](#drafts) and opens the sign-in dialog. Signing in brings them back to the same page, where the editor reopens at once with their source, note, title and section as they left them, ready to send. If the page's source fails to load then, the draft reopens the next time the editor opens on the page. If the browser blocks storage, the editor says so and asks them to copy their changes before signing in.
 
 ## Guard
 
@@ -141,6 +153,7 @@ The plugin answers under `<base><mount>/_svartz/submissions/`. Failures answer `
 | Request | Answer |
 | --- | --- |
 | `GET source/?page=/guides/setup/` | `{ "markdown": "…" }`, the note at the build commit. |
+| `GET links/` | `{ "notes": [{ "link", "title" }] }`: the published notes the editor suggests after `[[`, from the build's index. `link` is what goes between the brackets. |
 | `POST edit/` with `{ "submissionId", "page", "markdown", "note"?, "turnstileToken"? }` | 201 `{ "url", "number" }` of the pull request, new or opened by an earlier attempt with the same `submissionId`. 401 `sign_in_required` when the reader is anonymous and sign-in is required or their address isn't visible; 403 when Turnstile is missing or refused; 429 with `retryAfter` past the rate limit; 503 when Cloudflare, the rate limiter or GitHub can't be reached. |
 | `POST new/` with `{ "submissionId", "folder", "title", "markdown", "note"?, "turnstileToken"? }` | As `edit/`. Also 400 `not_a_section` or `invalid_title`, and 409 `exists` when the title is taken, with `existing` set to the clashing page's public URL unless that page is hidden. |
 
