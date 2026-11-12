@@ -151,6 +151,30 @@ function identityOf(row: IdentityRow): Identity {
   };
 }
 
+const agreementOf = (row: AgreementRow): Agreement => ({ author: identityOf(row), createdAt: row.created_at });
+
+/**
+ * Refresh `author`'s identity row with what their session says now: name, handle, avatar and profile link, nothing
+ * more. Batched with the write it accompanies, so nothing lands without its author.
+ */
+function upsertIdentity(db: Database, author: Identity, at: string): Statement {
+  return db.prepare(`INSERT INTO identities (id, provider, name, handle, avatar_url, profile_url, updated_at)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+    ON CONFLICT (id) DO UPDATE SET provider = excluded.provider, name = excluded.name, handle = excluded.handle,
+      avatar_url = excluded.avatar_url, profile_url = excluded.profile_url, updated_at = excluded.updated_at`)
+    .bind(author.id, author.provider, author.name, author.handle ?? null, author.avatarUrl ?? null, author.profileUrl ?? null, at);
+}
+
+/** `author` as the store keeps and lists them: only the fields {@link upsertIdentity} writes. */
+const stored = (author: Identity): Identity => identityOf({
+  author_id: author.id,
+  provider: author.provider,
+  name: author.name,
+  handle: author.handle ?? null,
+  avatar_url: author.avatarUrl ?? null,
+  profile_url: author.profileUrl ?? null,
+});
+
 /** A comment as a reader posts it; the store adds its id and time. */
 export interface NewComment {
   readonly vault: string;
@@ -160,32 +184,58 @@ export interface NewComment {
   readonly author: Identity;
 }
 
-/**
- * Store `comment`, refreshing its author's identity row with what their session says now: name, handle, avatar and
- * profile link, nothing more. One batch, so the comment never lands without its author.
- */
+/** Store `comment`, refreshing its author's identity row in the same batch. */
 export async function createComment(db: Database, { vault, page, anchor, body, author }: NewComment): Promise<Annotation> {
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
-  const row: IdentityRow = {
-    author_id: author.id,
-    provider: author.provider,
-    name: author.name,
-    handle: author.handle ?? null,
-    avatar_url: author.avatarUrl ?? null,
-    profile_url: author.profileUrl ?? null,
-  };
   await db.batch([
-    db.prepare(`INSERT INTO identities (id, provider, name, handle, avatar_url, profile_url, updated_at)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-      ON CONFLICT (id) DO UPDATE SET provider = excluded.provider, name = excluded.name, handle = excluded.handle,
-        avatar_url = excluded.avatar_url, profile_url = excluded.profile_url, updated_at = excluded.updated_at`)
-      .bind(row.author_id, row.provider, row.name, row.handle, row.avatar_url, row.profile_url, createdAt),
+    upsertIdentity(db, author, createdAt),
     db.prepare(`INSERT INTO annotations (id, vault, page, kind, body, exact, prefix, suffix, start, "end", author_id, created_at)
       VALUES (?, ?, ?, 'comment', ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(id, vault, page, body, anchor.exact, anchor.prefix, anchor.suffix, anchor.start, anchor.end, author.id, createdAt),
   ]);
-  return { id, kind: "comment", body, anchor, author: identityOf(row), createdAt, agreements: [] };
+  return { id, kind: "comment", body, anchor, author: stored(author), createdAt, agreements: [] };
+}
+
+/** A reader agreeing with a comment (`agreed: true`), or taking it back. */
+export interface AgreementChange {
+  readonly vault: string;
+  readonly annotation: string;
+  readonly author: Identity;
+  readonly agreed: boolean;
+}
+
+/**
+ * Make `author`'s agreement with `annotation` what `agreed` says, and answer the comment's agreements after the change,
+ * oldest first. Setting a state rather than flipping one makes a retried request harmless, and the primary key keeps
+ * racing requests to one agreement each. Answers `"missing"` when `vault` has no such annotation and `"reaction"` when
+ * it isn't a comment, changing nothing.
+ */
+export async function setAgreement(db: Database, { vault, annotation, author, agreed }: AgreementChange): Promise<Agreement[] | "missing" | "reaction"> {
+  const { results: [target] } = await db.prepare("SELECT kind FROM annotations WHERE id = ? AND vault = ?")
+    .bind(annotation, vault).all<{ kind: Annotation["kind"] }>();
+  if (!target) return "missing";
+  if (target.kind !== "comment") return "reaction";
+
+  const createdAt = new Date().toISOString();
+  // Taking an agreement back stores nothing about the reader, so it doesn't refresh their identity.
+  const change = agreed
+    ? [
+      upsertIdentity(db, author, createdAt),
+      // Through the comment itself, so a comment deleted since the check above gains nothing.
+      db.prepare(`INSERT INTO agreements (annotation_id, author_id, created_at)
+        SELECT id, ?2, ?3 FROM annotations WHERE id = ?1 AND kind = 'comment'
+        ON CONFLICT (annotation_id, author_id) DO NOTHING`).bind(annotation, author.id, createdAt),
+    ]
+    : [db.prepare("DELETE FROM agreements WHERE annotation_id = ? AND author_id = ?").bind(annotation, author.id)];
+  const answers = await db.batch([
+    ...change,
+    db.prepare(`SELECT g.annotation_id, g.created_at, ${AUTHOR_COLUMNS}
+      FROM agreements g JOIN identities i ON i.id = g.author_id
+      WHERE g.annotation_id = ?
+      ORDER BY g.created_at`).bind(annotation),
+  ]);
+  return (answers.at(-1)!.results as AgreementRow[]).map(agreementOf);
 }
 
 /** Every annotation on `page` of `vault`, oldest first, with its author and agreements. */
@@ -204,7 +254,7 @@ export async function listPage(db: Database, vault: string, page: string): Promi
   const agreements = new Map<string, Agreement[]>();
   for (const row of agreementRows!.results as AgreementRow[]) {
     const list = agreements.get(row.annotation_id) ?? [];
-    list.push({ author: identityOf(row), createdAt: row.created_at });
+    list.push(agreementOf(row));
     agreements.set(row.annotation_id, list);
   }
 

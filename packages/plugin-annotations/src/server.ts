@@ -1,16 +1,19 @@
 /**
  * The `annotations` server plugin. Routes, under `<mount>/_svartz/annotations/`:
- * - `GET ?page=<note path>` lists the page's annotations with their authors and agreements, to anyone.
+ * - `GET ?page=<note path>` lists the page's annotations with their authors and agreements, to anyone, and names the
+ *   signed-in reader as `viewer`.
  * - `POST` with `{ kind: "comment", page, anchor, body }` stores a signed-in reader's comment and answers it, 201.
+ * - `POST <id>/agree/` with `{ agreed }` sets the reader's **+1** on a comment.
  *   Writes need a session from `@svartz/auth` and an `Origin` header naming this site.
  *
  * The first request that reaches the database migrates it to the plugin's schema.
  */
 import type { EnvReference, ServerContext, ServerModuleFactory } from "@svartz/core";
+import type { Identity } from "@svartz/auth";
 import { readIdentity } from "@svartz/auth/server";
 import { CONTEXT_LENGTH, type Anchor } from "./anchor";
 import { COMMENT_MAX_LENGTH, QUOTE_MAX_LENGTH } from "./limits";
-import { createComment, listPage, migrate, type Database } from "./store";
+import { createComment, listPage, migrate, setAgreement, type Database } from "./store";
 
 /** One of the site's drawn reactions. */
 export interface Reaction {
@@ -120,43 +123,94 @@ function readComment(input: unknown): { page: string; anchor: Anchor; body: stri
   return typeof anchor === "string" ? anchor : { page: input.page, anchor, body };
 }
 
-async function list(url: URL, context: ServerContext, options: AnnotationsServerOptions): Promise<Response> {
+async function list(request: Request, url: URL, context: ServerContext, options: AnnotationsServerOptions): Promise<Response> {
   const page = url.searchParams.get("page");
   if (!isPage(page)) return failure(400, "invalid_page", "Name the note with ?page=<its path in the vault>.");
   const db = await databaseFor(context, options);
   if (db instanceof Response) return db;
-  return json({ annotations: await listPage(db, context.vault.id, page) });
+  const reader = await readIdentity(request, context.env);
+  return json({ annotations: await listPage(db, context.vault.id, page), viewer: reader && { id: reader.id } });
 }
 
-async function create(request: Request, url: URL, context: ServerContext, options: AnnotationsServerOptions): Promise<Response> {
+/** What a write route tells the reader when its request can't be read. */
+interface WriteMessages {
+  readonly signedOut: string;
+  readonly tooLarge: string;
+  readonly notJson: string;
+}
+
+/**
+ * The signed-in reader behind a write and the JSON they sent, or the refusal: another site, no session, a body over
+ * `MAX_REQUEST_BYTES`, or one that isn't JSON. Every write passes through here, so the per-reader rate limit (#274)
+ * belongs right after the author is known.
+ */
+async function readWrite(request: Request, url: URL, context: ServerContext, messages: WriteMessages): Promise<{ author: Identity; input: unknown } | Response> {
   // Browsers name the page's origin on every POST, so a missing or foreign one is another site, or no browser at all.
   if (request.headers.get("origin") !== url.origin) return failure(403, "cross_origin", "Post from this site.");
   const author = await readIdentity(request, context.env);
-  if (!author) return failure(401, "signed_out", "Sign in to comment.");
+  if (!author) return failure(401, "signed_out", messages.signedOut);
 
   const text = await readText(request);
-  if (text === undefined) return failure(413, "too_large", "This comment is too long to post.");
-  let input: unknown;
+  if (text === undefined) return failure(413, "too_large", messages.tooLarge);
   try {
-    input = JSON.parse(text);
+    return { author, input: JSON.parse(text) };
   } catch {
-    return failure(400, "invalid_json", "Send the comment as JSON.");
+    return failure(400, "invalid_json", messages.notJson);
   }
-  const comment = readComment(input);
+}
+
+async function create(request: Request, url: URL, context: ServerContext, options: AnnotationsServerOptions): Promise<Response> {
+  const write = await readWrite(request, url, context, {
+    signedOut: "Sign in to comment.",
+    tooLarge: "This comment is too long to post.",
+    notJson: "Send the comment as JSON.",
+  });
+  if (write instanceof Response) return write;
+  const comment = readComment(write.input);
   if (typeof comment === "string") return failure(400, "invalid_annotation", comment);
 
   const db = await databaseFor(context, options);
   if (db instanceof Response) return db;
-  return json({ annotation: await createComment(db, { vault: context.vault.id, ...comment, author }) }, 201);
+  return json({ annotation: await createComment(db, { vault: context.vault.id, ...comment, author: write.author }) }, 201);
 }
+
+/** `{ agreed }` sets the reader's **+1** on comment `id`, and answers `{ agreed, agreements }` with every agreement after it. */
+async function agree(request: Request, url: URL, context: ServerContext, options: AnnotationsServerOptions, id: string): Promise<Response> {
+  const write = await readWrite(request, url, context, {
+    signedOut: "Sign in to +1 a comment.",
+    tooLarge: "Send only { agreed } to +1 a comment.",
+    notJson: "Send the +1 as JSON.",
+  });
+  if (write instanceof Response) return write;
+  const { input, author } = write;
+  if (!isRecord(input) || typeof input.agreed !== "boolean") {
+    return failure(400, "invalid_agreement", "Send { agreed: true } to +1 a comment, or { agreed: false } to take it back.");
+  }
+
+  const db = await databaseFor(context, options);
+  if (db instanceof Response) return db;
+  const agreements = await setAgreement(db, { vault: context.vault.id, annotation: id, author, agreed: input.agreed });
+  if (agreements === "missing") return failure(404, "not_found", "This comment has been deleted.");
+  if (agreements === "reaction") return failure(400, "invalid_agreement", "Only comments take a +1.");
+  return json({ agreed: input.agreed, agreements });
+}
+
+/** `/<annotation id>/agree/`, below the plugin's base. */
+const AGREE_PATH = /^\/([^/]+)\/agree\/$/;
 
 /** The `annotations` server module: `server: { module, options }` with {@link AnnotationsServerOptions}. */
 const annotationsServer: ServerModuleFactory<AnnotationsServerOptions> = (options) => async (request, context) => {
   const url = new URL(request.url);
-  if (url.pathname.slice(context.base.length) !== "/") return undefined;
-  if (request.method === "GET") return list(url, context, options);
-  if (request.method === "POST") return create(request, url, context, options);
-  return failure(405, "method_not_allowed", "Use GET or POST.", { allow: "GET, POST" });
+  const path = url.pathname.slice(context.base.length);
+  if (path === "/") {
+    if (request.method === "GET") return list(request, url, context, options);
+    if (request.method === "POST") return create(request, url, context, options);
+    return failure(405, "method_not_allowed", "Use GET or POST.", { allow: "GET, POST" });
+  }
+  const agreeing = AGREE_PATH.exec(path);
+  if (!agreeing) return undefined;
+  if (request.method !== "POST") return failure(405, "method_not_allowed", "Use POST.", { allow: "POST" });
+  return agree(request, url, context, options, agreeing[1]!);
 };
 
 export default annotationsServer;
