@@ -75,23 +75,26 @@ function encode(text: string, quote: string, flow = false, typed = false): strin
  */
 type Field =
   | { readonly kind: "text"; readonly text: string; readonly quote: string; readonly typed?: boolean }
-  | { readonly kind: "list"; readonly items: readonly string[]; readonly typed: boolean; readonly indent?: string }
+  | { readonly kind: "list"; readonly items: readonly string[]; readonly raws: readonly string[]; readonly typed: boolean; readonly indent?: string }
   | { readonly kind: "yaml"; readonly text: string };
 
 function fieldOf(doc: Text, property: Property): Field {
   const [first = "", ...rest] = doc.sliceString(property.colon, property.to, "\n").split("\n");
   const head = first.trim();
   const yaml: Field = { kind: "yaml", text: rest.length ? [head, ...rest].join("\n").replace(/^\n/, "") : head };
-  /** The items as text, and whether any was a plain boolean, number or date: such a list keeps those items plain. */
+  /**
+   * The items as text, with their source so an item kept is written back as it was, and whether every one was a plain
+   * boolean, number or date: only then does a new item that looks like one stay plain.
+   */
   const scalars = (raws: string[]) => {
     const items = raws.map(decode);
     if (!items.every((item): item is string => item !== undefined && !item.includes(","))) return undefined;
-    return { items, typed: raws.some((raw) => !/^["']/.test(raw) && TYPED_PLAIN.test(raw)) };
+    return { items, raws, typed: raws.length > 0 && raws.every((raw) => !/^["']/.test(raw) && TYPED_PLAIN.test(raw)) };
   };
   if (!rest.length) {
     const flow = /^\[([^[\]{}]*)\]$/.exec(head);
     if (flow) {
-      const list = flow[1]!.trim() ? scalars(flow[1]!.split(",").map((item) => item.trim())) : { items: [], typed: false };
+      const list = flow[1]!.trim() ? scalars(flow[1]!.split(",").map((item) => item.trim())) : { items: [], raws: [], typed: false };
       return list ? { kind: "list", ...list } : yaml;
     }
     const text = decode(head);
@@ -117,8 +120,12 @@ function valueSource(field: Field, value: string, lineBreak: string): string {
     return `${block ? lineBreak : " "}${lines.join(lineBreak)}`;
   }
   const items = value.split(",").map((item) => item.trim()).filter(Boolean);
-  if (field.indent === undefined) return ` [${items.map((item) => encode(item, "", true, field.typed)).join(", ")}]`;
-  return items.map((item) => `${lineBreak}${field.indent}- ${encode(item, "", false, field.typed)}`).join("");
+  // An item the list had keeps its source, quotes and type included.
+  const kept = new Map<string, string>();
+  field.items.forEach((item, index) => kept.has(item) || kept.set(item, field.raws[index]!));
+  const source = (item: string, flow: boolean) => kept.get(item) ?? encode(item, "", flow, field.typed);
+  if (field.indent === undefined) return ` [${items.map((item) => source(item, true)).join(", ")}]`;
+  return items.map((item) => `${lineBreak}${field.indent}- ${source(item, false)}`).join("");
 }
 
 const encodeKey = (key: string) => (/^[^\s#:'"\-?,[\]{}&*!|>%@`][^:#]*$/.test(key) && key.trim() === key ? key : JSON.stringify(key));
