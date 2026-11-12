@@ -5,6 +5,7 @@ import type { BrowserOptions } from "../src/api";
 import { mount } from "../src/browser";
 import { readDraft, storeDraft } from "../src/draft";
 import { mount as mountAuth } from "@svartz/auth/browser";
+import { renderPreview } from "@svartz/plugins/preview";
 // The site's own renderer and theme-minimal's content components, as a theme page hands them to browser scripts.
 import { svartzContentComponents } from "../../ui/src/lib/content/index";
 import { resolveContentComponents } from "../../ui/src/lib/runtime/content-components";
@@ -1265,11 +1266,43 @@ describe("Rich text", () => {
     expect(await sendFromSource()).toBe("Mind the gap.\n");
   });
 
-  it("continues a list on Enter, and ends it on an empty item", async () => {
+  /** `markdown` as the site renders it, parsed. */
+  async function rendered(markdown: string) {
+    const html = await renderPreview(markdown, { notes: [], linkResolution: "shallowest", path: "guide.md", base: "", mountPath: "" });
+    return new DOMParser().parseFromString(html, "text/html").body;
+  }
+
+  it("continues a list on Enter, and ends it on an empty item with a paragraph after the list", async () => {
     await openRich("- Oil\n", 1);
     await userEvent.keyboard("{End}{Enter}Wicks{Enter}{Enter}Done.");
 
-    expect(await sendFromSource()).toBe("- Oil\n- Wicks\nDone.\n");
+    const sent = await sendFromSource();
+    expect(sent).toBe("- Oil\n- Wicks\n\nDone.\n");
+    const body = await rendered(sent);
+    expect([...body.querySelectorAll("ul > li")].map((item) => item.textContent)).toEqual(["Oil", "Wicks"]);
+    expect(body.querySelector(":scope > p")?.textContent).toBe("Done.");
+  });
+
+  it("ends a callout on an empty line, with a paragraph after it, in the note's line endings", async () => {
+    await openRich("> [!note] Tip\r\n> Inside\r\n", 1);
+    await userEvent.click(lineWith("Inside")!);
+    await userEvent.keyboard("{End}{Enter}{Enter}Done.");
+
+    const sent = await sendFromSource();
+    expect(sent).toBe("> [!note] Tip\r\n> Inside\r\n\r\nDone.\r\n");
+    const body = await rendered(sent);
+    expect(body.querySelector(":scope > p")?.textContent).toBe("Done.");
+    expect(body.querySelector("blockquote, .sv-callout")?.textContent).not.toContain("Done.");
+  });
+
+  it("ends a list inside a quote, keeping the quote", async () => {
+    await openRich("> - Oil\n", 1);
+    await userEvent.keyboard("{End}{Enter}{Enter}Done.");
+
+    const sent = await sendFromSource();
+    expect(sent).toBe("> - Oil\n>\n> Done.\n");
+    const body = await rendered(sent);
+    expect(body.querySelector("blockquote > p")?.textContent).toBe("Done.");
   });
 
   it("turns a heading back into text with Backspace at its start, and deletes past hidden syntax", async () => {

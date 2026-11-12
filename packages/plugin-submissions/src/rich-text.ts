@@ -250,7 +250,9 @@ function deleteForward(view: EditorView): boolean {
 }
 
 /**
- * Enter continues a list or a quote on the next line, and on an empty item ends it. Elsewhere it is CodeMirror's.
+ * Enter continues a list or a quote on the next line, and on an empty item ends it, leaving a blank line before what
+ * the reader writes next: without one, Markdown reads that text as more of the item or the quote. Elsewhere it is
+ * CodeMirror's.
  */
 function continueBlock(view: EditorView): boolean {
   const { state } = view;
@@ -260,7 +262,19 @@ function continueBlock(view: EditorView): boolean {
   const prefix = prefixOf(state, line);
   if (!prefix.length || range.head < line.from + prefix.length) return false;
   if (!line.text.slice(prefix.length).trim()) {
-    return remove(view, line.from + prefix.length - lastPart(prefix), line.from + prefix.length, "delete");
+    const cut = line.from + prefix.length - lastPart(prefix);
+    // A callout's first line has nothing above it in the callout to run on from.
+    if (prefix.label) return remove(view, cut, line.from + prefix.length, "delete");
+    // The quote levels left, which a blank line inside them repeats bare: `>`.
+    const quotes = state.sliceDoc(line.from, cut);
+    const insert = `${quotes.trimEnd()}${state.lineBreak}${quotes}`;
+    view.dispatch({
+      changes: { from: line.from, to: line.to, insert },
+      selection: EditorSelection.cursor(line.from + quotes.trimEnd().length + 1 + quotes.length),
+      userEvent: "input",
+      scrollIntoView: true,
+    });
+    return true;
   }
   const list = LIST_MARKER.exec(prefix.marker);
   const next = prefix.quotes + (list ? `${list[1]}${list[2] ?? `${Number(list[3]) + 1}${list[4]}`}${list[5]}${list[6] ? "[ ] " : ""}` : "");
