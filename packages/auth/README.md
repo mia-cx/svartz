@@ -1,6 +1,6 @@
 # `@svartz/auth`
 
-Readers sign in with Google, Discord or GitHub, and server plugins read who is signed in. Runs on Workers and Node with no hosted service.
+Readers sign in with Google, Discord, X or GitHub, and server plugins read who is signed in. Runs on Workers and Node with no hosted service.
 
 ```ts
 import { auth } from "@svartz/auth";
