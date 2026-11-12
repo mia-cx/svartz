@@ -224,6 +224,107 @@ describe("a comment whose passage is gone from the note", () => {
 
     expect(summary.isConnected).toBe(false);
   });
+
+  describe("with +1 and Delete", () => {
+    const ROOF = { exact: "anemometer on the roof", prefix: "", suffix: "", start: 10, end: 32 };
+    const MAST = { exact: "The vane sits a metre above the ridge", prefix: "", suffix: "", start: 40, end: 77 };
+
+    beforeEach(async () => {
+      // Grace's and Ada's comments, both on passages since removed.
+      await commands.seedComments([
+        { id: "roof", page: "hardware/sensors", author: GRACE, anchor: ROOF, createdAt: "2026-11-04T09:00:00.000Z", body: "Which roof?", agreedBy: [GRACE] },
+        { id: "mast", page: "hardware/sensors", author: ADA, anchor: MAST, createdAt: "2026-11-05T09:00:00.000Z", body: "On a mast." },
+      ]);
+    });
+
+    /** Attach, then open the list from the keyboard, leaving focus on its summary. */
+    async function openList() {
+      detach = attach(render(), { endpoint: ENDPOINT, page: "hardware/sensors" });
+      await expect.poll(() => document.querySelector(".sv-annotations-orphans-summary")).not.toBeNull();
+      const summary = document.querySelector<HTMLElement>(".sv-annotations-orphans-summary")!;
+      summary.focus();
+      await userEvent.keyboard("{Enter}");
+      return { summary, items: () => [...document.querySelectorAll<HTMLLIElement>(".sv-annotations-orphan")] };
+    }
+    const toggleOf = (item: HTMLElement) => item.querySelector<HTMLButtonElement>(".sv-annotations-agree")!;
+    const deleteOf = (item: HTMLElement) => item.querySelector<HTMLButtonElement>(".sv-annotations-delete")!;
+
+    it("toggles the reader's +1 from the keyboard", async () => {
+      await commands.signIn(location.origin);
+      const { items } = await openList();
+      const toggle = toggleOf(items()[0]!);
+
+      await userEvent.keyboard("{Tab}");
+      expect(document.activeElement).toBe(toggle);
+      expect(toggle.getAttribute("aria-pressed")).toBe("false");
+      await userEvent.keyboard(" ");
+
+      await expect.poll(() => toggle.getAttribute("aria-pressed")).toBe("true");
+      await expect.element(toggle).toHaveAccessibleName("+1 2");
+      await expect.element(toggle).toHaveAccessibleDescription("You and Grace Hopper agree");
+
+      await userEvent.keyboard("{Enter}");
+      await expect.poll(() => toggle.getAttribute("aria-pressed")).toBe("false");
+      await expect.element(toggle).toHaveAccessibleDescription("Grace Hopper agrees");
+    });
+
+    it("applies a signed-out reader's +1 when they come back from signing in", async () => {
+      unmountSignIn = mountSignIn(location.pathname, { endpoint: "/notes/_svartz/auth", providers: [{ id: "github", label: "GitHub" }] });
+      await openList();
+      await userEvent.keyboard("{Tab} ");
+      await expect.poll(() => document.querySelector<HTMLDialogElement>("dialog.sv-auth")?.open).toBe(true);
+
+      await commands.signIn(location.origin);
+      detach!();
+      detach = attach(render(), { endpoint: ENDPOINT, page: "hardware/sensors" });
+
+      await expect.poll(() => document.querySelector(".sv-annotations-orphans[open] .sv-annotations-agree[aria-pressed=true]")).not.toBeNull();
+      expect(document.activeElement).toBe(toggleOf(document.querySelector(".sv-annotations-orphan")!));
+    });
+
+    it("offers Delete on the reader's own comments only", async () => {
+      await commands.signIn(location.origin);
+      const { items } = await openList();
+
+      expect(items().map((item) => deleteOf(item).hidden)).toEqual([true, false]);
+    });
+
+    it("deletes the reader's comment from the keyboard after they confirm, counting one fewer", async () => {
+      await commands.signIn(location.origin);
+      const { summary, items } = await openList();
+      const [roof, mast] = items();
+
+      // Grace's +1, then Ada's name, her +1, and Delete.
+      await userEvent.keyboard("{Tab}{Tab}{Tab}{Tab}");
+      expect(document.activeElement).toBe(deleteOf(mast!));
+      await userEvent.keyboard("{Enter}");
+      await expect.element(mast!.querySelector(".sv-annotations-confirm")!).toHaveAccessibleName("Delete your comment?");
+      expect(document.activeElement?.textContent).toBe("Cancel");
+      await userEvent.keyboard("{Tab}{Enter}");
+
+      await expect.poll(() => mast!.isConnected).toBe(false);
+      expect(summary.textContent).toBe("1 comment on a passage no longer in the note");
+      expect(items()).toEqual([roof]);
+      // Focus moves on to the comment left, and a screen reader hears it went.
+      expect(document.activeElement).toBe(toggleOf(roof!));
+      expect(document.querySelector(".sv-annotations [role=status]")?.textContent).toBe("Comment deleted.");
+    });
+
+    it("takes the list away with its last comment, handing focus to the note", async () => {
+      await commands.seedComments([
+        { id: "roof", page: "hardware/sensors", author: GRACE, anchor: ROOF, createdAt: "2026-11-04T09:00:00.000Z", body: "Which roof?" },
+      ]);
+      await commands.signIn(location.origin, ALAN);
+      const { summary } = await openList();
+
+      // +1, Delete; then Cancel, Delete comment.
+      await userEvent.keyboard("{Tab}{Tab}{Enter}{Tab}{Enter}");
+
+      await expect.poll(() => summary.isConnected).toBe(false);
+      expect(document.querySelector(".sv-annotations-orphans")).toBeNull();
+      expect(document.activeElement).toBe(document.querySelector("article"));
+    });
+  });
 });
 
 describe("commenting on a selection", () => {

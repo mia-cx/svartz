@@ -64,7 +64,8 @@
 }
 
 .sv-annotations-marker:focus-visible,
-.sv-annotations-card :focus-visible {
+.sv-annotations-card :focus-visible,
+.sv-annotations-orphan :focus-visible {
 	outline: var(--sv-focus-width, 2px) solid var(--sv-accent, Highlight);
 	outline-offset: var(--sv-focus-offset, 2px);
 }
@@ -271,7 +272,8 @@ a.sv-annotations-name:hover {
 	z-index: 2;
 }
 
-.sv-annotations-card .sv-annotations-problem {
+.sv-annotations-card .sv-annotations-problem,
+.sv-annotations-orphan .sv-annotations-problem {
 	margin-block-start: var(--sv-space-2, 0.5rem);
 }
 
