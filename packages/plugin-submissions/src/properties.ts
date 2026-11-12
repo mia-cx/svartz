@@ -99,8 +99,11 @@ function fieldOf(doc: Text, property: Property): Field {
 function valueSource(field: Field, value: string, lineBreak: string): string {
   if (field.kind === "text") return value ? ` ${encode(value, field.quote)}` : "";
   if (field.kind === "yaml") {
+    if (!value) return "";
     const lines = value.split(/\r?\n/);
-    return /^(?:[ \t]|-(?:[ \t]|$)|$)/.test(lines[0]!) && lines.length > 1 ? `${lineBreak}${lines.join(lineBreak)}` : (value ? ` ${lines.join(lineBreak)}` : "");
+    // An indented or `- ` first line is a block value, which starts on the line below the key, even as one line.
+    const block = /^(?:[ \t]|-(?:[ \t]|$))/.test(lines[0]!) || (lines[0] === "" && lines.length > 1);
+    return `${block ? lineBreak : " "}${lines.join(lineBreak)}`;
   }
   const items = value.split(",").map((item) => item.trim()).filter(Boolean);
   if (field.indent === undefined) return ` [${items.map((item) => encode(item, "", true)).join(", ")}]`;

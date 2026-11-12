@@ -1145,6 +1145,13 @@ describe("Rich text", () => {
       .replace("See [[Ada Lovelace]].", "See [[Grace]]."));
   });
 
+  it("keeps a single nested entry on its own line when its value is edited", async () => {
+    await openRich(NOTE);
+    await page.getByRole("textbox", { name: "infobox" }).fill("  role: Lighthouse keeper");
+
+    expect(await sendFromSource()).toBe(NOTE.replace("  role: Lamplighter", "  role: Lighthouse keeper"));
+  });
+
   it("renames a property", async () => {
     await openRich(NOTE);
     await page.getByRole("textbox", { name: "Property name" }).first().fill("name");
