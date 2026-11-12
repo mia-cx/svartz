@@ -1314,6 +1314,18 @@ describe("Rich text", () => {
     expect(await sendFromSource()).toBe("Guide\n\nSome **bol**\n");
   });
 
+  it.each([["Backspace"], ["Delete"]])("deletes the formatting with all of its text selected, on %s", async (key) => {
+    await openRich("Some bold\n\nA *soft* word\n", 1);
+    await userEvent.keyboard("{End}");
+    await toolbar().getByRole("button", { name: "Bold" }).click();
+    // Bold leaves its word selected.
+    await userEvent.keyboard(`{${key}}`);
+    await userEvent.dblClick(lineWith("A soft word")!.querySelector(".cm-lp-em")!);
+    await userEvent.keyboard(`{${key}}`);
+
+    expect(await sendFromSource()).toBe("Some \n\nA  word\n");
+  });
+
   it("keeps typing out of the frontmatter", async () => {
     await openRich("---\ntitle: Guide\n---\nBody\n", 1);
     await userEvent.keyboard(`{${mod}>}{Home}{/${mod}}Top {Backspace}{Backspace}{Backspace}{Backspace}{Backspace}`);

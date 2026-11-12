@@ -184,15 +184,25 @@ function remove(view: EditorView, from: number, to: number, userEvent: string): 
   return true;
 }
 
+/** Delete a selection that is all of some formatting's text with that formatting's syntax. Raw blocks delete plainly. */
+function deleteSelection(view: EditorView, userEvent: string): boolean {
+  const { state } = view;
+  const { from, to } = state.selection.main;
+  if (inRaw(state, from) || inRaw(state, to)) return false;
+  const span = deletion(state, from, to);
+  return remove(view, span.from, span.to, userEvent);
+}
+
 /**
  * Backspace as in a word processor: at a line's start it removes the line's last prefix part (a list marker, a
  * heading, a callout's type, a quote level); elsewhere it deletes the character before the cursor, stepping over hidden
- * syntax, and a widget such as an embed or a checkbox as a whole.
+ * syntax, and a widget such as an embed or a checkbox as a whole. A selection goes with any formatting it is all of.
  */
 function deleteBackward(view: EditorView): boolean {
   const { state } = view;
   const range = state.selection.main;
-  if (!range.empty || state.selection.ranges.length > 1) return false;
+  if (state.selection.ranges.length > 1) return false;
+  if (!range.empty) return deleteSelection(view, "delete.backward");
   const start = bodyStart(state.doc);
   let pos = range.head;
   if (pos <= start) return start > 0;
@@ -221,11 +231,16 @@ function deleteBackward(view: EditorView): boolean {
   return remove(view, span.from, span.to, "delete.backward");
 }
 
-/** Delete as Backspace's mirror: at a line's end it joins the next line's text, dropping that line's prefix. */
+/**
+ * Delete as Backspace's mirror: at a line's end it joins the next line's text, dropping that line's prefix. A selection
+ * goes with any formatting it is all of.
+ */
 function deleteForward(view: EditorView): boolean {
   const { state } = view;
   const range = state.selection.main;
-  if (!range.empty || state.selection.ranges.length > 1 || inRaw(state, range.head)) return false;
+  if (state.selection.ranges.length > 1) return false;
+  if (!range.empty) return deleteSelection(view, "delete.forward");
+  if (inRaw(state, range.head)) return false;
   let pos = range.head;
   const syntaxRanges = hidden(view);
   for (;;) {
