@@ -12,6 +12,21 @@ export interface SourceResponse {
   readonly markdown: string;
 }
 
+/** A published note a wikilink can name. */
+export interface LinkTarget {
+  /**
+   * What goes between `[[` and `]]`: the note's name, or its path inside the vault when another note shares the name,
+   * without `.md`, as Obsidian writes it.
+   */
+  readonly link: string;
+  readonly title: string;
+}
+
+/** `GET <endpoint>/links/` answers this: the published notes, never password-protected or hidden ones. */
+export interface LinksResponse {
+  readonly notes: readonly LinkTarget[];
+}
+
 /** A submission id: 32 lowercase hex digits, 128 random bits. */
 export const SUBMISSION_ID_PATTERN = /^[0-9a-f]{32}$/;
 

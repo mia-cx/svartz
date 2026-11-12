@@ -68,8 +68,58 @@
 	padding: var(--sv-space-4) var(--sv-space-5) var(--sv-space-5);
 }
 
+/* Live Preview and Source as one segmented control, beside the close button. */
+.svartz-submissions-modes {
+	display: inline-flex;
+	margin: 0;
+	margin-inline-start: auto;
+	padding: 2px;
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	border-radius: var(--sv-radius-m);
+	min-inline-size: 0;
+}
+
+.svartz-submissions-modes label {
+	position: relative;
+	padding: var(--sv-space-1) var(--sv-space-2);
+	border-radius: var(--sv-radius-s);
+	color: var(--sv-muted);
+	font-size: var(--sv-label-size);
+	font-weight: 600;
+	line-height: 1.4;
+	text-transform: uppercase;
+	white-space: nowrap;
+	cursor: pointer;
+	transition:
+		background-color var(--sv-duration-fast) var(--sv-ease),
+		color var(--sv-duration-fast) var(--sv-ease);
+}
+
+.svartz-submissions-modes input {
+	position: absolute;
+	inset: 0;
+	margin: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.svartz-submissions-modes label:hover {
+	color: var(--sv-ink);
+}
+
+.svartz-submissions-modes label:has(:checked) {
+	background: var(--sv-surface);
+	color: var(--sv-ink);
+}
+
+.svartz-submissions-modes label:has(:focus-visible) {
+	outline: var(--sv-focus-width) solid var(--sv-accent);
+	outline-offset: var(--sv-focus-offset);
+}
+
 .svartz-submissions-source {
 	display: flex;
+	flex-direction: column;
 	min-block-size: 0;
 	border: var(--sv-rule-width) solid var(--sv-rule);
 	border-radius: var(--sv-radius-m);
@@ -87,8 +137,27 @@
 	font-size: var(--sv-step--1);
 }
 
+/* A kept draft, offered back above the source it would replace. */
+.svartz-submissions-restore {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--sv-space-2);
+	padding: var(--sv-space-2) var(--sv-space-4);
+	border-block-end: var(--sv-rule-width) solid var(--sv-rule);
+	background: var(--sv-paper);
+}
+
+.svartz-submissions-restore p {
+	flex: 1 1 12rem;
+	margin: 0;
+	color: var(--sv-ink);
+	font-size: var(--sv-step--1);
+}
+
 .svartz-submissions .cm-editor {
 	flex: 1;
+	min-block-size: 0;
 	min-inline-size: 0;
 	background: transparent;
 	color: var(--sv-text);
@@ -128,8 +197,9 @@
 	display: none;
 }
 
+/* The text fields; the mode switch's radios and Live Preview's checkboxes keep their own look. */
 .svartz-submissions textarea,
-.svartz-submissions input,
+.svartz-submissions input[type="text"],
 .svartz-submissions select {
 	box-sizing: border-box;
 	inline-size: 100%;
@@ -144,7 +214,7 @@
 }
 
 .svartz-submissions textarea,
-.svartz-submissions input,
+.svartz-submissions input[type="text"],
 .svartz-submissions select {
 	/* Host form resets (Tailwind forms) draw their own ring. */
 	appearance: none;
@@ -190,6 +260,138 @@
 
 .svartz-submissions .cm-placeholder {
 	color: var(--sv-muted);
+}
+
+/* Live Preview: prose type, with the syntax the cursor's line reveals in place. */
+.svartz-submissions .cm-lp {
+	font-family: var(--sv-font-sans);
+	font-size: var(--sv-step-0);
+}
+
+.svartz-submissions .cm-lp-heading {
+	color: var(--sv-ink);
+	font-weight: 700;
+	line-height: var(--sv-leading-tight);
+}
+
+.svartz-submissions .cm-lp-h1 { font-size: var(--sv-step-3); }
+.svartz-submissions .cm-lp-h2 { font-size: var(--sv-step-2); }
+.svartz-submissions .cm-lp-h3 { font-size: var(--sv-step-1); }
+
+.svartz-submissions .cm-lp-strong { font-weight: 700; }
+.svartz-submissions .cm-lp-em { font-style: italic; }
+.svartz-submissions .cm-lp-strike { text-decoration: line-through; }
+
+.svartz-submissions .cm-lp-code,
+.svartz-submissions .cm-lp-codeblock {
+	font-family: var(--sv-font-mono);
+	font-size: 0.9em;
+}
+
+.svartz-submissions .cm-lp-code {
+	padding: 0.1em 0.3em;
+	border-radius: var(--sv-radius-s);
+	background: var(--sv-surface);
+}
+
+.svartz-submissions .cm-lp-codeblock {
+	background: var(--sv-surface);
+}
+
+.svartz-submissions .cm-lp-link {
+	color: var(--sv-accent-text);
+	text-decoration: underline;
+	text-underline-offset: 0.15em;
+}
+
+/* `.cm-line` too, to outrank CodeMirror's own line padding. */
+.svartz-submissions .cm-line.cm-lp-quote {
+	border-inline-start: 3px solid var(--sv-rule-strong);
+	padding-inline-start: var(--sv-space-3);
+	color: var(--sv-muted);
+}
+
+/* Callouts tint as on the site: blue by default, the warning and failure types in their own hue. */
+.svartz-submissions .cm-line.cm-lp-callout {
+	--sv-hue: var(--sv-hue-blue);
+	padding-inline-start: var(--sv-space-3);
+	background: var(--sv-signal-soft);
+}
+
+.svartz-submissions .cm-lp-callout:is([data-callout="warning"], [data-callout="caution"], [data-callout="attention"]) {
+	--sv-hue: var(--sv-hue-amber);
+}
+
+.svartz-submissions .cm-lp-callout:is([data-callout="danger"], [data-callout="error"], [data-callout="bug"], [data-callout="failure"]) {
+	--sv-hue: var(--sv-hue-red);
+}
+
+.svartz-submissions .cm-lp-callout:is([data-callout="success"], [data-callout="check"], [data-callout="done"], [data-callout="tip"]) {
+	--sv-hue: var(--sv-hue-green);
+}
+
+.svartz-submissions .cm-lp-callout-type {
+	color: var(--sv-signal);
+	font-size: var(--sv-label-size);
+	font-weight: 700;
+	text-transform: uppercase;
+}
+
+.svartz-submissions .cm-lp-embed {
+	padding: 0.1em 0.5em;
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	border-radius: var(--sv-radius-s);
+	color: var(--sv-ink);
+	font-size: 0.9em;
+}
+
+.svartz-submissions .cm-lp-embed::before {
+	content: "↪ ";
+	color: var(--sv-muted);
+}
+
+.svartz-submissions .cm-lp-task {
+	margin: 0 0.3em 0 0;
+	vertical-align: -0.1em;
+	accent-color: var(--sv-accent);
+	cursor: pointer;
+}
+
+/* Wikilink suggestions, in the theme's surface and type. */
+.svartz-submissions .cm-tooltip.cm-tooltip-autocomplete {
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	border-radius: var(--sv-radius-m);
+	background: var(--sv-paper);
+	box-shadow: var(--sv-shadow);
+	overflow: hidden;
+}
+
+/* `.cm-editor` too, to outrank CodeMirror's monospace list. */
+.svartz-submissions .cm-editor .cm-tooltip-autocomplete > ul {
+	max-block-size: 16rem;
+	font-family: var(--sv-font-sans);
+	font-size: var(--sv-step--1);
+}
+
+.svartz-submissions .cm-tooltip-autocomplete > ul > li {
+	padding: var(--sv-space-1) var(--sv-space-3);
+	color: var(--sv-text);
+}
+
+.svartz-submissions .cm-tooltip-autocomplete > ul > li[aria-selected] {
+	background: var(--sv-accent-soft);
+	color: var(--sv-ink);
+}
+
+.svartz-submissions .cm-completionDetail {
+	margin-inline-start: var(--sv-space-2);
+	color: var(--sv-muted);
+	font-style: normal;
+}
+
+.svartz-submissions .cm-completionMatchedText {
+	text-decoration: none;
+	font-weight: 700;
 }
 
 /* Turnstile's widget is 65px tall; holding the space keeps the buttons still while it loads. */

@@ -9,7 +9,7 @@
 
 import GithubSlugger from "github-slugger";
 import { posix } from "node:path";
-import { definePlugin } from "@svartz/core";
+import { definePlugin, type PluginContext } from "@svartz/core";
 import { createAssetResolver, referenceDefinitionSpans, roamMediaReferences } from "./internal/asset-references";
 import { findRawLinkSpans } from "./internal/parse";
 import { resolveLink, buildSlugMap } from "./internal/resolve";
@@ -85,6 +85,21 @@ function escapeHtml(value: string): string {
 function replaceMissingWikilink(markdown: string, raw: string, label: string, roamReserved: boolean): string {
   return replaceAuthoredLinkMarkup(markdown, raw, "wikilink",
     `<span class="svartz-unresolved-link" role="link" aria-disabled="true">${escapeHtml(label)}</span>`, roamReserved);
+}
+
+/**
+ * The note a wikilink target names from anywhere in the vault, as `core:resolve-links` resolves it, or null. A
+ * target that `closest` would settle by the linking note's folder names no note here.
+ */
+export function wikilinkResolver(ctx: PluginContext): (target: string) => string | null {
+  const notes = ctx.files.filter((file) => isMarkdownFile(file.extension));
+  const slugMap = buildSlugMap(notes.map((file) => ({
+    slug: file.slug,
+    path: file.path,
+    aliases: alternateNames(file.frontmatter, ctx.config.frontmatter.aliasesField),
+  })));
+  const allSlugs = notes.map((file) => file.slug);
+  return (target) => resolveLink({ raw: "", target, type: "wikilink" }, slugMap, allSlugs, "absolute", "", notes);
 }
 
 export const resolveLinks = definePlugin(() => ({

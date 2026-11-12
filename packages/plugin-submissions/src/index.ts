@@ -19,11 +19,13 @@ import {
   getCompilerContributions,
   type EnvReference,
   type NormalizedSvartzPlugin,
+  type PluginContext,
   type ProcessedFile,
   type SvartzPlugin,
 } from "@svartz/core";
+import { wikilinkResolver } from "@svartz/plugins";
 import { isNote, pathRoute, requestedSlug, routeHref } from "@svartz/plugins/routes";
-import { PLUGIN_ID, type BrowserOptions } from "./api";
+import { PLUGIN_ID, type BrowserOptions, type LinkTarget } from "./api";
 import type { GuardOptions, RateLimitOptions, TurnstileOptions } from "./guard";
 import type { BuildData, Credentials, ServerOptions } from "./server";
 
@@ -156,6 +158,20 @@ function routeClaims(files: readonly ProcessedFile[], mountPath: string): Record
   return claims;
 }
 
+/**
+ * What a wikilink to each published note says, as Obsidian writes it: the note's name when the build resolves that
+ * to this note from anywhere, or else its vault path. Any note (protected and hidden ones included) taking the name,
+ * by file name, slug or alias, makes the link name the path.
+ */
+function linkTargets(published: ReadonlyArray<{ path: string; slug: string; title: string }>, ctx: PluginContext): LinkTarget[] {
+  const resolve = wikilinkResolver(ctx);
+  return published.map(({ path, slug, title }) => {
+    const link = path.replace(/\.md$/i, "");
+    const name = link.slice(link.lastIndexOf("/") + 1);
+    return { link: resolve(name) === slug ? name : link, title };
+  });
+}
+
 /** Exactly one kind of GitHub credentials, checked so a typo fails the build instead of every submission. */
 function credentials({ token, app }: SubmissionsOptions): Credentials {
   if (token && app) fail("set either token or app, not both");
@@ -207,7 +223,7 @@ export function submissions(options: SubmissionsOptions) {
         // Protected notes stay out: their source must not leave the repository through the site.
         const published = entries
           .filter((entry) => !entry.locked)
-          .map((entry) => ({ href: entry.href, path: entry.path.replaceAll("\\", "/") }));
+          .map((entry) => ({ href: entry.href, path: entry.path.replaceAll("\\", "/"), slug: entry.slug, title: entry.title }));
         const pages: Record<string, string> = Object.fromEntries(published
           .filter(({ path }) => /\.md$/i.test(path))
           .map(({ href, path }) => [href, root ? `${root}/${path}` : path]));
@@ -216,7 +232,8 @@ export function submissions(options: SubmissionsOptions) {
           .sort((a, b) => a.localeCompare(b));
 
         const compiler = getCompilerContributions(ctx);
-        compiler.serverData.set(PLUGIN_ID, { commit: checkout.commit, pages, routes, vaultRoot: root, folders } satisfies BuildData);
+        const links = linkTargets(published, ctx);
+        compiler.serverData.set(PLUGIN_ID, { commit: checkout.commit, pages, routes, vaultRoot: root, folders, links } satisfies BuildData);
         compiler.browserResources.set(PLUGIN_ID, {
           id: PLUGIN_ID,
           kind: "script",
@@ -235,5 +252,5 @@ export function submissions(options: SubmissionsOptions) {
   return plugin;
 }
 
-export type { BrowserOptions, EditRequest, EditResponse, ErrorResponse, NewPageRequest, SourceResponse } from "./api";
+export type { BrowserOptions, EditRequest, EditResponse, ErrorResponse, LinksResponse, LinkTarget, NewPageRequest, SourceResponse } from "./api";
 export type { RateLimitOptions, TurnstileOptions } from "./guard";

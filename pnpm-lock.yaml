@@ -325,15 +325,27 @@ importers:
 
   packages/plugin-submissions:
     dependencies:
+      '@codemirror/autocomplete':
+        specifier: ^6.20.4
+        version: 6.20.4
       '@codemirror/commands':
         specifier: ^6.11.1
         version: 6.11.1
+      '@codemirror/language':
+        specifier: ^6.13.1
+        version: 6.13.1
       '@codemirror/state':
         specifier: ^6.7.6
         version: 6.7.6
       '@codemirror/view':
         specifier: ^6.43.15
         version: 6.43.15
+      '@lezer/common':
+        specifier: ^1.5.5
+        version: 1.5.5
+      '@lezer/markdown':
+        specifier: ^1.8.1
+        version: 1.8.1
       '@svartz/auth':
         specifier: workspace:*
         version: link:../auth
@@ -1454,6 +1466,9 @@ packages:
   '@cloudflare/workers-types@4.20260301.1':
     resolution: {integrity: sha512-klKnECMb5A4GtVF0P5NH6rCjtyjqIEKJaz6kEtx9YPHhfFO2HUEarO+MI4F8WPchgeZqpGlEpDhRapzrOTw51Q==}
 
+  '@codemirror/autocomplete@6.20.4':
+    resolution: {integrity: sha512-yF8RhOf2SXlg00+qtupzLhrglcas61boqaONiNcbPIebHCpJocpqTBA6dyrtUrQO47hqyTdeob/3XnYilT7TaQ==}
+
   '@codemirror/commands@6.11.1':
     resolution: {integrity: sha512-O/4hG3SC1YwcmQ0d2UVNDs+AsaNWd1iHVxbTeEBuqH+6bExAiPK3iS/BvpY6rZGURALv4ZD3sIgcCmRvw3ehBg==}
 
@@ -1907,6 +1922,9 @@ packages:
 
   '@lezer/lr@1.4.12':
     resolution: {integrity: sha512-On9HU4oMMiHPMkQDgoTnGahjgG5n/MkN38CgG77sMraKLL+3JBbeQNi1FcCXV9QRqwF9/BUXP3caHyJC1fBOTQ==}
+
+  '@lezer/markdown@1.8.1':
+    resolution: {integrity: sha512-M5YmEcKWO4mJ45Y1hECwqyu8cLv25EiXOK554PVOvDOWOP0olwelHHQUWr9sjF+d1bENVhy0nfJ8E57XZUTiXg==}
 
   '@lix-js/sdk@0.4.7':
     resolution: {integrity: sha512-pRbW+joG12L0ULfMiWYosIW0plmW4AsUdiPCp+Z8rAsElJ+wJ6in58zhD3UwUcd4BNcpldEGjg6PdA7e0RgsDQ==}
@@ -6259,6 +6277,13 @@ snapshots:
 
   '@cloudflare/workers-types@4.20260301.1': {}
 
+  '@codemirror/autocomplete@6.20.4':
+    dependencies:
+      '@codemirror/language': 6.13.1
+      '@codemirror/state': 6.7.6
+      '@codemirror/view': 6.43.15
+      '@lezer/common': 1.5.5
+
   '@codemirror/commands@6.11.1':
     dependencies:
       '@codemirror/language': 6.13.1
@@ -6634,6 +6659,11 @@ snapshots:
   '@lezer/lr@1.4.12':
     dependencies:
       '@lezer/common': 1.5.5
+
+  '@lezer/markdown@1.8.1':
+    dependencies:
+      '@lezer/common': 1.5.5
+      '@lezer/highlight': 1.2.5
 
   '@lix-js/sdk@0.4.7':
     dependencies:

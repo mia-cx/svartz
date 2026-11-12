@@ -74,7 +74,7 @@ const config = (vault: string) => ({
 }) as ResolvedConfig;
 
 /** Route and index the vault with the core plugins, then run the plugin's build hook, in a fresh one-commit repository. */
-async function build(options: Partial<Parameters<typeof submissions>[0]> = {}) {
+async function build(options: Partial<Parameters<typeof submissions>[0]> = {}, extraNotes: readonly ProcessedFile[] = []) {
   repo = await realpath(await mkdtemp(path.join(os.tmpdir(), "svartz-submissions-")));
   const vault = path.join(repo, "content");
   await mkdir(vault);
@@ -83,7 +83,7 @@ async function build(options: Partial<Parameters<typeof submissions>[0]> = {}) {
   git("init", "--quiet");
   git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--quiet", "--allow-empty", "-m", "Build");
 
-  const ctx: PluginContext = { config: config(vault), files: vaultNotes(), artifacts: new Map(), meta: new Map() };
+  const ctx: PluginContext = { config: config(vault), files: [...vaultNotes(), ...extraNotes], artifacts: new Map(), meta: new Map() };
   const result = await runStages(
     [allocateRoutesPlugin(), indexContent(), submissions({ repo: "acme/wiki", ...options })],
     ctx,
@@ -119,12 +119,40 @@ describe("submissions build", () => {
       // Protected notes' folders stay out: a new page there would be public.
       vaultRoot: "content",
       folders: ["", "people", "tools"],
+      links: expect.any(Array),
     });
     expect(ctx.compiler?.browserResources.get("submissions")?.options).toEqual({
       endpoint: "/wiki/_svartz/submissions",
       pages: expect.arrayContaining(["/wiki/guide/", "/wiki/people/ada-lovelace/", "/wiki/people/hopper/"]),
       folders: ["", "people", "tools"],
     });
+  });
+
+  it("lists the notes a wikilink can name, by name unless another note shares it, never protected or hidden ones", async () => {
+    const { ctx } = await build({}, [note("tools/Guide.md", { title: "Tool guide" }), note("people/old/Grace.md", {}, { group: "family", hidden: true })]);
+    const { links } = ctx.compiler?.serverData.get("submissions") as BuildData;
+
+    expect(links.map(({ link }) => link).sort()).toEqual([
+      "Field Guide.svx",
+      // The root note keeps its name: the build resolves it there before any same-named note in a folder.
+      "guide",
+      // Two files share the name, so each link names the folder too.
+      "people/Ada Lovelace",
+      // A hidden note shares the name.
+      "people/Grace",
+      "people/ada lovelace.svx",
+      "tools/Guide",
+    ]);
+    expect(links).toContainEqual({ link: "tools/Guide", title: "Tool guide" });
+  });
+
+  it("names a note's folder when its name resolves to another note's slug", async () => {
+    // `[[Ada]]` opens the overview, whose frontmatter slug takes the name.
+    const { ctx } = await build({}, [note("people/Ada.md", { title: "Ada" }), note("Overview.md", { slug: "ada", title: "Overview" })]);
+    const { links } = ctx.compiler?.serverData.get("submissions") as BuildData;
+
+    expect(links).toContainEqual({ link: "people/Ada", title: "Ada" });
+    expect(links).toContainEqual({ link: "Overview", title: "Overview" });
   });
 
   it("uses the configured vault folder over git's", async () => {

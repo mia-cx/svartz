@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import "../src/browser.css";
 import type { BrowserOptions } from "../src/api";
 import { mount } from "../src/browser";
+import { readDraft, storeDraft } from "../src/draft";
 import { mount as mountAuth } from "@svartz/auth/browser";
 
 // CRLF line endings and frontmatter: the edit must keep every byte it doesn't touch.
@@ -12,9 +13,17 @@ const CONTEXT = { base: "/docs" };
 
 let unmount: (() => void) | void;
 
-/** The site's server: `source` for the guide's source, and `edit` for the pull request answer. */
+/** What the build lets a wikilink name: protected and hidden notes are never among them. */
+const NOTES = [
+  { link: "Ada Lovelace", title: "Ada Lovelace" },
+  { link: "People/Grace", title: "Grace Hopper" },
+  { link: "Guide", title: "Guide" },
+];
+
+/** The site's server: `source` for the guide's source, `links/` for the notes, and `edit` for the pull request answer. */
 function serve(edit: () => Response | Promise<Response>, source = () => Response.json({ markdown: SOURCE })) {
-  const fetch = vi.fn(async (url: string, init?: RequestInit) => url.includes("/source/") ? source() : edit());
+  const fetch = vi.fn(async (url: string, init?: RequestInit) =>
+    url.includes("/source/") ? source() : url.includes("/links/") ? Response.json({ notes: NOTES }) : edit());
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
@@ -23,11 +32,18 @@ async function openEditor(options: BrowserOptions = OPTIONS) {
   unmount = mount("/docs/wiki/guide/", options, CONTEXT);
   await page.getByRole("button", { name: "Edit" }).click();
   const source = page.getByRole("textbox", { name: "Page source" });
-  await expect.element(source).toHaveTextContent("# Guide");
+  await expect.element(source).toHaveTextContent("Guide");
   // Append at the end of the document.
   const mod = navigator.platform.startsWith("Mac") ? "Meta" : "Control";
   await source.click();
   await userEvent.keyboard(`{${mod}>}{End}{/${mod}}Welcome.`);
+}
+
+/** Reopen the editor on the guide and restore the edit navigation kept. */
+async function restoreDraft() {
+  unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Restore edit" }).click();
 }
 
 beforeEach(() => {
@@ -36,6 +52,9 @@ beforeEach(() => {
 
 afterEach(() => {
   if (unmount) unmount();
+  unmount = undefined;
+  // Navigation keeps drafts, so each test starts with none.
+  localStorage.clear();
   vi.unstubAllGlobals();
 });
 
@@ -159,7 +178,7 @@ describe("Edit", () => {
     // Navigation closes the panel without asking.
     if (unmount) unmount();
 
-    await openEditor();
+    await restoreDraft();
     await page.getByRole("button", { name: "Open pull request" }).click();
     await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
     if (unmount) unmount();
@@ -189,7 +208,7 @@ describe("Edit", () => {
     land(Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    await openEditor();
+    await restoreDraft();
     await page.getByRole("button", { name: "Open pull request" }).click();
     await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
 
@@ -241,7 +260,7 @@ describe("Edit", () => {
     unmount = mount("/docs/wiki/caf%C3%A9/", { ...OPTIONS, pages: ["/wiki/café/"] }, CONTEXT);
     await page.getByRole("button", { name: "Edit" }).click();
 
-    await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("# Guide");
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("Guide");
     expect(fetch.mock.calls[0]![0]).toBe(`/docs/wiki/_svartz/submissions/source/?page=${encodeURIComponent("/wiki/café/")}`);
   });
 
@@ -263,13 +282,13 @@ describe("sign-in", () => {
   let unmountAuth: (() => void) | undefined;
 
   beforeEach(() => {
-    sessionStorage.clear();
+    localStorage.clear();
     unmountAuth = mountAuth(HERE, { endpoint: "/_svartz/auth", providers: [{ id: "github", label: "GitHub" }] });
   });
 
   afterEach(() => {
     unmountAuth?.();
-    sessionStorage.clear();
+    localStorage.clear();
     vi.restoreAllMocks();
   });
 
@@ -280,12 +299,21 @@ describe("sign-in", () => {
     unmount = mount(HERE, SIGN_IN_OPTIONS, { base: "" });
   }
 
+  /** Leave the page and come back: no sign-in is pending, so the panel stays shut until the reader opens it. */
+  async function expectNoReopen() {
+    if (unmount) unmount();
+    unmount = mount(HERE, SIGN_IN_OPTIONS, { base: "" });
+    await import("../src/editor");
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(document.querySelector("dialog.svartz-submissions")).toBeNull();
+  }
+
   /** Open Edit on this page and add a word to the source. */
   async function writeEdit() {
     unmount = mount(HERE, SIGN_IN_OPTIONS, { base: "" });
     await page.getByRole("button", { name: "Edit" }).click();
     const source = page.getByRole("textbox", { name: "Page source" });
-    await expect.element(source).toHaveTextContent("# Guide");
+    await expect.element(source).toHaveTextContent("Guide");
     await source.click();
     await userEvent.keyboard("Welcome.");
   }
@@ -310,7 +338,7 @@ describe("sign-in", () => {
     const [signedOut, signedIn] = fetch.mock.calls.filter(([url]) => url.includes("/edit/")).map(([, init]) => JSON.parse(String(init!.body)));
     expect(signedIn).toMatchObject({ page: HERE, markdown: signedOut.markdown, note: "Greet readers." });
     expect(signedIn.markdown).toContain("Welcome.");
-    expect(sessionStorage.length).toBe(0);
+    expect(localStorage.length).toBe(0);
   });
 
   it("keeps a new page's title and section through the round trip", async () => {
@@ -328,7 +356,7 @@ describe("sign-in", () => {
 
     await expect.element(page.getByRole("textbox", { name: "Title" })).toHaveValue("Ada Lovelace");
     await expect.element(page.getByRole("combobox", { name: "Section" })).toHaveValue("People");
-    await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("# Ada Lovelace");
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("Ada Lovelace");
     await expect.element(page.getByRole("button", { name: "Open pull request" })).toBeEnabled();
   });
 
@@ -352,7 +380,7 @@ describe("sign-in", () => {
     sourceDown = false;
     await page.getByRole("button", { name: "Edit" }).click();
     await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("Welcome.");
-    expect(sessionStorage.length).toBe(0);
+    await expectNoReopen();
   });
 
   it("ignores a sign-in refusal that arrives after navigation closed the panel", async () => {
@@ -366,7 +394,7 @@ describe("sign-in", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(document.querySelector("dialog.sv-auth")).toBeNull();
-    expect(sessionStorage.length).toBe(0);
+    await expectNoReopen();
   });
 
   it("asks the reader to copy their changes when the browser can't keep them", async () => {
@@ -480,5 +508,338 @@ describe("New page", () => {
     unmount = mount("/docs/wiki/guide/", { ...OPTIONS, folders: [] }, CONTEXT);
 
     expect(document.querySelector('[data-svartz-region="site-actions"]')?.children).toHaveLength(0);
+  });
+});
+
+/** The source's lines as they show, by line number from 1. */
+const shownLine = (number: number) => document.querySelectorAll(".svartz-submissions .cm-line")[number - 1] as HTMLElement;
+
+/** Put the cursor on `line` by clicking it; wrapped lines make arrow keys count rows, not lines. */
+const cursorTo = (line: number) => userEvent.click(shownLine(line));
+
+/** The Markdown the edit sent. */
+function sentMarkdown(): string {
+  const [, init] = vi.mocked(globalThis.fetch).mock.calls.find(([url]) => String(url).includes("/edit/"))!;
+  return JSON.parse(String(init!.body)).markdown;
+}
+
+/** Open Edit on `markdown`, with the cursor on `line`. */
+async function openOn(markdown: string, line = 1) {
+  serve(() => Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }), () => Response.json({ markdown }));
+  unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+  await page.getByRole("button", { name: "Edit" }).click();
+  const source = page.getByRole("textbox", { name: "Page source" });
+  await expect.element(source).toBeVisible();
+  await cursorTo(line);
+  return source;
+}
+
+describe("Live Preview", () => {
+  const NOTE = [
+    "# Guide",
+    "",
+    "Some **bold**, *soft* and `code` text with [a link](https://example.com).",
+    "",
+    "See [[People/Ada Lovelace|Ada]] and ![[diagram.png]].",
+    "",
+    "> [!warning] Mind the gap",
+    "> Inside the callout.",
+    "",
+    "- [ ] Write the page",
+    "",
+    "Read [the docs][docs].",
+    "",
+    "[docs]: https://example.com/docs",
+  ].join("\n");
+
+  it("shows Markdown formatted away from the cursor, and raw on the cursor's line", async () => {
+    await openOn(NOTE, 1);
+
+    expect(shownLine(1).textContent).toBe("# Guide");
+    expect(shownLine(1).classList).toContain("cm-lp-h1");
+    expect(shownLine(3).textContent).toBe("Some bold, soft and code text with a link.");
+    expect(shownLine(3).querySelector(".cm-lp-strong")?.textContent).toBe("bold");
+    expect(shownLine(5).textContent).toBe("See Ada and diagram.png.");
+    expect(shownLine(5).querySelector(".cm-lp-embed")?.textContent).toBe("diagram.png");
+    expect(shownLine(7).textContent).toBe("Warning Mind the gap");
+    expect(shownLine(7).dataset.callout).toBe("warning");
+    expect(shownLine(8).textContent).toBe("Inside the callout.");
+    await expect.element(page.getByRole("checkbox", { name: "Done" })).not.toBeChecked();
+    expect(shownLine(12).textContent).toBe("Read the docs.");
+    // A reference definition is content, not syntax.
+    expect(shownLine(14).textContent).toBe("[docs]: https://example.com/docs");
+
+    await cursorTo(5);
+    await expect.poll(() => shownLine(5).textContent).toBe("See [[People/Ada Lovelace|Ada]] and ![[diagram.png]].");
+    expect(shownLine(1).textContent).toBe("Guide");
+  });
+
+  it("ticks a task from its checkbox", async () => {
+    await openOn(NOTE, 1);
+    await page.getByRole("checkbox", { name: "Done" }).click();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+
+    expect(sentMarkdown()).toBe(NOTE.replace("- [ ]", "- [x]"));
+  });
+
+  it("opens a note whose link syntax spans lines, showing that syntax", async () => {
+    await openOn('# Guide\n\n[link](https://example.com "Title\ncontinued")\n\nSee [[target\ncontinued|label]].\n', 1);
+
+    expect(shownLine(3).textContent).toBe('link "Title');
+    // A wikilink stays on one line, so Markdown reads only the inner brackets, as a link.
+    expect(shownLine(7).textContent).toBe("continued|label].");
+  });
+
+  it("ticks a task from the keyboard, keeping focus on its checkbox", async () => {
+    await openOn(NOTE, 1);
+    await userEvent.tab();
+    const box = page.getByRole("checkbox", { name: "Done" });
+    await expect.element(box).toHaveFocus();
+    await userEvent.keyboard(" ");
+
+    await expect.element(box).toBeChecked();
+    await expect.element(box).toHaveFocus();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+    expect(sentMarkdown()).toBe(NOTE.replace("- [ ]", "- [x]"));
+  });
+
+  it("leaves tasks alone while the pull request opens", async () => {
+    let answer!: (response: Response) => void;
+    await openOn(NOTE, 1);
+    await userEvent.keyboard("{End}!");
+    serve(() => new Promise((resolve) => { answer = resolve; }), () => Response.json({ markdown: NOTE }));
+    await page.getByRole("button", { name: "Open pull request" }).click();
+
+    const box = page.getByRole("checkbox", { name: "Done" });
+    await expect.element(box).toBeDisabled();
+    // What a script or assistive technology could still send to it.
+    box.element().dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    (box.element() as HTMLInputElement).click();
+    answer(Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+
+    await expect.element(box).not.toBeChecked();
+    await expect.element(box).toBeDisabled();
+    expect(sentMarkdown()).toBe(NOTE.replace("# Guide", "# Guide!"));
+    await page.getByRole("radio", { name: "Source" }).click();
+    expect(shownLine(10).textContent).toBe("- [ ] Write the page");
+  });
+
+  it("switches to Source and back without changing a byte, and remembers the choice", async () => {
+    await openOn(SOURCE, 5);
+    await userEvent.keyboard("{End} today");
+    await page.getByRole("radio", { name: "Source" }).click();
+    await cursorTo(1);
+    expect(shownLine(5).textContent).toBe("# Guide today");
+    await page.getByRole("radio", { name: "Live Preview" }).click();
+    // Formatting follows the parser, which runs after the switch.
+    await expect.poll(() => shownLine(5).textContent).toBe("Guide today");
+    await page.getByRole("radio", { name: "Source" }).click();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+
+    expect(sentMarkdown()).toBe(SOURCE.replace("# Guide", "# Guide today"));
+
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect.element(page.getByRole("radio", { name: "Source" })).toBeChecked();
+  });
+
+  it("switches modes from the keyboard", async () => {
+    await openOn(SOURCE);
+    await page.getByRole("radio", { name: "Live Preview" }).click();
+    await userEvent.keyboard("{ArrowRight}");
+
+    await expect.element(page.getByRole("radio", { name: "Source" })).toBeChecked();
+    await expect.element(page.getByRole("group", { name: "Editor mode" })).toBeVisible();
+  });
+});
+
+describe("drafts", () => {
+  /** Write in the editor, pause long enough for the autosave, then lose the page without any cleanup, as a crash does. */
+  async function writeThenCrash() {
+    await openEditor();
+    await page.getByLabelText("What changed").fill("Greet readers.");
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    document.querySelector("dialog")?.remove();
+    unmount = undefined;
+    document.body.innerHTML = '<nav data-svartz-region="site-actions"></nav><div class="sv-page-actions"><span data-svartz-region="page-actions"></span></div>';
+    unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+    await page.getByRole("button", { name: "Edit" }).click();
+  }
+
+  it("offers an unsent edit back after a crash, and restores it from the keyboard", async () => {
+    serve(() => Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
+    await writeThenCrash();
+
+    await expect.element(page.getByRole("group", { name: /^Unsent edit from / })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Restore edit" })).toHaveFocus();
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).not.toHaveTextContent("Welcome.");
+    await userEvent.keyboard("{Enter}");
+
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("Welcome.");
+    await expect.element(page.getByLabelText("What changed")).toHaveValue("Greet readers.");
+    await expect.element(page.getByRole("group", { name: /^Unsent edit/ })).not.toBeInTheDocument();
+  });
+
+  it("takes no new writing until the reader answers the offer, so none goes unsaved", async () => {
+    serve(() => Response.json({}));
+    await writeThenCrash();
+    await page.getByRole("textbox", { name: "Page source" }).click();
+    await userEvent.keyboard("Lost?");
+    await page.getByLabelText("What changed").click();
+    await userEvent.keyboard("Lost?");
+
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).not.toHaveTextContent("Lost?");
+    await expect.element(page.getByLabelText("What changed")).toHaveValue("");
+    await page.getByRole("button", { name: "Discard edit" }).click();
+    await page.getByLabelText("What changed").fill("Kept.");
+    await expect.element(page.getByLabelText("What changed")).toHaveValue("Kept.");
+  });
+
+  it("still forgets its restored draft on Discard after an autosave storage refused", async () => {
+    serve(() => Response.json({}));
+    vi.stubGlobal("confirm", () => true);
+    await writeThenCrash();
+    await page.getByRole("button", { name: "Restore edit" }).click();
+    const full = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Storage is full.", "QuotaExceededError");
+    });
+    await page.getByLabelText("What changed").fill("Greet every reader.");
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    full.mockRestore();
+    await page.getByRole("button", { name: "Close editor" }).click();
+
+    expect(readDraft("/docs/wiki/_svartz/submissions", { kind: "edit", page: "/wiki/guide/" })).toBeUndefined();
+  });
+
+  it("forgets the draft the reader discards", async () => {
+    serve(() => Response.json({}));
+    await writeThenCrash();
+    await page.getByRole("button", { name: "Discard edit" }).click();
+
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).not.toHaveTextContent("Welcome.");
+    await expect.element(page.getByLabelText("What changed")).toHaveValue("");
+    await page.getByRole("button", { name: "Close editor" }).click();
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toBeVisible();
+    expect(document.querySelector(".svartz-submissions-restore")).toBeNull();
+  });
+
+  it("keeps a new page's title and section", async () => {
+    serve(() => Response.json({}));
+    unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+    await page.getByRole("button", { name: "New page" }).click();
+    await userEvent.keyboard("Ada Lovelace");
+    await page.getByRole("combobox", { name: "Section" }).selectOptions("People");
+    await page.getByRole("textbox", { name: "Page source" }).click();
+    await userEvent.keyboard("She wrote the first program.");
+    // Navigation closes the panel without asking.
+    if (unmount) unmount();
+
+    unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+    await page.getByRole("button", { name: "New page" }).click();
+    await page.getByRole("button", { name: "Restore page" }).click();
+    await expect.element(page.getByRole("textbox", { name: "Title" })).toHaveValue("Ada Lovelace");
+    await expect.element(page.getByRole("combobox", { name: "Section" })).toHaveValue("People");
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("She wrote the first program.");
+  });
+
+  it("keeps a draft another tab saved while this one had nothing written", async () => {
+    serve(() => Response.json({}));
+    const endpoint = "/docs/wiki/_svartz/submissions";
+    const target = { kind: "edit", page: "/wiki/guide/" } as const;
+    const other = { kind: "edit", page: "/wiki/guide/", markdown: "From the other tab.", note: "", savedAt: Date.now() } as const;
+    for (const leave of ["navigation", "close"] as const) {
+      unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+      await page.getByRole("button", { name: "Edit" }).click();
+      await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("Guide");
+      storeDraft(endpoint, target, other);
+      if (leave === "close") await page.getByRole("button", { name: "Close editor" }).click();
+      unmount?.();
+      unmount = undefined;
+
+      expect(readDraft(endpoint, target)).toEqual(other);
+    }
+  });
+
+  it("keeps a discarded edit discarded when the page is left afterwards", async () => {
+    serve(() => Response.json({}));
+    vi.stubGlobal("confirm", () => true);
+    await openEditor();
+    await page.getByRole("button", { name: "Close editor" }).click();
+    unmount?.();
+    unmount = undefined;
+
+    expect(readDraft("/docs/wiki/_svartz/submissions", { kind: "edit", page: "/wiki/guide/" })).toBeUndefined();
+  });
+
+  it("forgets the draft once the pull request opens", async () => {
+    serve(() => Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
+    await openEditor();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+    if (unmount) unmount();
+
+    unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveFocus();
+    expect(document.querySelector(".svartz-submissions-restore")).toBeNull();
+  });
+});
+
+describe("wikilink autocomplete", () => {
+  it("suggests the site's notes after [[ and inserts the one picked from the keyboard", async () => {
+    const source = await openOn("# Guide\n", 2);
+    // `[[` types one `[` in userEvent's syntax.
+    await userEvent.keyboard("See [[[[");
+
+    await expect.element(page.getByRole("listbox")).toBeVisible();
+    // Each note's link, then its title when the link doesn't already say it.
+    expect(page.getByRole("option").elements().map((option) => option.textContent)).toEqual([
+      "Ada Lovelace",
+      "Guide",
+      "People/GraceGrace Hopper",
+    ]);
+    // CodeMirror ignores Enter for 75ms after the list opens, so a keystroke meant for the text isn't taken as a pick.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    await expect.element(page.getByRole("listbox")).not.toBeInTheDocument();
+    await userEvent.keyboard(" today.");
+
+    await page.getByRole("radio", { name: "Source" }).click();
+    await expect.element(source).toHaveTextContent("See [[People/Grace]] today.");
+  });
+
+  // `[[` types one `[` in userEvent's syntax; the cursor goes back before `after`, where the reader types `Gr`.
+  it.each([
+    ["a label", "|label]]", "See [[People/Grace|label]]"],
+    ["a label with a bracket", "|A [[label]]", "See [[People/Grace|A [label]]"],
+    ["a heading", "#Heading]]", "See [[People/Grace#Heading]]"],
+    ["the rest of the name", "ace]]", "See [[People/Grace]]"],
+    ["text after an unclosed link", " and more.", "See [[People/Grace]] and more."],
+    ["a later link on the line", " and [[[[Guide]]", "See [[People/Grace]] and [[Guide]]"],
+  ])("completes a link before %s without breaking it", async (_, after, expected) => {
+    const source = await openOn("# Guide\n", 2);
+    await userEvent.keyboard(`See [[[[${after}{ArrowLeft>${after.replaceAll("[[", "[").length}/}Gr`);
+    await expect.element(page.getByRole("option", { name: /People\/Grace/ })).toBeVisible();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await userEvent.keyboard("{Enter}");
+
+    await page.getByRole("radio", { name: "Source" }).click();
+    await expect.element(source).toHaveTextContent(expected);
+    expect(shownLine(2).textContent).toBe(expected);
+  });
+
+  it("narrows the suggestions as the reader types, and Escape closes them", async () => {
+    await openOn("# Guide\n", 2);
+    await userEvent.keyboard("[[[[gra");
+
+    await expect.element(page.getByRole("option")).toHaveTextContent("People/GraceGrace Hopper");
+    await userEvent.keyboard("{Escape}");
+    await expect.element(page.getByRole("listbox")).not.toBeInTheDocument();
+    await expect.element(page.getByRole("dialog")).toBeVisible();
   });
 });
