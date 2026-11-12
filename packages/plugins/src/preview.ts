@@ -15,7 +15,6 @@ import { visit } from "unist-util-visit";
 import { findLinkSpans, type PositionedLink } from "./internal/link-spans";
 import { markdownProcessor } from "./internal/markdown-processor";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
-import { routeHref } from "./internal/routes";
 import { fileToSlug } from "./internal/slug";
 import { transformMarkdown } from "./internal/ofm";
 
@@ -38,7 +37,7 @@ export interface PreviewOptions {
   readonly path: string;
   /** SvelteKit's deployment base, which every link's URL starts with. */
   readonly base: string;
-  /** The vault's mount path, `""` at the site's root: a new note's route starts with it. */
+  /** The vault's mount path, `""` at the site's root: attachment URLs start with it. */
   readonly mountPath: string;
   /** The theme's tags route, as `theme.routes.tags`. */
   readonly tagsRoute?: string;
@@ -56,7 +55,7 @@ function escapeHtml(value: string): string {
 }
 
 /** `markdown` as the build hands it to the Markdown compiler, for a preview of the note at `options.path`. */
-function prepare(markdown: string, options: PreviewOptions): { content: string; route: string } {
+function prepare(markdown: string, options: PreviewOptions): string {
   const { notes, linkResolution, path, base } = options;
   const slugMap = buildSlugMap(notes);
   const slugs = notes.map((note) => note.slug);
@@ -89,23 +88,24 @@ function prepare(markdown: string, options: PreviewOptions): { content: string; 
     const title = label.join("|").trim() || notes.find((note) => note.slug === slug)!.title;
     return `<div class="svartz-embed" data-embed="${escapeHtml(slug)}"><p class="svartz-embed-source"><a href="${escapeHtml(url(slug, section?.trim()))}">${escapeHtml(title)}</a></p></div>`;
   });
-  return { content: embedded, route: `${base}${hrefs.get(sourceSlug) ?? routeHref(sourceSlug, options.mountPath)}` };
+  return embedded;
 }
 
 /**
  * The note's HTML, rendered from `markdown` (frontmatter and all) as the site would render its body. Relative URLs
- * resolve from the note's route, so they work wherever the preview shows.
+ * left after link resolution name attachments: they resolve from the note's folder to where the build publishes
+ * attachments, `<base><mount>/<vault path>`, so they work wherever the preview shows.
  */
 export async function renderPreview(markdown: string, options: PreviewOptions): Promise<string> {
-  const { content, route } = prepare(markdown, options);
   const processor = markdownProcessor([remarkGfm]);
-  const tree = await processor.run(processor.parse(content)) as Root;
+  const tree = await processor.run(processor.parse(prepare(markdown, options))) as Root;
+  const folder = `https://preview.invalid/${options.path.slice(0, options.path.lastIndexOf("/") + 1)}`;
   visit(tree, "element", (node) => {
     for (const name of ["href", "src"] as const) {
       const value = node.properties[name];
       if (typeof value !== "string" || !value || value.startsWith("#") || value.startsWith("/") || SCHEME.test(value)) continue;
-      const resolved = new URL(value, `https://preview.invalid${route}`);
-      node.properties[name] = resolved.pathname + resolved.search + resolved.hash;
+      const resolved = new URL(value, folder);
+      node.properties[name] = `${options.base}${options.mountPath}${resolved.pathname}${resolved.search}${resolved.hash}`;
     }
   });
   return toHtml(tree);

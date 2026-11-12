@@ -56,10 +56,11 @@ describe("renderPreview", () => {
     expect(html).toContain('<pre><code class="language-mermaid">graph TD; [[Ada]]\n</code></pre>');
   });
 
-  it("resolves relative URLs and tags from a new note's route", async () => {
-    const html = await render("![chart](chart.png) #draft", { path: "People/New Page.md" });
+  it("resolves relative attachment URLs from the note's folder, where the build publishes attachments", async () => {
+    const html = await render("![chart](chart.png) ![logo](../Assets/logo%201.png) #draft", { path: "People/New Page.md" });
 
-    expect(html).toContain('src="/docs/wiki/people/new-page/chart.png"');
+    expect(html).toContain('src="/docs/wiki/People/chart.png"');
+    expect(html).toContain('src="/docs/wiki/Assets/logo%201.png"');
     expect(html).toContain('href="/docs/wiki/tags/draft/"');
   });
 });
