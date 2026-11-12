@@ -3,8 +3,9 @@
  * and the pull request link once submitted. Edit opens it on a published note's source; New page opens it blank,
  * under a title and a section. Loaded on the first click of either.
  *
- * The source opens in Live Preview, Source or Split, as the reader last chose, and suggests published notes after `[[`.
- * Split shows the source beside the page as the site renders it, or under Write and Preview tabs on a phone. What
+ * The source opens in Live Preview, Source, Rich text or Split, as the reader last chose, and suggests published notes
+ * after `[[`. Rich text formats from a toolbar and edits frontmatter as properties, loading on first use. Split shows
+ * the source beside the page as the site renders it, or under Write and Preview tabs on a phone. What
  * the reader writes is kept as a {@link Draft} while they write it; the panel offers it back when it next opens on the
  * same page, warning when the page's source has changed since. When the server asks for sign-in, the panel marks the draft to resume and opens `@svartz/auth`'s sign-in
  * dialog; signing in returns the reader to the page, and the panel reopens with the draft at once.
@@ -51,13 +52,15 @@ export interface EditorInput {
 
 /**
  * How the source shows, as the mode switch lists them, with the extension each installs. Every mode edits the same
- * document, so switching never changes its bytes. Split shows the raw source beside the rendered page.
+ * document, so switching never changes its bytes. Rich text loads the first time it opens. Split shows the raw source
+ * beside the rendered page.
  */
-const MODES = {
+const MODES: Record<"live" | "source" | "rich" | "split", { label: string; extension: () => Extension | Promise<Extension> }> = {
   live: { label: "Live Preview", extension: livePreview },
-  source: { label: "Source", extension: (): Extension => [] },
-  split: { label: "Split", extension: (): Extension => [] },
-} as const;
+  source: { label: "Source", extension: () => [] },
+  rich: { label: "Rich text", extension: () => import("./rich-text").then(({ richText }) => richText()) },
+  split: { label: "Split", extension: () => [] },
+};
 type Mode = keyof typeof MODES;
 /** theme-minimal's phone breakpoint: below it, Split's panes become Write and Preview tabs. */
 const PHONE = "(max-width: 40rem)";
@@ -265,8 +268,22 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     radio.addEventListener("change", () => {
       mode = radio.value as Mode;
       rememberMode(mode);
-      view?.dispatch({ effects: presentation.reconfigure(MODES[mode].extension()) });
+      present();
       arrange();
+    });
+  }
+
+  /** Install the mode's presentation, once it has loaded; a mode chosen meanwhile wins. */
+  function present() {
+    const shown = mode;
+    const install = (extension: Extension) => {
+      if (shown === mode) view?.dispatch({ effects: presentation.reconfigure(extension) });
+    };
+    const extension = MODES[shown].extension();
+    if (!(extension instanceof Promise)) return install(extension);
+    void extension.then(install, (cause: unknown) => {
+      console.error(`[submissions] couldn't load ${MODES[shown].label}`, cause);
+      if (shown === mode) showError({ message: `Couldn't load ${MODES[shown].label}. Check your connection, then choose it again.` });
     });
   }
 
@@ -602,7 +619,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
           EditorView.lineWrapping,
           EditorView.contentAttributes.of({ "aria-label": "Page source" }),
           editable.of(EditorView.editable.of(true)),
-          presentation.of(MODES[mode].extension()),
+          presentation.of([]),
           wikilinkCompletion(endpoint),
           ...(target.kind === "new" ? [placeholder("Write the page in Markdown.")] : []),
           EditorView.updateListener.of((update) => {
@@ -615,6 +632,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
         ],
       }),
     });
+    present();
     refreshPreview();
   }
 
