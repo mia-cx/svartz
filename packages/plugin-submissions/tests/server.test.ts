@@ -5,11 +5,15 @@ import createHandler from "../src/server";
 import { GITHUB_TIMEOUT_MS } from "../src/github";
 import type { GuardOptions } from "../src/guard";
 import {
+  APP_ID,
+  APP_KEY,
   branchFor,
   BUILD_COMMIT,
   editExchanges,
   existenceCheck,
   GUIDE_SOURCE,
+  INSTALLATION_TOKEN,
+  installationLookup,
   newPageExchanges,
   pullLookup,
   REPO,
@@ -17,6 +21,7 @@ import {
   sourceExchange,
   SUBMISSION_ID,
   TOKEN,
+  tokenExchange,
   useFakeTimeouts,
 } from "./github-exchanges";
 
@@ -157,6 +162,54 @@ describe("submissions server", () => {
       body: {
         error: "misconfigured",
         message: "This site can't open pull requests yet: its server has no SVARTZ_GITHUB_TOKEN set.",
+      },
+    });
+  });
+});
+
+describe("as a GitHub App", () => {
+  const appHandler = (guard: GuardOptions = { rateLimit: { limit: 100, period: 60 } }) => createHandler(
+    { repo: REPO, labels: ["submission"], app: { id: APP_ID, privateKey: { env: "SVARTZ_GITHUB_APP_KEY" } }, guard },
+    { commit: BUILD_COMMIT, pages: { "/wiki/guide/": "content/guide.md" }, routes: {}, vaultRoot: "content", folders: [""] },
+  );
+  const appEnv = { SVARTZ_GITHUB_APP_KEY: APP_KEY.pkcs1 };
+
+  it("reads the source and opens the pull request with one installation token", async () => {
+    const markdown = GUIDE_SOURCE.replace("Set up the wiki.", "Set up the wiki in five minutes.");
+    const note = "Added the time it takes.";
+    const serve = appHandler();
+    const github = replayGitHub([
+      installationLookup,
+      tokenExchange(new Date(Date.now() + 60 * 60_000).toISOString()),
+      sourceExchange,
+      ...editExchanges({ markdown, note, pageUrl: `${ORIGIN}/docs/wiki/guide/`, branch: branchFor("wiki-guide") }),
+    ], INSTALLATION_TOKEN);
+
+    expect(await answer(source("/wiki/guide/"), appEnv, serve)).toEqual({ status: 200, body: { markdown: GUIDE_SOURCE } });
+    expect(await answer(edit({ page: "/wiki/guide/", markdown, note }), appEnv, serve)).toEqual({
+      status: 201,
+      body: { url: `https://github.com/${REPO}/pull/42`, number: 42 },
+    });
+    expect(github.pending).toEqual([]);
+  });
+
+  it("passes the guard before exchanging the App's credentials", async () => {
+    const github = replayGitHub([]);
+    const guarded = appHandler({ turnstile: { siteKey: "0x4AAAAAAAtest", secret: { env: "TURNSTILE_SECRET" } }, rateLimit: { limit: 5, period: 60 } });
+
+    expect(await answer(edit({ page: "/wiki/guide/", markdown: "x" }), appEnv, guarded)).toMatchObject({
+      status: 403,
+      body: { error: "turnstile_required" },
+    });
+    expect(github.requests).toEqual([]);
+  });
+
+  it("names the missing private key variable", async () => {
+    expect(await answer(source("/wiki/guide/"), {}, appHandler())).toEqual({
+      status: 503,
+      body: {
+        error: "misconfigured",
+        message: "This site can't open pull requests yet: its server has no SVARTZ_GITHUB_APP_KEY set.",
       },
     });
   });

@@ -46,20 +46,26 @@ interface PullRequest {
   readonly number: number;
 }
 
-const unavailable = () =>
+export const unavailable = () =>
   new SubmissionError("github_unavailable", 503, "Couldn't reach GitHub right now. Try again in a moment.");
 
 /**
- * One GitHub request, its body read in full within {@link GITHUB_TIMEOUT_MS}. No answer in time, or none at all,
- * throws `github_unavailable`; whether GitHub acted on the request is then unknown.
+ * One GitHub request to `path` below the API root, its body read in full within {@link GITHUB_TIMEOUT_MS}. No answer
+ * in time, or none at all, throws `github_unavailable`; whether GitHub acted on the request is then unknown.
  */
-async function send(target: GitHubTarget, method: string, path: string, body?: unknown, accept = "application/vnd.github+json") {
+export async function requestGitHub(
+  token: string,
+  method: string,
+  path: string,
+  body?: unknown,
+  accept = "application/vnd.github+json",
+): Promise<Response> {
   try {
-    const response = await fetch(`${API}/repos/${target.repo}${path}`, {
+    const response = await fetch(`${API}${path}`, {
       method,
       headers: {
         accept,
-        authorization: `Bearer ${target.token}`,
+        authorization: `Bearer ${token}`,
         "user-agent": "svartz-submissions",
         "x-github-api-version": "2022-11-28",
         ...(body === undefined ? {} : { "content-type": "application/json" }),
@@ -72,6 +78,10 @@ async function send(target: GitHubTarget, method: string, path: string, body?: u
   } catch {
     throw unavailable();
   }
+}
+
+function send(target: GitHubTarget, method: string, path: string, body?: unknown, accept?: string) {
+  return requestGitHub(target.token, method, `/repos/${target.repo}${path}`, body, accept);
 }
 
 /** The reader-facing error for a GitHub response that failed. */

@@ -18,7 +18,7 @@ import { definePlugin, getCompilerContributions, type EnvReference, type Process
 import { isNote, pathRoute, requestedSlug, routeHref } from "@svartz/plugins/routes";
 import { PLUGIN_ID, type BrowserOptions } from "./api";
 import type { GuardOptions, RateLimitOptions, TurnstileOptions } from "./guard";
-import type { BuildData, ServerOptions } from "./server";
+import type { BuildData, Credentials, ServerOptions } from "./server";
 
 export interface SubmissionsOptions {
   /** The GitHub repository pull requests open on, as `owner/name`. */
@@ -31,9 +31,18 @@ export interface SubmissionsOptions {
   readonly labels?: readonly string[];
   /**
    * The server environment variable holding a fine-grained GitHub token with read and write access to the
-   * repository's Contents and Pull requests. Default: `{ env: "SVARTZ_GITHUB_TOKEN" }`.
+   * repository's Contents and Pull requests. Default, unless `app` is set: `{ env: "SVARTZ_GITHUB_TOKEN" }`.
    */
   readonly token?: EnvReference;
+  /** Open pull requests as a GitHub App, in place of `token`: they then come from `<app>[bot]`. */
+  readonly app?: {
+    /** The App's ID, or its Client ID. */
+    readonly id: number | string;
+    /** The server environment variable holding the App's private key, the `.pem` file GitHub generates. */
+    readonly privateKey: EnvReference;
+    /** The App's installation ID on `repo`. Default: looked up from the repository. */
+    readonly installation?: number;
+  };
   /** What every submission must pass before it reaches GitHub. */
   readonly guard?: {
     /** Show a Cloudflare Turnstile challenge in the editor and verify its token on the server. */
@@ -123,17 +132,37 @@ function routeClaims(files: readonly ProcessedFile[], mountPath: string): Record
   return claims;
 }
 
+/** Exactly one kind of GitHub credentials, checked so a typo fails the build instead of every submission. */
+function credentials({ token, app }: SubmissionsOptions): Credentials {
+  if (token && app) fail("set either token or app, not both");
+  if (!app) {
+    if (token && isBlank(token.env)) fail('token must name its environment variable: { env: "NAME" }');
+    return { token: { env: (token ?? DEFAULT_TOKEN).env } };
+  }
+  if (!isPositiveInteger(app.id) && isBlank(app.id)) fail("app.id must be the App's ID or Client ID");
+  if (isBlank(app.privateKey?.env)) fail('app.privateKey must name its environment variable: { env: "NAME" }');
+  if (app.installation !== undefined && !isPositiveInteger(app.installation)) {
+    fail("app.installation must be the installation's numeric ID, or left out to look it up");
+  }
+  return {
+    app: {
+      id: app.id,
+      privateKey: { env: app.privateKey.env },
+      ...(app.installation === undefined ? {} : { installation: app.installation }),
+    },
+  };
+}
+
 /** Let readers edit any published Markdown note, or add one in a published folder, as a pull request on `repo`. */
 export function submissions(options: SubmissionsOptions) {
   if (!REPO_PATTERN.test(options.repo)) fail(`repo "${options.repo}" must be "owner/name".`);
-  if (options.token && isBlank(options.token.env)) fail('token must name its environment variable: { env: "NAME" }');
   const guard = guardOptions(options.guard);
   const vaultRoot = options.vaultRoot === undefined ? undefined : normalizeVaultRoot(options.vaultRoot);
   const serverOptions: ServerOptions = {
     repo: options.repo,
     ...(options.branch ? { branch: options.branch } : {}),
     labels: [...(options.labels ?? [])],
-    token: options.token ?? DEFAULT_TOKEN,
+    ...credentials(options),
     guard,
   };
 
