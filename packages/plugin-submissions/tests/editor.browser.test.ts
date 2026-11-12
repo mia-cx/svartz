@@ -1268,7 +1268,7 @@ describe("Rich text", () => {
 
   /** `markdown` as the site renders it, parsed. */
   async function rendered(markdown: string) {
-    const html = await renderPreview(markdown, { notes: [], linkResolution: "shallowest", path: "guide.md", base: "", mountPath: "" });
+    const html = await renderPreview(markdown, { notes: [], attachments: [], linkResolution: "shallowest", path: "guide.md", base: "", mountPath: "" });
     return new DOMParser().parseFromString(html, "text/html").body;
   }
 
