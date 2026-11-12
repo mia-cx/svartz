@@ -23,7 +23,7 @@ const NOTES = [
   { link: "People/Grace", title: "Grace Hopper", slug: "people/grace", path: "People/Grace.md", href: "/wiki/people/grace/" },
   { link: "Guide", title: "Guide", slug: "guide", path: "Guide.md", href: "/wiki/guide/" },
 ];
-const LINKS = { notes: NOTES, linkResolution: "shallowest", mountPath: "/wiki", tagsRoute: "tags" };
+const LINKS = { notes: NOTES, linkResolution: "shallowest", mountPath: "/wiki", tagsRoute: "tags", attachments: [] };
 
 /** The site's server: `source` for the guide's source, `links/` for the notes, and `edit` for the pull request answer. */
 function serve(edit: () => Response | Promise<Response>, source = () => Response.json({ markdown: SOURCE })) {

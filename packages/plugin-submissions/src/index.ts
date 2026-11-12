@@ -23,7 +23,7 @@ import {
   type ProcessedFile,
   type SvartzPlugin,
 } from "@svartz/core";
-import { wikilinkResolver } from "@svartz/plugins";
+import { publishedAttachments, wikilinkResolver } from "@svartz/plugins";
 import { alternateNames, isNote, pathRoute, requestedSlug, routeHref } from "@svartz/plugins/routes";
 import { PLUGIN_ID, type BrowserOptions, type LinkTarget } from "./api";
 import type { GuardOptions, RateLimitOptions, TurnstileOptions } from "./guard";
@@ -238,7 +238,13 @@ export function submissions(options: SubmissionsOptions) {
         const links = linkTargets(published, ctx);
         // Inline `#tags` link under the theme's tags route, as core:transform-ofm links them.
         const tagsRoute = (ctx.config.theme.routes as { tags?: string } | undefined)?.tags ?? "tags";
-        const preview = { linkResolution: ctx.config.linkResolution, mountPath: ctx.config.mountPath ?? "", tagsRoute };
+        const preview = {
+          linkResolution: ctx.config.linkResolution,
+          mountPath: ctx.config.mountPath ?? "",
+          tagsRoute,
+          // Only what the site serves, so an unpublished or protected file's name never leaves the build.
+          attachments: publishedAttachments(ctx).map((file) => file.path),
+        };
         compiler.serverData.set(PLUGIN_ID, { commit: checkout.commit, pages, routes, vaultRoot: root, folders, links, preview } satisfies BuildData);
         compiler.browserResources.set(PLUGIN_ID, {
           id: PLUGIN_ID,

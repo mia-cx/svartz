@@ -26,13 +26,16 @@ export interface LinkTarget extends PreviewNote {
   readonly link: string;
 }
 
-/** `GET <endpoint>/links/` answers this: the published notes, never password-protected or hidden ones. */
+/**
+ * `GET <endpoint>/links/` answers this: the published notes, never password-protected or hidden ones, and the
+ * attachments the site publishes.
+ */
 export interface LinksResponse extends PreviewSettings {
   readonly notes: readonly LinkTarget[];
 }
 
-/** How the vault resolves and routes links, for the Split preview. */
-export type PreviewSettings = Pick<PreviewOptions, "linkResolution" | "mountPath" | "tagsRoute">;
+/** How the vault resolves and routes links, and the attachments they can name, for the Split preview. */
+export type PreviewSettings = Pick<PreviewOptions, "linkResolution" | "mountPath" | "tagsRoute" | "attachments">;
 
 /** A submission id: 32 lowercase hex digits, 128 random bits. */
 export const SUBMISSION_ID_PATTERN = /^[0-9a-f]{32}$/;

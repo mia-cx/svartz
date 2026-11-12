@@ -35,6 +35,18 @@ const BASE_REHYPE_PLUGINS = [
   ] as unknown,
 ] as MdsvexOptions["rehypePlugins"];
 
+/**
+ * The vault attachments the site publishes, each at `<mount>/<path>`: the files public notes reference, as
+ * `core:filter-unpublished` settles them. Attachments only protected notes reference stay in their encrypted payload.
+ */
+export function publishedAttachments(ctx: PluginContext): ProcessedFile[] {
+  const publicPaths = ctx.meta.get("svartz:publicAssetPaths") as ReadonlySet<string> | undefined;
+  return ctx.files.filter((file) =>
+    (!file.extension || ![".md", ".mdx", ".svx"].includes(file.extension)) &&
+    file.sourcePath &&
+    (!publicPaths || publicPaths.has(file.path)));
+}
+
 function getArtifactsRoot(outDir: string): string {
   return resolve(outDir, "..", "artifacts");
 }
@@ -147,9 +159,6 @@ export const emitArtifacts = definePlugin(() => ({
       const noteFiles = ctx.files.filter((file) =>
         file.extension && [".md", ".mdx", ".svx"].includes(file.extension),
       );
-      const assetFiles = ctx.files.filter(
-        (file) => !file.extension || ![".md", ".mdx", ".svx"].includes(file.extension),
-      );
       const pageArtifacts = await Promise.all(
         noteFiles.map(async (file) => {
           const key = `pages/${file.slug}.svelte`;
@@ -180,11 +189,7 @@ export const emitArtifacts = definePlugin(() => ({
         }),
       );
       const assetArtifacts = await Promise.all(
-        assetFiles
-          .filter((file) => file.sourcePath && (
-            !ctx.meta.has("svartz:publicAssetPaths") ||
-            (ctx.meta.get("svartz:publicAssetPaths") as ReadonlySet<string>).has(file.path)
-          ))
+        publishedAttachments(ctx)
           .map(async (file) => {
             const key = `assets/${file.path}`;
             const path = join(artifactsRoot, key);
