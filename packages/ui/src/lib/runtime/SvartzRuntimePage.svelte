@@ -6,13 +6,11 @@
 
 	let { pathname, contentComponents = {} }: { pathname: string; contentComponents?: ContentComponentOverrides } = $props();
 	const base = vaults[0]?.basePath ?? '';
-	const decodedPathname = $derived(decodeRoutePath(pathname) ?? '');
+	// Strip the base while both are still encoded: a base from `site.url` keeps its percent escapes.
 	const appPathname = $derived(
-		base && decodedPathname.startsWith(`${base}/`)
-			? decodedPathname.slice(base.length)
-			: decodedPathname === base
-				? '/'
-				: decodedPathname
+		decodeRoutePath(
+			base && pathname.startsWith(`${base}/`) ? pathname.slice(base.length) : pathname === base ? '/' : pathname
+		) ?? ''
 	);
 	const selected = $derived(resolveHostVault(appPathname));
 </script>

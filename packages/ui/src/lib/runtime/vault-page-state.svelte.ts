@@ -56,7 +56,7 @@ export class VaultPageState {
 
 	artifacts = $derived.by(() => this.#input().artifacts);
 	// Decode only for index/artifact matching; the page keeps the request URL for relative assets and metadata.
-	appPathname = $derived(decodeRoutePath(this.#input().appPathname) ?? '');
+	appPathname = $derived.by(() => decodeRoutePath(this.#input().appPathname) ?? '');
 	discovery = $derived(this.artifacts.createUnlockedVault([...this.unlockedGroups.values()]));
 	vault = $derived(this.discovery.vault);
 	index = $derived(this.discovery.index);
