@@ -5,11 +5,13 @@
 
 import type { RawLink } from "@svartz/core";
 import { toString } from "mdast-util-to-string";
+import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { SKIP, visit } from "unist-util-visit";
 
-const markdownParser = unified().use(remarkParse);
+// The renderer's grammar, GFM tables included, so a backtick in one table cell never pairs with one in the next.
+const markdownParser = unified().use(remarkParse).use(remarkGfm);
 
 /** Replace embeds in prose while preserving parsed inline, fenced, and indented code in build and preview. */
 export function replaceEmbeds(markdown: string, render: (raw: string, inner: string) => string): string {

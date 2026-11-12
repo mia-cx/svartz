@@ -31,6 +31,13 @@ describe("renderPreview", () => {
     expect(html).not.toContain("svartz-embed");
   });
 
+  it("finds code in a table as the renderer does: backticks in separate cells protect nothing", async () => {
+    const html = await render("| Before | Embed | After | Code |\n| - | - | - | - |\n| ` | ![[Ada]] | ` | `![[Ada]]` |\n");
+
+    expect(html).toContain('data-embed="people/ada-lovelace"');
+    expect(html).toContain("<code>![[Ada]]</code>");
+  });
+
   it("links published notes by name, alias, heading and Markdown path", async () => {
     const html = await render("[[Ada Lovelace]], [[Ada|the countess]], [[Ada Lovelace#Early life]] and [her](People/Ada%20Lovelace.md).");
 
