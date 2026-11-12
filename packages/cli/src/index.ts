@@ -24,7 +24,7 @@ import {
   getGeneratedHostIndexPath,
   getGeneratedHostRegistryPath,
   getGeneratedHostServerPath,
-  svelteKitBasePath,
+  svelteKitPaths,
   getVaultBuildRoot,
   resolveThemeModuleIds,
   resolveThemePackageRoot,
@@ -567,10 +567,9 @@ const createAppConfig = (
         {
           name: "svartz:host-registry-base",
           async configResolved(resolved) {
-            if (!hostApp) return;
-            const kitBasePath = svelteKitBasePath(resolved.define) ?? "";
-            await writeFile(hostRegistryPath, createHostRegistrySource(vaults, kitBasePath));
-            await writeFile(hostIndexPath, createHostIndexSource(vaults, kitBasePath));
+            const kitPaths = svelteKitPaths(resolved.define) ?? { base: "", assets: "" };
+            await writeFile(hostRegistryPath, createHostRegistrySource(vaults, kitPaths));
+            await writeFile(hostIndexPath, createHostIndexSource(vaults, kitPaths.base));
           },
         },
       ],

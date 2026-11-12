@@ -175,6 +175,8 @@ export const theme = {
 	}
 };
 
+export const base = '';
+export const assets = '';
 export const vaults = [{ id: 'work', mountPath: '/work', basePath: '', artifacts, theme }];
 
 export const routes = {

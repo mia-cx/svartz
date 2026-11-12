@@ -1,7 +1,6 @@
-import { assets, base } from '$app/paths';
 import { error } from '@sveltejs/kit';
 import { decodeRoutePath } from '@svartz/ui/runtime';
-import { hostStylesheets, prepareHostVault } from 'virtual:svartz/host';
+import { assets, base, hostStylesheets, prepareHostVault } from 'virtual:svartz/host';
 
 export const load = async ({ url }) => {
   const appPath = decodeRoutePath(base ? url.pathname.slice(base.length) || '/' : url.pathname);

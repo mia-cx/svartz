@@ -74,6 +74,7 @@ import {
   getGeneratedHostStylesPath,
   readHostAdapterName,
   svelteKitBasePath,
+  svelteKitPaths,
 } from "./host-registry";
 import { emitProtectedGroupArtifacts } from "./protected-payload";
 import { clearPublicAssets, recordMarkdownRoutes, recordPublicAssets } from "./public-assets";
@@ -381,9 +382,9 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     },
     async configResolved(resolved) {
       context = createSvartzViteContext(options, resolved);
-      kitBasePath = svelteKitBasePath(resolved.define);
+      kitBasePath = svelteKitPaths(resolved.define)?.base;
       themeImport = resolveThemeRuntimeImport(context.config, context.root, selectedThemeSources(context.config));
-      if (context.config.target.type === "host") hostAdapter = await readHostAdapterName(context.root);
+      if (context.config.target.type === "host") hostAdapter = await readHostAdapterName(context.root, resolved.plugins);
     },
     async buildStart() {
       await executePipeline();
@@ -562,6 +563,7 @@ export {
   getGeneratedHostServerPath,
   getGeneratedHostStylesPath,
   svelteKitBasePath,
+  svelteKitPaths,
   clearPublicAssets,
 };
 export type {

@@ -16,8 +16,7 @@ The standalone SvelteKit shell imports `SvartzRuntimePage` from `@svartz/ui/runt
 Before rendering that component, the route's universal `load` must prepare its theme:
 
 ```ts
-import { prepareHostVault } from 'virtual:svartz/host';
-import { base } from '$app/paths';
+import { base, prepareHostVault } from 'virtual:svartz/host';
 
 export const load = async ({ url }) => {
   const appPath = base ? url.pathname.slice(base.length) || '/' : url.pathname;
@@ -25,7 +24,7 @@ export const load = async ({ url }) => {
 };
 ```
 
-The generated catchall already does this. A custom route that renders `SvartzRuntimePage` needs the same call. It resolves lazy theme pages before SSR and hydration. To render only a note body inside your own layout, use `SvartzNoteContent`. See [host vaults](../../docs/host-vaults.md#render-a-note-inside-your-own-page).
+`virtual:svartz/host` exports SvelteKit's `base` and `assets`, so the route works in SvelteKit 2 and 3; SvelteKit 3's `$app/paths` has neither. The generated catchall already does this. A custom route that renders `SvartzRuntimePage` needs the same call. It resolves lazy theme pages before SSR and hydration. To render only a note body inside your own layout, use `SvartzNoteContent`. See [host vaults](../../docs/host-vaults.md#render-a-note-inside-your-own-page).
 
 Theme route components can use lazy imports, including pages that import `@svartz/ui`:
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { basename } from "node:path";
 import type { ResolvedConfig } from "@svartz/core";
-import { createHostIndexSource, createHostRegistrySource, deploymentBasePath, getGeneratedHostIndexPath, getGeneratedHostRegistryPath, getGeneratedHostStylesPath, svelteKitBasePath } from "../src/host-registry";
+import { createHostIndexSource, createHostRegistrySource, deploymentBasePath, getGeneratedHostIndexPath, getGeneratedHostRegistryPath, getGeneratedHostStylesPath, svelteKitPaths } from "../src/host-registry";
 
 const vault = (id: string, mountPath: string): ResolvedConfig => ({
   version: "1.0.0",
@@ -66,11 +66,21 @@ describe("host registry", () => {
       .toContain('basePath: "/site"');
     expect(createHostRegistrySource([{ ...vault("blog", "/blog"), target: { type: "static", basePath: "/site" } }]))
       .toContain('basePath: "/site"');
-    expect(svelteKitBasePath({ __SVELTEKIT_PATHS_BASE__: '"/site"' })).toBe("/site");
     expect(deploymentBasePath({ ...vault("blog", "/blog"), site: { title: "Blog" } }, "/site")).toBe("/site");
-    const source = createHostRegistrySource([vault("blog", "/site/docs")], "/site");
+    const source = createHostRegistrySource([vault("blog", "/site/docs")], { base: "/site", assets: "/site" });
     expect(source).toContain('basePath: "/site"');
     expect(source).toContain("return pathname === mountPath || pathname.startsWith(`${mountPath}/`);");
     expect(source).not.toContain("pathname.slice(basePath.length)");
+  });
+
+  it("exports SvelteKit's base and assets, which SvelteKit 3's $app/paths dropped", () => {
+    const define = { __SVELTEKIT_PATHS_BASE__: '"/site"', __SVELTEKIT_PATHS_ASSETS__: '""' };
+    expect(svelteKitPaths(define)).toEqual({ base: "/site", assets: "/site" });
+    expect(svelteKitPaths({ ...define, __SVELTEKIT_PATHS_ASSETS__: '"https://cdn.example.test"' }))
+      .toEqual({ base: "/site", assets: "https://cdn.example.test" });
+    expect(svelteKitPaths({})).toBeUndefined();
+    const source = createHostRegistrySource([vault("blog", "/blog")], { base: "/site", assets: "https://cdn.example.test" });
+    expect(source).toContain('export const base = "/site";');
+    expect(source).toContain('export const assets = "https://cdn.example.test";');
   });
 });

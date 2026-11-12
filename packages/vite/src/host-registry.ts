@@ -12,10 +12,25 @@ import {
 
 export const HOST_STYLES_PLACEHOLDER = "__SVARTZ_HOST_STYLES__";
 
-/** Read the deployment base SvelteKit puts in Vite's resolved definitions. */
+/** SvelteKit's `paths.base`, and `paths.assets` or the base when it has none: the prefixes `$app/paths` exported before SvelteKit 3. */
+export interface SvelteKitPaths {
+  readonly base: string;
+  readonly assets: string;
+}
+
+/** Read SvelteKit's paths from the definitions it puts in Vite's resolved config, the same in SvelteKit 2 and 3. */
+export function svelteKitPaths(define: Readonly<Record<string, unknown>> | undefined): SvelteKitPaths | undefined {
+  const read = (key: string): string | undefined => {
+    const value = define?.[key];
+    return typeof value === "string" ? JSON.parse(value) as string : undefined;
+  };
+  const base = read("__SVELTEKIT_PATHS_BASE__");
+  return base === undefined ? undefined : { base, assets: read("__SVELTEKIT_PATHS_ASSETS__") || base };
+}
+
+/** SvelteKit's `paths.base` alone, from the same definitions as {@link svelteKitPaths}. */
 export function svelteKitBasePath(define: Readonly<Record<string, unknown>> | undefined): string | undefined {
-  const value = define?.["__SVELTEKIT_PATHS_BASE__"];
-  return typeof value === "string" ? JSON.parse(value) as string : undefined;
+  return svelteKitPaths(define)?.base;
 }
 
 /** Standalone targets declare their base; hosts use SvelteKit's configured base. */
@@ -41,18 +56,23 @@ export function createHostIndexSource(vaults: readonly ResolvedConfig[], kitBase
   return [...imports, `export const vaults = [\n${records.join("\n")}\n];`, ""].join("\n");
 }
 
-/** The host eagerly reads route metadata and loads runtime code only for the selected mount. */
-export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitBasePath?: string): string {
+/**
+ * `virtual:svartz/host`: the host eagerly reads route metadata and loads runtime code only for the selected mount.
+ * It also exports SvelteKit's `base` and `assets`, which SvelteKit 3's `$app/paths` no longer does.
+ */
+export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitPaths?: SvelteKitPaths): string {
   const imports = vaults.map((vault, index) =>
     `import * as index${index} from ${JSON.stringify(getGeneratedIndexModulePath(vault))};`
   );
   const records = vaults.map((vault, index) => {
     const { favicon: _favicon, ...siteConfig } = vault.site;
-    return `  { id: ${JSON.stringify(vault.id)}, mountPath: ${JSON.stringify(vault.mountPath)}, basePath: ${JSON.stringify(deploymentBasePath(vault, kitBasePath))}, artifacts: { index: index${index}.index, siteConfig: ${JSON.stringify(siteConfig)} }, theme: undefined },`;
+    return `  { id: ${JSON.stringify(vault.id)}, mountPath: ${JSON.stringify(vault.mountPath)}, basePath: ${JSON.stringify(deploymentBasePath(vault, kitPaths?.base))}, artifacts: { index: index${index}.index, siteConfig: ${JSON.stringify(siteConfig)} }, theme: undefined },`;
   });
   const loaders = vaults.map((vault) => `  () => Promise.all([import(${JSON.stringify(getGeneratedRuntimeArtifactsModulePath(vault))}), import(${JSON.stringify(getGeneratedRuntimeThemeModulePath(vault))})]),`);
   return [
     ...imports,
+    `export const base = ${JSON.stringify(kitPaths?.base ?? "")};`,
+    `export const assets = ${JSON.stringify(kitPaths?.assets ?? "")};`,
     `export const vaults = [\n${records.join("\n")}\n];`,
     "// Kit evaluates the server bundle before client CSS exists; the client build fills this marker before prerendering.",
     `const runtimeStyles = import.meta.env.SSR ? (() => { try { return JSON.parse(${JSON.stringify(HOST_STYLES_PLACEHOLDER)}); } catch { return []; } })() : [];`,
@@ -135,8 +155,19 @@ export function createHostServerSource(vaults: readonly ResolvedConfig[]): strin
   ].join("\n");
 }
 
-/** The host app's `kit.adapter.name`, read from `svelte.config.js` or `.ts` in `root`, as SvelteKit finds it. */
-export async function readHostAdapterName(root: string): Promise<string | undefined> {
+/**
+ * The host app's adapter name. SvelteKit 3 takes the adapter in `sveltekit({ adapter })` and exposes its config on
+ * the resolved `vite-plugin-sveltekit-setup` plugin; SvelteKit 2 reads `kit.adapter` from `svelte.config.js` or `.ts`
+ * in `root`.
+ */
+export async function readHostAdapterName(
+  root: string,
+  plugins: readonly { readonly name: string; readonly api?: unknown }[],
+): Promise<string | undefined> {
+  const kit3 = plugins.find((plugin) => plugin.name === "vite-plugin-sveltekit-setup")?.api as
+    | { options?: { adapter?: { name?: unknown } } }
+    | undefined;
+  if (kit3?.options) return typeof kit3.options.adapter?.name === "string" ? kit3.options.adapter.name : undefined;
   const file = ["js", "ts"].map((extension) => join(root, `svelte.config.${extension}`)).find((path) => existsSync(path));
   if (!file) return undefined;
   // Bust the import cache so a dev restart sees an edited adapter, as SvelteKit does.
