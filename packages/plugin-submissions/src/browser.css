@@ -73,7 +73,7 @@
 	padding: var(--sv-space-4) var(--sv-space-5) var(--sv-space-5);
 }
 
-/* Live Preview, Source and Split as one segmented control, beside the close button. */
+/* The modes as one segmented control, beside the close button. */
 .svartz-submissions-modes {
 	display: inline-flex;
 	margin: 0;
@@ -559,5 +559,149 @@
 
 	.svartz-submissions-fields {
 		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+/* Rich text: the toolbar, and the link form when it is open, above the editor. */
+.svartz-submissions-rich {
+	display: grid;
+	border-block-end: var(--sv-rule-width) solid var(--sv-rule);
+	background: var(--sv-paper);
+}
+
+.svartz-submissions-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px;
+	padding: var(--sv-space-1) var(--sv-space-2);
+}
+
+/* Each group of tools set apart from the one before it. */
+.svartz-submissions-toolbar [data-group] {
+	margin-inline-start: var(--sv-space-2);
+}
+
+.svartz-submissions-toolbar [aria-pressed="true"] {
+	background: var(--sv-accent-soft);
+	color: var(--sv-ink);
+}
+
+.svartz-submissions-toolbar button:focus-visible,
+.svartz-submissions-property button:focus-visible {
+	outline: var(--sv-focus-width) solid var(--sv-accent);
+	outline-offset: calc(-1 * var(--sv-focus-width));
+}
+
+.svartz-submissions-toolbar button:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.svartz-submissions-link {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--sv-space-2);
+	padding: var(--sv-space-2) var(--sv-space-3);
+	border-block-start: var(--sv-rule-width) solid var(--sv-rule);
+}
+
+.svartz-submissions-link input[type="text"] {
+	flex: 1 1 12rem;
+	inline-size: auto;
+}
+
+.svartz-submissions-link[hidden],
+.svartz-submissions-link [hidden] {
+	display: none;
+}
+
+/* The frontmatter as name and value fields, at the top of the note and scrolling with it. */
+.svartz-submissions-properties {
+	margin-block-end: var(--sv-space-3);
+	padding-block-end: var(--sv-space-3);
+	border-block-end: var(--sv-rule-width) solid var(--sv-rule);
+	font-size: var(--sv-step--1);
+}
+
+.svartz-submissions-properties summary {
+	color: var(--sv-muted);
+	font-size: var(--sv-label-size);
+	font-weight: 600;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+
+.svartz-submissions-properties[open] summary {
+	margin-block-end: var(--sv-space-2);
+}
+
+.svartz-submissions-property-list {
+	display: grid;
+	gap: var(--sv-space-1);
+	margin-block-end: var(--sv-space-2);
+}
+
+.svartz-submissions-property {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+	align-items: start;
+	gap: var(--sv-space-2);
+}
+
+.svartz-submissions-property :is(input[type="text"], textarea) {
+	padding-block: var(--sv-space-1);
+}
+
+/* YAML keeps its indentation readable: long lines scroll rather than wrap. */
+.svartz-submissions-property textarea {
+	overflow-x: auto;
+	font-family: var(--sv-font-mono);
+	white-space: pre;
+}
+
+/* What the toolbar can't write shows as its source, in a block of its own. */
+.svartz-submissions .cm-line.cm-lp-raw {
+	background: var(--sv-surface);
+	color: var(--sv-text);
+	font-family: var(--sv-font-mono);
+	font-size: 0.9em;
+}
+
+.svartz-submissions .cm-lp-bullet {
+	display: inline-block;
+	inline-size: 1.2em;
+	color: var(--sv-muted);
+}
+
+@media (max-width: 40rem) {
+	/* Four modes fill a phone's width: the switch takes its own row under the title and close button. */
+	.svartz-submissions-modes {
+		order: 1;
+		flex-basis: 100%;
+		margin-inline-start: 0;
+	}
+
+	.svartz-submissions-modes label {
+		flex: 1;
+		text-align: center;
+	}
+
+	.svartz-submissions-header > [data-close] {
+		margin-inline-start: auto;
+	}
+
+	.svartz-submissions-toolbar {
+		gap: 0;
+		padding-inline: var(--sv-space-1);
+	}
+
+	.svartz-submissions-toolbar [data-group] {
+		margin-inline-start: var(--sv-space-1);
+	}
+
+	.svartz-submissions-property {
+		grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto;
+		gap: var(--sv-space-1);
 	}
 }

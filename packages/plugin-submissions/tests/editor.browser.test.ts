@@ -1011,3 +1011,336 @@ describe("Split", () => {
     expect(page.getByRole("radio", { name: "Split" }).query()).toBeNull();
   });
 });
+
+describe("Rich text", () => {
+  /** Every construct the toolbar writes, and the ones it can't, which must survive as they are. */
+  const NOTE = [
+    "---",
+    "title: Guide",
+    'hatnote: "See [[Ada Lovelace]]."',
+    "tags: [people, guides]",
+    "aliases:",
+    "  - Handbook",
+    "  - Manual",
+    "infobox:",
+    "  role: Lamplighter",
+    "---",
+    "",
+    "# Guide",
+    "",
+    "Some **bold**, *soft*, ~~gone~~ and `code` with [a link](https://example.com).[^1]",
+    "",
+    "See [[People/Grace#Early life|Grace]], [[Ada Lovelace]] and ![[diagram.png]].",
+    "",
+    "> [!warning] Mind the gap",
+    "> Inside the callout.",
+    "",
+    "- [ ] Write the page",
+    "- A bullet",
+    "1. A step",
+    "",
+    "| Lantern | Hours |",
+    "| --- | --- |",
+    "| Harbour | **9** |",
+    "",
+    "```js",
+    "# not a heading",
+    "```",
+    "",
+    "<details><summary>More</summary>",
+    "Hidden *HTML*.",
+    "</details>",
+    "",
+    "$$",
+    "e = mc^2",
+    "$$",
+    "",
+    "%% a comment %%",
+    "",
+    "[^1]: A *footnote*.",
+  ].join("\n");
+  const CRLF = NOTE.replaceAll("\n", "\r\n");
+  /** The showcase wiki's notes, as a wiki's readers would open them. */
+  const WIKI = Object.entries(import.meta.glob<string>("../../../vaults/showcase-wiki/**/*.md", { query: "?raw", import: "default", eager: true }))
+    .map(([path, markdown]) => [path.slice(path.indexOf("showcase-wiki/")), markdown] as const);
+  const mod = navigator.platform.startsWith("Mac") ? "Meta" : "Control";
+  const toolbar = () => page.getByRole("toolbar", { name: "Formatting" });
+
+  /** Open Edit on `markdown` and switch to Rich text, with the cursor where clicking the `line`th shown line puts it. */
+  async function openRich(markdown: string, line = 1) {
+    const source = await openOn(markdown);
+    await page.getByRole("radio", { name: "Rich text" }).click();
+    await expect.element(toolbar()).toBeVisible();
+    await cursorTo(line);
+    return source;
+  }
+
+  /** Back to Source, append `!` at the very end, and send: the sent Markdown is then the document plus `!`. */
+  async function sendFromSource() {
+    await page.getByRole("radio", { name: "Source" }).click();
+    await page.getByRole("textbox", { name: "Page source" }).click();
+    await userEvent.keyboard(`{${mod}>}{End}{/${mod}}!`);
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+    return sentMarkdown().slice(0, -1);
+  }
+
+  /** The line that shows `text` in the editor. */
+  const lineWith = (text: string) => [...document.querySelectorAll<HTMLElement>(".svartz-submissions .cm-line")].find((line) => line.textContent === text);
+
+  afterEach(() => page.viewport(414, 896));
+
+  it.each([["LF", NOTE], ["CRLF", CRLF], ...WIKI])("leaves %s byte for byte as it was, from Live Preview through Rich text and back", async (_, markdown) => {
+    await openOn(markdown, 1);
+    await page.getByRole("radio", { name: "Rich text" }).click();
+    await expect.element(toolbar()).toBeVisible();
+    // Walk the cursor through the note: moving through hidden syntax writes nothing.
+    for (const line of document.querySelectorAll<HTMLElement>(".svartz-submissions .cm-line")) await userEvent.click(line);
+    await page.getByRole("radio", { name: "Live Preview" }).click();
+
+    await expect.element(page.getByRole("button", { name: "Open pull request" })).toBeDisabled();
+    expect(await sendFromSource()).toBe(markdown);
+  });
+
+  it("shows the note formatted with no syntax, and what it can't format as source", async () => {
+    await openRich(NOTE, 2);
+    // The cursor's line hides its syntax too.
+    await userEvent.click(lineWith("Guide")!);
+
+    expect(lineWith("Guide")!.classList).toContain("cm-lp-h1");
+    const shown = [...document.querySelectorAll(".svartz-submissions .cm-line")].map((line) => line.textContent);
+    expect(shown).toContain("Some bold, soft, gone and code with a link.[^1]");
+    expect(shown).toContain("See Grace, Ada Lovelace and diagram.png.");
+    expect(shown).toContain("•A bullet");
+    expect(shown).toContain("1. A step");
+    expect(lineWith("Warning Mind the gap")?.dataset.callout).toBe("warning");
+    for (const raw of ["| Harbour | **9** |", "# not a heading", "Hidden *HTML*.", "e = mc^2", "%% a comment %%", "[^1]: A *footnote*."]) {
+      expect(lineWith(raw)?.classList, raw).toContain("cm-lp-raw");
+    }
+    // Frontmatter shows in the properties panel instead.
+    expect(document.querySelector(".svartz-submissions .cm-content")!.textContent).not.toContain("title:");
+  });
+
+  it("lists the frontmatter's properties, lists as comma-separated text", async () => {
+    await openRich(NOTE);
+
+    const names = page.getByRole("textbox", { name: "Property name" }).elements().map((field) => (field as HTMLInputElement).value);
+    expect(names).toEqual(["title", "hatnote", "tags", "aliases", "infobox"]);
+    await expect.element(page.getByRole("textbox", { name: "title", exact: true })).toHaveValue("Guide");
+    await expect.element(page.getByRole("textbox", { name: "hatnote" })).toHaveValue("See [[Ada Lovelace]].");
+    await expect.element(page.getByRole("textbox", { name: "tags" })).toHaveValue("people, guides");
+    await expect.element(page.getByRole("textbox", { name: "aliases" })).toHaveValue("Handbook, Manual");
+    await expect.element(page.getByRole("textbox", { name: "infobox" })).toHaveValue("  role: Lamplighter");
+  });
+
+  it("writes an edited value into its own line only, in the note's line endings", async () => {
+    await openRich(CRLF);
+    await page.getByRole("textbox", { name: "title", exact: true }).fill("Guide: the basics");
+    await page.getByRole("textbox", { name: "aliases" }).fill("Handbook, Manual, Primer");
+    await page.getByRole("textbox", { name: "hatnote" }).fill("See [[Grace]].");
+
+    expect(await sendFromSource()).toBe(CRLF
+      .replace("title: Guide", 'title: "Guide: the basics"')
+      .replace("  - Manual", "  - Manual\r\n  - Primer")
+      .replace("See [[Ada Lovelace]].", "See [[Grace]]."));
+  });
+
+  it("renames a property", async () => {
+    await openRich(NOTE);
+    await page.getByRole("textbox", { name: "Property name" }).first().fill("name");
+    await userEvent.keyboard("{Enter}");
+
+    expect(await sendFromSource()).toBe(NOTE.replace("title: Guide", "name: Guide"));
+  });
+
+  it("adds a property, starting the frontmatter of a note without one", async () => {
+    await openRich("# Guide\n");
+    await page.getByRole("button", { name: "Add property" }).click();
+    await expect.element(page.getByRole("textbox", { name: "Property name" })).toHaveFocus();
+    await userEvent.keyboard("status");
+    await page.getByRole("textbox", { name: "status" }).fill("draft");
+
+    expect(await sendFromSource()).toBe("---\nstatus: draft\n---\n# Guide\n");
+  });
+
+  it("removes a property with all its lines", async () => {
+    await openRich(NOTE);
+    await page.getByRole("button", { name: "Remove aliases" }).click();
+
+    await expect.element(page.getByRole("textbox", { name: "aliases" })).not.toBeInTheDocument();
+    expect(await sendFromSource()).toBe(NOTE.replace("aliases:\n  - Handbook\n  - Manual\n", ""));
+  });
+
+  it("bolds the word at the cursor, shows the button pressed there, and unbolds it", async () => {
+    await openRich("# Guide\n\nA brave lamplighter.\n", 3);
+    await userEvent.keyboard("{Home}{ArrowRight}{ArrowRight}{ArrowRight}");
+    const bold = toolbar().getByRole("button", { name: "Bold" });
+    await expect.element(bold).toHaveAttribute("aria-pressed", "false");
+    await bold.click();
+    await expect.element(bold).toHaveAttribute("aria-pressed", "true");
+    expect(lineWith("A brave lamplighter.")?.querySelector(".cm-lp-strong")?.textContent).toBe("brave");
+
+    await bold.click();
+    await expect.element(bold).toHaveAttribute("aria-pressed", "false");
+    await userEvent.keyboard(`{${mod}>}i{/${mod}}`);
+    expect(await sendFromSource()).toBe("# Guide\n\nA *brave* lamplighter.\n");
+  });
+
+  it("makes headings and lists from the toolbar, and plain lines again", async () => {
+    await openRich("Title\n\nOne\nTwo\n", 1);
+    await toolbar().getByRole("button", { name: "Heading 2" }).click();
+    await expect.element(toolbar().getByRole("button", { name: "Heading 2" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(lineWith("One")!);
+    await userEvent.keyboard("{Shift>}{ArrowDown}{/Shift}");
+    await toolbar().getByRole("button", { name: "Numbered list" }).click();
+    await toolbar().getByRole("button", { name: "Bulleted list" }).click();
+    await expect.element(toolbar().getByRole("button", { name: "Bulleted list" })).toHaveAttribute("aria-pressed", "true");
+
+    expect(await sendFromSource()).toBe("## Title\n\n- One\n- Two\n");
+  });
+
+  it("links the selection to the address typed, and edits that link", async () => {
+    await openRich("Read the guide.\n", 1);
+    await userEvent.keyboard("{End}{ArrowLeft}{Shift>}{ArrowLeft>5}{/Shift}");
+    await userEvent.keyboard(`{${mod}>}k{/${mod}}`);
+    const address = page.getByRole("textbox", { name: "Link address" });
+    await expect.element(address).toHaveFocus();
+    await userEvent.keyboard("https://example.com/a guide{Enter}");
+    // Enter applied the link; it didn't send the panel's form or close it.
+    await expect.poll(() => address.query()).toBeNull();
+    await expect.element(page.getByRole("dialog")).toBeVisible();
+    expect(lineWith("Read the guide.")?.querySelector(".cm-lp-link")?.textContent).toBe("guide");
+
+    await userEvent.keyboard("{ArrowLeft}");
+    await toolbar().getByRole("button", { name: "Link", exact: true }).click();
+    await expect.element(address).toHaveValue("https://example.com/a%20guide");
+    await page.getByRole("button", { name: "Remove link" }).click();
+    expect(await sendFromSource()).toBe("Read the guide.\n");
+  });
+
+  it("closes the link form on Escape, leaving the panel open", async () => {
+    await openRich("Read the guide.\n", 1);
+    await toolbar().getByRole("button", { name: "Link", exact: true }).click();
+    await userEvent.keyboard("{Escape}");
+
+    await expect.poll(() => page.getByRole("textbox", { name: "Link address" }).query()).toBeNull();
+    await expect.element(page.getByRole("dialog")).toBeVisible();
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveFocus();
+  });
+
+  it("links a page from the site's notes, as wikilink autocomplete suggests them", async () => {
+    await openRich("See \n", 1);
+    await userEvent.keyboard("{End}");
+    await toolbar().getByRole("button", { name: "Link to a page" }).click();
+    await expect.element(page.getByRole("listbox")).toBeVisible();
+    await userEvent.keyboard("Gr");
+    await expect.element(page.getByRole("option", { name: /People\/Grace/ })).toBeVisible();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await userEvent.keyboard("{Enter}");
+
+    expect(await sendFromSource()).toBe("See [[People/Grace]]\n");
+  });
+
+  it("puts lines in a callout and takes them back out", async () => {
+    await openRich("Mind the gap.\n", 1);
+    const callout = toolbar().getByRole("button", { name: "Callout" });
+    await callout.click();
+    await expect.element(callout).toHaveAttribute("aria-pressed", "true");
+    expect(lineWith("Note")?.dataset.callout).toBe("note");
+    await page.getByRole("radio", { name: "Source" }).click();
+    expect(shownLine(1).textContent).toBe("> [!note]");
+    expect(shownLine(2).textContent).toBe("> Mind the gap.");
+    await page.getByRole("radio", { name: "Rich text" }).click();
+    await expect.poll(() => lineWith("Mind the gap.")).toBeDefined();
+    await userEvent.click(lineWith("Mind the gap.")!);
+    await toolbar().getByRole("button", { name: "Callout" }).click();
+
+    expect(await sendFromSource()).toBe("Mind the gap.\n");
+  });
+
+  it("continues a list on Enter, and ends it on an empty item", async () => {
+    await openRich("- Oil\n", 1);
+    await userEvent.keyboard("{End}{Enter}Wicks{Enter}{Enter}Done.");
+
+    expect(await sendFromSource()).toBe("- Oil\n- Wicks\nDone.\n");
+  });
+
+  it("turns a heading back into text with Backspace at its start, and deletes past hidden syntax", async () => {
+    await openRich("## Guide\n\nSome **bold**\n", 1);
+    await userEvent.keyboard("{Home}{Backspace}");
+    await userEvent.click(lineWith("Some bold")!);
+    await userEvent.keyboard("{End}{Backspace}");
+
+    expect(await sendFromSource()).toBe("Guide\n\nSome **bol**\n");
+  });
+
+  it("keeps typing out of the frontmatter", async () => {
+    await openRich("---\ntitle: Guide\n---\nBody\n", 1);
+    await userEvent.keyboard(`{${mod}>}{Home}{/${mod}}Top {Backspace}{Backspace}{Backspace}{Backspace}{Backspace}`);
+
+    expect(await sendFromSource()).toBe("---\ntitle: Guide\n---\nBody\n");
+  });
+
+  it("moves through the toolbar with arrow keys, Home and End, as one stop in the tab order", async () => {
+    await openRich("Text\n", 1);
+    const buttons = toolbar().getByRole("button");
+    // From the close button, Tab reaches the toolbar.
+    page.getByRole("button", { name: "Close editor" }).element().focus();
+    await userEvent.tab();
+    await expect.element(buttons.first()).toHaveFocus();
+    await userEvent.keyboard("{ArrowLeft}");
+    await expect.element(toolbar().getByRole("button", { name: "Callout" })).toHaveFocus();
+    await userEvent.keyboard("{Home}{ArrowRight}");
+    await expect.element(toolbar().getByRole("button", { name: "Heading 2" })).toHaveFocus();
+    await userEvent.keyboard("{End}");
+    await expect.element(toolbar().getByRole("button", { name: "Callout" })).toHaveFocus();
+
+    // Tab leaves the toolbar, and Shift+Tab comes back to the button last focused.
+    await userEvent.tab();
+    expect(toolbar().element().contains(document.activeElement)).toBe(false);
+    await userEvent.tab({ shift: true });
+    await expect.element(toolbar().getByRole("button", { name: "Callout" })).toHaveFocus();
+  });
+
+  it("names every button, with the shortcut where there is one", async () => {
+    await openRich("Text\n", 1);
+    const names = toolbar().getByRole("button").elements().map((button) => button.getAttribute("aria-label"));
+    expect(names).toEqual(["Heading 1", "Heading 2", "Heading 3", "Bold", "Italic", "Bulleted list", "Numbered list", "Link", "Link to a page", "Callout"]);
+    await expect.element(toolbar().getByRole("button", { name: "Bold" })).toHaveAttribute("aria-keyshortcuts", `${mod === "Meta" ? "Meta" : "Control"}+B`);
+  });
+
+  it("fits the toolbar and properties on a 390 px phone", async () => {
+    await page.viewport(390, 844);
+    await openRich(NOTE, 12);
+    const dialog = page.getByRole("dialog").element().getBoundingClientRect();
+    for (const element of [...toolbar().getByRole("button").elements(), ...page.getByRole("textbox", { name: "Property name" }).elements()]) {
+      const box = element.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(dialog.left);
+      expect(box.right).toBeLessThanOrEqual(dialog.right);
+    }
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+  });
+
+  it("takes no formatting while the pull request opens", async () => {
+    let answer!: (response: Response) => void;
+    await openRich("Text\n", 1);
+    await userEvent.keyboard("{End}!");
+    serve(() => new Promise((resolve) => { answer = resolve; }), () => Response.json({ markdown: "Text\n" }));
+    await page.getByRole("button", { name: "Open pull request" }).click();
+
+    await expect.element(toolbar().getByRole("button", { name: "Bold" })).toBeDisabled();
+    await expect.element(page.getByRole("button", { name: "Add property" })).toBeDisabled();
+    answer(Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+    expect(sentMarkdown()).toBe("Text!\n");
+  });
+
+  it("opens in Rich text when the reader last chose it", async () => {
+    await openRich("Text\n", 1);
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await page.getByRole("button", { name: "Edit" }).click();
+
+    await expect.element(toolbar()).toBeVisible();
+    await expect.element(page.getByRole("radio", { name: "Rich text" })).toBeChecked();
+  });
+});
