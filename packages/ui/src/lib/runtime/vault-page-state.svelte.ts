@@ -147,21 +147,24 @@ export class VaultPageState {
 /**
  * Mount the vault's plugin browser scripts while rendered. Returning `undefined` mounts nothing.
  * They remount when `pathname` or the rendered note (`noteHref`) changes: unlocking a hidden
- * note renders its header, and the page-actions region in it, without navigating.
+ * note renders its header, and the page-actions region in it, without navigating. `note` is the
+ * body a host page's `SvartzNoteContent` renders, which scripts then work on instead of the document's.
  */
 export function useBrowserResources(
-	input: () => { artifacts: ArtifactsModule; pathname: string; noteHref?: string } | undefined
+	input: () =>
+		| { artifacts: ArtifactsModule; pathname: string; noteHref?: string; note?: HTMLElement }
+		| undefined
 ): void {
 	$effect(() => {
 		if (!browser) return;
-		// Calling `input` tracks everything it reads, `noteHref` included; scripts get only the pathname.
+		// Calling `input` tracks everything it reads, `noteHref` included; scripts get the pathname and note.
 		const resources = input();
 		if (!resources) return;
-		const { artifacts, pathname } = resources;
+		const { artifacts, pathname, note } = resources;
 		let released = false;
 		let dispose: (() => void) | undefined;
 		void artifacts
-			.mountBrowserResources(pathname)
+			.mountBrowserResources(pathname, note)
 			.then((cleanup) => {
 				if (released) cleanup();
 				else dispose = cleanup;

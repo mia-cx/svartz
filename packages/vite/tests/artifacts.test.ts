@@ -137,9 +137,9 @@ describe("@svartz/vite artifact helpers", () => {
     expect(source).toContain('import "/plugins/katex.min.css";');
     expect(source).toContain('load: () => import("/plugins/diagram.js")');
     expect(source).toContain('options: {"enabled":true}');
-    expect(source).toContain("export async function mountBrowserResources(pathname)");
-    // Scripts learn the deployment base so they can reach their plugin's server.
-    expect(source).toContain('return mountBrowserScripts(browserScripts, pathname, { base: "" });');
+    expect(source).toContain("export async function mountBrowserResources(pathname, note)");
+    // Scripts learn the deployment base so they can reach their plugin's server, and the host note body they serve.
+    expect(source).toContain('return mountBrowserScripts(browserScripts, pathname, { base: "", note });');
     expect(source).toContain('import browserAsset2 from "/plugins/icon.svg";');
     expect(source).toContain('"icon": browserAsset2');
 

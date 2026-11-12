@@ -9,13 +9,14 @@ import { annotations } from "@svartz/plugin-annotations";
 plugins: [auth({ providers: { … } }), annotations({ database: { env: "DB" } })]
 ```
 
-That is all a theme-minimal site needs, and any theme extending it: every note shows its annotations. A host app's own pages call `attach` on their content element:
+That is all a theme-minimal site needs, and any theme extending it: every note shows its annotations. So does a host app page that renders a note with `SvartzNoteContent`. On markup a host app renders itself, call `attach` on the content element with the note's vault and slug:
 
 ```ts
 import { attach } from "@svartz/plugin-annotations/browser";
 import "@svartz/plugin-annotations/browser.css";
+import { vaults } from "virtual:svartz/host";
 
-const detach = attach(noteElement, { endpoint: "/_svartz/annotations", page: "garden/roses" });
+const detach = attach(noteElement, { vault: vaults.find((vault) => vault.id === "notes")!, slug: "garden/roses" });
 ```
 
 Setup, the D1 binding, options and styling: [docs/annotations.md](../../docs/annotations.md).

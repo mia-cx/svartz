@@ -38,6 +38,19 @@ it('marks the note body for prose styles and previews', async () => {
 	expect(body?.closest('[data-svartz-note-content]')).not.toBeNull();
 });
 
+it('marks a note body with its slug for plugins, and leaves a protected note unmarked', async () => {
+	const marked = () =>
+		[...document.querySelectorAll<HTMLElement>('[data-svartz-note]')].map((element) => element.dataset.svartzNote);
+	const plain = render(SvartzNoteContent, { pathname: '/work/plain/', stylesheets: [] });
+	await expect.element(page.getByText('Plain body')).toBeVisible();
+	expect(marked()).toEqual(['plain']);
+	plain.unmount();
+
+	render(SvartzNoteContent, { pathname: '/work/secret/', stylesheets: [] });
+	await expect.element(page.getByRole('button', { name: 'Unlock note' })).toBeVisible();
+	expect(marked()).toEqual([]);
+});
+
 it('uses theme content components and lets host overrides win their slot', async () => {
 	const theme = render(SvartzNoteContent, { pathname: '/work/callouts/', stylesheets: [] });
 	await expect.element(page.getByText('Callout body')).toBeVisible();
@@ -111,7 +124,21 @@ it('mounts browser resources only while a note renders', async () => {
 	nonNote.unmount();
 
 	render(SvartzNoteContent, { pathname: '/work/plain/', stylesheets: [] });
-	await expect.poll(() => mount.mock.calls).toEqual([['/work/plain/']]);
+	await expect.poll(() => mount.mock.calls.length).toBe(1);
+	expect(mount.mock.calls[0]).toEqual(['/work/plain/', document.querySelector('[data-svartz-note="plain"]')]);
+});
+
+it('mounts browser resources for each note on a page with its own body', async () => {
+	const mount = vi.spyOn(artifacts, 'mountBrowserResources');
+	render(SvartzNoteContent, { pathname: '/work/plain/', stylesheets: [] });
+	render(SvartzNoteContent, { pathname: '/work/callouts/', stylesheets: [] });
+	await expect.poll(() => mount.mock.calls.length).toBe(2);
+	expect(
+		mount.mock.calls.map(([pathname, note]) => [pathname, note?.dataset.svartzNote]).sort()
+	).toEqual([
+		['/work/callouts/', 'callouts'],
+		['/work/plain/', 'plain']
+	]);
 });
 
 it('renders nothing for non-note pathnames', async () => {

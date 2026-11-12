@@ -59,6 +59,8 @@ Mount `<a>` or `<button>` elements as direct children of the region. Each needs 
 
 To work on the note itself, such as highlighting passages, look up `[data-svartz-note]`. Every first-party theme puts it on the element that holds the note's body, with the note's slug as its value: `<article data-svartz-note="garden/roses">`. Leave that element's DOM as it is, since the theme renders it. List pages and password-protected notes have no marked body.
 
+A host app can render several notes on one page with `SvartzNoteContent`, each mounting your script with its own body as `context.note`. Work on that element when it is set, and look up `[data-svartz-note]` in the document only when it is absent: `context.note ?? document.querySelector("[data-svartz-note]")`.
+
 `mount` also receives the resource's `options` and a `context` whose `base` is the deployment base path (`""` at the domain root). `pathname` includes it. Build URLs from it, such as `${context.base}${mountPath}/_svartz/<id>/` for a plugin's own server.
 
 ## Test

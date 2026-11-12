@@ -1,7 +1,7 @@
 /**
  * A theme-minimal site with the plugin enabled: the runtime mounts the plugin's browser resource after every
  * navigation, through core's real `mountBrowserScripts`, on pages whose note body theme-minimal marks with
- * `data-svartz-note`.
+ * `data-svartz-note`; and a host page whose `SvartzNoteContent` notes each mount it with their own body.
  */
 import { mountBrowserScripts } from "@svartz/core";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -11,7 +11,7 @@ import "../src/browser.css";
 import sensors from "./fixtures/sensors.html?raw";
 import { describe as describeRange, rangeOf } from "../src/anchor";
 import { HIGHLIGHT } from "../src/browser";
-import { ADA } from "./data";
+import { ADA, ENDPOINT } from "./data";
 
 // The site is served under the deployment base `/notes` with the vault at its root, so the endpoint is ENDPOINT.
 const CONTEXT = { base: "/notes" };
@@ -109,4 +109,32 @@ it("adds nothing to a page without a note body", async () => {
   await new Promise((resolve) => requestAnimationFrame(resolve));
   expect(document.querySelector(".sv-annotations-toolbar")).toBeNull();
   expect(CSS.highlights.has(HIGHLIGHT)).toBe(false);
+});
+
+it("keeps each note's annotations on its own body when a host page shows two, and stores a comment under its note", async () => {
+  // As SvartzNoteContent renders two notes of the vault, each mounting the plugin with its own body as `context.note`.
+  document.body.innerHTML = `<main style="max-inline-size: 42rem; margin: 2rem auto; padding-inline: 1rem; font: 16px/1.6 system-ui">${PAGES["/notes/hardware/sensors/"]}${PAGES["/notes/hardware/wind/"]}</main>`;
+  const [sensors, wind] = [...document.querySelectorAll<HTMLElement>("[data-svartz-note]")] as [HTMLElement, HTMLElement];
+  const mounts = await Promise.all([
+    mountBrowserScripts([RESOURCE], "/notes/hardware/sensors/", { ...CONTEXT, note: sensors }),
+    mountBrowserScripts([RESOURCE], "/notes/hardware/wind/", { ...CONTEXT, note: wind }),
+  ]);
+  dispose = () => mounts.forEach((release) => release());
+
+  // Selecting text in the second note offers its toolbar; the comment lands on that note's passage, under its slug.
+  const start = wind.textContent!.indexOf(GUSTS);
+  getSelection()!.removeAllRanges();
+  getSelection()!.addRange(rangeOf(wind, { start, end: start + GUSTS.length }));
+  await userEvent.click(page.getByRole("button", { name: "Comment", exact: true }));
+  await userEvent.keyboard("Mine reports a ten-minute average.");
+  await userEvent.click(page.getByRole("button", { name: "Post comment" }));
+
+  // One marker per comment, and each highlight inside its own note.
+  await expect.poll(() => markers().length).toBe(2);
+  const owner = (range: AbstractRange) => (sensors.contains(range.startContainer) ? "sensors" : wind.contains(range.startContainer) ? "wind" : "neither");
+  expect(new Map([...CSS.highlights.get(HIGHLIGHT) ?? []].map((range) => [range.toString(), owner(range)]))).toEqual(
+    new Map([[DEW_POINT, "sensors"], [GUSTS, "wind"]]),
+  );
+  const stored = await fetch(`${ENDPOINT}/?page=${encodeURIComponent("hardware/wind")}`).then((response) => response.json() as Promise<{ annotations: Array<{ body: string }> }>);
+  expect(stored.annotations.map(({ body }) => body)).toEqual(["Mine reports a ten-minute average."]);
 });

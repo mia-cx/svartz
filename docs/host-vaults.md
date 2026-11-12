@@ -164,6 +164,33 @@ export const entries: EntryGenerator = () =>
 
 `work.basePath` is the absolute deployment base, SvelteKit's `kit.paths.base`, so the route slices the URL with it instead of `$app/paths.base`, which can be relative during SSR. `routes.notes` includes hidden protected notes. Those have no `vault.note()` entry until unlock, so the page shows no title for them. `vault.note()` matches hrefs that include the deployment base. Redirects follow the vault's alias redirects like the generated catchall. The `entries` generator reads route metadata in `vaults`, which needs no runtime code. The route takes priority over the Svartz catchall for every URL under `/work`. Import `virtual:svartz/tailwind-sources.css` once in the host, as the generated catchall does, so theme content classes get their styles. Add `/// <reference types="@svartz/vite/virtual-modules" />` to `src/app.d.ts`, the declarations the CLI template uses.
 
+## Annotations
+
+With [`@svartz/plugin-annotations`](annotations.md) and `auth` on a host vault, `svartzHandle` serves both plugins' routes (see [server plugins](#server-plugins)). The app runs on `@sveltejs/adapter-cloudflare` with the D1 binding in its Wrangler config, and under `svartz dev` the plugin reads a local D1 from that config (see [bindings under `svartz dev`](server-plugins.md#bindings-under-svartz-dev)).
+
+`SvartzNoteContent` marks a public note's body as theme-minimal does, so a page that renders a note with it shows the note's annotations with no code. A page can render several notes, from one vault or several, and each shows its own. Protected notes get none.
+
+On notes the host renders itself (see [render notes with your own renderer](#render-notes-with-your-own-renderer)), call `attach` from `@svartz/plugin-annotations/browser` with the note's vault and slug. Svelte's `{@attach}` removes the annotations when the reader leaves the page, and attaches again when the slug changes:
+
+```svelte
+<!-- src/routes/blog/[slug]/+page.svelte -->
+<script lang="ts">
+  import { attach } from '@svartz/plugin-annotations/browser';
+  import '@svartz/plugin-annotations/browser.css';
+  import { vaults } from 'virtual:svartz/host';
+  import type { PageProps } from './$types';
+
+  let { data }: PageProps = $props();
+  const blog = vaults.find((vault) => vault.id === 'blog')!;
+</script>
+
+<article {@attach (element) => attach(element, { vault: blog, slug: data.slug })}>
+  {@html data.html}
+</article>
+```
+
+`attach` finds the plugin's routes under the deployment base and the vault's mount. The slug, such as `mastering` for `/blog/mastering/`, is the key the note's annotations are stored under, the same one theme pages use. `auth`'s sign-in dialog comes with the vault's browser scripts, which run on pages that render a note through Svartz; on a page with only `attach`, a reader signs in elsewhere on the site before commenting.
+
 ## Render notes with your own renderer
 
 A host that styles and renders notes itself can use Svartz for the index alone. Set `index: { markdown: true }` on the vault, and each published entry carries `markdown`: the body without its frontmatter, with `%%comments%%` and HTML comments removed and wikilinks, embeds and Markdown links rewritten to page and attachment URLs. A link to a note that isn't public becomes its label. Protected notes never carry it.
