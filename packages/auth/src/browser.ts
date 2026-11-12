@@ -2,6 +2,7 @@
  * The sign-in dialog. The `auth` plugin mounts this script on every page with the vault's {@link SignInConfig};
  * after that, any element with `data-svartz-sign-in` opens the dialog, and other plugins call {@link openSignIn}.
  */
+import type { BrowserScriptContext } from "@svartz/core";
 import type { ProviderId } from "./providers";
 
 export interface SignInProvider {
@@ -11,7 +12,7 @@ export interface SignInProvider {
 
 /** What the dialog needs from the vault's `auth` config. */
 export interface SignInConfig {
-  /** The auth routes' base path, such as `/notes/_svartz/auth`. */
+  /** The auth routes' path below the deployment base, such as `/notes/_svartz/auth`. */
   readonly endpoint: string;
   /** Enabled providers, in the order the dialog lists them. */
   readonly providers: readonly SignInProvider[];
@@ -143,9 +144,12 @@ export function openSignIn(returnTo = `${location.pathname}${location.search}${l
   dialog.showModal();
 }
 
-/** Browser script entry: remember the vault's config and open the dialog from `data-svartz-sign-in` elements. */
-export function mount(_pathname: string, options: SignInConfig): () => void {
-  config = options;
+/**
+ * Browser script entry: remember the vault's config and open the dialog from `data-svartz-sign-in` elements.
+ * The build doesn't know a host app's `paths.base`, so the routes get the deployment base here, from `context`.
+ */
+export function mount(_pathname: string, options: SignInConfig, { base }: BrowserScriptContext = { base: "" }): () => void {
+  config = { ...options, endpoint: `${base}${options.endpoint}` };
   const onClick = (event: MouseEvent) => {
     if (!(event.target instanceof Element) || !event.target.closest(TRIGGER)) return;
     event.preventDefault();

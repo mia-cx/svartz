@@ -45,16 +45,6 @@ function validate(options: AuthOptions): ProviderId[] {
   return names as ProviderId[];
 }
 
-/**
- * The deployment base standalone shells give SvelteKit (`target.basePath` for `static` and `node`), so the browser
- * can reach the routes. A host app's `paths.base` isn't known here, so host vaults assume none.
- */
-function deploymentBase(config: ResolvedConfig): string {
-  const { target } = config;
-  const base = (target.type === "static" || target.type === "node") && typeof target.basePath === "string" ? target.basePath : "";
-  return base.replace(/\/+$/, "");
-}
-
 /** The `auth` options a vault runs, or `undefined` when it doesn't enable auth. */
 function authOptionsOf(vault: ResolvedConfig): AuthOptions | undefined {
   const plugin = (vault.plugins as readonly SvartzPlugin[]).find(({ id }) => id === AUTH_PLUGIN_ID);
@@ -102,7 +92,8 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], call
     emitArtifacts: {
       run(ctx) {
         const browser: SignInConfig = {
-          endpoint: `${deploymentBase(ctx.config)}${callbackMountPath ?? ctx.config.mountPath}/_svartz/${AUTH_PLUGIN_ID}`,
+          // Below the deployment base, which the dialog adds when it mounts.
+          endpoint: `${callbackMountPath ?? ctx.config.mountPath}/_svartz/${AUTH_PLUGIN_ID}`,
           providers: providers.map((id) => ({ id, label: PROVIDERS[id].label })),
           ...options.privacyNotice ? { privacyNotice: options.privacyNotice } : {},
         };
