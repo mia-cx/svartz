@@ -1352,6 +1352,14 @@ describe("Rich text", () => {
     expect(await sendFromSource()).toBe("---\r\ntitle: Guide\r\n---\r\n# Guide");
   });
 
+  it("starts a several-line block as the first body of a CRLF note in the note's line endings", async () => {
+    await openRich("---\r\ntitle: Guide\r\n---", 1);
+    await toolbar().getByRole("button", { name: "Callout" }).click();
+
+    // Each of the callout's lines is a line of the editor, not one line holding a bare LF.
+    expect(await sendFromSource()).toMatch(/^---\r\ntitle: Guide\r\n---\r\n> \[!note\][^\n]*\r\n> /);
+  });
+
   it("moves through the toolbar with arrow keys, Home and End, as one stop in the tab order", async () => {
     await openRich("Text\n", 1);
     const buttons = toolbar().getByRole("button");

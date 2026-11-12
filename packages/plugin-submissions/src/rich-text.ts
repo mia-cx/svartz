@@ -91,10 +91,11 @@ const openBody = EditorState.transactionFilter.of((tr) => {
   tr.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
     if (fromA < close || toA > fromA) elsewhere = true;
     written.push({ from: fromB, to: toB });
-    text += inserted.toString();
+    // In the note's own line breaks, which the editor splits lines on: `toString()` would join them with LF.
+    text += inserted.sliceString(0, inserted.length, lineBreak);
   });
   // Enter, or a redo, already starts the line.
-  if (elsewhere || text.startsWith("\n")) return tr;
+  if (elsewhere || text.startsWith(lineBreak)) return tr;
   /** A position after the edit as written, moved to where its text lands on the new line. */
   const onNewLine = (pos: number) => {
     if (pos < close) return pos;
