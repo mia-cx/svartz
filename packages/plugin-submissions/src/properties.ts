@@ -56,10 +56,17 @@ function decode(raw: string): string | undefined {
 /** Text YAML would read as something else when written plain. */
 const UNSAFE_PLAIN = /^$|^[\s\-?:,[\]{}#&*!|>'"%@`]|\s$|: | #|[\n\r]/;
 
-/** `text` as a YAML scalar, in the quotes the value had, or plain where that reads back the same. */
-function encode(text: string, quote: string, flow = false): string {
+/** Plain scalars YAML reads as a boolean, null, number or date rather than as text. */
+const TYPED_PLAIN = /^(?:true|false|null|~|[-+]?(?:\d[\d_]*(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?|0x[\da-f]+|0o[0-7]+|[-+]?\.inf|\.nan|\d{4}-\d\d?-\d\d?(?:[t\s].*)?)$/i;
+
+/**
+ * `text` as a YAML scalar, in the quotes the value had, or plain where that reads back the same. `typed` keeps a value
+ * that was a boolean, number or date plain, so `featured: true` stays a boolean; text that would read as one is quoted.
+ */
+function encode(text: string, quote: string, flow = false, typed = false): string {
   if (quote === "'") return `'${text.replaceAll("'", "''")}'`;
-  return quote === '"' || UNSAFE_PLAIN.test(text) || (flow && /[,[\]{}]/.test(text)) ? JSON.stringify(text) : text;
+  const quoted = quote === '"' || UNSAFE_PLAIN.test(text) || (flow && /[,[\]{}]/.test(text)) || (!typed && TYPED_PLAIN.test(text));
+  return quoted ? JSON.stringify(text) : text;
 }
 
 /**
@@ -67,7 +74,7 @@ function encode(text: string, quote: string, flow = false): string {
  * block, as it was), anything else as its YAML.
  */
 type Field =
-  | { readonly kind: "text"; readonly text: string; readonly quote: string }
+  | { readonly kind: "text"; readonly text: string; readonly quote: string; readonly typed?: boolean }
   | { readonly kind: "list"; readonly items: readonly string[]; readonly indent?: string }
   | { readonly kind: "yaml"; readonly text: string };
 
@@ -86,7 +93,9 @@ function fieldOf(doc: Text, property: Property): Field {
       return items ? { kind: "list", items } : yaml;
     }
     const text = decode(head);
-    return text === undefined ? yaml : { kind: "text", text, quote: /^["']/.exec(head)?.[0] ?? "" };
+    if (text === undefined) return yaml;
+    const quote = /^["']/.exec(head)?.[0] ?? "";
+    return { kind: "text", text, quote, typed: !quote && TYPED_PLAIN.test(text) };
   }
   const block = rest.map((line) => /^([ \t]*)- (.*)$/.exec(line));
   const indent = block[0]?.[1];
@@ -97,7 +106,7 @@ function fieldOf(doc: Text, property: Property): Field {
 
 /** What follows `key:` for `value` typed into `field`'s input, with `lineBreak` between lines. */
 function valueSource(field: Field, value: string, lineBreak: string): string {
-  if (field.kind === "text") return value ? ` ${encode(value, field.quote)}` : "";
+  if (field.kind === "text") return value ? ` ${encode(value, field.quote, false, field.typed)}` : "";
   if (field.kind === "yaml") {
     if (!value) return "";
     const lines = value.split(/\r?\n/);

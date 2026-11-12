@@ -1153,6 +1153,15 @@ describe("Rich text", () => {
     expect(await sendFromSource()).toBe(NOTE.replace("  role: Lamplighter", "  role: Lighthouse keeper"));
   });
 
+  it("keeps text that looks like a boolean or a date as text, and a boolean as a boolean", async () => {
+    const note = "---\ntitle: Guide\nfeatured: true\n---\n# Guide\n";
+    await openRich(note);
+    await page.getByRole("textbox", { name: "title", exact: true }).fill("true");
+    await page.getByRole("textbox", { name: "featured" }).fill("false");
+
+    expect(await sendFromSource()).toBe(note.replace("title: Guide", 'title: "true"').replace("featured: true", "featured: false"));
+  });
+
   it("renames a property", async () => {
     await openRich(NOTE);
     await page.getByRole("textbox", { name: "Property name" }).first().fill("name");
@@ -1192,6 +1201,15 @@ describe("Rich text", () => {
     await expect.element(bold).toHaveAttribute("aria-pressed", "false");
     await userEvent.keyboard(`{${mod}>}i{/${mod}}`);
     expect(await sendFromSource()).toBe("# Guide\n\nA *brave* lamplighter.\n");
+  });
+
+  it("makes every selected line a heading when only some of them are", async () => {
+    await openRich("Plain\n## Sub\n", 1);
+    await userEvent.click(lineWith("Plain")!);
+    await userEvent.keyboard("{Home}{Shift>}{ArrowDown}{End}{/Shift}");
+    await toolbar().getByRole("button", { name: "Heading 2" }).click();
+
+    expect(await sendFromSource()).toBe("## Plain\n## Sub\n");
   });
 
   it("makes headings and lists from the toolbar, and plain lines again", async () => {

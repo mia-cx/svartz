@@ -322,17 +322,16 @@ function enclosing(state: EditorState, ...names: string[]): SyntaxNode | undefin
   return undefined;
 }
 
-const headingLevel = (state: EditorState) => {
-  const line = state.doc.lineAt(state.selection.main.head);
-  return HEADING_MARKER.exec(prefixOf(state, line).marker)?.[1]!.length ?? 0;
-};
+const levelOf = (state: EditorState, line: Line) => HEADING_MARKER.exec(prefixOf(state, line).marker)?.[1]!.length ?? 0;
+const headingLevel = (state: EditorState) => levelOf(state, state.doc.lineAt(state.selection.main.head));
 
 /** Make the selected lines headings of `level`, or paragraphs when they all are already. */
 function toggleHeading(view: EditorView, level: number) {
   const { state } = view;
-  const off = headingLevel(state) === level;
+  const lines = selectedLines(state);
+  const off = lines.every((line) => levelOf(state, line) === level);
   view.dispatch({
-    changes: selectedLines(state).map((line) => {
+    changes: lines.map((line) => {
       const { quotes, label, marker } = prefixOf(state, line);
       const at = line.from + quotes.length + label.length;
       return { from: at, to: at + marker.length, insert: off ? "" : `${"#".repeat(level)} ` };
