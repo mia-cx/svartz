@@ -66,16 +66,17 @@ interface Candidate extends Position {
 
 /**
  * Where `anchor` is in `text` now, or `null` when its passage is gone.
- * Candidates are the stored position, every exact occurrence of the quote, and the near matches a bounded fuzzy search
- * finds around the stored position. Each is scored by how much of the quote and its context agree with the text there
+ * The quote with its context unchanged is found at once, preferring the stored position. Otherwise the candidates are
+ * every exact occurrence of the quote and the near matches a bounded fuzzy search finds around the stored position. Each is scored by how much of the quote and its context agree with the text there
  * (see {@link MIN_AGREEMENT}); the best one wins, the nearest of equals, and none wins below the threshold.
  */
 export function locate(text: string, anchor: Anchor): Position | null {
-  const { exact, start, end } = anchor;
+  const { exact, prefix, suffix, start } = anchor;
   if (!exact) return null;
-  const stored: Candidate = { start, end, edits: 0 };
-  // The common case: the note hasn't changed around the passage.
-  if (text.slice(start, end) === exact && agreement(text, anchor, stored) === 1) return { start, end };
+  // The common cases: the passage and its context are unchanged, where they were or moved as a whole.
+  const whole = prefix + exact + suffix;
+  const at = text.startsWith(whole, start - prefix.length) ? start - prefix.length : text.indexOf(whole);
+  if (at !== -1) return { start: at + prefix.length, end: at + prefix.length + exact.length };
 
   const candidates = [...occurrences(text, exact), ...nearMatches(text, anchor)]
     .sort((a, b) => a.edits - b.edits || Math.abs(a.start - start) - Math.abs(b.start - start))
