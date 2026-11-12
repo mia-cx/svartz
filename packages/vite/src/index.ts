@@ -64,9 +64,11 @@ import {
 import { createVaultChangeEvent } from "./watch";
 import { isHostRouteFile, staticHostRoutes } from "./manual-routes";
 import {
+  createHostIndexSource,
   createHostRegistrySource,
   createHostServerSource,
   deploymentBasePath,
+  getGeneratedHostIndexPath,
   getGeneratedHostRegistryPath,
   getGeneratedHostServerPath,
   getGeneratedHostStylesPath,
@@ -552,8 +554,10 @@ export {
   getThemePresetPlugins,
   resolveRuntimePlugins,
   createVaultChangeEvent,
+  createHostIndexSource,
   createHostRegistrySource,
   createHostServerSource,
+  getGeneratedHostIndexPath,
   getGeneratedHostRegistryPath,
   getGeneratedHostServerPath,
   getGeneratedHostStylesPath,

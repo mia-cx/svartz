@@ -2,3 +2,4 @@ packages:
   - "packages/*"
   - "apps/*"
   - "themes/*"
+  - "packages/cli/tests/fixtures/sveltekit-3-host"

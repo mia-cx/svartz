@@ -26,6 +26,21 @@ export function deploymentBasePath(config: ResolvedConfig, kitBasePath?: string)
   return kitBasePath ?? (config.site.url ? new URL(config.site.url).pathname.replace(/\/+$/, "") : "");
 }
 
+/**
+ * `virtual:svartz/index`: each vault's published index and site metadata, in config order. It imports no page
+ * runtime or theme, not even dynamically, so a host that only reads the index never compiles Svartz's page runtime.
+ */
+export function createHostIndexSource(vaults: readonly ResolvedConfig[], kitBasePath?: string): string {
+  const imports = vaults.map((vault, index) =>
+    `import { index as index${index} } from ${JSON.stringify(getGeneratedIndexModulePath(vault))};`
+  );
+  const records = vaults.map((vault, index) => {
+    const { favicon: _favicon, ...siteConfig } = vault.site;
+    return `  { id: ${JSON.stringify(vault.id)}, mountPath: ${JSON.stringify(vault.mountPath)}, basePath: ${JSON.stringify(deploymentBasePath(vault, kitBasePath))}, index: index${index}, siteConfig: ${JSON.stringify(siteConfig)} },`;
+  });
+  return [...imports, `export const vaults = [\n${records.join("\n")}\n];`, ""].join("\n");
+}
+
 /** The host eagerly reads route metadata and loads runtime code only for the selected mount. */
 export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitBasePath?: string): string {
   const imports = vaults.map((vault, index) =>
@@ -97,6 +112,10 @@ export function getGeneratedHostStylesPath(hostRegistryPath: string, vaultId: st
 
 export function getGeneratedHostRegistryPath(configDir: string): string {
   return join(configDir, ".svartz", "host", "runtime.ts");
+}
+
+export function getGeneratedHostIndexPath(configDir: string): string {
+  return join(configDir, ".svartz", "host", "index.ts");
 }
 
 export function getGeneratedHostServerPath(configDir: string): string {

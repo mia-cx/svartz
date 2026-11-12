@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { basename } from "node:path";
 import type { ResolvedConfig } from "@svartz/core";
-import { createHostRegistrySource, deploymentBasePath, getGeneratedHostRegistryPath, getGeneratedHostStylesPath, svelteKitBasePath } from "../src/host-registry";
+import { createHostIndexSource, createHostRegistrySource, deploymentBasePath, getGeneratedHostIndexPath, getGeneratedHostRegistryPath, getGeneratedHostStylesPath, svelteKitBasePath } from "../src/host-registry";
 
 const vault = (id: string, mountPath: string): ResolvedConfig => ({
   version: "1.0.0",
@@ -47,6 +47,15 @@ describe("host registry", () => {
       .not.toBe(getGeneratedHostStylesPath("/workspace/.svartz/host/runtime.ts", "aaG").toLowerCase());
     expect(Buffer.byteLength(basename(getGeneratedHostStylesPath("/workspace/.svartz/host/runtime.ts", "x".repeat(126)))))
       .toBeLessThanOrEqual(255);
+  });
+
+  it("publishes each vault's index without importing the page runtime or theme", () => {
+    const source = createHostIndexSource([vault("blog", "/blog"), vault("work", "/work")], "/site");
+    expect(source).toContain('import { index as index0 } from "/workspace/.svartz/vaults/blog/artifacts/index.ts"');
+    expect(source).toContain('{ id: "work", mountPath: "/work", basePath: "/site", index: index1, siteConfig: {"title":"work","url":"https://example.test"} }');
+    // Vite compiles dynamic imports too, so the entry must not name runtime modules at all.
+    expect(source).not.toMatch(/import\(|runtime-|\$app\//);
+    expect(getGeneratedHostIndexPath("/workspace")).toBe("/workspace/.svartz/host/index.ts");
   });
 
   it("uses the target or canonical host URL as the deployment base", () => {

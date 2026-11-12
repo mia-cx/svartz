@@ -92,6 +92,22 @@ declare module "virtual:svartz/host" {
   export function hostStylesheets(pathname: string): readonly string[];
 }
 
+/**
+ * Every vault's published index, without Svartz's page runtime: a host that lists notes or links their Markdown
+ * imports this instead of `virtual:svartz/host`. Select a vault by `id`; the order follows the config.
+ */
+declare module "virtual:svartz/index" {
+  interface PublishedVault {
+    readonly id: string;
+    readonly mountPath: string;
+    /** SvelteKit's `paths.base`. Entry hrefs start at the app root, so prefix them with it. */
+    readonly basePath: string;
+    readonly index: import("@svartz/core").Index;
+    readonly siteConfig: typeof import("virtual:svartz/artifacts").siteConfig;
+  }
+  export const vaults: readonly PublishedVault[];
+}
+
 /** Server-only. Add `svartzHandle` to `hooks.server` to route `/_svartz/<id>/` to every vault's server plugins. */
 declare module "virtual:svartz/server" {
   export const svartzHandle: import("@sveltejs/kit").Handle;
