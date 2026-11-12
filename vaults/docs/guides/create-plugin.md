@@ -57,6 +57,8 @@ export function mount(pathname: string) {
 
 Mount `<a>` or `<button>` elements as direct children of the region. Each needs a visible label or an `aria-label`. An empty region takes no space.
 
+To work on the note itself, such as highlighting passages, look up `[data-svartz-note]`. Every first-party theme puts it on the element that holds the note's body, with the note's slug as its value: `<article data-svartz-note="garden/roses">`. Leave that element's DOM as it is, since the theme renders it. List pages and password-protected notes have no marked body.
+
 `mount` also receives the resource's `options` and a `context` whose `base` is the deployment base path (`""` at the domain root). `pathname` includes it. Build URLs from it, such as `${context.base}${mountPath}/_svartz/<id>/` for a plugin's own server.
 
 ## Test
