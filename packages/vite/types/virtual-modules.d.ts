@@ -81,6 +81,10 @@ declare module "virtual:svartz/host" {
     readonly artifacts: typeof import("virtual:svartz/artifacts");
     readonly theme: typeof import("virtual:svartz/theme");
   }
+  /** SvelteKit's `paths.base`. Use it in place of `$app/paths`, which has no `base` in SvelteKit 3. */
+  export const base: string;
+  /** SvelteKit's `paths.assets`, or `base` when unset: the prefix for `hostStylesheets` files. */
+  export const assets: string;
   export const vaults: readonly HostVaultMetadata[];
   export const routes: {
     readonly all: readonly string[];

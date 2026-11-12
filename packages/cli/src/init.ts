@@ -466,7 +466,14 @@ const initProjectEffect = (
       const existingCatchallServer = existsSync(catchallServerPath)
         ? yield* operation("read host catchall server load", () => readFile(catchallServerPath, "utf8"))
         : undefined;
-      const previousUniversalStylesLoad = catchallLoadTemplate
+      // Templates before SvelteKit 3 support read `base` and `assets` from `$app/paths`, which SvelteKit 3 dropped.
+      const previousAppPathsLoad = catchallLoadTemplate.replace(
+        "import { decodeRoutePath } from '@svartz/ui/runtime';\nimport { base, prepareHostVault, routes }",
+        "import { base } from '$app/paths';\nimport { decodeRoutePath } from '@svartz/ui/runtime';\nimport { prepareHostVault, routes }",
+      );
+      const previousAppPathsServer = `import { assets, base } from '$app/paths';\n${catchallServerTemplate
+        .replace("import { assets, base, hostStylesheets, prepareHostVault }", "import { hostStylesheets, prepareHostVault }")}`;
+      const previousUniversalStylesLoad = previousAppPathsLoad
         .replace("import { base }", "import { assets, base }")
         .replace("import { prepareHostVault, routes }", "import { hostStylesheets, prepareHostVault, routes }")
         .replace("async ({ url, data })", "async ({ url })")
@@ -495,11 +502,12 @@ const initProjectEffect = (
         .replace("import { error } from '@sveltejs/kit';\n", "")
         .replace("decodeRoutePath(base ? url.pathname.slice(base.length) || '/' : url.pathname);\n  if (appPath === undefined) error(404);",
           "base ? url.pathname.slice(base.length) || '/' : url.pathname;");
-      const generatedLoads = [catchallLoadTemplate, previousUniversalStylesLoad, previousOrderedCatchallLoad, previousStyledCatchallLoad, previousCatchallLoad];
+      const generatedLoads = [catchallLoadTemplate, previousAppPathsLoad, previousUniversalStylesLoad, previousOrderedCatchallLoad, previousStyledCatchallLoad, previousCatchallLoad];
+      const generatedServers = [catchallServerTemplate, previousAppPathsServer];
       const compatibleCatchallLoad = existingCatchallLoad !== undefined &&
         [...generatedLoads, ...generatedLoads.map(withoutPathDecoding)].includes(existingCatchallLoad) &&
         !existsSync(path.join(catchallRoot, "+page.server.js")) &&
-        (existingCatchallServer === undefined || [catchallServerTemplate, withoutPathDecoding(catchallServerTemplate)].includes(existingCatchallServer));
+        (existingCatchallServer === undefined || [...generatedServers, ...generatedServers.map(withoutPathDecoding)].includes(existingCatchallServer));
       const migrateCatchall = compatibleCatchallLoad && existingCatchallLoad !== catchallLoadTemplate;
       const installCatchallServer = compatibleCatchallLoad && existingCatchallServer !== catchallServerTemplate;
       const catchallPageUpdate =

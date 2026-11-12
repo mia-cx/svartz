@@ -1,5 +1,4 @@
-import { assets } from '$app/paths';
-import { hostStylesheets, prepareHostVault } from 'virtual:svartz/host';
+import { assets, hostStylesheets, prepareHostVault } from 'virtual:svartz/host';
 
 /**
  * Stylesheet URLs for a host note route. Call it in the route's server `load`
