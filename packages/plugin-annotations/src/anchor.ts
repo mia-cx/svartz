@@ -58,8 +58,7 @@ export const MIN_AGREEMENT = 0.6;
 const SEARCH_CELLS = 4_000_000;
 /**
  * Candidates scored in full, so a common word stays cheap. They are ranked by how much of the quote and the words right
- * beside it agree, less a cost for distance from the stored position, so unrelated repeats of a quote never crowd out
- * its passage.
+ * beside it agree, the nearest of equals first, so unrelated repeats of a quote never crowd out its passage.
  */
 const MAX_CANDIDATES = 64;
 
@@ -94,10 +93,10 @@ export function locate(text: string, anchor: Anchor): Position | null {
   const candidates = [...occurrences(text, exact), ...nearMatches(text, anchor)]
     .map((candidate) => {
       const adjacent = wordsInCommon(before, text, candidate.start - 1, -1) + wordsInCommon(after, text, candidate.end, 1);
-      // Twice as far costs one more character, so a nearby passage outranks distant repeats with a little more context.
-      return { candidate, rank: candidate.edits - adjacent + Math.log2(1 + distance(candidate)) };
+      return { candidate, rank: candidate.edits - adjacent };
     })
-    .sort((a, b) => a.rank - b.rank)
+    // Distance only breaks ties: weighing it in lets nearby repeats crowd out a passage that moved and was edited.
+    .sort((a, b) => a.rank - b.rank || distance(a.candidate) - distance(b.candidate))
     .slice(0, MAX_CANDIDATES);
   let best: Candidate | undefined;
   let bestScore = MIN_AGREEMENT;

@@ -207,6 +207,17 @@ describe("after a light edit to the passage", () => {
     expect(found && text.slice(found.end)).toBe(" is measured once every morning.");
   });
 
+  it("keeps a passage edited beside its quote after many repeats were added above it", () => {
+    const original = "In the northern sheltered garden, temperature is measured once every morning.";
+    const start = original.indexOf("temperature");
+    const anchor = anchorIn(original, start, start + "temperature".length);
+    const text = "temperature reading; ".repeat(140) + original.replace("temperature is measured", "stable temperature is checked");
+
+    const found = locate(text, anchor);
+
+    expect(found && text.slice(found.end)).toBe(" is checked once every morning.");
+  });
+
   it("keeps a passage wrapped in punctuation among more repeats than are scored", () => {
     const original = "In the northern sheltered garden, temperature is measured once every morning.";
     const start = original.indexOf("temperature");
