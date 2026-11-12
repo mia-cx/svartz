@@ -1,14 +1,13 @@
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { once } from "node:events";
 import { setTimeout as sleep } from "node:timers/promises";
-import { promisify } from "node:util";
 import { access, cp, mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { runBuild } from "./helpers/build-process";
 
-const execFileAsync = promisify(execFile);
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
 const cli = path.join(workspaceRoot, "packages/cli/dist/index.js");
 const HANDLER_MARKER = "svartz-hello-handler";
@@ -68,9 +67,10 @@ async function build(target: Record<string, unknown>, { serverPlugin = true, mou
       }],
     }],
   };\n`);
-  return execFileAsync(process.execPath, [cli, "build", "--config", path.join(root, "svartz.config.ts")], {
+  return runBuild([cli, "build", "--config", path.join(root, "svartz.config.ts")], {
     cwd: root,
-    maxBuffer: 20_000_000,
+    // Leave the test time to clean up and report a hung build.
+    timeout: BUILD_TIMEOUT - 10_000,
   });
 }
 
