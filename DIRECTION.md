@@ -10,10 +10,14 @@ Svartz publishes Obsidian vaults as SvelteKit sites, in the spirit of Quartz: on
 - **Themes compose.** A vault lists the themes it combines in config, or uses a theme package that composes others. The first theme styles the site. Each page picks the theme that renders it: its `theme:`, its nearest folder note's, a renderer detecting its metadata, then the first theme.
 - **`@svartz/ui` holds building blocks only**: primitives, content components, schema trees, code panels, renderer types. No shell grows there again.
 
-## Current state (October 2026)
+## Current state (November 2026)
 
-- 2.1.0 is published. 2.0 brought the extension contract, the compositor, all five default themes as extensions of minimal, and `theme.base` lists (PRD #203). 2.1 renders WebSocket endpoints and browser routes (form actions, redirects) as reference operations.
-- Logitland's docs (staging.logit.land/docs) consume the published API and MCP themes as a `theme.base` list and document their sockets and browser routes with the 2.1 frontmatter.
+- 2.3.0 is published; the release PR (#285) collects everything below. 2.0 brought the extension contract, the compositor, all five default themes as extensions of minimal, and `theme.base` lists (PRD #203). 2.1 renders WebSocket endpoints and browser routes as reference operations.
+- Plugins can answer requests at runtime (`/_svartz/<id>/`, PRD #245) on standalone Node and Cloudflare targets and in host apps through `svartzHandle`. Pages stay prerendered.
+- Readers sign in with GitHub, Google, Discord or X (`@svartz/auth`). On that base, `@svartz/plugin-annotations` lets them comment on and +1 passages (D1, with comments that survive light edits). `@svartz/plugin-submissions` (private until its npm bootstrap) turns edits and new pages into pull requests, from an editor with Live Preview, Source, Split and Rich text modes that never changes a byte the reader didn't touch.
+- SvelteKit 2 and 3 hosts both build and render Svartz pages; index-only hosts import `virtual:svartz/index`.
+- Waiting on Mia: the reaction drawings (#281) that unblock reactions (#270, #271, #276, #277), the mia.cx sign-in notice (#282), and whether Bluesky sign-in (#254) becomes an auth provider.
+- Logitland's docs (staging.logit.land/docs) consume the published API and MCP themes as a `theme.base` list.
 
 ## Decisions
 
@@ -24,4 +28,6 @@ Svartz publishes Obsidian vaults as SvelteKit sites, in the spirit of Quartz: on
 - Conflicts fail the build with the page path rather than choosing silently.
 - The config file format keeps its own major (`CONFIG_FORMAT_MAJOR`), separate from the package major, so a package major never breaks existing configs.
 - Reference pages show only what the frontmatter states: a page without `operation` stays a guide, and no method is inferred from a title.
+- The submissions editor keeps one CodeMirror document for every mode; Rich text is not ProseMirror or Milkdown, because those rebuild Markdown on save and rewrite what they don't model (November 2026).
+- The editor's Split preview runs the build's own Markdown steps, moved into browser-safe modules, so the preview and the site cannot drift; what only the build can do falls back visibly.
 - The compositor ships as 2.0.0. `RELEASE_LINE` in `scripts/release-packages.mjs` names the major version; a changeset may declare `major` only to reach it.
