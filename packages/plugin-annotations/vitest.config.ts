@@ -3,18 +3,19 @@ import { playwright } from "@vitest/browser-playwright";
 import type { Plugin } from "vite";
 import type { BrowserCommand } from "vitest/node";
 import { defineConfig } from "vitest/config";
-import { ADA, createDatabase, createSite, ENDPOINT, seed, signIn as signInAt, type SeedComment } from "./tests/harness";
+import type { Identity } from "@svartz/auth";
+import { ADA, ALAN, createDatabase, createSite, ENDPOINT, seed, signIn as signInAt, type SeedComment } from "./tests/harness";
 
 /**
  * Browser tests read and write annotations through the real plugin on a real D1, same-origin as the test page: this
  * serves `ENDPOINT` from the Vite dev server, the `seedComments` command fills the database between tests, and
- * `signIn` gives the test browser a real session cookie from `auth`.
+ * `signIn` gives the test browser a real session cookie from `auth`. Alan moderates.
  */
 let site: Promise<{ fetch: ReturnType<typeof createSite>; seed: (comments: readonly SeedComment[]) => Promise<void>; dispose: () => Promise<void> }> | undefined;
 
 function annotationsSite() {
   site ??= createDatabase().then(({ db, dispose }) => ({
-    fetch: createSite({ DB: db }),
+    fetch: createSite({ DB: db }, { moderators: [ALAN.id] }),
     seed: (comments: readonly SeedComment[]) => seed(db, comments),
     dispose,
   }));
@@ -29,11 +30,11 @@ const seedComments: BrowserCommand<[comments: SeedComment[]]> = async (_context,
   await (await annotationsSite()).seed(comments);
 };
 
-/** Sign the test browser in as Ada, as returning from GitHub would; `null` signs it out. */
-const signIn: BrowserCommand<[origin: string | null]> = async ({ context }, origin) => {
+/** Sign the test browser in as `person`, Ada unless a test says otherwise, as returning from GitHub would; `null` signs it out. */
+const signIn: BrowserCommand<[origin: string | null, person?: Identity]> = async ({ context }, origin, person = ADA) => {
   await context.clearCookies({ name: "__Host-svartz-session" });
   if (!origin) return;
-  const [name, value] = (await signInAt((await annotationsSite()).fetch, ADA)).split(/=(.*)/s) as [string, string];
+  const [name, value] = (await signInAt((await annotationsSite()).fetch, person)).split(/=(.*)/s) as [string, string];
   // Chromium treats http://localhost as secure, so it sends a `Secure` cookie there, but only takes one set for https.
   await context.addCookies([{ name, value, url: origin.replace(/^http:/, "https:"), secure: true, httpOnly: true, sameSite: "Lax" }]);
 };

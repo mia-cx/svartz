@@ -6,13 +6,14 @@ import "../src/browser.css";
 import note from "./fixtures/sensors.html?raw";
 import { describe as describeRange, rangeOf } from "../src/anchor";
 import { ACTIVE_HIGHLIGHT, attach, HIGHLIGHT } from "../src/browser";
-import { ADA, ENDPOINT, GRACE, type SeedComment } from "./data";
+import type { Identity } from "@svartz/auth";
+import { ADA, ALAN, ENDPOINT, GRACE, type SeedComment } from "./data";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
     seedComments(comments: SeedComment[]): Promise<void>;
-    /** Sign the browser in as Ada at `origin`, as GitHub sending her back would; `null` signs it out. */
-    signIn(origin: string | null): Promise<void>;
+    /** Sign the browser in as `person` (Ada by default) at `origin`, as GitHub sending them back would; `null` signs it out. */
+    signIn(origin: string | null, person?: Identity): Promise<void>;
   }
 }
 
@@ -485,6 +486,212 @@ describe("agreeing with a comment", () => {
       expect(posts).toBe(1);
       expect(toggle.getAttribute("aria-pressed")).toBe("true");
       expect(agreed()).toBe("You and Grace Hopper agree");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+});
+
+describe("deleting a comment", () => {
+  const BMP390 = "BMP390";
+
+  beforeEach(async () => {
+    const root = render();
+    // Ada's comment, Grace's, and Ada's again on the same line as Grace's.
+    await commands.seedComments([
+      { id: "dew-point", page: "hardware/sensors", author: ADA, anchor: anchorOf(root, DEW_POINT), createdAt: "2026-11-02T09:00:00.000Z", body: "Every morning.", agreedBy: [GRACE] },
+      { id: "pressure", page: "hardware/sensors", author: GRACE, anchor: anchorOf(root, PRESSURE), createdAt: "2026-11-03T09:00:00.000Z", body: "Which model?" },
+      { id: "bmp390", page: "hardware/sensors", author: ADA, anchor: anchorOf(root, BMP390), createdAt: "2026-11-05T09:00:00.000Z", body: "Same as mine." },
+    ]);
+  });
+
+  async function markers(count = 3) {
+    await expect.poll(() => document.querySelectorAll(".sv-annotations-marker").length).toBe(count);
+    return [...document.querySelectorAll<HTMLButtonElement>(".sv-annotations-marker")];
+  }
+  const cardOf = (marker: HTMLButtonElement) => document.getElementById(marker.getAttribute("popovertarget")!)!;
+  const deleteOf = (marker: HTMLButtonElement) => cardOf(marker).querySelector<HTMLButtonElement>(".sv-annotations-delete")!;
+  const confirmOf = (marker: HTMLButtonElement) => cardOf(marker).querySelector<HTMLElement>(".sv-annotations-confirm")!;
+  const confirmButton = (marker: HTMLButtonElement) => [...confirmOf(marker).querySelectorAll("button")].find((button) => button.textContent === "Delete comment")!;
+  const reattach = () => {
+    detach?.();
+    detach = attach(render(), { endpoint: ENDPOINT, page: "hardware/sensors" });
+  };
+
+  it("is offered on the reader's own comments only, and to no one signed out", async () => {
+    reattach();
+    expect((await markers()).map((marker) => deleteOf(marker).hidden)).toEqual([true, true, true]);
+
+    await commands.signIn(location.origin);
+    reattach();
+
+    expect((await markers()).map((marker) => deleteOf(marker).hidden)).toEqual([false, true, false]);
+  });
+
+  it("deletes the reader's comment from the keyboard after they confirm, taking its marker and highlight with it", async () => {
+    await commands.signIn(location.origin);
+    reattach();
+    const [dewPoint, pressure] = await markers();
+
+    dewPoint!.focus();
+    await userEvent.keyboard("{Enter}");
+    // Ada's name, then +1, then Delete.
+    await userEvent.keyboard("{Tab}{Tab}{Tab}");
+    expect(document.activeElement).toBe(deleteOf(dewPoint!));
+    await expect.element(deleteOf(dewPoint!)).toHaveAccessibleName("Delete comment");
+
+    // Asking first, with Cancel focused, so a second Enter can't delete.
+    await userEvent.keyboard("{Enter}");
+    expect(confirmOf(dewPoint!).hidden).toBe(false);
+    await expect.element(confirmOf(dewPoint!)).toHaveAccessibleName("Delete your comment?");
+    expect(document.activeElement?.textContent).toBe("Cancel");
+    await userEvent.keyboard("{Enter}");
+    expect(confirmOf(dewPoint!).hidden).toBe(true);
+    expect(document.activeElement).toBe(deleteOf(dewPoint!));
+    expect(highlighted()).toEqual([DEW_POINT, PRESSURE, BMP390]);
+
+    await userEvent.keyboard("{Enter}{Tab}");
+    expect(document.activeElement).toBe(confirmButton(dewPoint!));
+    await userEvent.keyboard("{Enter}");
+
+    await markers(2);
+    expect(dewPoint!.isConnected).toBe(false);
+    expect(highlighted()).toEqual([PRESSURE, BMP390]);
+    expect(CSS.highlights.has(ACTIVE_HIGHLIGHT)).toBe(false);
+    // Focus moves on to the next comment, and a screen reader hears it went.
+    expect(document.activeElement).toBe(pressure);
+    expect(document.querySelector(".sv-annotations [role=status]")?.textContent).toBe("Comment deleted.");
+
+    // Gone for good: a fresh page doesn't show it.
+    reattach();
+    expect((await markers(2)).map((marker) => marker.getAttribute("aria-label"))).toEqual([
+      `Comment by Grace Hopper on “${PRESSURE}”`, `Comment by Ada Lovelace on “${BMP390}”`,
+    ]);
+  });
+
+  it("lets a moderator delete anyone's comment with the mouse, closing up the markers left on its line", async () => {
+    await commands.signIn(location.origin, ALAN);
+    reattach();
+    const [, pressure, bmp390] = await markers();
+    expect([...document.querySelectorAll<HTMLButtonElement>(".sv-annotations-marker")].map((marker) => deleteOf(marker).hidden)).toEqual([false, false, false]);
+    const first = pressure!.getBoundingClientRect();
+    expect(bmp390!.getBoundingClientRect().top).toBe(first.top);
+
+    await userEvent.click(pressure!);
+    await userEvent.click(deleteOf(pressure!));
+    await expect.element(confirmOf(pressure!)).toHaveAccessibleName("Delete Grace Hopper's comment?");
+    await userEvent.click(confirmButton(pressure!));
+
+    await markers(2);
+    expect(highlighted()).toEqual([DEW_POINT, BMP390]);
+    expect(bmp390!.getBoundingClientRect().left).toBe(first.left);
+  });
+
+  it("locks the confirmation while the delete is sent, so it's sent once", async () => {
+    await commands.signIn(location.origin);
+    const realFetch = globalThis.fetch;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let deletes = 0;
+    globalThis.fetch = async (input, init) => {
+      if (init?.method === "DELETE") {
+        deletes++;
+        await held;
+      }
+      return realFetch(input, init);
+    };
+    try {
+      reattach();
+      const [dewPoint] = await markers();
+      await userEvent.click(dewPoint!);
+      await userEvent.click(deleteOf(dewPoint!));
+      await userEvent.click(confirmButton(dewPoint!));
+      expect(confirmOf(dewPoint!).getAttribute("aria-busy")).toBe("true");
+
+      await userEvent.click(confirmButton(dewPoint!));
+      // Playwright won't press an aria-disabled button, so press it as a script would.
+      confirmOf(dewPoint!).querySelector("button")!.click();
+      expect(confirmOf(dewPoint!).hidden).toBe(false);
+      release();
+
+      await markers(2);
+      expect(deletes).toBe(1);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("keeps the comment and says why when the site refuses", async () => {
+    await commands.signIn(location.origin);
+    reattach();
+    const [dewPoint] = await markers();
+    // The session ends while the page is open.
+    await commands.signIn(null);
+
+    await userEvent.click(dewPoint!);
+    await userEvent.click(deleteOf(dewPoint!));
+    await userEvent.click(confirmButton(dewPoint!));
+
+    const problem = cardOf(dewPoint!).querySelector("[role=alert]")!;
+    await expect.poll(() => problem.textContent).toBe("Sign in to delete a comment.");
+    expect(confirmOf(dewPoint!).hidden).toBe(false);
+    expect(document.activeElement).toBe(confirmButton(dewPoint!));
+    expect(document.querySelectorAll(".sv-annotations-marker")).toHaveLength(3);
+  });
+
+  it("takes away a comment someone else deleted first", async () => {
+    await commands.signIn(location.origin);
+    reattach();
+    const [dewPoint] = await markers();
+    // A moderator deletes Ada's comment while her page is open.
+    const root = document.querySelector("article") as HTMLElement;
+    await commands.seedComments([{ id: "pressure", page: "hardware/sensors", author: GRACE, anchor: anchorOf(root, PRESSURE), createdAt: "2026-11-03T09:00:00.000Z", body: "Which model?" }]);
+    await commands.signIn(location.origin);
+
+    await userEvent.click(dewPoint!);
+    await userEvent.click(deleteOf(dewPoint!));
+    await userEvent.click(confirmButton(dewPoint!));
+
+    await markers(2);
+    expect(highlighted()).toEqual([PRESSURE, BMP390]);
+  });
+
+  it("keeps a deleted comment away when the page's list answers after it went", async () => {
+    await commands.signIn(location.origin);
+    const root = render();
+    const SHADE = "It needs shade and airflow";
+    // Back from signing in with a draft, posted and deleted before the page's list arrives; the list still has it.
+    sessionStorage.setItem("svartz-annotations:draft", JSON.stringify({
+      endpoint: ENDPOINT, page: "hardware/sensors", action: "comment", anchor: anchorOf(root, SHADE), body: "Mine sits under the eaves.",
+    }));
+    const realFetch = globalThis.fetch;
+    let posted!: () => void;
+    let removed!: () => void;
+    const afterPost = new Promise<void>((resolve) => { posted = resolve; });
+    const afterDelete = new Promise<void>((resolve) => { removed = resolve; });
+    globalThis.fetch = async (input, init) => {
+      if (!init?.method) {
+        await afterPost;
+        const list = await realFetch(input, init);
+        await afterDelete;
+        return list;
+      }
+      const response = await realFetch(input, init);
+      if (init.method === "POST") posted();
+      if (init.method === "DELETE") removed();
+      return response;
+    };
+    try {
+      detach = attach(root, { endpoint: ENDPOINT, page: "hardware/sensors" });
+      await userEvent.click(document.querySelector<HTMLButtonElement>(".sv-annotations-composer button[type=submit]")!);
+      const [mine] = await markers(1);
+      await userEvent.click(mine!);
+      await userEvent.click(deleteOf(mine!));
+      await userEvent.click(confirmButton(mine!));
+
+      // The list, read before the delete, still has it; it stays away.
+      await markers(3);
+      expect(highlighted()).toEqual([DEW_POINT, PRESSURE, BMP390]);
     } finally {
       globalThis.fetch = realFetch;
     }
