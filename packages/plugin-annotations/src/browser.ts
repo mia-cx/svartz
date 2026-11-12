@@ -3,7 +3,8 @@
  * highlights each passage with the CSS Custom Highlight API, so `element`'s DOM is never rewritten, and puts a marker
  * in the margin on the passage's first line. Each marker opens a card with the comment, its author, and **+1**, which
  * toggles the reader's agreement and shows who agrees. The card offers **Delete**, behind a confirmation, on the
- * reader's own comments, and on every comment for a moderator.
+ * reader's own comments, and on every comment for a moderator. Comments whose passage the author has since removed
+ * are listed after the note, each with the quote it responded to.
  *
  * Selecting text inside `element` shows a toolbar beside it; **Comment** opens a composer that posts to the plugin's
  * route. A signed-out reader gets `@svartz/auth`'s sign-in dialog, and the draft or +1 waits in `sessionStorage` until
@@ -185,12 +186,16 @@ function agreedBy(people: readonly Identity[], viewer: string | undefined): stri
   return `${NAMES.format(shown)} ${names.length === 1 && names[0] !== "You" ? "agrees" : "agree"}`;
 }
 
-function card(comment: Comment, id: string, ...footer: HTMLElement[]): HTMLElement {
+/** Who wrote `comment`, and when. */
+function byline(comment: Comment): HTMLElement {
   const time = create("time", "sv-annotations-time", new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(comment.createdAt)));
   time.dateTime = comment.createdAt;
+  return create("div", "sv-annotations-byline", avatar(comment.author), author(comment.author), time);
+}
+
+function card(comment: Comment, id: string, ...footer: HTMLElement[]): HTMLElement {
   const body = create("p", "sv-annotations-body", ...linkify(comment.body));
-  const node = create("div", "sv-annotations-card",
-    create("div", "sv-annotations-byline", avatar(comment.author), author(comment.author), time), body, ...footer);
+  const node = create("div", "sv-annotations-card", byline(comment), body, ...footer);
   node.id = id;
   node.popover = "auto";
   // Cards render in the top layer, outside the hidden layer, so each hides itself.
@@ -200,9 +205,31 @@ function card(comment: Comment, id: string, ...footer: HTMLElement[]): HTMLEleme
   return node;
 }
 
+/** `text` on one line, as a reader would quote it. */
+function oneLine(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
+}
+
 function quote(text: string): string {
-  const words = text.trim().replace(/\s+/g, " ");
+  const words = oneLine(text);
   return words.length > LABEL_QUOTE_LENGTH ? `${words.slice(0, LABEL_QUOTE_LENGTH).trimEnd()}…` : words;
+}
+
+/**
+ * Comments whose passage is no longer in the note, each with the quote it responded to, in a disclosure after the
+ * note so they stay readable without crowding it.
+ */
+function orphanList(comments: readonly Comment[]): HTMLElement {
+  const summary = create("summary", "sv-annotations-orphans-summary", comments.length === 1
+    ? "1 comment on a passage no longer in the note"
+    : `${comments.length} comments on passages no longer in the note`);
+  const items = comments.map((comment) => create("li", "sv-annotations-orphan",
+    byline(comment),
+    create("blockquote", "sv-annotations-quote", oneLine(comment.anchor.exact)),
+    create("p", "sv-annotations-body", ...linkify(comment.body))));
+  const node = create("details", "sv-annotations-orphans", summary, create("ul", "sv-annotations-orphan-list", ...items));
+  node.setAttribute("data-print-hide", "");
+  return node;
 }
 
 function marker(comment: Comment, cardId: string): HTMLButtonElement {
@@ -276,7 +303,7 @@ function popover<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, className: s
 
 /**
  * Show the annotations stored for `page` beside `content`, the note's body element. Returns `detach`, which removes every
- * marker, card and highlight it added. Passages no longer in the note are left out.
+ * marker, card, highlight and list it added. Comments whose passage is no longer in the note are listed after it.
  *
  * A host app names the note instead: `attach(element, { vault, slug })`, with `vault` from `virtual:svartz/host`.
  */
@@ -789,11 +816,20 @@ export function attach(content: HTMLElement, options: AttachOptions | HostNoteOp
     content.focus({ preventScroll: true });
   }
 
+  /** The list of comments whose passage is gone, after the markers in tab order. */
+  let orphans: HTMLElement | undefined;
   const show = (comments: readonly Comment[]) => {
     const text = content.textContent ?? "";
+    const lost: Comment[] = [];
     for (const comment of comments) {
-      const position = !deleted.has(comment.id) && locate(text, comment.anchor);
+      if (deleted.has(comment.id) || placed.some(({ id }) => id === comment.id)) continue;
+      const position = locate(text, comment.anchor);
       if (position) add(comment, position);
+      else lost.push(comment);
+    }
+    if (lost.length) {
+      orphans = orphanList(lost);
+      layer.after(orphans);
     }
     layout();
   };
@@ -835,6 +871,7 @@ export function attach(content: HTMLElement, options: AttachOptions | HostNoteOp
     }
     if (highlight?.size === 0) CSS.highlights.delete(HIGHLIGHT);
     layer.remove();
+    orphans?.remove();
   };
 }
 

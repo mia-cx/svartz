@@ -198,6 +198,34 @@ describe("a page with comments, read signed out", () => {
   });
 });
 
+describe("a comment whose passage is gone from the note", () => {
+  it("is listed after the note with its author and quote, reached from the keyboard", async () => {
+    const markers = await attached();
+
+    markers.at(-1)!.focus();
+    await userEvent.keyboard("{Tab}");
+    const summary = document.activeElement as HTMLElement;
+    expect(summary.tagName).toBe("SUMMARY");
+    expect(summary.textContent).toBe("1 comment on a passage no longer in the note");
+    await userEvent.keyboard("{Enter}");
+
+    const items = [...summary.parentElement!.querySelectorAll("li")];
+    expect(items).toHaveLength(1);
+    expect(items[0]!.checkVisibility()).toBe(true);
+    expect(items[0]!.querySelector(".sv-annotations-name")?.textContent).toBe("Grace Hopper");
+    expect(items[0]!.querySelector("blockquote")?.textContent).toBe("anemometer on the roof");
+    expect(items[0]!.querySelector(".sv-annotations-body")?.textContent).toBe("Which roof?");
+    expect(summary.closest("[data-print-hide]")).not.toBeNull();
+    // It stays out of the note: no highlight, no marker.
+    expect(highlighted()).toEqual([DEW_POINT, PRESSURE]);
+
+    detach!();
+    detach = undefined;
+
+    expect(summary.isConnected).toBe(false);
+  });
+});
+
 describe("commenting on a selection", () => {
   const SHADE = "It needs shade and airflow";
 

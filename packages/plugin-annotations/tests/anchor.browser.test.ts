@@ -24,6 +24,13 @@ function at(root: Node, needle: string, edge: "start" | "end", occurrence = 0): 
   throw new Error(`"${needle}" isn't in the note`);
 }
 
+/** The anchor for `text.slice(start, end)` in a note of plain `text`. */
+function anchorIn(text: string, start: number, end: number): Anchor {
+  const root = document.createElement("article");
+  root.textContent = text;
+  return describeRange(root, rangeOf(root, { start, end }));
+}
+
 function select(root: Node, from: string, to: string, occurrence = 0): Range {
   const range = document.createRange();
   range.setStart(...at(root, from, "start", occurrence));
@@ -98,5 +105,165 @@ describe("after the note changes", () => {
     if (suffix === null) return expect(found).toBeNull();
     expect(text.slice(found!.start, found!.end)).toBe("SHT45");
     expect(text.slice(found!.end).startsWith(suffix)).toBe(true);
+  });
+});
+
+describe("after a light edit to the passage", () => {
+  /** Swap `from` for `to` in the note's text nodes, leaving its markup alone. */
+  function replace(root: HTMLElement, from: string, to: string): void {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+      if (node.data.includes(from)) return void (node.data = node.data.replace(from, to));
+    }
+    throw new Error(`"${from}" isn't in the note`);
+  }
+
+  interface Edit {
+    /** The passage anchored: the first `quote` after `after` in the note as `before` leaves it. */
+    readonly quote: string;
+    readonly after?: string;
+    readonly before?: (root: HTMLElement) => void;
+    /** The author's edit, made to a fresh copy of the note. */
+    readonly edit: (root: HTMLElement) => void;
+    /** The passage expected there now, followed by `then`; `null` when it's gone. */
+    readonly found: string | null;
+    readonly then?: string;
+  }
+
+  it.each<[string, Edit]>([
+    ["keeps a passage whose typos were fixed", {
+      quote: "Readings stay hihg untill it dries.",
+      before: (root) => replace(root, "Readings stay high until it dries.", "Readings stay hihg untill it dries."),
+      edit: () => {},
+      found: "Readings stay high until it dries.",
+    }],
+    ["keeps a passage with a word inserted into it", {
+      quote: "A Bosch BMP390 reads station pressure.",
+      edit: (root) => replace(root, "reads station pressure", "reads the station's pressure"),
+      found: "A Bosch BMP390 reads the station's pressure.",
+    }],
+    ["keeps a short passage with words inserted right before it", {
+      quote: "SHT45",
+      after: "The same",
+      edit: (root) => replace(root, "The same SHT45", "Last updated in October. The same calibrated SHT45"),
+      found: "SHT45",
+      then: " reports relative humidity",
+    }],
+    ["keeps a sentence reflowed across lines", {
+      quote: "Humidity alone says little about comfort.",
+      edit: (root) => replace(root, "Humidity alone says little about comfort.", "Humidity alone says\nlittle about\ncomfort."),
+      found: "Humidity alone says\nlittle about\ncomfort.",
+    }],
+    ["loses a passage rewritten in other words", {
+      quote: "Readings stay high until it dries.",
+      edit: (root) => replace(root, "Readings stay high until it dries.", "The numbers lag until the film evaporates."),
+      found: null,
+    }],
+    ["loses a deleted passage even though its words are in another one", {
+      quote: "relative humidity",
+      edit: (root) => replace(root, "The same SHT45 reports relative humidity. ", ""),
+      found: null,
+    }],
+    ["loses a table cell whose row was removed, though the next row reads almost the same", {
+      quote: "I²C",
+      after: "BMP390Pressure",
+      edit: (root) => root.querySelectorAll("tbody tr")[1]!.remove(),
+      found: null,
+    }],
+  ])("%s", (_case, { quote, after = "", before, edit, found: expected, then = "" }) => {
+    let root = render();
+    before?.(root);
+    const start = root.textContent!.indexOf(quote, root.textContent!.indexOf(after));
+    const anchor = describeRange(root, rangeOf(root, { start, end: start + quote.length }));
+    root = render();
+    edit(root);
+    const text = root.textContent!;
+
+    const found = locate(text, anchor);
+
+    if (expected === null) return expect(found).toBeNull();
+    expect(found && text.slice(found.start, found.end)).toBe(expected);
+    expect(text.slice(found!.end).startsWith(then)).toBe(true);
+  });
+
+  it("keeps the passage among repeats whose words and context are all the same", () => {
+    const sentence = "A sentence which repeats identically in a checklist. ";
+    const original = sentence.repeat(5);
+    const start = 2 * sentence.length + sentence.indexOf("repeats");
+    const anchor = anchorIn(original, start, start + "repeats".length);
+    const text = "Introduction added. " + original;
+
+    expect(locate(text, anchor)?.start).toBe(start + "Introduction added. ".length);
+  });
+
+  it("keeps a passage whose quote now repeats many times nearer where it was", () => {
+    const original = "In the northern sheltered garden, temperature is measured once every morning.";
+    const start = original.indexOf("temperature");
+    const anchor = anchorIn(original, start, start + "temperature".length);
+    const text = "temperature reading; ".repeat(70) + original.replace("northern", "southern");
+
+    const found = locate(text, anchor);
+
+    expect(found && text.slice(found.end)).toBe(" is measured once every morning.");
+  });
+
+  it("keeps a passage edited beside its quote after many repeats were added above it", () => {
+    const original = "In the northern sheltered garden, temperature is measured once every morning.";
+    const start = original.indexOf("temperature");
+    const anchor = anchorIn(original, start, start + "temperature".length);
+    const text = "temperature reading; ".repeat(140) + original.replace("temperature is measured", "stable temperature is checked");
+
+    const found = locate(text, anchor);
+
+    expect(found && text.slice(found.end)).toBe(" is checked once every morning.");
+  });
+
+  it("keeps a passage edited beside its quote where it was among many repeats added below it", () => {
+    const original = "In the northern sheltered garden, temperature is measured once every morning.";
+    const start = original.indexOf("temperature");
+    const anchor = anchorIn(original, start, start + "temperature".length);
+    const text =
+      original.replace("garden, temperature is measured", "garden, stable temperature is checked") +
+      " garden, temperature is nonsense.".repeat(100);
+
+    expect(locate(text, anchor)).toEqual({ start: start + "stable ".length, end: start + "stable temperature".length });
+  });
+
+  it("keeps a passage edited beside its quote between repeats above and below it", () => {
+    const original = "In the northern sheltered garden, temperature is measured once every morning.";
+    const start = original.indexOf("temperature");
+    const anchor = anchorIn(original, start, start + "temperature".length);
+    const above = "temperature reading; ".repeat(20);
+    const text =
+      above +
+      original.replace("garden, temperature is measured", "garden, stable temperature is checked") +
+      " garden, temperature is nonsense.".repeat(20);
+
+    const at = above.length + start + "stable ".length;
+    expect(locate(text, anchor)).toEqual({ start: at, end: at + "temperature".length });
+  });
+
+  it("keeps a passage wrapped in punctuation among more repeats than are scored", () => {
+    const original = "In the northern sheltered garden, temperature is measured once every morning.";
+    const start = original.indexOf("temperature");
+    const anchor = anchorIn(original, start, start + "temperature".length);
+    const text = original.replace("temperature", "(temperature)") + " temperature reading;".repeat(70);
+
+    expect(locate(text, anchor)).toEqual({ start: start + 1, end: start + 1 + "temperature".length });
+  });
+
+  it("stays fast on a long note with a long passage that changed", () => {
+    const root = render();
+    const quote = root.querySelector(".sv-callout-body")!.textContent!.slice(0, 200);
+    const start = root.textContent!.indexOf(quote);
+    const anchor = describeRange(root, rangeOf(root, { start, end: start + quote.length }));
+    // About a megabyte of note, the passage edited and still in its place.
+    const text = root.textContent!.replace("film of water", "film of dew").repeat(400);
+
+    const began = performance.now();
+    const found = locate(text, anchor);
+
+    expect(performance.now() - began).toBeLessThan(150);
+    expect(found?.start).toBe(start);
   });
 });
