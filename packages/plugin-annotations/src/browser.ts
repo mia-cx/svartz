@@ -757,7 +757,19 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
     entry.card.remove();
     status.textContent = "Comment deleted.";
     layout();
-    if (focused) (placed[index] ?? placed[index - 1])?.marker.focus();
+    if (!focused) return;
+    const next = (placed[index] ?? placed[index - 1])?.marker;
+    if (next) {
+      next.focus();
+      return;
+    }
+    // No marker left: the note takes focus, where the deleted comment's passage was. Focusable only for this visit,
+    // so the note's own markup is left as the author wrote it.
+    if (!content.hasAttribute("tabindex")) {
+      content.setAttribute("tabindex", "-1");
+      content.addEventListener("blur", () => content.removeAttribute("tabindex"), { once: true });
+    }
+    content.focus({ preventScroll: true });
   }
 
   const show = (comments: readonly Comment[]) => {

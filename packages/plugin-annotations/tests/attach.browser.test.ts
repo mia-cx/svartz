@@ -569,6 +569,27 @@ describe("deleting a comment", () => {
     ]);
   });
 
+  it("hands focus to the note when the page's last comment is deleted", async () => {
+    const root = render();
+    await commands.seedComments([
+      { id: "dew-point", page: "hardware/sensors", author: ADA, anchor: anchorOf(root, DEW_POINT), createdAt: "2026-11-02T09:00:00.000Z", body: "Every morning." },
+    ]);
+    await commands.signIn(location.origin);
+    reattach();
+    const [only] = await markers(1);
+
+    only!.focus();
+    await userEvent.keyboard("{Enter}{Tab}{Tab}{Tab}{Enter}{Tab}{Enter}");
+
+    await markers(0);
+    const note = document.querySelector("article")!;
+    expect(document.activeElement).toBe(note);
+    // Focusable only while it holds focus; the note's markup is left as written.
+    only!.blur();
+    note.blur();
+    expect(note.hasAttribute("tabindex")).toBe(false);
+  });
+
   it("lets a moderator delete anyone's comment with the mouse, closing up the markers left on its line", async () => {
     await commands.signIn(location.origin, ALAN);
     reattach();
