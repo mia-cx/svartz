@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { resolveConfig } from "@svartz/config";
 import { resolveThemePackageRoot, resolveThemeRuntimeImport } from "@svartz/vite";
 import {
+  createDevWatcher,
   getConfigWatchDescriptors,
   getViteConfigWatchDescriptors,
   getThemeWatchDescriptors,
@@ -206,5 +207,24 @@ describe("CLI dev watch helpers", () => {
     const descriptors = getThemeWatchDescriptors(externalThemeRoot, appRoot, workspaceRoot);
     expect(descriptors).toEqual([{ path: await realpath(externalThemeRoot), label: `${externalThemeRoot} source` }]);
     expect(matchesWatchDescriptor(path.join(externalThemeRoot, "index.js"), descriptors[0]!)).toBe(true);
+  });
+
+  it("leaves a watched theme's dependencies and build caches unwatched", async () => {
+    const themeRoot = await realpath(await mkdtemp(path.join(os.tmpdir(), "svartz-watched-theme-")));
+    tempDirs.push(themeRoot);
+    for (const directory of ["src", "node_modules/dep", ".svelte-kit"]) {
+      await mkdir(path.join(themeRoot, directory), { recursive: true });
+      await writeFile(path.join(themeRoot, directory, "index.js"), "export {};\n");
+    }
+
+    const watcher = createDevWatcher([{ path: themeRoot, label: "theme source" }], () => {});
+    try {
+      await new Promise((resolve) => watcher.once("ready", resolve));
+      expect(Object.keys(watcher.getWatched()).sort()).toEqual(
+        [path.dirname(themeRoot), themeRoot, path.join(themeRoot, "src")].sort(),
+      );
+    } finally {
+      await watcher.close();
+    }
   });
 });

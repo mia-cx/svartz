@@ -6,7 +6,6 @@ import { existsSync } from "node:fs";
 import { lstat, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import chokidar, { type FSWatcher } from "chokidar";
 import { Command } from "commander";
 import { Data, Effect, Either } from "effect";
 import {
@@ -40,12 +39,12 @@ import {
   type ServerOptions,
 } from "vite";
 import {
+  createDevWatcher,
   createWorkspaceSourceWatchDescriptors,
   getThemeWatchDescriptors,
   getConfigWatchDescriptors,
   getViteConfigWatchDescriptors,
   isLocalWorkspacePackage,
-  matchesWatchDescriptor,
   uniqBuildFilters,
   type WatchDescriptor,
 } from "./dev-watch";
@@ -689,32 +688,6 @@ const previewCommand = (options: PreviewOptions): Effect.Effect<void, CliError> 
     yield* previewVaults(workspace, vaults, options);
   });
 
-const createDevWatcher = (
-  context: DevWatchContext,
-  onRestartRequested: (
-    changedPath: string,
-    descriptors: readonly WatchDescriptor[],
-  ) => void,
-): FSWatcher => {
-  const watcher = chokidar.watch(context.descriptors.map((descriptor) => descriptor.path), {
-    ignoreInitial: true,
-    awaitWriteFinish: {
-      stabilityThreshold: 150,
-      pollInterval: 50,
-    },
-  });
-
-  watcher.on("all", (_eventName, changedPath) => {
-    const matchingDescriptors = context.descriptors.filter((descriptor) =>
-      matchesWatchDescriptor(changedPath, descriptor),
-    );
-    if (matchingDescriptors.length === 0) return;
-    onRestartRequested(changedPath, matchingDescriptors);
-  });
-
-  return watcher;
-};
-
 const devRunnerCommand = (options: DevOptions): Effect.Effect<void, CliError> =>
   Effect.gen(function* () {
     const workspace = yield* loadWorkspace(options.config);
@@ -726,7 +699,7 @@ const devRunnerCommand = (options: DevOptions): Effect.Effect<void, CliError> =>
 
 const runDevSupervisor = async (options: DevOptions): Promise<void> => {
   let watchContext = await loadDevWatchContext(options);
-  let watcher = createDevWatcher(watchContext, requestRestart);
+  let watcher = createDevWatcher(watchContext.descriptors, requestRestart);
   let child = startDevRunnerChild(options);
   let shuttingDown = false;
   let restarting = false;
@@ -778,12 +751,12 @@ const runDevSupervisor = async (options: DevOptions): Promise<void> => {
       await stopDevRunnerChild(child);
       if (shuttingDown) return;
       watchContext = nextContext;
-      watcher = createDevWatcher(watchContext, requestRestart);
+      watcher = createDevWatcher(watchContext.descriptors, requestRestart);
       child = startDevRunnerChild(options);
       monitorRunner(child);
     } catch (cause) {
       console.error("[svartz:dev] rebuild failed; waiting for another edit:", cause);
-      if (!shuttingDown) watcher = createDevWatcher(watchContext, requestRestart);
+      if (!shuttingDown) watcher = createDevWatcher(watchContext.descriptors, requestRestart);
     } finally {
       watcherPaused = false;
       restarting = false;

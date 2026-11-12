@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import chokidar, { type FSWatcher } from "chokidar";
 import { resolveThemePackageRoot } from "@svartz/vite";
 import { loadConfigFromFile } from "vite";
 
@@ -161,7 +162,40 @@ function uniqBuildFilters(filters: readonly string[]): string[] {
   return [...new Set(filters)];
 }
 
+/**
+ * Dependency and generated trees inside a watched root. Chokidar 5 has no
+ * fsevents, so on macOS every watched file costs a descriptor; a theme root's
+ * pnpm `node_modules` alone links in ~40,000 files.
+ */
+const UNWATCHED_DIRECTORIES = new Set(["node_modules", ".git", ".svelte-kit", ".turbo", ".wrangler"]);
+
+/** Watch the descriptors' paths and report each change with the descriptors it matches. */
+function createDevWatcher(
+  descriptors: readonly WatchDescriptor[],
+  onRestartRequested: (changedPath: string, descriptors: readonly WatchDescriptor[]) => void,
+): FSWatcher {
+  const watcher = chokidar.watch(descriptors.map((descriptor) => descriptor.path), {
+    ignoreInitial: true,
+    ignored: (watchedPath) => UNWATCHED_DIRECTORIES.has(path.basename(watchedPath)),
+    awaitWriteFinish: {
+      stabilityThreshold: 150,
+      pollInterval: 50,
+    },
+  });
+
+  watcher.on("all", (_eventName, changedPath) => {
+    const matchingDescriptors = descriptors.filter((descriptor) =>
+      matchesWatchDescriptor(changedPath, descriptor),
+    );
+    if (matchingDescriptors.length === 0) return;
+    onRestartRequested(changedPath, matchingDescriptors);
+  });
+
+  return watcher;
+}
+
 export {
+  createDevWatcher,
   createWorkspaceSourceWatchDescriptors,
   getThemeWatchDescriptors,
   getConfigWatchDescriptors,
