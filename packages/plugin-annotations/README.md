@@ -9,6 +9,8 @@ import { annotations } from "@svartz/plugin-annotations";
 plugins: [auth({ providers: { … } }), annotations({ database: { env: "DB" } })]
 ```
 
+That is all a theme-minimal site needs, and any theme extending it: every note shows its annotations. A host app's own pages call `attach` on their content element:
+
 ```ts
 import { attach } from "@svartz/plugin-annotations/browser";
 import "@svartz/plugin-annotations/browser.css";

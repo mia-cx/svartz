@@ -57,7 +57,19 @@ Only a person's identity is stored: their id, provider, name, and, when the prov
 
 ## Showing annotations on a page
 
-`attach` shows a page's annotations on the element that holds the note's text, and returns a function that removes them:
+On a site built with theme-minimal, or any theme that extends it, enabling the plugin is all it takes: every note shows its annotations, with no code. Moving to another note removes the last note's markers, cards and highlights and shows the new note's. List pages, tag pages and password-protected notes get none, so nothing ever quotes a protected note publicly. Each note's annotations are stored under its slug, so renaming the note's file starts it without them.
+
+A theme that doesn't extend minimal opts in by marking the note body (see [creating a theme](../vaults/docs/guides/create-theme.md#notes-and-browser-resources)).
+
+The note's own DOM is never changed: highlights use the [CSS Custom Highlight API](https://developer.mozilla.org/docs/Web/API/CSS_Custom_Highlight_API), and markers sit in a layer after the note's body, so they follow the note in tab order. A comment whose passage is no longer in the note is left out. Comment text is always shown as text, with web addresses made links.
+
+Each marker is a button named for its comment, such as "Comment by Ada Lovelace on “the dew point”". Enter or a click opens the comment as a popover beside the marker, or under it when the margin is too narrow; Escape closes it and returns focus to the marker. An author without an avatar gets their initials; without a profile link, their name isn't a link.
+
+Annotations are hidden when the page prints (everything carries `data-print-hide`) and never appear in a note's Markdown twin, which is built from the note's source.
+
+### In a host app
+
+On a page the host app renders itself, call `attach` on the element that holds the note's text. It returns a function that removes the annotations:
 
 ```ts
 import { attach } from "@svartz/plugin-annotations/browser";
@@ -70,21 +82,15 @@ const detach = attach(document.querySelector(".prose")!, {
 ```
 
 - `endpoint` is the plugin's routes: `<base><mount>/_svartz/annotations`.
-- `page` is the note's path in its vault. Annotations are stored under it, so it must stay the same for the same note.
-
-The note's own DOM is never changed: highlights use the [CSS Custom Highlight API](https://developer.mozilla.org/docs/Web/API/CSS_Custom_Highlight_API), and markers sit in a layer after the element, so they follow the note in tab order. A comment whose passage is no longer in the note is left out. Comment text is always shown as text, with web addresses made links.
-
-Each marker is a button named for its comment, such as "Comment by Ada Lovelace on “the dew point”". Enter or a click opens the comment as a popover beside the marker, or under it when the margin is too narrow; Escape closes it and returns focus to the marker. An author without an avatar gets their initials; without a profile link, their name isn't a link.
-
-Annotations are hidden when the page prints (everything carries `data-print-hide`) and never appear in a note's Markdown twin, which is built from the note's source.
+- `page` is the key the note's annotations are stored under, so it must stay the same for the same note. Theme pages use the note's slug, such as `garden/roses`; use the same to share a note's annotations with them.
 
 ### Commenting
 
-Selecting text inside the element shows a toolbar above the selection with **Comment**. The selection stays an ordinary selection, so copying works, until the reader picks an action. From the keyboard, Tab moves from the selection to the toolbar and Escape leaves it. **Comment** opens a composer beside the passage: **Post comment** (or Ctrl/⌘+Enter) posts it, and **Cancel** (or Escape) goes back to the selection. A posted comment gets its highlight and marker at once, and focus moves to the marker.
+Selecting text in the note shows a toolbar above the selection with **Comment**. The selection stays an ordinary selection, so copying works, until the reader picks an action. From the keyboard, Tab moves from the selection to the toolbar and Escape leaves it. **Comment** opens a composer beside the passage: **Post comment** (or Ctrl/⌘+Enter) posts it, and **Cancel** (or Escape) goes back to the selection. A posted comment gets its highlight and marker at once, and focus moves to the marker.
 
 A comment is plain text up to 2,000 characters, on a passage of up to 1,000. When the site refuses one, the composer keeps the draft and shows why.
 
-A signed-out reader who posts gets `auth`'s sign-in dialog. The draft, its passage and the pending action wait in `sessionStorage`, and when sign-in brings the reader back to the page, `attach` reopens the composer on the same passage with the draft as it was. The dialog is [`auth`'s](auth.md#the-sign-in-dialog), which the `auth` plugin puts on every page of its vault.
+A signed-out reader who posts gets `auth`'s sign-in dialog. The draft, its passage and the pending action wait in `sessionStorage`, and when sign-in brings the reader back to the page, the composer reopens on the same passage with the draft as it was. The dialog is [`auth`'s](auth.md#the-sign-in-dialog), which the `auth` plugin puts on every page of its vault.
 
 ### Agreeing
 

@@ -28,7 +28,7 @@ const note = (slug: string): IndexEntry => ({
 
 const index: Index = {
 	version: '1.0.0',
-	entries: [note('plain'), { ...note('copied'), markdownHref: '/copied.md' }],
+	entries: [note('plain'), { ...note('copied'), markdownHref: '/copied.md' }, { ...note('secret'), properties: { password_group: 'friends' } }],
 	graph: {},
 	backlinks: {},
 	search: [],
@@ -106,4 +106,44 @@ it('keeps site actions on list pages, which have no page actions', async () => {
 	renderPage();
 	expect(document.querySelectorAll(PAGE)).toHaveLength(0);
 	expect(document.querySelectorAll(SITE)).toHaveLength(1);
+});
+
+it('marks the note body with its slug for plugins, and nothing on list pages or protected notes', async () => {
+	const marked = () => [...document.querySelectorAll<HTMLElement>('[data-svartz-note]')];
+	const note = renderPage('plain');
+	await expect.element(page.getByRole('heading', { name: 'The plain note' })).toBeVisible();
+	expect(marked().map((element) => [element.dataset.svartzNote, element.textContent])).toEqual([['plain', 'Body']]);
+	note.unmount();
+
+	const list = renderPage();
+	expect(marked()).toEqual([]);
+	list.unmount();
+
+	// Unlocked, a protected note still names its group: its passages must not be quoted where the password doesn't reach.
+	renderPage('secret');
+	await expect.element(page.getByRole('heading', { name: 'The secret note' })).toBeVisible();
+	expect(marked()).toEqual([]);
+});
+
+it('marks the home note, and nothing on a generated home page', async () => {
+	const marked = () => [...document.querySelectorAll<HTMLElement>('[data-svartz-note]')].map((element) => element.dataset.svartzNote);
+	const home = createVaultView({ ...index, entries: [note('index'), note('plain')] }, 'garden');
+	const renderHome = (entry?: IndexEntry) =>
+		render(SiteLayout, {
+			vault: home,
+			entry,
+			site: { title: 'Garden' } as ResolvedSiteConfig,
+			match: { route: { id: 'home', pattern: '/' }, pathname: '/', params: {} },
+			theme: composeThemes([]),
+			children: body
+		});
+
+	const homeNote = renderHome(home.entries.find((entry) => entry.slug === 'index'));
+	await expect.element(page.getByText('Body')).toBeVisible();
+	expect(marked()).toEqual(['index']);
+	homeNote.unmount();
+
+	renderHome();
+	await expect.element(page.getByText('Body')).toBeVisible();
+	expect(marked()).toEqual([]);
 });

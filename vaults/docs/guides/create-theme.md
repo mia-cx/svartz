@@ -79,6 +79,8 @@ Plugins mount actions into two regions a theme renders from `@svartz/ui` (see [[
 
 Render each exactly once per page and let Svelte leave them empty: plugins own their children. Both take no space while empty, and base.css styles the links and buttons plugins mount in them like Copy page.
 
+Plugins that work on the note itself, such as annotations, find its body by `data-svartz-note`. Put `data-svartz-note={entry.slug}` on the one element that wraps the rendered note, and leave it off list pages and password-protected notes (`entry.locked`, or a `password_group` property once unlocked). A theme that extends minimal inherits this from minimal's layout, home page included: its `home` page receives the home note's body already marked in `children`, so it renders `children` and adds no marker of its own.
+
 ## Best practices
 
 Keep layouts and route pages in the theme. Use content components for the five Markdown slots. Keep custom note logic in `.svx` files. Test both SSR output and navigation when a theme adds browser scripts. Make every page in `runtime.ts` eager: a lazy page that shares modules with eager ones stalls the Vite build (#62).

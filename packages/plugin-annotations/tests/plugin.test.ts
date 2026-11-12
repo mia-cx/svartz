@@ -1,5 +1,5 @@
 import { auth } from "@svartz/auth";
-import type { NormalizedSvartzPlugin, ResolvedConfig } from "@svartz/core";
+import type { NormalizedSvartzPlugin, PluginContext, ResolvedConfig } from "@svartz/core";
 import { describe, expect, it } from "vitest";
 import { annotations, type AnnotationsOptions } from "../src/index";
 
@@ -21,6 +21,19 @@ describe("the annotations plugin", () => {
       module: expect.stringMatching(/server\.js$/),
       options: { database, reactions: [], moderators: [], limits: { writesPerHour: 30 } },
     });
+  });
+
+  it("gives the browser a script that finds the vault's routes, and its stylesheet", async () => {
+    const plugin = annotations({ database });
+    const ctx = { config: { mountPath: "/garden", target: { type: "cloudflare-workers" } }, files: [], meta: new Map() } as unknown as PluginContext;
+
+    await plugin.emitArtifacts!.run(ctx);
+
+    const resources = ctx.compiler!.browserResources;
+    expect(resources.get("annotations")).toEqual({
+      id: "annotations", kind: "script", importId: expect.stringMatching(/browser\.js$/), options: { endpoint: "/garden/_svartz/annotations" },
+    });
+    expect(resources.get("annotations-css")).toEqual({ id: "annotations-css", kind: "css", importId: expect.stringMatching(/browser\.css$/) });
   });
 
   it.each([
