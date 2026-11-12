@@ -53,6 +53,10 @@ interface Written {
   readonly note: string;
   readonly pageUrl: string;
   readonly branch: string;
+  /** The commit's author, when the reader signed in with GitHub. */
+  readonly author?: { readonly name: string; readonly email: string };
+  /** Who the pull request says sent it. Default: `anonymously`. */
+  readonly credit?: string;
 }
 
 /** Whether the build commit has anything at `path`: GitHub's 404 when it doesn't. */
@@ -74,7 +78,9 @@ export function newPageExchanges({ path, ...written }: Written & { path: string 
   return [lookup!, existenceCheck(path), ...rest];
 }
 
-function writeExchanges({ markdown, note, pageUrl, branch, path, title }: Written & { path: string; title: string }): Exchange[] {
+function writeExchanges({
+  markdown, note, pageUrl, branch, path, title, author, credit = "anonymously",
+}: Written & { path: string; title: string }): Exchange[] {
   return [
     pullLookup(branch),
     {
@@ -97,7 +103,7 @@ function writeExchanges({ markdown, note, pageUrl, branch, path, title }: Writte
       request: {
         method: "POST",
         url: `${API}/git/commits`,
-        body: { message: `${title}\n\n${note}`, tree: NEW_TREE, parents: [BUILD_COMMIT] },
+        body: { message: `${title}\n\n${note}`, tree: NEW_TREE, parents: [BUILD_COMMIT], ...(author ? { author } : {}) },
       },
       response: { status: 201, json: { sha: NEW_COMMIT, tree: { sha: NEW_TREE } } },
     },
@@ -113,7 +119,7 @@ function writeExchanges({ markdown, note, pageUrl, branch, path, title }: Writte
           title,
           head: branch,
           base: "main",
-          body: `${note}\n\n---\nSubmitted anonymously from ${pageUrl}. Based on ${BUILD_COMMIT}.`,
+          body: `${note}\n\n---\nSubmitted ${credit} from ${pageUrl}. Based on ${BUILD_COMMIT}.`,
         },
       },
       response: { status: 201, json: PULL_42 },

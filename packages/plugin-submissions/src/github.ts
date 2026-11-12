@@ -2,6 +2,7 @@
  * The PR writer: reads a note's source at the build commit and opens a submission as a pull request through
  * GitHub's REST and Git Data APIs. Uses `fetch` only, so it runs on Workers and Node alike.
  */
+import type { Identity, ProviderId } from "@svartz/auth/server";
 import type { EditResponse } from "./api";
 import { SubmissionError } from "./errors";
 
@@ -39,6 +40,8 @@ export interface Submission {
   readonly pageUrl: string;
   readonly markdown: string;
   readonly note: string;
+  /** The signed-in reader who sent it, or `null` when anonymous. */
+  readonly submitter: Identity | null;
 }
 
 interface PullRequest {
@@ -145,13 +148,41 @@ function quietMentions(text: string): string {
   return text.replace(/@(?=[\w-])/g, "@⁠");
 }
 
+const PROVIDER_NAMES = { github: "GitHub", google: "Google", discord: "Discord" } as const satisfies Record<ProviderId, string>;
+
+/** A reader-chosen name as plain Markdown text: no formatting, links, mentions or line breaks. */
+function markdownText(text: string): string {
+  return quietMentions(text.replace(/\s+/g, " ").trim().replace(/[\\`*_{}[\]()<>#+!|~]/g, "\\$&"));
+}
+
+/** `[Ada Lovelace](https://github.com/ada) (signed in with GitHub)`, or `anonymously`. */
+function credit(submitter: Identity | null): string {
+  if (!submitter) return "anonymously";
+  const name = markdownText(submitter.name);
+  // A link destination in angle brackets may hold anything but whitespace and the brackets themselves.
+  const profile = submitter.profileUrl && /^https:\/\/[^\s<>]+$/.test(submitter.profileUrl) ? submitter.profileUrl : undefined;
+  return `by ${profile ? `[${name}](<${profile}>)` : name} (signed in with ${PROVIDER_NAMES[submitter.provider]})`;
+}
+
+/**
+ * The commit's author for a GitHub sign-in: the account's noreply address, so GitHub links the commit to it. Other
+ * sign-ins have no GitHub account to link; their commit keeps the site's credentials as author.
+ */
+function commitAuthor(submitter: Identity | null): { name: string; email: string } | undefined {
+  if (submitter?.provider !== "github" || !submitter.handle) return undefined;
+  const id = submitter.id.slice("github:".length);
+  // Git refuses angle brackets and line breaks in a name.
+  const name = submitter.name.replace(/[<>\u0000-\u001f\u007f]/g, "").trim() || submitter.handle;
+  return { name, email: `${id}+${submitter.handle}@users.noreply.github.com` };
+}
+
 function pullRequestBody(submission: Submission, commit: string): string {
   const note = submission.note.trim();
   return [
     note ? quietMentions(note) : "_No description given._",
     "",
     "---",
-    `Submitted anonymously from ${submission.pageUrl}. Based on ${commit}.`,
+    `Submitted ${credit(submission.submitter)} from ${submission.pageUrl}. Based on ${commit}.`,
   ].join("\n");
 }
 
@@ -225,10 +256,12 @@ async function createPull(target: GitHubTarget, submission: Submission, branch: 
 
   const title = `${submission.kind === "edit" ? "Edit" : "Add"} ${submission.path}`;
   const note = submission.note.trim();
+  const author = commitAuthor(submission.submitter);
   const commit = await call<{ sha: string }>(target, "POST", "/git/commits", {
     message: note ? `${title}\n\n${note}` : title,
     tree: tree.sha,
     parents: [target.commit],
+    ...(author ? { author } : {}),
   });
   await writeBranch(target, branch, commit.sha);
   // No answer (`github_unavailable`) throws here; the branch stays for a retry, and the pull request may exist.

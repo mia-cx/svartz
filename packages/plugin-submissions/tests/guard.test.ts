@@ -32,9 +32,8 @@ function handlerWith(guard: GuardOptions) {
   );
 }
 
-async function sessionCookie(id: string): Promise<string> {
-  const identity = { id, provider: "github", name: id, handle: id, avatarUrl: "", profileUrl: "" };
-  return `__Host-svartz-session=${await seal(identity, SESSION_SECRET, "session", 60)}`;
+async function sessionCookie(id: string, identity: Record<string, string> = { provider: "github", name: id, handle: id }): Promise<string> {
+  return `__Host-svartz-session=${await seal({ id, ...identity }, SESSION_SECRET, "session", 60)}`;
 }
 
 /**
@@ -221,5 +220,19 @@ describe("required sign-in", () => {
     expect(await submit(handler, { cookie: ada })).toMatchObject({ status: 503, body: { error: "misconfigured" } });
     expect(await submit(handler, { cookie: ada, ip: "198.51.100.4" })).toMatchObject({ status: 429 });
     expect(verifications).toEqual([]);
+  });
+
+  it("opens the signed-in reader's pull request under their name", async () => {
+    const github = replayGitHub(editExchanges({
+      markdown: MARKDOWN, note: "Timing.", pageUrl: `${ORIGIN}/wiki/guide/`, branch: branchFor("wiki-guide"),
+      author: { name: "Ada Lovelace", email: "583231+ada@users.noreply.github.com" },
+      credit: "by [Ada Lovelace](<https://github.com/ada>) (signed in with GitHub)",
+    }));
+    const cookie = await sessionCookie("github:583231", { provider: "github", name: "Ada Lovelace", handle: "ada", profileUrl: "https://github.com/ada" });
+
+    const answer = await submit(handlerWith(required), { cookie, env: { ...GUARD_ONLY_ENV, SVARTZ_GITHUB_TOKEN: TOKEN } });
+
+    expect(answer).toMatchObject({ status: 201, body: { number: 42 } });
+    expect(github.pending).toEqual([]);
   });
 });
