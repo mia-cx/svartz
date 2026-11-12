@@ -70,7 +70,7 @@ Typing `[[` suggests the site's published notes. Arrow keys choose one, Enter in
 
 ### Drafts
 
-The editor saves what a reader writes in the browser's `localStorage` as they write it, per page (and one new page per vault), so a closed tab loses nothing and a crash loses at most the last moment of typing. The next time they open the editor on that page, it offers the draft back above the source with **Restore edit** and **Discard edit** (**Restore page** and **Discard page** for a new page); the fields take no writing until they choose. A draft is forgotten once its pull request opens, or when the reader discards it or closes the editor and confirms discarding their changes.
+The editor saves what a reader writes in the browser's `localStorage` as they write it, per page (and one new page per vault), so a closed tab loses nothing and a crash loses at most the last moment of typing. The next time they open the editor on that page, it offers the draft back above the source with **Restore edit** and **Discard edit** (**Restore page** and **Discard page** for a new page); the fields take no writing until they choose. An edit's draft records a fingerprint of the source it was written against: if the page has changed on the site since, the offer says "This page changed since you saved this draft" and the restore button reads **Restore anyway**, since sending the draft would undo those changes. Drafts saved before fingerprints existed are offered as before. A draft is forgotten once its pull request opens, or when the reader discards it or closes the editor and confirms discarding their changes.
 
 ### New page
 
@@ -108,7 +108,7 @@ plugins: [
 
 The server then refuses anonymous edits and new pages with 401 `sign_in_required` before it calls GitHub, and Turnstile is skipped: the editor shows no challenge and the server verifies none. A vault that requires sign-in without the `auth` plugin fails the build.
 
-Readers can open the editor and write while signed out. When they send, the editor saves their [draft](#drafts) and opens the sign-in dialog. Signing in brings them back to the same page, where the editor reopens at once with their source, note, title and section as they left them, ready to send. If the page's source fails to load then, the draft reopens the next time the editor opens on the page. If the browser blocks storage, the editor says so and asks them to copy their changes before signing in.
+Readers can open the editor and write while signed out. When they send, the editor saves their [draft](#drafts) and opens the sign-in dialog. Signing in brings them back to the same page, where the editor reopens at once with their source, note, title and section as they left them, ready to send. If the page changed on the site meanwhile, the editor offers the draft with the warning instead. If the page's source fails to load then, the draft reopens the next time the editor opens on the page. If the browser blocks storage, the editor says so and asks them to copy their changes before signing in.
 
 ## Guard
 
