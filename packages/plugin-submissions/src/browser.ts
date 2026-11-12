@@ -1,9 +1,10 @@
 /**
  * Adds Edit to the page actions of every editable note, and New page to the site actions of every page. The editor
- * itself loads on first use.
+ * itself loads on first use, or at once when the reader comes back from signing in with a draft for this page.
  */
 import type { BrowserScriptContext } from "@svartz/core";
 import type { BrowserOptions } from "./api";
+import { takeDraft, type Draft } from "./draft";
 import type { EditorTarget } from "./editor";
 
 // Lucide "pencil" and "file-plus", as the theme's other actions draw their icons.
@@ -25,37 +26,40 @@ function editablePage(path: string, pages: readonly string[]): string | undefine
 }
 
 export function mount(pathname: string, options: BrowserOptions, context: BrowserScriptContext = { base: "" }) {
+  const endpoint = `${context.base}${options.endpoint}`;
   const buttons: HTMLButtonElement[] = [];
   let close: (() => void) | undefined;
   let unmounted = false;
 
-  /** A button in `region` that opens the editor on `target`. */
+  /** A button in `region` that opens the editor on `target`. Answers how to open it with a draft. */
   function action(region: Element | null, icon: string, label: string, target: EditorTarget) {
-    if (!region) return;
+    if (!region) return undefined;
     const button = document.createElement("button");
     button.type = "button";
     button.innerHTML = `${icon}${label}`;
-    button.addEventListener("click", async () => {
+    const open = async (draft?: Draft) => {
       const { openEditor } = await import("./editor");
       // The page may have gone while the editor loaded; its panel would outlive the cleanup below.
       if (unmounted) return;
-      close = openEditor({
-        target,
-        endpoint: `${context.base}${options.endpoint}`,
-        opener: button,
-        turnstileSiteKey: options.turnstileSiteKey,
-      });
-    });
+      close = openEditor({ target, endpoint, opener: button, turnstileSiteKey: options.turnstileSiteKey, draft });
+    };
+    button.addEventListener("click", () => open());
     region.append(button);
     buttons.push(button);
+    return open;
   }
 
   const page = editablePage(pathname.slice(context.base.length), options.pages);
-  if (page) action(document.querySelector('[data-svartz-region="page-actions"]'), PENCIL_ICON, "Edit", { kind: "edit", page });
-  if (options.folders.length > 0) {
-    action(document.querySelector('[data-svartz-region="site-actions"]'), FILE_PLUS_ICON, "New page", { kind: "new", folders: options.folders });
-  }
+  const edit = page ? action(document.querySelector('[data-svartz-region="page-actions"]'), PENCIL_ICON, "Edit", { kind: "edit", page }) : undefined;
+  const create = options.folders.length > 0
+    ? action(document.querySelector('[data-svartz-region="site-actions"]'), FILE_PLUS_ICON, "New page", { kind: "new", folders: options.folders })
+    : undefined;
   if (buttons.length === 0) return;
+
+  // Back from signing in: the panel the reader left reopens with their draft.
+  const draft = takeDraft(endpoint, pathname);
+  if (draft?.kind === "edit" && draft.page === page) void edit?.(draft);
+  if (draft?.kind === "new") void create?.(draft);
 
   return () => {
     unmounted = true;

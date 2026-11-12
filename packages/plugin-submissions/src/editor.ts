@@ -2,10 +2,14 @@
  * The submission panel: a full-height modal dialog with a note's Markdown source in CodeMirror, a note for reviewers,
  * and the pull request link once submitted. Edit opens it on a published note's source; New page opens it blank,
  * under a title and a section. Loaded on the first click of either.
+ *
+ * When the server asks for sign-in, the panel keeps the submission as a {@link Draft} and opens `@svartz/auth`'s
+ * sign-in dialog; signing in returns the reader to the page, and the panel reopens with the draft.
  */
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, placeholder } from "@codemirror/view";
+import { openSignIn } from "@svartz/auth/browser";
 import {
   MAX_NOTE_LENGTH,
   MAX_TITLE_LENGTH,
@@ -15,6 +19,7 @@ import {
   type NewPageRequest,
   type SourceResponse,
 } from "./api";
+import { storeDraft, type Draft } from "./draft";
 
 /** What the panel submits: an edit of a published note, or a new note in one of `folders`. */
 export type EditorTarget =
@@ -29,6 +34,8 @@ export interface EditorInput {
   readonly opener: HTMLElement;
   /** Show the Turnstile challenge with this site key, and send its token with the submission. */
   readonly turnstileSiteKey?: string;
+  /** The submission the reader left to sign in, to reopen with. Its kind matches `target`'s. */
+  readonly draft?: Draft;
 }
 
 /** The parts of Turnstile's explicit-rendering API the panel uses. */
@@ -158,7 +165,7 @@ function query<E extends Element>(root: ParentNode, selector: string): E {
 }
 
 /** Open the panel on `target`. Returns a function that closes it without asking, for navigation cleanup. */
-export function openEditor({ target, endpoint, opener, turnstileSiteKey }: EditorInput): () => void {
+export function openEditor({ target, endpoint, opener, turnstileSiteKey, draft }: EditorInput): () => void {
   const dialog = document.createElement("dialog");
   dialog.className = "svartz-submissions";
   dialog.setAttribute("aria-labelledby", "svartz-submissions-title");
@@ -228,6 +235,8 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey }: Edito
   function dismiss(): boolean {
     if (phase === "sending") return false;
     if (phase !== "sent" && typed() && !window.confirm(target.kind === "edit" ? "Discard your edit?" : "Discard this page?")) return false;
+    // A draft kept for a sign-in the reader abandoned would reopen the panel on their next visit.
+    storeDraft(undefined);
     close();
     return true;
   }
@@ -254,8 +263,37 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey }: Edito
 
   /** The submission's route, its key in {@link unconfirmed}, and its fields, without its id or Turnstile token. */
   function fields(markdown: string) {
-    if (target.kind === "edit") return { route: "edit", key: `${endpoint} ${target.page}`, fields: { page: target.page, markdown, note: note.value } };
-    return { route: "new", key: `${endpoint} new`, fields: { folder: folder?.value ?? "", title: title?.value ?? "", markdown, note: note.value } };
+    if (target.kind === "edit") {
+      return { route: "edit" as const, key: `${endpoint} ${target.page}`, fields: { page: target.page, markdown, note: note.value } };
+    }
+    return { route: "new" as const, key: `${endpoint} new`, fields: { folder: folder?.value ?? "", title: title?.value ?? "", markdown, note: note.value } };
+  }
+
+  /**
+   * Keep the submission and open the sign-in dialog. Signing in leaves the page; the panel reopens with the draft
+   * when the reader comes back. Without storage, the reader is told to copy their changes before signing in.
+   */
+  function signIn(failure: ServerError, submission: ReturnType<typeof fields>) {
+    showError(failure);
+    const pathname = location.pathname;
+    const kept = storeDraft(submission.route === "edit"
+      ? { endpoint, pathname, kind: "edit", ...submission.fields }
+      : { endpoint, pathname, kind: "new", ...submission.fields });
+    if (!kept) {
+      const button = Object.assign(document.createElement("button"), { type: "button", textContent: "Sign in" });
+      button.addEventListener("click", () => openSignIn());
+      error.append(" This browser can't keep your changes while you sign in, so copy them first. ", button);
+      return;
+    }
+    // Cancelling the dialog hands focus back here, beside the message.
+    submit.focus();
+    try {
+      openSignIn();
+    } catch (cause) {
+      // The vault has no auth plugin: the message stays, and the draft waits for no one.
+      storeDraft(undefined);
+      console.error("[submissions] couldn't open sign-in", cause);
+    }
   }
 
   form.addEventListener("submit", async (event) => {
@@ -284,6 +322,7 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey }: Edito
       // Confirmed only once the reader can see the link: if navigation already closed the panel, the next panel
       // retries under this id and the server answers with the pull request this attempt opened.
       if (dialog.isConnected) unconfirmed.delete(submission.key);
+      storeDraft(undefined);
       phase = "sent";
       challenge.hidden = true;
       holdOpen(false);
@@ -294,9 +333,11 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey }: Edito
       holdOpen(false);
       // The server spent the token; a retry needs a fresh one.
       if (turnstile) turnstile.api.reset(turnstile.id);
-      showError(cause as ServerError);
       submit.disabled = false;
       submit.textContent = "Open pull request";
+      const failure = cause as ServerError;
+      if (failure.code === "sign_in_required") signIn(failure, submission);
+      else showError(failure);
     }
   });
 
@@ -345,11 +386,24 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey }: Edito
     });
   }
 
+  /** Back from signing in: the draft as the reader left it, ready to send. */
+  function resume({ markdown, note: text, ...rest }: Draft) {
+    view?.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: markdown } });
+    note.value = text;
+    if (rest.kind === "new" && title && folder) {
+      title.value = rest.title;
+      folder.value = rest.folder;
+    }
+    submit.disabled = !ready();
+    submit.focus();
+  }
+
   async function load(page: string) {
     try {
       const { markdown } = await request<SourceResponse>(`${endpoint}/source/?page=${encodeURIComponent(page)}`);
       showSource(markdown);
-      view?.focus();
+      if (draft) resume(draft);
+      else view?.focus();
     } catch (cause) {
       source.replaceChildren();
       showError(cause as ServerError);
@@ -375,7 +429,8 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey }: Edito
     void load(target.page);
   } else {
     showSource("");
-    title?.focus();
+    if (draft) resume(draft);
+    else title?.focus();
   }
   if (turnstileSiteKey) void showChallenge(turnstileSiteKey);
   return close;
