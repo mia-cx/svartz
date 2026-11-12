@@ -8,6 +8,19 @@ export interface BrowserScriptContext {
    * Absent on theme pages, where the document holds one page; look up `[data-svartz-note]` there.
    */
   readonly note?: HTMLElement;
+  /**
+   * Show inert HTML in `target` as this page shows a note body: through the theme's content components (the host's
+   * overrides first), sanitized as the build sanitizes. The renderer loads on first use. Absent when the page renders
+   * no vault content.
+   */
+  readonly mountContent?: (target: HTMLElement) => Promise<ContentView>;
+}
+
+/** HTML shown through a page's content components, from {@link BrowserScriptContext.mountContent}. */
+export interface ContentView {
+  /** Show `html` in place of what shows. */
+  render(html: string): void;
+  destroy(): void;
 }
 
 /** Lifecycle contract for a script contributed by a content plugin. */

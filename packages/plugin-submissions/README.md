@@ -64,7 +64,9 @@ Every published Markdown note gets an **Edit** action beside Copy page. It opens
 
 ### The editor
 
-The source opens in **Live Preview**, as in Obsidian: headings, bold, italics, links, wikilinks, inline code, callouts, embeds and task checkboxes show formatted, and the line holding the cursor shows its Markdown. Clicking a task's checkbox, or pressing Space on it, ticks it. **Source** shows the raw Markdown throughout. The switch is remembered in the browser, and neither mode changes a byte the reader didn't edit.
+The source opens in **Live Preview**, as in Obsidian: headings, bold, italics, links, wikilinks, inline code, callouts, embeds and task checkboxes show formatted, and the line holding the cursor shows its Markdown. Clicking a task's checkbox, or pressing Space on it, ticks it. **Source** shows the raw Markdown throughout. **Split** shows the raw Markdown beside the page as the site renders it, with the theme's callouts, code blocks, images, links and embeds, and updates it a moment after the reader stops typing. Links to published notes resolve as they do on the site, and links to anything else show unresolved. What only the build can do stays plain: code isn't highlighted, math and diagrams show their source, an embedded note shows its link without its body, and an embedded attachment shows as code. On a phone, Split shows one side at a time under **Write** and **Preview** tabs. Clicking a link in the preview opens it in a new tab. The switch is remembered in the browser, and no mode changes a byte the reader didn't edit.
+
+Split's preview loads the first time a reader opens it, and renders in a web worker so typing never waits on it. A site's Content Security Policy allows the worker with `script-src 'self'` (or `worker-src 'self'`), as the standalone shell's does. A host app that renders notes without Svartz's runtime offers no Split.
 
 Typing `[[` suggests the site's published notes. Arrow keys choose one, Enter inserts it as `[[Name]]`, or `[[folder/Name]]` when another note's name, slug or alias would take `[[Name]]`, and Escape closes the list. Password-protected and hidden notes are never suggested.
 
@@ -81,7 +83,7 @@ Every page gets a **New page** action in the site actions (the rail or site navi
 - For an edit, a branch `svartz/submission/edit/<page>-<submission id>` from the commit the site was built from, with one commit replacing the note. When the page changed since, GitHub shows a conflict instead of the edit overwriting it. The pull request is titled `Edit <path>`.
 - For a new page, a branch `svartz/submission/new/<vault folder>-<section>-<title>-<submission id>` from the same commit, with one commit adding the note. The pull request is titled `Add <path>`.
 - Every pull request gets the configured labels, the reader's note, and the page or site it came from.
-- A signed-in reader is named in the pull request with a link to their profile and the provider they signed in with, such as "Submitted by [Ada Lovelace](https://github.com/ada) (signed in with GitHub)". A reader signed in with GitHub also authors the commit, as their `<id>+<login>@users.noreply.github.com` address, so GitHub links it to their account. Google and Discord accounts have no GitHub account to link, so their commit keeps the token's owner, or the App, as author.
+- A signed-in reader is named in the pull request with a link to their profile and the provider they signed in with, such as "Submitted by [Ada Lovelace](https://github.com/ada) (signed in with GitHub)". A reader signed in with GitHub also authors the commit, as their `<id>+<login>@users.noreply.github.com` address, so GitHub links it to their account. Google, Discord and X accounts have no GitHub account to link, so their commit keeps the token's owner, or the App, as author.
 
 Each opened editor makes a random submission id and sends it with every attempt. When GitHub's answer is lost, a retry finds the pull request the first attempt opened instead of opening a second one. When GitHub refuses the pull request, the branch stays: another attempt at the same edit may be opening a pull request from it, and a retry reuses it. Every GitHub request gives up after 10 seconds, and the reader is told to try again.
 
@@ -153,7 +155,7 @@ The plugin answers under `<base><mount>/_svartz/submissions/`. Failures answer `
 | Request | Answer |
 | --- | --- |
 | `GET source/?page=/guides/setup/` | `{ "markdown": "…" }`, the note at the build commit. |
-| `GET links/` | `{ "notes": [{ "link", "title" }] }`: the published notes the editor suggests after `[[`, from the build's index. `link` is what goes between the brackets. |
+| `GET links/` | `{ "notes": [{ "link", "title", "slug", "path", "href", "aliases"? }], "linkResolution", "mountPath", "tagsRoute" }`: the published notes the editor suggests after `[[` and the Split preview links to, from the build's index, with how the vault resolves and routes links. `link` is what goes between the brackets. |
 | `POST edit/` with `{ "submissionId", "page", "markdown", "note"?, "turnstileToken"? }` | 201 `{ "url", "number" }` of the pull request, new or opened by an earlier attempt with the same `submissionId`. 401 `sign_in_required` when the reader is anonymous and sign-in is required or their address isn't visible; 403 when Turnstile is missing or refused; 429 with `retryAfter` past the rate limit; 503 when Cloudflare, the rate limiter or GitHub can't be reached. |
 | `POST new/` with `{ "submissionId", "folder", "title", "markdown", "note"?, "turnstileToken"? }` | As `edit/`. Also 400 `not_a_section` or `invalid_title`, and 409 `exists` when the title is taken, with `existing` set to the clashing page's public URL unless that page is hidden. |
 

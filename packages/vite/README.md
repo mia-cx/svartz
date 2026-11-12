@@ -18,7 +18,7 @@ The repository's standalone `apps/web` shell loads the same CSS collector from a
 ## Runtime modules
 
 - `virtual:svartz/artifacts` exposes the generated note components, published index, route data, and browser resources for one vault. Direct consumers call `await prepareNoteArtifact(key)` before the synchronous `getNoteArtifact(key)`; `hasNoteArtifact(key)` only checks existence.
-- `mountBrowserResources(pathname)` mounts a vault's browser scripts and returns a disposer. The disposer calls every script cleanup, then reports any errors.
+- `mountBrowserResources(pathname, note?, mountContent?)` mounts a vault's browser scripts, passing them the host-rendered note body and the page's content renderer, and returns a disposer. The disposer calls every script cleanup, then reports any errors.
 - `virtual:svartz/theme` exposes the theme, its route matcher, and a `ready` promise that loads lazy components.
 - `virtual:svartz/host` exposes each host vault's published metadata, combined routes, `resolveHostVault(pathname)`, `hostStylesheets(pathname)`, and `prepareHostVault(pathname)`. The latter loads only the selected vault's runtime code. The generated catchall links the selected vault's built CSS during SSR, even before JavaScript runs.
 - `virtual:svartz/index` exposes each host vault's published index and site metadata, and nothing else. A host that only lists notes or links their Markdown imports it, so it never compiles Svartz's page runtime. See [index-only hosts](../../docs/host-vaults.md#index-only-hosts).

@@ -150,6 +150,7 @@ export {
   type BrowserScriptContext,
   type BrowserScriptLoader,
   type BrowserScriptModule,
+  type ContentView,
 } from "./plugin/browser-scripts";
 export { ThemeValidationError, type ThemeError } from "./theme/errors";
 

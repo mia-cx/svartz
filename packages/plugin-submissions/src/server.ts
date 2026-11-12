@@ -24,6 +24,7 @@ import {
   type EditResponse,
   type LinksResponse,
   type LinkTarget,
+  type PreviewSettings,
   type SourceResponse,
 } from "./api";
 import { appTokens, type AppCredentials } from "./app";
@@ -60,8 +61,9 @@ export interface BuildData {
   readonly vaultRoot: string;
   /** Vault folders that hold a published note, where new notes may go. `""` is the vault's top level. */
   readonly folders: readonly string[];
-  /** The published notes the editor suggests after `[[`. */
+  /** The published notes the editor suggests after `[[`, and its preview links. */
   readonly links: readonly LinkTarget[];
+  readonly preview: PreviewSettings;
 }
 
 /** Room for a full note, the longest note and the JSON around them. */
@@ -211,7 +213,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     return open(request, context, turnstileToken, { ...submission, kind: "new", path, page: path.slice(0, -".md".length), pageUrl });
   }
 
-  const links = async () => Response.json({ notes: data.links } satisfies LinksResponse);
+  const links = async () => Response.json({ notes: data.links, ...data.preview } satisfies LinksResponse);
 
   const handlers = new Map([
     ["/source/", { method: "GET", run: source }],

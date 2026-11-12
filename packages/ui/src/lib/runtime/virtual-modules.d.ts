@@ -85,8 +85,15 @@ declare module 'virtual:svartz/artifacts' {
 
 	export const artifacts: ReadonlyMap<string, RuntimeArtifactRecord>;
 	export const browserResources: Readonly<Record<string, string>>;
-	/** Mount the vault's browser scripts for `pathname`; `note` is the host-rendered note body they belong to. */
-	export function mountBrowserResources(pathname: string, note?: HTMLElement): Promise<() => void>;
+	/**
+	 * Mount the vault's browser scripts for `pathname`; `note` is the host-rendered note body they belong to, and
+	 * `mountContent` renders HTML through the page's content components.
+	 */
+	export function mountBrowserResources(
+		pathname: string,
+		note?: HTMLElement,
+		mountContent?: import("@svartz/core").BrowserScriptContext["mountContent"],
+	): Promise<() => void>;
 	export function loadProtectedBridgeUrls(ids: readonly string[]): Promise<Readonly<Record<string, string>>>;
 	export function hasNoteArtifact(key: string): boolean;
 	export function prepareNoteArtifact(key: string): Promise<{ default: Component<any>; svartzProtected?: { slug: string; payloadId: string; payloadPath: string } }>;

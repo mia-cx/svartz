@@ -38,7 +38,12 @@
 	let body = $state<HTMLElement>();
 	useBrowserResources(() =>
 		vaultPage.noteModule && body
-			? { artifacts, pathname: `${artifacts.deploymentBasePath}${appPathname}`, note: body }
+			? {
+					artifacts,
+					pathname: `${artifacts.deploymentBasePath}${appPathname}`,
+					note: body,
+					contentComponents: vaultPage.contentComponents
+				}
 			: undefined
 	);
 </script>
