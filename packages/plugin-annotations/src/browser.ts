@@ -9,8 +9,11 @@
  * they come back.
  *
  * Style it with `@svartz/plugin-annotations/browser.css` and the custom properties it documents.
+ *
+ * On a theme-minimal site the plugin's own browser resource calls `attach` through `mount`; host apps call it themselves.
  */
 import type { Identity } from "@svartz/auth";
+import type { BrowserScriptContext } from "@svartz/core";
 import { openSignIn } from "@svartz/auth/browser";
 import { describe, locate, rangeOf, type Anchor, type Position } from "./anchor";
 import { COMMENT_MAX_LENGTH } from "./limits";
@@ -688,4 +691,21 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
     if (highlight?.size === 0) CSS.highlights.delete(HIGHLIGHT);
     layer.remove();
   };
+}
+
+/** What the plugin's browser resource receives from the build. */
+export interface MountOptions {
+  /** The annotations routes under the vault's mount path, without the deployment base: `/notes/_svartz/annotations`. */
+  readonly endpoint: string;
+}
+
+/**
+ * Browser resource entry, which Svartz calls after every navigation: attach to the note body the theme marks with
+ * `data-svartz-note="<slug>"`, keyed by that slug. A page without one, such as a list page, gets nothing.
+ */
+export function mount(_pathname: string, { endpoint }: MountOptions, { base }: BrowserScriptContext = { base: "" }) {
+  const content = document.querySelector<HTMLElement>("[data-svartz-note]");
+  const page = content?.dataset.svartzNote;
+  if (!content || !page) return undefined;
+  return attach(content, { endpoint: `${base}${endpoint}`, page });
 }

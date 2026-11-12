@@ -87,6 +87,8 @@ export default defineConfig({
         test: {
           name: "browser",
           include: ["tests/**/*.browser.test.ts"],
+          // Every file seeds the one database the middleware serves, so they take turns.
+          fileParallelism: false,
           browser: {
             enabled: true,
             provider: playwright(),

@@ -3,7 +3,8 @@
  * in `svartz.config.ts`. The browser shows them with `attach` from `@svartz/plugin-annotations/browser`.
  */
 import { fileURLToPath } from "node:url";
-import { definePlugin, type NormalizedSvartzPlugin, type SvartzPlugin } from "@svartz/core";
+import { definePlugin, getCompilerContributions, type NormalizedSvartzPlugin, type SvartzPlugin } from "@svartz/core";
+import type { MountOptions } from "./browser";
 import type { AnnotationsOptions, AnnotationsServerOptions } from "./server";
 
 export type { AnnotationsOptions, Reaction } from "./server";
@@ -18,6 +19,8 @@ export const DEFAULT_WRITES_PER_HOUR = 30;
 
 // Beside this module in dist.
 const SERVER_MODULE = fileURLToPath(new URL("./server.js", import.meta.url));
+const BROWSER_MODULE = fileURLToPath(new URL("./browser.js", import.meta.url));
+const STYLESHEET = fileURLToPath(new URL("./browser.css", import.meta.url));
 
 const REACTION_ID = /^[a-z0-9][a-z0-9-]*$/;
 const IDENTITY_ID = /^[a-z]+:.+$/;
@@ -61,7 +64,10 @@ function checkVault(vault: { readonly id: string; readonly target: { readonly ty
   if (!auth?.server || auth.disabled) fail(`vault "${vault.id}" enables annotations without auth; add auth({ providers: … }) to the same vault`);
 }
 
-/** The `annotations` plugin: its routes on the server. */
+/**
+ * The `annotations` plugin: its routes on the server, and in the browser a script that attaches to every note body a
+ * theme marks with `data-svartz-note`, as theme-minimal and every theme extending it do.
+ */
 export function annotations(options: AnnotationsOptions): NormalizedSvartzPlugin {
   const serverOptions = resolve(options);
   const plugin: NormalizedSvartzPlugin = definePlugin(() => ({
@@ -70,6 +76,19 @@ export function annotations(options: AnnotationsOptions): NormalizedSvartzPlugin
     forVault({ vault }) {
       checkVault(vault);
       return plugin;
+    },
+    emitArtifacts: {
+      options: { fatal: true },
+      run(ctx) {
+        const compiler = getCompilerContributions(ctx);
+        compiler.browserResources.set(ANNOTATIONS_PLUGIN_ID, {
+          id: ANNOTATIONS_PLUGIN_ID,
+          kind: "script",
+          importId: BROWSER_MODULE,
+          options: { endpoint: `${ctx.config.mountPath}/_svartz/${ANNOTATIONS_PLUGIN_ID}` } satisfies MountOptions,
+        });
+        compiler.browserResources.set(`${ANNOTATIONS_PLUGIN_ID}-css`, { id: `${ANNOTATIONS_PLUGIN_ID}-css`, kind: "css", importId: STYLESHEET });
+      },
     },
   }))();
   return plugin;
