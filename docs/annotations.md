@@ -69,20 +69,20 @@ Annotations are hidden when the page prints (everything carries `data-print-hide
 
 ### In a host app
 
-On a page the host app renders itself, call `attach` on the element that holds the note's text. It returns a function that removes the annotations:
+A host page that renders a note with `SvartzNoteContent` shows its annotations with no code, like a theme page. On markup the host renders itself, call `attach` on the element that holds the note's text, with the note's vault from `virtual:svartz/host` and its slug. It returns a function that removes the annotations:
 
 ```ts
 import { attach } from "@svartz/plugin-annotations/browser";
 import "@svartz/plugin-annotations/browser.css";
+import { vaults } from "virtual:svartz/host";
 
-const detach = attach(document.querySelector(".prose")!, {
-  endpoint: "/notes/_svartz/annotations",
-  page: "garden/roses",
-});
+const notes = vaults.find((vault) => vault.id === "notes")!;
+const detach = attach(document.querySelector(".prose")!, { vault: notes, slug: "garden/roses" });
 ```
 
-- `endpoint` is the plugin's routes: `<base><mount>/_svartz/annotations`.
-- `page` is the key the note's annotations are stored under, so it must stay the same for the same note. Theme pages use the note's slug, such as `garden/roses`; use the same to share a note's annotations with them.
+`attach` finds the plugin's routes under the deployment base and the vault's mount, and stores the note's annotations under its slug, as theme pages do, so both show the same comments. See [annotations in a host app](host-vaults.md#annotations) for a Svelte page.
+
+Outside a host app, name the routes and key yourself: `attach(element, { endpoint: "/notes/_svartz/annotations", page: "garden/roses" })`, where `endpoint` is `<base><mount>/_svartz/annotations`.
 
 ### Commenting
 
