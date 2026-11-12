@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -9,9 +10,13 @@ import { runBuild } from "./helpers/build-process";
 function isRunning(pid: number): boolean {
   try {
     process.kill(pid, 0);
+    // Container init may leave a terminated orphan unreaped; zombies cannot run.
+    if (process.platform === "linux") {
+      return !/^State:\s+Z/m.test(readFileSync(`/proc/${pid}/status`, "utf8"));
+    }
     return true;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+    if (["ESRCH", "ENOENT"].includes((error as NodeJS.ErrnoException).code ?? "")) return false;
     throw error;
   }
 }

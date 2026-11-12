@@ -8,8 +8,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { readReleasePackages } from './release-packages.mjs';
+import { runBuildProcess } from './build-process.mjs';
 
 const exec = promisify(execFile);
+const BUILD_TIMEOUT = 240_000;
 const root = fileURLToPath(new URL('../', import.meta.url));
 const licenseText = await readFile(path.join(root, 'LICENSE'), 'utf8');
 const releaseVersion = readReleasePackages(root)[0].version;
@@ -30,9 +32,11 @@ const packages = [
   ['svartz', 'packages/cli', ['dist/index.js', 'template/vault/index.md', 'template/gitignore']],
 ];
 
-async function command(file, args, cwd) {
+async function command(file, args, cwd, { build = false } = {}) {
   try {
-    const { stdout, stderr } = await exec(file, args, { cwd, maxBuffer: 10 * 1024 * 1024 });
+    const { stdout, stderr } = build && process.platform !== 'win32'
+      ? await runBuildProcess(file, args, { cwd, timeout: BUILD_TIMEOUT })
+      : await exec(file, args, { cwd, maxBuffer: 10 * 1024 * 1024 });
     if (process.env.SVARTZ_RELEASE_VERBOSE) process.stdout.write(stdout + stderr);
     return stdout;
   } catch (error) {
@@ -120,7 +124,7 @@ async function checkFresh(project, launcher, archives) {
     '}',
     `if (minimalTheme().version !== '${releaseVersion}') throw new Error('Packed minimal theme has a stale manifest version');`,
   ].join('\n')], project);
-  await command('npm', ['run', 'build'], project);
+  await command('npm', ['run', 'build'], project, { build: true });
   const html = await readFile(path.join(project, '.svartz/vaults/notes/dist/index.html'), 'utf8');
   assert.match(html, /Svartz/);
   await checkDev(project, '/', 'Svartz');
@@ -224,7 +228,7 @@ async function checkHost(project, launcher, archives) {
   await command(path.join(project, 'node_modules/.bin/tsc'),
     ['--noEmit', '--strict', '--skipLibCheck', '--module', 'esnext', '--moduleResolution', 'bundler', '--target', 'es2022', 'check-ui-types.ts'], project);
   process.env.SVARTZ_RELEASE_PASSWORD = 'packed-host-check';
-  await command('npm', ['run', 'svartz:build'], project);
+  await command('npm', ['run', 'svartz:build'], project, { build: true });
   await command(path.join(project, 'node_modules/.bin/svelte-check'), ['--tsconfig', './tsconfig.json'], project);
   const sourcesPath = path.join(project, '.svartz/vaults/notes/tailwind-sources.css');
   const tailwindSources = await readFile(sourcesPath, 'utf8');
@@ -267,7 +271,7 @@ async function checkHost(project, launcher, archives) {
     .replace("version: '1.0.0',", "version: '1.0.0',\n  passwordGroups: { release: { env: 'SVARTZ_RELEASE_PASSWORD' } },")
     .replace("target: { type: 'host' },", "target: { type: 'host' },\n    mountPath: 'notes',"));
   await rm(path.join(project, 'src/routes/rss.xml'), { recursive: true });
-  await command('npm', ['run', 'svartz:build'], project);
+  await command('npm', ['run', 'svartz:build'], project, { build: true });
   await checkStyledHostCss(project);
   await checkDev(project, '/site/notes/', 'Welcome');
   console.log('Packed Vite 8 host: integration, types, static build, and dev passed.');
@@ -275,7 +279,7 @@ async function checkHost(project, launcher, archives) {
   // Reuse the packed Vite 8 consumer with its adapter changed to the production host's adapter.
   await command('npm', ['install', '--save-dev', '@sveltejs/adapter-cloudflare@^7', '--no-audit', '--no-fund'], project);
   await write(project, 'svelte.config.js', "import adapter from '@sveltejs/adapter-cloudflare';\nexport default { kit: { adapter: adapter() } };\n");
-  await command('npm', ['run', 'svartz:build'], project);
+  await command('npm', ['run', 'svartz:build'], project, { build: true });
   await stat(path.join(project, '.svelte-kit/cloudflare/_worker.js'));
   const mountedNote = await readFile(path.join(project, '.svelte-kit/cloudflare/notes.html'), 'utf8');
   assert.match(mountedNote, /Welcome/);
