@@ -383,6 +383,18 @@ describe("sign-in", () => {
     await expectNoReopen();
   });
 
+  it("offers the draft instead of reopening it when the page changed while the reader signed in", async () => {
+    let markdown = SOURCE;
+    serve(() => Response.json(SIGNED_OUT, { status: 401 }), () => Response.json({ markdown }));
+    await writeEdit();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "Continue with GitHub" })).toBeVisible();
+
+    markdown = `${SOURCE}Newer change.\r\n`;
+    returnFromSignIn();
+    await expect.element(page.getByRole("button", { name: "Restore anyway" })).toHaveFocus();
+  });
+
   it("ignores a sign-in refusal that arrives after navigation closed the panel", async () => {
     let refuse!: (response: Response) => void;
     serve(() => new Promise((resolve) => { refuse = resolve; }));
@@ -774,6 +786,70 @@ describe("drafts", () => {
     unmount = undefined;
 
     expect(readDraft("/docs/wiki/_svartz/submissions", { kind: "edit", page: "/wiki/guide/" })).toBeUndefined();
+  });
+
+  describe("saved before the page changed", () => {
+    const NEWER = `${SOURCE}Newer change.\r\n`;
+
+    /** Leave an edit of the guide unsent, then reopen the editor once the site serves a newer source. */
+    async function reopenChanged() {
+      let markdown = SOURCE;
+      serve(() => Response.json({}), () => Response.json({ markdown }));
+      await openEditor();
+      // Navigation closes the panel and keeps the edit.
+      if (unmount) unmount();
+      markdown = NEWER;
+      unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+      await page.getByRole("button", { name: "Edit" }).click();
+    }
+
+    it("warns that the page changed", async () => {
+      await reopenChanged();
+
+      await expect.element(page.getByRole("group", { name: /^Unsent edit from .+\. This page changed since you saved this draft\.$/ })).toBeVisible();
+      await expect.element(page.getByRole("button", { name: "Restore anyway" })).toHaveFocus();
+    });
+
+    it("restores the draft anyway", async () => {
+      await reopenChanged();
+      await page.getByRole("button", { name: "Restore anyway" }).click();
+
+      const source = page.getByRole("textbox", { name: "Page source" });
+      await expect.element(source).toHaveTextContent("Welcome.");
+      await expect.element(source).not.toHaveTextContent("Newer change.");
+    });
+
+    it("forgets the draft the reader discards", async () => {
+      await reopenChanged();
+      await page.getByRole("button", { name: "Discard edit" }).click();
+
+      await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("Newer change.");
+      expect(readDraft("/docs/wiki/_svartz/submissions", { kind: "edit", page: "/wiki/guide/" })).toBeUndefined();
+    });
+
+    it("still warns after the restored draft saves again", async () => {
+      await reopenChanged();
+      await page.getByRole("button", { name: "Restore anyway" }).click();
+      await userEvent.keyboard(" Again.");
+      if (unmount) unmount();
+
+      unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+      await page.getByRole("button", { name: "Edit" }).click();
+      await expect.element(page.getByRole("group", { name: /This page changed since you saved this draft\.$/ })).toBeVisible();
+    });
+  });
+
+  it("offers a draft that recorded no source without a warning", async () => {
+    serve(() => Response.json({}));
+    // As drafts were saved before they recorded their source.
+    storeDraft("/docs/wiki/_svartz/submissions", { kind: "edit", page: "/wiki/guide/" }, {
+      kind: "edit", page: "/wiki/guide/", markdown: `${SOURCE}Welcome.`, note: "", savedAt: Date.now(),
+    });
+    unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+    await page.getByRole("button", { name: "Edit" }).click();
+
+    await expect.element(page.getByRole("group", { name: /^Unsent edit from .+\.$/ })).not.toHaveTextContent("This page changed");
+    await expect.element(page.getByRole("button", { name: "Restore edit" })).toHaveFocus();
   });
 
   it("forgets the draft once the pull request opens", async () => {

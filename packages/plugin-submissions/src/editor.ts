@@ -5,7 +5,7 @@
  *
  * The source opens in Live Preview or Source, as the reader last chose, and suggests published notes after `[[`. What
  * the reader writes is kept as a {@link Draft} while they write it; the panel offers it back when it next opens on the
- * same page. When the server asks for sign-in, the panel marks the draft to resume and opens `@svartz/auth`'s sign-in
+ * same page, warning when the page's source has changed since. When the server asks for sign-in, the panel marks the draft to resume and opens `@svartz/auth`'s sign-in
  * dialog; signing in returns the reader to the page, and the panel reopens with the draft at once.
  */
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -21,7 +21,7 @@ import {
   type NewPageRequest,
   type SourceResponse,
 } from "./api";
-import { draftSlot, readDraft, storeDraft, type Draft } from "./draft";
+import { draftSlot, hashSource, readDraft, storeDraft, type Draft } from "./draft";
 import { livePreview } from "./live-preview";
 import { wikilinkCompletion } from "./wikilinks";
 
@@ -254,6 +254,11 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
   const editable = new Compartment();
   let view: EditorView | undefined;
   let original = "";
+  /**
+   * The {@link Draft.sourceHash} of what the source holds: the loaded source's, or a restored draft's, so a draft
+   * restored over a newer source still warns when it is offered again.
+   */
+  let sourceHash: string | undefined;
   // The fields are locked while sending, so the pull request holds exactly what the reader sees. The panel can't be
   // dismissed then either: the reader would never see the pull request it opens.
   let phase: "editing" | "sending" | "sent" = "editing";
@@ -285,7 +290,7 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
     const savedAt = Date.now();
     const common = { markdown: view.state.sliceDoc(), note: note.value, savedAt, ...(resumeOn ? { resume: resumeOn } : {}) };
     const stored = storeDraft(endpoint, target, target.kind === "edit"
-      ? { ...common, kind: "edit", page: target.page }
+      ? { ...common, kind: "edit", page: target.page, sourceHash }
       : { ...common, kind: "new", folder: folder?.value ?? "", title: title?.value ?? "" });
     // A refused save leaves the last stored draft in place, and this panel still owns it.
     if (stored) ownSave = savedAt;
@@ -479,6 +484,7 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
   /** CodeMirror on `markdown`, replacing the loading status. */
   function showSource(markdown: string) {
     original = markdown;
+    if (target.kind === "edit") sourceHash = hashSource(markdown);
     source.replaceChildren();
     view = new EditorView({
       parent: source,
@@ -509,7 +515,8 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
   function restore({ markdown, note: text, ...rest }: Draft) {
     view?.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: markdown } });
     note.value = text;
-    if (rest.kind === "new" && title && folder) {
+    if (rest.kind === "edit") sourceHash = rest.sourceHash;
+    else if (title && folder) {
       title.value = rest.title;
       folder.value = rest.folder;
     }
@@ -526,10 +533,11 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
   }
 
   /**
-   * Offer the kept draft back above the source, focusing its first button. The fields take no writing until the reader
-   * answers: the draft isn't saved over while it shows, so that writing would be lost.
+   * Offer the kept draft back above the source, focusing its first button, and say so when the page `changed` since it
+   * was saved. The fields take no writing until the reader answers: the draft isn't saved over while it shows, so that
+   * writing would be lost.
    */
-  function offerDraft(kept: Draft) {
+  function offerDraft(kept: Draft, changed: boolean) {
     lock(true);
     const noun = target.kind === "edit" ? "edit" : "page";
     offer = document.createElement("div");
@@ -537,9 +545,10 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
     offer.setAttribute("role", "group");
     offer.setAttribute("aria-labelledby", "svartz-submissions-restore-text");
     offer.innerHTML = `<p id="svartz-submissions-restore-text"></p>
-      <button type="button" class="sv-action" data-restore>Restore ${noun}</button>
+      <button type="button" class="sv-action" data-restore>Restore ${changed ? "anyway" : noun}</button>
       <button type="button" class="sv-action" data-discard>Discard ${noun}</button>`;
-    query<HTMLElement>(offer, "p").textContent = `Unsent ${noun} from ${savedAt.format(kept.savedAt)}.`;
+    query<HTMLElement>(offer, "p").textContent =
+      `Unsent ${noun} from ${savedAt.format(kept.savedAt)}.${changed ? " This page changed since you saved this draft." : ""}`;
     query<HTMLElement>(offer, "[data-restore]").addEventListener("click", () => {
       dropOffer();
       restore(kept);
@@ -556,15 +565,17 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
   }
 
   /**
-   * With the source showing: back from signing in, the draft as the reader left it, ready to send. Otherwise a kept
-   * draft is offered, and the panel starts where the reader writes.
+   * With the source showing: back from signing in, the draft as the reader left it, ready to send, unless the page
+   * changed meanwhile. Otherwise a kept draft is offered, and the panel starts where the reader writes. A draft without
+   * a recorded source is offered as before: whether its page changed is unknown.
    */
   function begin() {
-    if (draft?.resume === pathname) {
+    const changed = draft?.kind === "edit" && draft.sourceHash !== undefined && draft.sourceHash !== sourceHash;
+    if (draft?.resume === pathname && !changed) {
       restore(draft);
       submit.focus();
     } else if (draft) {
-      offerDraft(draft);
+      offerDraft(draft, changed);
     } else {
       (target.kind === "edit" ? view : title)?.focus();
     }
