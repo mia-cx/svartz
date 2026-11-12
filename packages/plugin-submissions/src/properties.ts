@@ -75,22 +75,24 @@ function encode(text: string, quote: string, flow = false, typed = false): strin
  */
 type Field =
   | { readonly kind: "text"; readonly text: string; readonly quote: string; readonly typed?: boolean }
-  | { readonly kind: "list"; readonly items: readonly string[]; readonly indent?: string }
+  | { readonly kind: "list"; readonly items: readonly string[]; readonly typed: boolean; readonly indent?: string }
   | { readonly kind: "yaml"; readonly text: string };
 
 function fieldOf(doc: Text, property: Property): Field {
   const [first = "", ...rest] = doc.sliceString(property.colon, property.to, "\n").split("\n");
   const head = first.trim();
   const yaml: Field = { kind: "yaml", text: rest.length ? [head, ...rest].join("\n").replace(/^\n/, "") : head };
+  /** The items as text, and whether any was a plain boolean, number or date: such a list keeps those items plain. */
   const scalars = (raws: string[]) => {
     const items = raws.map(decode);
-    return items.every((item): item is string => item !== undefined && !item.includes(",")) ? items : undefined;
+    if (!items.every((item): item is string => item !== undefined && !item.includes(","))) return undefined;
+    return { items, typed: raws.some((raw) => !/^["']/.test(raw) && TYPED_PLAIN.test(raw)) };
   };
   if (!rest.length) {
     const flow = /^\[([^[\]{}]*)\]$/.exec(head);
     if (flow) {
-      const items = flow[1]!.trim() ? scalars(flow[1]!.split(",").map((item) => item.trim())) : [];
-      return items ? { kind: "list", items } : yaml;
+      const list = flow[1]!.trim() ? scalars(flow[1]!.split(",").map((item) => item.trim())) : { items: [], typed: false };
+      return list ? { kind: "list", ...list } : yaml;
     }
     const text = decode(head);
     if (text === undefined) return yaml;
@@ -100,8 +102,8 @@ function fieldOf(doc: Text, property: Property): Field {
   const block = rest.map((line) => /^([ \t]*)- (.*)$/.exec(line));
   const indent = block[0]?.[1];
   if (head || indent === undefined || !block.every((match) => match?.[1] === indent)) return yaml;
-  const items = scalars(block.map((match) => match![2]!.trim()));
-  return items ? { kind: "list", items, indent } : yaml;
+  const list = scalars(block.map((match) => match![2]!.trim()));
+  return list ? { kind: "list", ...list, indent } : yaml;
 }
 
 /** What follows `key:` for `value` typed into `field`'s input, with `lineBreak` between lines. */
@@ -115,8 +117,8 @@ function valueSource(field: Field, value: string, lineBreak: string): string {
     return `${block ? lineBreak : " "}${lines.join(lineBreak)}`;
   }
   const items = value.split(",").map((item) => item.trim()).filter(Boolean);
-  if (field.indent === undefined) return ` [${items.map((item) => encode(item, "", true)).join(", ")}]`;
-  return items.map((item) => `${lineBreak}${field.indent}- ${encode(item, "")}`).join("");
+  if (field.indent === undefined) return ` [${items.map((item) => encode(item, "", true, field.typed)).join(", ")}]`;
+  return items.map((item) => `${lineBreak}${field.indent}- ${encode(item, "", false, field.typed)}`).join("");
 }
 
 const encodeKey = (key: string) => (/^[^\s#:'"\-?,[\]{}&*!|>%@`][^:#]*$/.test(key) && key.trim() === key ? key : JSON.stringify(key));

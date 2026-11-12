@@ -1166,6 +1166,15 @@ describe("Rich text", () => {
       .replace("featured: true", "featured: false"));
   });
 
+  it("keeps a list of numbers numbers, and quotes a number added to a list of text", async () => {
+    const note = "---\nvalues: [1, 2]\ntags:\n  - people\n---\n# Guide\n";
+    await openRich(note);
+    await page.getByRole("textbox", { name: "values" }).fill("1, 2, 3");
+    await page.getByRole("textbox", { name: "tags" }).fill("people, 2026");
+
+    expect(await sendFromSource()).toBe(note.replace("[1, 2]", "[1, 2, 3]").replace("  - people\n", '  - people\n  - "2026"\n'));
+  });
+
   it("renames a property", async () => {
     await openRich(NOTE);
     await page.getByRole("textbox", { name: "Property name" }).first().fill("name");
