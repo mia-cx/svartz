@@ -1,8 +1,8 @@
-import { posix } from "node:path";
 import type { ProcessedFile } from "@svartz/core";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
+import { attachmentResolver } from "./attachments";
 
 const WIKILINK = /!?\[\[([^\]]+)\]\]/g;
 const HTML_TAG = /<(?:a|audio|iframe|img|link|source|video)\b[^>]*>/gi;
@@ -115,42 +115,10 @@ export function htmlAssetSpans(html: string): { start: number; end: number; targ
   return spans;
 }
 
-function assetTarget(target: string): string | undefined {
-  const path = target.split(/[?#]/, 1)[0]?.trim();
-  if (!path || /^(?:[a-z]+:|\/\/)/i.test(path)) return;
-  try {
-    return decodeURIComponent(path).replaceAll("\\", "/");
-  } catch {
-    return path.replaceAll("\\", "/");
-  }
-}
-
-/** Resolve an attachment using its vault path, note-relative path, or unique basename. */
+/** Resolve an attachment using its note-relative path, vault path, or unique basename (see {@link attachmentResolver}). */
 export function createAssetResolver(assets: readonly ProcessedFile[]) {
-  const byPath = new Map(assets.map((file) => [file.path.toLowerCase(), file.path]));
-  const byName = new Map<string, string>();
-  const ambiguousNames = new Set<string>();
-  for (const file of assets) {
-    const name = posix.basename(file.path).toLowerCase();
-    if (ambiguousNames.has(name)) continue;
-    if (byName.has(name)) {
-      byName.delete(name);
-      ambiguousNames.add(name);
-    } else {
-      byName.set(name, file.path);
-    }
-  }
-
-  return (note: ProcessedFile, raw: string): string | undefined => {
-    const target = assetTarget(raw);
-    if (!target) return;
-    const vaultPath = target.replace(/^\/+/, "");
-    const relativePath = posix.normalize(posix.join(posix.dirname(note.path), target));
-    return (target.startsWith("/") ? byPath.get(vaultPath.toLowerCase()) : undefined) ??
-      byPath.get(relativePath.toLowerCase()) ??
-      byPath.get(vaultPath.toLowerCase()) ??
-      byName.get(posix.basename(vaultPath).toLowerCase());
-  };
+  const resolve = attachmentResolver(assets.map((file) => file.path));
+  return (note: ProcessedFile, raw: string): string | undefined => resolve(note.path, raw);
 }
 
 /** Collect vault attachments named by public note content, excluding code spans and fences. */

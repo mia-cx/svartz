@@ -12,7 +12,7 @@ import { unified } from "unified";
 import { visit } from "unist-util-visit";
 import { hiddenCommentSpans, htmlAssetSpans, maskHiddenComments, referenceDefinitionSpans } from "./asset-references";
 import { findLinkSpans } from "./parse";
-import { IMAGE_EXTENSIONS, splitEmbedInner } from "../transform-embeds";
+import { IMAGE_EXTENSIONS, splitEmbedInner } from "./attachments";
 
 const markdownParser = unified().use(remarkParse);
 const EMBED = /!\[\[([^\]]+)\]\]/g;
