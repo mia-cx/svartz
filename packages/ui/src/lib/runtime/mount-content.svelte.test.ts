@@ -45,6 +45,18 @@ it('drops scripts, handlers and script URLs, as the build does', async () => {
 	expect('pwned' in window).toBe(false);
 });
 
+it('draws inline SVG, and HTML inside its foreignObject, in their own namespaces', async () => {
+	show(
+		'<p><svg width="100" height="100"><circle cx="50" cy="50" r="40"></circle><foreignObject width="100" height="20"><p>Label</p></foreignObject></svg></p>'
+	);
+
+	await expect.element(page.getByText('Label')).toBeVisible();
+	const circle = target.querySelector('circle');
+	expect(circle).toBeInstanceOf(SVGCircleElement);
+	expect((circle as SVGCircleElement).getBBox().width).toBe(80);
+	expect(target.querySelector('foreignObject p')?.namespaceURI).toBe('http://www.w3.org/1999/xhtml');
+});
+
 it('replaces what shows on each render', async () => {
 	const view = show('<p>First</p>');
 	await expect.element(page.getByText('First')).toBeVisible();
