@@ -120,10 +120,10 @@ function valueSource(field: Field, value: string, lineBreak: string): string {
     return `${block ? lineBreak : " "}${lines.join(lineBreak)}`;
   }
   const items = value.split(",").map((item) => item.trim()).filter(Boolean);
-  // An item the list had keeps its source, quotes and type included.
-  const kept = new Map<string, string>();
-  field.items.forEach((item, index) => kept.has(item) || kept.set(item, field.raws[index]!));
-  const source = (item: string, flow: boolean) => kept.get(item) ?? encode(item, "", flow, field.typed);
+  // An item the list had keeps its source, quotes and type included; items that read the same take theirs in turn.
+  const kept = new Map<string, string[]>();
+  field.items.forEach((item, index) => kept.set(item, [...(kept.get(item) ?? []), field.raws[index]!]));
+  const source = (item: string, flow: boolean) => kept.get(item)?.shift() ?? encode(item, "", flow, field.typed);
   if (field.indent === undefined) return ` [${items.map((item) => source(item, true)).join(", ")}]`;
   return items.map((item) => `${lineBreak}${field.indent}- ${source(item, false)}`).join("");
 }

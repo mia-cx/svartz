@@ -1167,15 +1167,17 @@ describe("Rich text", () => {
   });
 
   it("keeps each listed item's type, and gives a new one the list's", async () => {
-    const note = "---\nvalues: [1, 2]\nmixed: [1, \"2\"]\ntags:\n  - people\n---\n# Guide\n";
+    const note = "---\nvalues: [1, 2]\nmixed: [1, \"2\"]\nsame: [1, \"1\"]\ntags:\n  - people\n---\n# Guide\n";
     await openRich(note);
     await page.getByRole("textbox", { name: "values" }).fill("1, 2, 3");
     await page.getByRole("textbox", { name: "mixed" }).fill("1, 2, 3");
+    await page.getByRole("textbox", { name: "same" }).fill("1, 1, 3");
     await page.getByRole("textbox", { name: "tags" }).fill("people, 2026");
 
     expect(await sendFromSource()).toBe(note
       .replace("values: [1, 2]", "values: [1, 2, 3]")
       .replace('mixed: [1, "2"]', 'mixed: [1, "2", "3"]')
+      .replace('same: [1, "1"]', 'same: [1, "1", "3"]')
       .replace("  - people\n", '  - people\n  - "2026"\n'));
   });
 
