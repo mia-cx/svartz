@@ -27,6 +27,20 @@ export interface AttachOptions {
   readonly page: string;
 }
 
+/** A note in a host app's vault, which locates its annotations without spelling out the route or key. */
+export interface HostNoteOptions {
+  /** The note's vault: one of `vaults` from `virtual:svartz/host`. */
+  readonly vault: { readonly basePath: string; readonly mountPath: string };
+  /** The note's slug, such as `garden/roses`: the key theme pages store its annotations under too. */
+  readonly slug: string;
+}
+
+/** The vault's annotations routes under the deployment base, and the note's key. The plugin's id is `annotations`. */
+const hostNote = ({ vault, slug }: HostNoteOptions): AttachOptions => ({
+  endpoint: `${vault.basePath}${vault.mountPath}/_svartz/annotations`,
+  page: slug,
+});
+
 /** Highlight names, for `::highlight(…)` in a host's own CSS. */
 export const HIGHLIGHT = "svartz-annotations";
 export const ACTIVE_HIGHLIGHT = "svartz-annotations-active";
@@ -263,8 +277,11 @@ function popover<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, className: s
 /**
  * Show the annotations stored for `page` beside `content`, the note's body element. Returns `detach`, which removes every
  * marker, card and highlight it added. Passages no longer in the note are left out.
+ *
+ * A host app names the note instead: `attach(element, { vault, slug })`, with `vault` from `virtual:svartz/host`.
  */
-export function attach(content: HTMLElement, { endpoint, page }: AttachOptions): () => void {
+export function attach(content: HTMLElement, options: AttachOptions | HostNoteOptions): () => void {
+  const { endpoint, page } = "vault" in options ? hostNote(options) : options;
   const controller = new AbortController();
   const { signal } = controller;
   const base = endpoint.replace(/\/+$/, "");
