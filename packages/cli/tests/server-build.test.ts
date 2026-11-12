@@ -13,6 +13,7 @@ const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
 const cli = path.join(workspaceRoot, "packages/cli/dist/index.js");
 const HANDLER_MARKER = "svartz-hello-handler";
 const BUILD_TIMEOUT = 240_000;
+const unicodeNotes = [["café", "Prerendered café note."], ["日本語", "Prerendered Japanese note."]] as const;
 
 let root: string;
 
@@ -87,6 +88,9 @@ beforeAll(async () => {
   await mkdir(path.join(root, "plugins"));
   await writeFile(path.join(root, "vault/source.md"), "---\nslug: guide\n---\n# Guide\n\nPublished guide. Read [[other]].\n");
   await writeFile(path.join(root, "vault/other.md"), "# Other\n\nLinked page.\n");
+  for (const [slug, content] of unicodeNotes) {
+    await writeFile(path.join(root, "vault", `${slug}.md`), `# ${slug}\n\n${content}\n`);
+  }
   await writeFile(path.join(root, "vault/private.md"), "---\nprivate: true\n---\n# PRIVATE_MARKER\n");
   await writeFile(path.join(root, "plugins/hello.mjs"), `export default (options) => (request, context) => {
     if (new URL(request.url).pathname !== context.base + "/") return undefined;
@@ -115,10 +119,26 @@ describe("standalone builds with a server plugin", () => {
 
   it.each([true, false])("negotiates prerendered pages in Node (server plugin %s)", async (serverPlugin) => {
     const prefix = serverPlugin ? "" : "/site/docs";
-    await build({ type: "node", basePath: serverPlugin ? "" : "/site" }, { serverPlugin, mountPath: serverPlugin ? "" : "/docs" });
+    // Exercise generated host loaders too, under a deployment base and vault mount.
+    const catchall = path.join(root, "apps/web/src/routes/[...slug]");
+    const originalLoad = await readFile(path.join(catchall, "+page.ts"));
+    if (!serverPlugin) {
+      for (const name of ["+page.ts", "+page.server.ts"]) {
+        await cp(path.join(workspaceRoot, "packages/cli/template/src/routes/[...slug]", name), path.join(catchall, name));
+      }
+    }
+    try {
+      await build({ type: "node", basePath: serverPlugin ? "" : "/site" }, { serverPlugin, mountPath: serverPlugin ? "" : "/docs" });
+    } finally {
+      await writeFile(path.join(catchall, "+page.ts"), originalLoad);
+      if (!serverPlugin) await rm(path.join(catchall, "+page.server.ts"));
+    }
     const dist = path.join(root, ".svartz/vaults/site/dist");
     await access(path.join(dist, "index.js"));
     expect(await readFile(path.join(dist, "prerendered", prefix, "index.html"), "utf8")).toContain("Prerendered welcome.");
+    for (const [slug, content] of unicodeNotes) {
+      expect(await readFile(path.join(dist, "prerendered", prefix, slug, "index.html"), "utf8")).toContain(content);
+    }
     expect([...(await readTree(path.join(dist, "prerendered"))).keys()].filter((file) => file.includes("_svartz"))).toEqual([]);
     const client = await readTree(path.join(dist, "client"));
     expect(filesContaining(client, HANDLER_MARKER)).toEqual([]);
@@ -163,6 +183,13 @@ describe("standalone builds with a server plugin", () => {
       expect(home.headers.get("vary")).toContain("Accept");
       expect(home.headers.get("vary")).toContain("User-Agent");
       expect(await home.text()).toContain("Prerendered welcome.");
+      // Proves non-ASCII notes are built and served at encoded URLs, including under a base and mount.
+      for (const [slug, content] of unicodeNotes) {
+        const note = await fetch(`${origin}/${encodeURIComponent(slug)}/`);
+        expect(note.status).toBe(200);
+        expect(await note.text()).toContain(content);
+      }
+      expect((await fetch(`${origin}/%E0%A4%A/`)).status).toBe(404);
 
       // Proves page URLs negotiate the emitted copy ahead of adapter-node's static HTML middleware.
       const agent = await fetch(`${origin}/guide/`, { headers: { "user-agent": "ClaudeBot/1.0" } });

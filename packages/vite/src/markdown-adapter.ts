@@ -27,7 +27,7 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
       const entry = node ? "handler.js" : "_worker.js";
       const original = node ? "svartz-handler.js" : "svartz-worker.js";
       const common = `
-        import { createServerHandle, markdownCopyFor } from ${JSON.stringify(import.meta.resolve("@svartz/core"))};
+        import { createServerHandle, decodeRoutePath, markdownCopyFor } from ${JSON.stringify(import.meta.resolve("@svartz/core"))};
         const markdown = ${JSON.stringify(markdown)};
         const handle = createServerHandle({
           basePath: "", vault: { id: "", mountPath: "", site: {} }, servers: [],
@@ -39,6 +39,11 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
         export async function handler(req, res, next) {
           try {
             const url = new URL(req.url, "http://svartz.local");
+            // Kit rejects malformed escapes before its hooks and loaders can return Svartz's 404.
+            if (decodeRoutePath(url.pathname) === undefined) {
+              res.writeHead(404);
+              return res.end();
+            }
             if (!["GET", "HEAD"].includes(req.method) || !markdownCopyFor(markdown, url.pathname)) {
               return original(req, res, next);
             }
@@ -74,6 +79,7 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
           ...original,
           fetch(request, env, ctx) {
             const url = new URL(request.url);
+            if (decodeRoutePath(url.pathname) === undefined) return new Response(null, { status: 404 });
             if (!["GET", "HEAD"].includes(request.method) || !markdownCopyFor(markdown, url.pathname)) {
               return original.fetch(request, env, ctx);
             }

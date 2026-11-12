@@ -507,6 +507,33 @@ export const entries: EntryGenerator = async () => routes.all
   expect(await readFile(catchall, "utf8")).toBe(custom);
 });
 
+it.each([false, true])("upgrades generated path decoding while preserving host server loaders (custom %s)", async (customServer) => {
+  const root = await fixture();
+  await mkdir(path.join(root, "src/routes"), { recursive: true });
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    name: "host-app", dependencies: { "@sveltejs/kit": "^2.0.0" },
+  }));
+  await initProject({ cwd: root, install: false, git: false });
+  const route = path.join(root, "src/routes/[...slug]");
+  const load = await readFile(path.join(route, "+page.ts"), "utf8");
+  const server = await readFile(path.join(route, "+page.server.ts"), "utf8");
+  const previous = (source: string) => source
+    .replace("import { decodeRoutePath } from '@svartz/ui/runtime';\n", "")
+    .replace("import { error } from '@sveltejs/kit';\n", "")
+    .replace("decodeRoutePath(base ? url.pathname.slice(base.length) || '/' : url.pathname);\n  if (appPath === undefined) error(404);",
+      "base ? url.pathname.slice(base.length) || '/' : url.pathname;");
+  const ownedServer = "export const load = () => ({ host: true });\n";
+  await writeFile(path.join(route, "+page.ts"), previous(load));
+  await writeFile(path.join(route, "+page.server.ts"), customServer ? ownedServer : previous(server));
+
+  // Proves existing generated pairs receive decoding, while a host-owned server loader protects the pair.
+  expect((await initProject({ cwd: root, install: false, git: false })).kind)
+    .toBe(customServer ? "already-configured" : "integrated");
+  expect(await readFile(path.join(route, "+page.ts"), "utf8")).toBe(customServer ? previous(load) : load);
+  expect(await readFile(path.join(route, "+page.server.ts"), "utf8")).toBe(customServer ? ownedServer : server);
+});
+
 it("upgrades generated host routes to link SSR styles without changing custom routes", async () => {
   const root = await fixture();
   await mkdir(path.join(root, "src/routes"), { recursive: true });
