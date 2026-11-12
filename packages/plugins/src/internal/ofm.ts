@@ -82,7 +82,7 @@ function transformCallouts(markdown: string): string {
   return markdown
     .split("\n")
     .map((line) => {
-      const match = /^([ \t]*(?:>[ \t]*)+)\[!([^\]\s]+)\]([+-])?\s*(.*)$/.exec(line);
+      const match = /^([ \t]*(?:>[ \t]*)+)\[!([^\]\s]+)\]([+-])?\s*(.*)\r?$/.exec(line);
       if (!match) return line;
 
       const [, quotePrefix = "> ", rawType = "note", fold, customTitle] = match;
