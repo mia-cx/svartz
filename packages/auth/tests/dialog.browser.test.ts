@@ -4,9 +4,9 @@ import { mount } from "../src/browser";
 
 let unmount: (() => void) | undefined;
 
-function page(config: Parameters<typeof mount>[1]) {
+function page(config: Parameters<typeof mount>[1], context?: Parameters<typeof mount>[2]) {
   document.body.innerHTML = `<p>Note</p><button type="button" data-svartz-sign-in>Sign in</button>`;
-  unmount = mount(location.pathname, config);
+  unmount = mount(location.pathname, config, context);
   return document.querySelector<HTMLButtonElement>("[data-svartz-sign-in]")!;
 }
 
@@ -47,6 +47,20 @@ describe("the sign-in dialog", () => {
     // SvelteKit's router listens on the whole document; sign-in must reach the server, not a client route.
     expect(providers.every((link) => link.hasAttribute("data-sveltekit-reload"))).toBe(true);
     expect([...dialog.querySelectorAll("a")].find((link) => link.textContent === "Privacy notice")?.getAttribute("href")).toBe("/notes/privacy/");
+  });
+
+  it.each([
+    ["the site's deployment base", { base: "/site" }, "/site/notes/_svartz/auth"],
+    ["no deployment base", { base: "" }, "/notes/_svartz/auth"],
+    ["no mount context", undefined, "/notes/_svartz/auth"],
+  ])("starts sign-in below %s", async (_case, context, endpoint) => {
+    history.replaceState(null, "", "/site/notes/garden/");
+    const trigger = page({ endpoint: "/notes/_svartz/auth", providers: [{ id: "github", label: "GitHub" }] }, context);
+
+    await userEvent.click(trigger);
+
+    expect(document.querySelector(".sv-auth-provider")?.getAttribute("href"))
+      .toBe(`${endpoint}/start/github/?returnTo=${encodeURIComponent("/site/notes/garden/")}`);
   });
 
   it("works from the keyboard and hands focus back when it closes", async () => {

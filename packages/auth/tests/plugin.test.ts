@@ -14,7 +14,8 @@ describe("the auth plugin", () => {
     expect(plugin.id).toBe("auth");
     expect(plugin.server).toEqual({ module: expect.stringMatching(/server\.js$/), options: { providers: { github }, privacyNotice: "/privacy/" } });
     expect(ctx.compiler?.browserResources.get("auth")?.options).toEqual({
-      endpoint: "/site/notes/_svartz/auth",
+      // Below the deployment base, which the dialog only learns when it mounts: a host app's comes from SvelteKit.
+      endpoint: "/notes/_svartz/auth",
       providers: [{ id: "github", label: "GitHub" }],
       privacyNotice: "/privacy/",
     });
