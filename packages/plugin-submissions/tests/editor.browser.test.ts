@@ -816,6 +816,7 @@ describe("wikilink autocomplete", () => {
   // `[[` types one `[` in userEvent's syntax; the cursor goes back before `after`, where the reader types `Gr`.
   it.each([
     ["a label", "|label]]", "See [[People/Grace|label]]"],
+    ["a label with a bracket", "|A [[label]]", "See [[People/Grace|A [label]]"],
     ["a heading", "#Heading]]", "See [[People/Grace#Heading]]"],
     ["the rest of the name", "ace]]", "See [[People/Grace]]"],
     ["text after an unclosed link", " and more.", "See [[People/Grace]] and more."],

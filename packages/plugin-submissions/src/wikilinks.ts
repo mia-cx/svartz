@@ -35,9 +35,9 @@ function loadTargets(endpoint: string): Promise<readonly LinkTarget[]> {
 
 /**
  * The rest of a link's target after the cursor, then whatever closes it on the line: a heading or label, then `]]`.
- * A `[` ends the scan, so a later link's `]]` never closes this one.
+ * A `[[` ends the scan, so a later link's `]]` never closes this one; a label may still hold a single `[`.
  */
-const LINK_REST = /^([^[\]|#\n]*)((?:[|#][^[\]\n]*)?\]\])?/;
+const LINK_REST = /^([^[\]|#\n]*)((?:[|#](?:(?!\[\[)[^\]\n])*)?\]\])?/;
 
 /**
  * Insert `link` in place of the target. In a closed link, that is the whole target, and the cursor lands after the
