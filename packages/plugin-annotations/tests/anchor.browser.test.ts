@@ -24,6 +24,13 @@ function at(root: Node, needle: string, edge: "start" | "end", occurrence = 0): 
   throw new Error(`"${needle}" isn't in the note`);
 }
 
+/** The anchor for `text.slice(start, end)` in a note of plain `text`. */
+function anchorIn(text: string, start: number, end: number): Anchor {
+  const root = document.createElement("article");
+  root.textContent = text;
+  return describeRange(root, rangeOf(root, { start, end }));
+}
+
 function select(root: Node, from: string, to: string, occurrence = 0): Range {
   const range = document.createRange();
   range.setStart(...at(root, from, "start", occurrence));
@@ -177,6 +184,27 @@ describe("after a light edit to the passage", () => {
     if (expected === null) return expect(found).toBeNull();
     expect(found && text.slice(found.start, found.end)).toBe(expected);
     expect(text.slice(found!.end).startsWith(then)).toBe(true);
+  });
+
+  it("keeps the passage among repeats whose words and context are all the same", () => {
+    const sentence = "A sentence which repeats identically in a checklist. ";
+    const original = sentence.repeat(5);
+    const start = 2 * sentence.length + sentence.indexOf("repeats");
+    const anchor = anchorIn(original, start, start + "repeats".length);
+    const text = "Introduction added. " + original;
+
+    expect(locate(text, anchor)?.start).toBe(start + "Introduction added. ".length);
+  });
+
+  it("keeps a passage whose quote now repeats many times nearer where it was", () => {
+    const original = "In the northern sheltered garden, temperature is measured once every morning.";
+    const start = original.indexOf("temperature");
+    const anchor = anchorIn(original, start, start + "temperature".length);
+    const text = "temperature reading; ".repeat(70) + original.replace("northern", "southern");
+
+    const found = locate(text, anchor);
+
+    expect(found && text.slice(found.end)).toBe(" is measured once every morning.");
   });
 
   it("stays fast on a long note with a long passage that changed", () => {

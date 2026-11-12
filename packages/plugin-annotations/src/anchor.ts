@@ -56,7 +56,10 @@ export const MIN_AGREEMENT = 0.6;
 
 /** Cells of the fuzzy search's table, which bounds its work: a long quote searches a narrower stretch around where it was. */
 const SEARCH_CELLS = 4_000_000;
-/** Candidates scored by their context, fewest quote edits then nearest first, so a common word stays cheap. */
+/**
+ * Candidates scored in full, so a common word stays cheap. They are picked by how much of the quote and the context
+ * right beside it agree, then nearest first, so unrelated repeats of a quote never crowd out its passage.
+ */
 const MAX_CANDIDATES = 64;
 
 interface Candidate extends Position {
@@ -66,32 +69,38 @@ interface Candidate extends Position {
 
 /**
  * Where `anchor` is in `text` now, or `null` when its passage is gone.
- * The quote with its context unchanged is found at once, preferring the stored position. Otherwise the candidates are
- * every exact occurrence of the quote and the near matches a bounded fuzzy search finds around the stored position. Each is scored by how much of the quote and its context agree with the text there
- * (see {@link MIN_AGREEMENT}); the best one wins, the nearest of equals, and none wins below the threshold.
+ * The quote with its context unchanged is found at once, at the occurrence nearest the stored position. Otherwise the
+ * candidates are every exact occurrence of the quote and the near matches a bounded fuzzy search finds around the stored
+ * position. Each is scored by how much of the quote and its context agree with the text there (see
+ * {@link MIN_AGREEMENT}); the best one wins, the nearest of equals, and none wins below the threshold.
  */
 export function locate(text: string, anchor: Anchor): Position | null {
   const { exact, prefix, suffix, start } = anchor;
   if (!exact) return null;
+  const distance = (position: Position) => Math.abs(position.start - start);
   // The common cases: the passage and its context are unchanged, where they were or moved as a whole.
-  const whole = prefix + exact + suffix;
-  const at = text.startsWith(whole, start - prefix.length) ? start - prefix.length : text.indexOf(whole);
-  if (at !== -1) return { start: at + prefix.length, end: at + prefix.length + exact.length };
+  let at: Position | undefined;
+  for (const whole of occurrences(text, prefix + exact + suffix)) {
+    const here = { start: whole.start + prefix.length, end: whole.start + prefix.length + exact.length };
+    // Occurrences come in order, so once one is farther than the last, the rest are too.
+    if (at && distance(here) >= distance(at)) break;
+    at = here;
+  }
+  if (at) return at;
 
   const candidates = [...occurrences(text, exact), ...nearMatches(text, anchor)]
-    .sort((a, b) => a.edits - b.edits || Math.abs(a.start - start) - Math.abs(b.start - start))
+    .map((candidate) => ({ candidate, disagreement: candidate.edits - adjacentAgreement(text, anchor, candidate) }))
+    .sort((a, b) => a.disagreement - b.disagreement || distance(a.candidate) - distance(b.candidate))
     .slice(0, MAX_CANDIDATES);
-  let best: Position | null = null;
+  let best: Candidate | undefined;
   let bestScore = MIN_AGREEMENT;
-  for (const candidate of candidates) {
+  for (const { candidate } of candidates) {
     const score = agreement(text, anchor, candidate);
-    // Sorted nearest first, so a later candidate wins only by scoring higher.
-    if (score > bestScore || (score === bestScore && !best)) {
-      best = { start: candidate.start, end: candidate.end };
-      bestScore = score;
-    }
+    if (score < bestScore || (score === bestScore && best && distance(candidate) >= distance(best))) continue;
+    best = candidate;
+    bestScore = score;
   }
-  return best;
+  return best ? { start: best.start, end: best.end } : null;
 }
 
 /** A DOM range over `position` in `root`'s text, for highlighting and measuring it. */
@@ -146,6 +155,19 @@ function agreement(text: string, { exact, prefix, suffix }: Anchor, candidate: C
   const before = editsToStart(reverse(prefix), reverse(text.slice(Math.max(0, candidate.start - 2 * prefix.length), candidate.start)));
   const after = editsToStart(suffix, text.slice(candidate.end, candidate.end + 2 * suffix.length));
   return 1 - (candidate.edits + before + after) / (exact.length + prefix.length + suffix.length);
+}
+
+/**
+ * Characters of `anchor`'s context that match the text right beside `candidate`, up to the first difference on each
+ * side: a cheap estimate of {@link agreement} for choosing which candidates it scores.
+ */
+function adjacentAgreement(text: string, { prefix, suffix }: Anchor, { start, end }: Candidate): number {
+  let before = 0;
+  // Past either end of the text `charCodeAt` is NaN, which matches nothing.
+  while (before < prefix.length && unit(prefix.charCodeAt(prefix.length - 1 - before)) === unit(text.charCodeAt(start - 1 - before))) before++;
+  let after = 0;
+  while (after < suffix.length && unit(suffix.charCodeAt(after)) === unit(text.charCodeAt(end + after))) after++;
+  return before + after;
 }
 
 /**
@@ -218,13 +240,15 @@ function editsToStart(pattern: string, text: string): number {
 const SPACE = 32;
 const NO_BREAK_SPACE = 0xa0;
 
-/** UTF-16 code units, the text's own offsets, with every kind of whitespace alike: reflowing a sentence costs nothing. */
+/** A UTF-16 code unit with every kind of whitespace alike: reflowing a sentence costs nothing. */
+function unit(code: number): number {
+  return code <= SPACE || code === NO_BREAK_SPACE ? SPACE : code;
+}
+
+/** The text's {@link unit}s, so offsets stay the text's own. */
 function codes(text: string): Uint16Array {
   const units = new Uint16Array(text.length);
-  for (let i = 0; i < text.length; i++) {
-    const unit = text.charCodeAt(i);
-    units[i] = unit <= SPACE || unit === NO_BREAK_SPACE ? SPACE : unit;
-  }
+  for (let i = 0; i < text.length; i++) units[i] = unit(text.charCodeAt(i));
   return units;
 }
 
