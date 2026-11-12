@@ -18,12 +18,14 @@ const DRAFT_KEY = "svartz-submissions:draft";
 
 const isText = (value: unknown) => typeof value === "string";
 
-/** The draft saved for `endpoint` on `pathname`, removed from storage as it's taken. */
-export function takeDraft(endpoint: string, pathname: string): Draft | undefined {
+/**
+ * The draft saved for `endpoint` on `pathname`. It stays saved until the panel restores it, so a panel that fails to
+ * load can offer it again.
+ */
+export function readDraft(endpoint: string, pathname: string): Draft | undefined {
   try {
     const draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? "null") as Partial<Record<string, unknown>> | null;
     if (draft?.endpoint !== endpoint || draft.pathname !== pathname) return undefined;
-    sessionStorage.removeItem(DRAFT_KEY);
     if (!isText(draft.markdown) || !isText(draft.note)) return undefined;
     if (draft.kind === "edit" ? !isText(draft.page) : draft.kind !== "new" || !isText(draft.folder) || !isText(draft.title)) return undefined;
     return draft as Draft;

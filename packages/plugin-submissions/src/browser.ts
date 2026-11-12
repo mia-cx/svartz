@@ -4,7 +4,7 @@
  */
 import type { BrowserScriptContext } from "@svartz/core";
 import type { BrowserOptions } from "./api";
-import { takeDraft, type Draft } from "./draft";
+import { readDraft, type Draft } from "./draft";
 import type { EditorTarget } from "./editor";
 
 // Lucide "pencil" and "file-plus", as the theme's other actions draw their icons.
@@ -30,36 +30,44 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
   const buttons: HTMLButtonElement[] = [];
   let close: (() => void) | undefined;
   let unmounted = false;
+  /** Opens the panel the reader left to sign in, when this page holds its draft. */
+  let resume: (() => Promise<void>) | undefined;
 
-  /** A button in `region` that opens the editor on `target`. Answers how to open it with a draft. */
+  /** The draft saved on this page for `target`'s panel. */
+  function draftFor(target: EditorTarget): Draft | undefined {
+    const draft = readDraft(endpoint, pathname);
+    if (draft?.kind === "new") return target.kind === "new" ? draft : undefined;
+    return draft && target.kind === "edit" && draft.page === target.page ? draft : undefined;
+  }
+
+  /** A button in `region` that opens the editor on `target`, with the draft saved for it if there is one. */
   function action(region: Element | null, icon: string, label: string, target: EditorTarget) {
-    if (!region) return undefined;
+    if (!region) return;
     const button = document.createElement("button");
     button.type = "button";
     button.innerHTML = `${icon}${label}`;
-    const open = async (draft?: Draft) => {
+    const open = async () => {
       const { openEditor } = await import("./editor");
       // The page may have gone while the editor loaded; its panel would outlive the cleanup below.
       if (unmounted) return;
-      close = openEditor({ target, endpoint, opener: button, turnstileSiteKey: options.turnstileSiteKey, draft });
+      const draft = draftFor(target);
+      close = openEditor({ target, endpoint, pathname, opener: button, turnstileSiteKey: options.turnstileSiteKey, draft });
     };
-    button.addEventListener("click", () => open());
+    button.addEventListener("click", () => void open());
     region.append(button);
     buttons.push(button);
-    return open;
+    if (draftFor(target)) resume = open;
   }
 
   const page = editablePage(pathname.slice(context.base.length), options.pages);
-  const edit = page ? action(document.querySelector('[data-svartz-region="page-actions"]'), PENCIL_ICON, "Edit", { kind: "edit", page }) : undefined;
-  const create = options.folders.length > 0
-    ? action(document.querySelector('[data-svartz-region="site-actions"]'), FILE_PLUS_ICON, "New page", { kind: "new", folders: options.folders })
-    : undefined;
+  if (page) action(document.querySelector('[data-svartz-region="page-actions"]'), PENCIL_ICON, "Edit", { kind: "edit", page });
+  if (options.folders.length > 0) {
+    action(document.querySelector('[data-svartz-region="site-actions"]'), FILE_PLUS_ICON, "New page", { kind: "new", folders: options.folders });
+  }
   if (buttons.length === 0) return;
 
   // Back from signing in: the panel the reader left reopens with their draft.
-  const draft = takeDraft(endpoint, pathname);
-  if (draft?.kind === "edit" && draft.page === page) void edit?.(draft);
-  if (draft?.kind === "new") void create?.(draft);
+  void resume?.();
 
   return () => {
     unmounted = true;

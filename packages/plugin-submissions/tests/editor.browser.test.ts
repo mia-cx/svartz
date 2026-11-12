@@ -12,10 +12,9 @@ const CONTEXT = { base: "/docs" };
 
 let unmount: (() => void) | void;
 
-/** The site's server: source for the guide, and `edit` for the pull request answer. */
-function serve(edit: () => Response | Promise<Response>) {
-  const fetch = vi.fn(async (url: string, init?: RequestInit) =>
-    url.includes("/source/") ? Response.json({ markdown: SOURCE }) : edit());
+/** The site's server: `source` for the guide's source, and `edit` for the pull request answer. */
+function serve(edit: () => Response | Promise<Response>, source = () => Response.json({ markdown: SOURCE })) {
+  const fetch = vi.fn(async (url: string, init?: RequestInit) => url.includes("/source/") ? source() : edit());
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
@@ -331,6 +330,43 @@ describe("sign-in", () => {
     await expect.element(page.getByRole("combobox", { name: "Section" })).toHaveValue("People");
     await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("# Ada Lovelace");
     await expect.element(page.getByRole("button", { name: "Open pull request" })).toBeEnabled();
+  });
+
+  it("keeps the draft when the source fails to load after sign-in, so reopening the editor restores it", async () => {
+    let sourceDown = false;
+    serve(
+      () => Response.json(SIGNED_OUT, { status: 401 }),
+      () => sourceDown
+        ? Response.json({ error: "github_unavailable", message: "Couldn't reach GitHub right now." }, { status: 503 })
+        : Response.json({ markdown: SOURCE }),
+    );
+    await writeEdit();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "Continue with GitHub" })).toBeVisible();
+
+    sourceDown = true;
+    returnFromSignIn();
+    await expect.element(page.getByRole("alert")).toHaveTextContent("Couldn't reach GitHub right now.");
+    await page.getByRole("button", { name: "Close editor" }).click();
+
+    sourceDown = false;
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("Welcome.");
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it("ignores a sign-in refusal that arrives after navigation closed the panel", async () => {
+    let refuse!: (response: Response) => void;
+    serve(() => new Promise((resolve) => { refuse = resolve; }));
+    await writeEdit();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    // Navigation closes the panel before the server answers.
+    if (unmount) unmount();
+    refuse(Response.json(SIGNED_OUT, { status: 401 }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(document.querySelector("dialog.sv-auth")).toBeNull();
+    expect(sessionStorage.length).toBe(0);
   });
 
   it("asks the reader to copy their changes when the browser can't keep them", async () => {

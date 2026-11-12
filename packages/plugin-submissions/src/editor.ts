@@ -30,11 +30,16 @@ export interface EditorInput {
   readonly target: EditorTarget;
   /** The plugin's URL path, deployment base included, without a trailing slash. */
   readonly endpoint: string;
+  /** The page the panel opened on, which a draft kept for sign-in is saved under. */
+  readonly pathname: string;
   /** Focus returns here when the panel closes. */
   readonly opener: HTMLElement;
   /** Show the Turnstile challenge with this site key, and send its token with the submission. */
   readonly turnstileSiteKey?: string;
-  /** The submission the reader left to sign in, to reopen with. Its kind matches `target`'s. */
+  /**
+   * The submission the reader left to sign in, to reopen with. Its kind matches `target`'s. The panel forgets the saved
+   * copy once it has restored it; until then, a panel that fails to load leaves it for the next one.
+   */
   readonly draft?: Draft;
 }
 
@@ -165,7 +170,7 @@ function query<E extends Element>(root: ParentNode, selector: string): E {
 }
 
 /** Open the panel on `target`. Returns a function that closes it without asking, for navigation cleanup. */
-export function openEditor({ target, endpoint, opener, turnstileSiteKey, draft }: EditorInput): () => void {
+export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKey, draft }: EditorInput): () => void {
   const dialog = document.createElement("dialog");
   dialog.className = "svartz-submissions";
   dialog.setAttribute("aria-labelledby", "svartz-submissions-title");
@@ -184,6 +189,8 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey, draft }
     folder?.append(...target.folders.map((path) => Object.assign(document.createElement("option"), { value: path, textContent: sectionName(path) })));
   }
   let turnstile: { api: Turnstile; id: string } | undefined;
+  /** The draft while it waits to be restored: still saved, so closing the panel mustn't forget it. */
+  let unrestored = draft;
 
   const editable = new Compartment();
   let view: EditorView | undefined;
@@ -236,7 +243,7 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey, draft }
     if (phase === "sending") return false;
     if (phase !== "sent" && typed() && !window.confirm(target.kind === "edit" ? "Discard your edit?" : "Discard this page?")) return false;
     // A draft kept for a sign-in the reader abandoned would reopen the panel on their next visit.
-    storeDraft(undefined);
+    if (!unrestored) storeDraft(undefined);
     close();
     return true;
   }
@@ -275,7 +282,6 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey, draft }
    */
   function signIn(failure: ServerError, submission: ReturnType<typeof fields>) {
     showError(failure);
-    const pathname = location.pathname;
     const kept = storeDraft(submission.route === "edit"
       ? { endpoint, pathname, kind: "edit", ...submission.fields }
       : { endpoint, pathname, kind: "new", ...submission.fields });
@@ -318,16 +324,20 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey, draft }
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ submissionId, ...submission.fields, turnstileToken } satisfies EditRequest | NewPageRequest),
       });
-      // The pull request holds these fields now and the panel stays locked; further typing would go nowhere.
       // Confirmed only once the reader can see the link: if navigation already closed the panel, the next panel
       // retries under this id and the server answers with the pull request this attempt opened.
-      if (dialog.isConnected) unconfirmed.delete(submission.key);
+      if (!dialog.isConnected) return;
+      // The pull request holds these fields now and the panel stays locked; further typing would go nowhere.
+      unconfirmed.delete(submission.key);
       storeDraft(undefined);
       phase = "sent";
       challenge.hidden = true;
       holdOpen(false);
       showOpened(pull);
     } catch (cause) {
+      // Navigation closed the panel mid-send: the refusal belongs to a page the reader left, so it opens no sign-in
+      // and saves no draft. The unconfirmed id stays for the next panel's retry.
+      if (!dialog.isConnected) return;
       phase = "editing";
       lock(false);
       holdOpen(false);
@@ -396,11 +406,15 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey, draft }
     }
     submit.disabled = !ready();
     submit.focus();
+    unrestored = undefined;
+    storeDraft(undefined);
   }
 
   async function load(page: string) {
     try {
       const { markdown } = await request<SourceResponse>(`${endpoint}/source/?page=${encodeURIComponent(page)}`);
+      // Navigation closed the panel while the source loaded; a draft stays saved for the page's next visit.
+      if (!dialog.isConnected) return;
       showSource(markdown);
       if (draft) resume(draft);
       else view?.focus();

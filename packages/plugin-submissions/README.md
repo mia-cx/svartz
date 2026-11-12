@@ -96,7 +96,7 @@ plugins: [
 
 The server then refuses anonymous edits and new pages with 401 `sign_in_required` before it calls GitHub, and Turnstile is skipped: the editor shows no challenge and the server verifies none. A vault that requires sign-in without the `auth` plugin fails the build.
 
-Readers can open the editor and write while signed out. When they send, the editor keeps their edit for the browser tab and opens the sign-in dialog. Signing in brings them back to the same page, where the editor reopens with their source, note, title and section as they left them, ready to send. If the browser blocks storage, the editor says so and asks them to copy their changes before signing in.
+Readers can open the editor and write while signed out. When they send, the editor keeps their edit for the browser tab and opens the sign-in dialog. Signing in brings them back to the same page, where the editor reopens with their source, note, title and section as they left them, ready to send. If the page's source fails to load then, the edit stays kept until the editor next opens on it. If the browser blocks storage, the editor says so and asks them to copy their changes before signing in.
 
 ## Guard
 
