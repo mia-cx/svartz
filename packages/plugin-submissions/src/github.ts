@@ -148,7 +148,7 @@ function quietMentions(text: string): string {
   return text.replace(/@(?=[\w-])/g, "@⁠");
 }
 
-const PROVIDER_NAMES = { github: "GitHub", google: "Google", discord: "Discord" } as const satisfies Record<ProviderId, string>;
+const PROVIDER_NAMES = { github: "GitHub", google: "Google", discord: "Discord", x: "X" } as const satisfies Record<ProviderId, string>;
 
 /** A reader-chosen name as plain Markdown text: no formatting, links, mentions or line breaks. */
 function markdownText(text: string): string {
