@@ -36,7 +36,11 @@ const AUTH_ENV = {
  */
 export async function createDatabase() {
   const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["DB"] });
-  const binding = async () => await miniflare.getD1Database("DB") as unknown as Database;
+  // Miniflare caches one binding object, so wrap it: a fresh object is what a fresh isolate's per-binding state keys on.
+  const binding = async (): Promise<Database> => {
+    const db = await miniflare.getD1Database("DB") as unknown as Database;
+    return { prepare: (query) => db.prepare(query), batch: (statements) => db.batch(statements) };
+  };
   return { db: await binding(), binding, dispose: () => miniflare.dispose() };
 }
 

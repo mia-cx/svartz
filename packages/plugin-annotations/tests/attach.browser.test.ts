@@ -320,8 +320,8 @@ describe("commenting on a selection", () => {
     await userEvent.keyboard("Mine sits under the eaves.");
     await userEvent.click(composer().querySelector<HTMLButtonElement>("button[type=submit]")!);
 
-    // A real clock may cross the first second while the 30 writes finish.
-    const message = /^You've sent too many annotations\. Try again in (1 hour|60 minutes)\.$/;
+    // The budget runs to the end of the real clock hour, so the wait is whatever is left of it.
+    const message = /^You've sent too many annotations\. Try again in (1 hour|\d+ minutes?|\d+ seconds?)\.$/;
     await expect.poll(() => composer().querySelector("[role=alert]")?.textContent).toMatch(message);
     expect(composer().matches(":popover-open")).toBe(true);
     expect(composer().querySelector("textarea")!.value).toBe("Mine sits under the eaves.");

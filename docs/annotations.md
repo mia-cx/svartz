@@ -28,30 +28,15 @@ Enable it per vault. It needs [`auth`](auth.md) on the same vault, and a Cloudfl
 | `database` | The D1 binding to store annotations in: `{ env: "DB" }`. |
 | `reactions` | Optional. The site's drawn reactions, `[{ id, label, src }]`, in the order readers are offered them. `id` is lowercase letters, digits and hyphens; `label` is what screen readers announce. |
 | `moderators` | Optional. Identity ids, such as `"github:583231"`, that may delete any annotation. See [moderating](#moderating) for finding yours. |
-| `limits` | Optional. `{ writesPerHour }`: write attempts each signed-in reader may make per hour with the in-memory limiter. Default 30. See [write limits](#write-limits). |
+| `limits` | Optional. `{ writesPerHour }`: write attempts each signed-in reader may make per clock hour. Default 30. See [write limits](#write-limits). |
 
 ## Write limits
 
-Every signed-in write attempt shares one budget per identity: posting a comment, setting or removing a **+1**, and deleting. Repeated or invalid writes count too; signed-out and cross-origin requests do not. Reading comments spends nothing. Set the in-memory budget with `limits: { writesPerHour: 30 }`.
+Every signed-in write attempt spends from one budget per identity: posting a comment, setting or removing a **+1**, and deleting. Repeated or invalid writes count too; signed-out and cross-origin requests do not. Reading comments spends nothing. Set the budget with `limits: { writesPerHour: 30 }`.
 
-Without an extra binding, the plugin keeps a fixed one-hour window in memory, starting at the reader's first write. Each isolate/process and each vault's server module counts independently; a restart clears its counters. D1 stores annotations, not the rate-limit counters.
+The budget is counted in the annotations database, in the `write_counts` table, so every isolate and every restart sees the same count, and racing writes can't spend more than it. It needs no extra binding. Each clock hour starts a fresh budget, and counts from past hours are swept as readers write. Vaults sharing one database share each reader's budget.
 
-On Workers, optionally bind Cloudflare's native rate limiter as `SVARTZ_ANNOTATIONS_RATE_LIMIT`. It replaces the memory window and uses its own `simple.limit` and `simple.period`, rather than `writesPerHour`. Cloudflare supports periods of 10 or 60 seconds, so choose that quota separately from the hourly fallback:
-
-```jsonc
-// wrangler.jsonc
-{
-  "ratelimits": [{
-    "name": "SVARTZ_ANNOTATIONS_RATE_LIMIT",
-    "namespace_id": "1001",
-    "simple": { "limit": 30, "period": 60 }
-  }]
-}
-```
-
-The native binding counts `identity:<provider>:<subject>` across vaults using that binding, under Cloudflare's rate-limiting scope. It does not return its reset time, so a refusal conservatively asks the reader to wait one hour. If the binding rejects, the write answers 503 and does not fall back to a separate budget.
-
-An exhausted budget answers `429 { error: "rate_limited", message, retryAfter }`, with `retryAfter` in seconds and the same value in the `Retry-After` header. The composer or card shows the wait in words, and the composer keeps the draft.
+An exhausted budget answers `429 { error: "rate_limited", message, retryAfter }`, with `retryAfter` the seconds until the hour ends and the same value in the `Retry-After` header. The composer or card shows the wait in words, and the composer keeps the draft.
 
 ## The D1 database
 
@@ -177,4 +162,3 @@ Failures answer `{ error, message }`, where `message` is written for the reader:
 | 413 | `too_large` | A write body over 32 KiB. |
 | 429 | `rate_limited` | The signed-in reader has spent their write budget. Also includes `retryAfter` in seconds. |
 | 503 | `misconfigured` | No D1 binding under `database.env`. |
-| 503 | `rate_limit_unavailable` | The configured native rate-limiting binding rejected the check. |
