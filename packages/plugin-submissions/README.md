@@ -45,7 +45,7 @@ Every page gets a **New page** action in the site actions (the rail or site navi
 ## What maintainers get
 
 - For an edit, a branch `svartz/submission/edit/<page>-<submission id>` from the commit the site was built from, with one commit replacing the note. When the page changed since, GitHub shows a conflict instead of the edit overwriting it. The pull request is titled `Edit <path>`.
-- For a new page, a branch `svartz/submission/new/<section>-<title>-<submission id>` from the same commit, with one commit adding the note. The pull request is titled `Add <path>`.
+- For a new page, a branch `svartz/submission/new/<vault folder>-<section>-<title>-<submission id>` from the same commit, with one commit adding the note. The pull request is titled `Add <path>`.
 - Every pull request gets the configured labels, the reader's note, and the page or site it came from.
 
 Each opened editor makes a random submission id and sends it with every attempt. When GitHub's answer is lost, a retry finds the pull request the first attempt opened instead of opening a second one. When GitHub refuses the pull request, the branch stays: another attempt at the same edit may be opening a pull request from it, and a retry reuses it. Every GitHub request gives up after 10 seconds, and the reader is told to try again.
@@ -54,7 +54,7 @@ Readers never choose a file path; the server works it out:
 
 - An edit must name a published `.md` note. Password-protected notes, other files and paths outside the vault are refused.
 - A new page must name a section from the list. Folders without a published note, folders holding only password-protected notes, and hidden folders are refused. So are titles that start with a dot or contain `\ / : * ? " < > | # ^ [ ]`, and titles over 120 characters.
-- A new page is never written over a file. The server refuses a title that a published page has, in any letter case, before calling GitHub, and one whose file exists in the commit the site was built from, published or not, before writing anything.
+- A new page is never written over a file. The server refuses a title that a published page of any type (`.md`, `.svx` and the rest) has, in any letter case, before calling GitHub, and one whose file exists in the commit the site was built from, published or not, before writing anything.
 
 A page's source is capped at 512 KB and the note at 2,000 characters.
 

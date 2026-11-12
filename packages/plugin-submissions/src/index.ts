@@ -126,8 +126,11 @@ export function submissions(options: SubmissionsOptions) {
       async run(ctx) {
         const checkout = await readCheckout(resolve(ctx.config.path));
         const root = vaultRoot ?? checkout.vaultRoot;
+        const entries = ctx.index?.entries ?? [];
+        const routes: Record<string, string> = Object.fromEntries(entries.map(({ href, path }) =>
+          [path.replaceAll("\\", "/").replace(/\.[^./]+$/, "").toLowerCase(), href]));
         // Protected notes stay out: their source must not leave the repository through the site.
-        const published = (ctx.index?.entries ?? [])
+        const published = entries
           .filter((entry) => !entry.locked)
           .map((entry) => ({ href: entry.href, path: entry.path.replaceAll("\\", "/") }));
         const pages: Record<string, string> = Object.fromEntries(published
@@ -138,7 +141,7 @@ export function submissions(options: SubmissionsOptions) {
           .sort((a, b) => a.localeCompare(b));
 
         const compiler = getCompilerContributions(ctx);
-        compiler.serverData.set(PLUGIN_ID, { commit: checkout.commit, pages, vaultRoot: root, folders } satisfies BuildData);
+        compiler.serverData.set(PLUGIN_ID, { commit: checkout.commit, pages, routes, vaultRoot: root, folders } satisfies BuildData);
         compiler.browserResources.set(PLUGIN_ID, {
           id: PLUGIN_ID,
           kind: "script",

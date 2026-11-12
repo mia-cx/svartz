@@ -30,7 +30,10 @@ export interface Submission {
   readonly id: string;
   /** Repository-relative path of the note. */
   readonly path: string;
-  /** Names the branch: an edited page's route, such as `/guides/setup/`, or a new note's path in the vault. */
+  /**
+   * Names the branch: an edited page's route, such as `/wiki/guides/setup/`, or a new note's repository path without
+   * its extension. Both name the vault (its mount, or its folder), so vaults sharing a repository never share a branch.
+   */
   readonly page: string;
   /** Absolute URL of the edited page, or of the site a new page was submitted from, for the pull request body. */
   readonly pageUrl: string;

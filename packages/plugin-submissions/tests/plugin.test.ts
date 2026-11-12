@@ -52,6 +52,15 @@ describe("submissions build", () => {
     expect(ctx.compiler?.serverData.get("submissions")).toEqual({
       commit,
       pages: { "/wiki/guide/": "content/guide.md", "/wiki/people/ada/": "content/people/Ada Lovelace.MD" },
+      // Every routed page, whatever its type or protection: a new note named like one would take its route.
+      routes: {
+        guide: "/wiki/guide/",
+        "people/ada lovelace": "/wiki/people/ada/",
+        secret: "/wiki/secret/",
+        app: "/wiki/app/",
+        "tools/app": "/wiki/tools/app/",
+        "private/plans": "/wiki/private/plans/",
+      },
       // Protected notes' folders stay out: a new page there would be public.
       vaultRoot: "content",
       folders: ["", "people", "tools"],

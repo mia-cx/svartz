@@ -108,9 +108,12 @@ const panel = (target: EditorTarget) => `
   </form>
 </div>`;
 
-/** A failure the reader can act on; `existing` links the published page a new page's title is taken by. */
+/**
+ * A failure the reader can act on. `code` is the server's {@link ErrorResponse.error}; `existing` links the published
+ * page a new page's title is taken by.
+ */
 class ServerError extends Error {
-  constructor(message: string, readonly existing?: string) {
+  constructor(message: string, readonly code?: string, readonly existing?: string) {
     super(message);
   }
 }
@@ -125,9 +128,10 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   }
   const body = await response.json().catch(() => undefined) as T | Partial<ErrorResponse> | undefined;
   if (!response.ok) {
-    const { message, existing } = (body ?? {}) as Partial<ErrorResponse>;
+    const { message, error, existing } = (body ?? {}) as Partial<ErrorResponse>;
     throw new ServerError(
       typeof message === "string" ? message : `The site answered ${response.status}. Try again in a moment.`,
+      typeof error === "string" ? error : undefined,
       typeof existing === "string" ? existing : undefined,
     );
   }
@@ -135,9 +139,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * The last submission sent without a confirmed answer, by page (`new` for new pages): its id and the exact fields sent
- * under it. Sending the same fields again reuses the id, so the server finds the pull request a lost attempt may have
- * opened, even after navigation closed the panel mid-send. Different fields get a new id: the server would answer with
+ * The last submission sent without a confirmed answer, by endpoint and page (`new` for new pages), so vaults on one
+ * site never share an entry: its id and the exact fields sent under it. Sending the same fields again reuses the id, so
+ * the server finds the pull request a lost attempt may have opened, even after navigation closed the panel mid-send. Different fields get a new id: the server would answer with
  * the earlier pull request, which doesn't hold them.
  */
 const unconfirmed = new Map<string, { readonly id: string; readonly payload: string }>();
@@ -180,6 +184,8 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey }: Edito
   // The fields are locked while sending, so the pull request holds exactly what the reader sees. The panel can't be
   // dismissed then either: the reader would never see the pull request it opens.
   let phase: "editing" | "sending" | "sent" = "editing";
+  /** Whether the error says the title is taken. */
+  let conflict = false;
   /** Whether there is something to submit: a changed source, or a new page with a title and content. */
   const ready = () => {
     if (!view) return false;
@@ -200,8 +206,9 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey }: Edito
     for (const button of closers) button.disabled = held;
   }
 
-  function showError({ message, existing }: { message: string; existing?: string }) {
+  function showError({ message, code, existing }: { message: string; code?: string; existing?: string }) {
     error.textContent = message;
+    conflict = code === "exists";
     if (existing) {
       const link = Object.assign(document.createElement("a"), { href: existing, textContent: "Open the existing page" });
       error.append(" ", link);
@@ -232,14 +239,23 @@ export function openEditor({ target, endpoint, opener, turnstileSiteKey }: Edito
   dialog.addEventListener("click", (event) => {
     if ((event.target as Element).closest("[data-close]")) dismiss();
   });
+  // A taken title's message and link describe the name last sent; another name makes them wrong.
+  function dropConflict() {
+    if (!conflict) return;
+    conflict = false;
+    error.hidden = true;
+    error.replaceChildren();
+  }
   title?.addEventListener("input", () => {
+    dropConflict();
     if (phase === "editing") submit.disabled = !ready();
   });
+  folder?.addEventListener("change", dropConflict);
 
-  /** The submission's route and fields, without its id or Turnstile token. */
+  /** The submission's route, its key in {@link unconfirmed}, and its fields, without its id or Turnstile token. */
   function fields(markdown: string) {
-    if (target.kind === "edit") return { route: "edit", key: target.page, fields: { page: target.page, markdown, note: note.value } };
-    return { route: "new", key: "new", fields: { folder: folder?.value ?? "", title: title?.value ?? "", markdown, note: note.value } };
+    if (target.kind === "edit") return { route: "edit", key: `${endpoint} ${target.page}`, fields: { page: target.page, markdown, note: note.value } };
+    return { route: "new", key: `${endpoint} new`, fields: { folder: folder?.value ?? "", title: title?.value ?? "", markdown, note: note.value } };
   }
 
   form.addEventListener("submit", async (event) => {

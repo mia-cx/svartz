@@ -24,10 +24,16 @@ const ORIGIN = "https://wiki.example";
 // Deployed under /docs, vault mounted at /wiki.
 const BASE = "/docs/wiki/_svartz/submissions";
 
-/** A vault at `content/` with the guide at its top level and a published `People` folder. */
+/** A vault at `content/` with the guide at its top level and a published `People` folder holding an `.svx` page. */
 const handlerWith = (guard: GuardOptions) => createHandler(
   { repo: REPO, labels: ["submission"], token: { env: "SVARTZ_GITHUB_TOKEN" }, guard },
-  { commit: BUILD_COMMIT, pages: { "/wiki/guide/": "content/guide.md" }, vaultRoot: "content", folders: ["", "People"] },
+  {
+    commit: BUILD_COMMIT,
+    pages: { "/wiki/guide/": "content/guide.md" },
+    routes: { guide: "/wiki/guide/", "people/timeline": "/wiki/people/timeline/" },
+    vaultRoot: "content",
+    folders: ["", "People"],
+  },
 );
 const handler = handlerWith({ rateLimit: { limit: 100, period: 60 } });
 
@@ -163,7 +169,7 @@ describe("new pages", () => {
       markdown: ADA,
       note: "She deserves a page.",
       pageUrl: `${ORIGIN}/docs/wiki/`,
-      branch: branchFor("people-ada-lovelace", "new"),
+      branch: branchFor("content-people-ada-lovelace", "new"),
     }));
 
     expect(await answer(newPage({ folder: "People", title: " Ada Lovelace ", note: "She deserves a page." }))).toEqual({
@@ -202,8 +208,18 @@ describe("new pages", () => {
     expect(github.requests).toEqual([]);
   });
 
+  it("links a published page of any type that a title would take the route of, before calling GitHub", async () => {
+    const github = replayGitHub([]);
+
+    expect(await answer(newPage({ folder: "People", title: "Timeline" }))).toEqual({
+      status: 409,
+      body: expect.objectContaining({ error: "exists", existing: `${ORIGIN}/docs/wiki/people/timeline/` }),
+    });
+    expect(github.requests).toEqual([]);
+  });
+
   it("refuses a title whose file the build commit has, unpublished, and writes nothing", async () => {
-    const branch = branchFor("people-draft", "new");
+    const branch = branchFor("content-people-draft", "new");
     const github = replayGitHub([pullLookup(branch), existenceCheck("content/People/Draft.md", true)]);
 
     expect(await answer(newPage({ folder: "People", title: "Draft" }))).toEqual({

@@ -39,6 +39,12 @@ export interface BuildData {
   readonly commit: string;
   /** Each editable note's route below the deployment base, mapped to its repository-relative path. */
   readonly pages: Readonly<Record<string, string>>;
+  /**
+   * Every page the vault routes, of any type and protected ones included, by its vault path without the extension,
+   * lowercased, mapped to its route. A new note named like one would take its route: Obsidian treats names that
+   * differ only in case as the same.
+   */
+  readonly routes: Readonly<Record<string, string>>;
   /** The vault's folder inside the repository, `""` at its root. */
   readonly vaultRoot: string;
   /** Vault folders that hold a published note, where new notes may go. `""` is the vault's top level. */
@@ -102,8 +108,7 @@ async function readSubmission(request: Request) {
 
 const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, data) => {
   const pages = new Map(Object.entries(data.pages));
-  // A repository path, lowercased, to its page's route: Obsidian treats names that differ only in case as the same.
-  const routesByPath = new Map([...pages].map(([route, path]) => [path.toLowerCase(), route]));
+  const routes = new Map(Object.entries(data.routes));
   const folders = new Set(data.folders);
   const guard = createGuard(options.guard);
 
@@ -174,7 +179,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     if (typeof folder !== "string" || typeof title !== "string") throw invalid();
     const vaultPath = newNotePath(folder, title);
     const path = data.vaultRoot ? `${data.vaultRoot}/${vaultPath}` : vaultPath;
-    const existing = routesByPath.get(path.toLowerCase());
+    const existing = routes.get(vaultPath.slice(0, -".md".length).toLowerCase());
     if (existing !== undefined) {
       throw new SubmissionError(
         "exists",
@@ -186,17 +191,17 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     }
     // The pull request names where the reader came from: this vault's home page.
     const pageUrl = publicUrl(`${context.vault.mountPath}/`, request, context);
-    return open(request, context, turnstileToken, { ...submission, kind: "new", path, page: vaultPath.slice(0, -".md".length), pageUrl });
+    return open(request, context, turnstileToken, { ...submission, kind: "new", path, page: path.slice(0, -".md".length), pageUrl });
   }
 
-  const routes = new Map([
+  const handlers = new Map([
     ["/source/", { method: "GET", run: source }],
     ["/edit/", { method: "POST", run: edit }],
     ["/new/", { method: "POST", run: create }],
   ]);
 
   return async (request, context) => {
-    const route = routes.get(new URL(request.url).pathname.slice(context.base.length));
+    const route = handlers.get(new URL(request.url).pathname.slice(context.base.length));
     if (!route) return undefined;
     if (request.method !== route.method) {
       return Response.json(

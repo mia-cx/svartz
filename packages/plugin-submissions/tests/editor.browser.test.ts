@@ -257,8 +257,8 @@ describe("Edit", () => {
 
 describe("New page", () => {
   /** Open New page from any page, then fill the title, the section, and the page itself. */
-  async function writeNewPage() {
-    unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+  async function writeNewPage(options: BrowserOptions = OPTIONS) {
+    unmount = mount("/docs/wiki/guide/", options, CONTEXT);
     await page.getByRole("button", { name: "New page" }).click();
     await expect.element(page.getByRole("heading", { name: "New page" })).toBeVisible();
     await expect.element(page.getByRole("combobox", { name: "Section" })).toHaveValue("");
@@ -298,6 +298,40 @@ describe("New page", () => {
     await expect.element(page.getByRole("link", { name: "Open the existing page" }))
       .toHaveAttribute("href", "https://wiki.example/docs/wiki/people/ada-lovelace/");
     await expect.element(page.getByRole("textbox", { name: "Title" })).not.toHaveAttribute("readonly");
+  });
+
+  it.each([
+    ["title", () => page.getByRole("textbox", { name: "Title" }).fill("Ada King")],
+    ["section", () => page.getByRole("combobox", { name: "Section" }).selectOptions("Top level")],
+  ])("drops the taken-title message once the reader changes the %s", async (_field, change) => {
+    serve(() => Response.json({ error: "exists", message: "A page with this title already exists.", existing: "https://wiki.example/docs/wiki/people/ada-lovelace/" }, { status: 409 }));
+    await writeNewPage();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "Open the existing page" })).toBeVisible();
+
+    await change();
+
+    await expect.element(page.getByRole("link", { name: "Open the existing page" })).not.toBeInTheDocument();
+    expect(document.querySelector(".svartz-submissions-error")).toHaveProperty("hidden", true);
+  });
+
+  it("keeps an unanswered new page in one vault from reusing its id in another vault on the site", async () => {
+    // The first vault's answer is lost: the reader navigated to the second vault before it came.
+    const answers: Array<Promise<Response>> = [
+      new Promise(() => {}),
+      Promise.resolve(Response.json({ url: "https://github.com/acme/wiki/pull/9", number: 9 }, { status: 201 })),
+    ];
+    const fetch = serve(() => answers.shift()!);
+    await writeNewPage();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    if (unmount) unmount();
+
+    await writeNewPage({ ...OPTIONS, endpoint: "/notes/_svartz/submissions" });
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #9" })).toBeVisible();
+
+    const [first, second] = fetch.mock.calls.map(([, init]) => JSON.parse(String(init!.body)).submissionId);
+    expect(second).not.toBe(first);
   });
 
   it("waits for a title and some content before it can be sent", async () => {
