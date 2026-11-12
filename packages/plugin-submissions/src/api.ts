@@ -30,7 +30,23 @@ export interface EditRequest {
   readonly turnstileToken?: string;
 }
 
-/** `POST <endpoint>/edit/` answers 201 with this. */
+/** Longest new page title, in characters. */
+export const MAX_TITLE_LENGTH = 120;
+
+/** `POST <endpoint>/new/` takes this JSON body. The server derives the file path from `folder` and `title`. */
+export interface NewPageRequest {
+  /** As {@link EditRequest.submissionId}. */
+  readonly submissionId: string;
+  /** One of {@link BrowserOptions.folders}: a published folder's path inside the vault, `""` for its top level. */
+  readonly folder: string;
+  /** The page's title, which becomes its filename as in Obsidian: `Ada Lovelace` → `Ada Lovelace.md`. */
+  readonly title: string;
+  readonly markdown: string;
+  readonly note?: string;
+  readonly turnstileToken?: string;
+}
+
+/** `POST <endpoint>/edit/` and `POST <endpoint>/new/` answer 201 with this. */
 export interface EditResponse {
   readonly url: string;
   readonly number: number;
@@ -42,6 +58,8 @@ export interface ErrorResponse {
   readonly message: string;
   /** On a 429: seconds until the reader may submit again. */
   readonly retryAfter?: number;
+  /** On a 409 for a new page whose title is taken by a published page: that page's URL. */
+  readonly existing?: string;
 }
 
 /** Settings the browser script receives. */
@@ -50,6 +68,8 @@ export interface BrowserOptions {
   readonly endpoint: string;
   /** URL paths (below the deployment base) of the notes readers can edit. */
   readonly pages: readonly string[];
+  /** The vault folders a new page may go in: each holds a published note. `""` is the vault's top level. */
+  readonly folders: readonly string[];
   /** The Turnstile site key, when the editor must show the widget. */
   readonly turnstileSiteKey?: string;
 }

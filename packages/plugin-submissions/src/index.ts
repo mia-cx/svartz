@@ -1,5 +1,6 @@
 /**
- * `@svartz/plugin-submissions`: readers edit a published note from the site and the site opens a pull request.
+ * `@svartz/plugin-submissions`: readers edit a published note, or write a new one, from the site, and the site opens
+ * a pull request.
  *
  * ```ts
  * plugins: [submissions({ repo: "wikiplace/wikiplace.live", labels: ["submission"] })]
@@ -13,7 +14,8 @@ import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { definePlugin, getCompilerContributions, type EnvReference } from "@svartz/core";
+import { definePlugin, getCompilerContributions, type EnvReference, type ProcessedFile } from "@svartz/core";
+import { isNote, pathRoute, requestedSlug, routeHref } from "@svartz/plugins/routes";
 import { PLUGIN_ID, type BrowserOptions } from "./api";
 import type { GuardOptions, RateLimitOptions, TurnstileOptions } from "./guard";
 import type { BuildData, ServerOptions } from "./server";
@@ -103,7 +105,25 @@ function normalizeVaultRoot(value: string): string {
   return root === "." ? "" : root;
 }
 
-/** Let readers edit any published Markdown note and submit it as a pull request on `repo`. */
+/**
+ * Every route a note holds or would ask for again, of any type and protected ones included, mapped to the page's
+ * public URL, or `null` when the page is hidden. Read from the files rather than the index: the index redacts
+ * protected notes' paths and leaves hidden ones out.
+ */
+function routeClaims(files: readonly ProcessedFile[], mountPath: string): Record<string, string | null> {
+  const notes = files.filter(isNote);
+  const link = (file: ProcessedFile) => file.protection?.hidden ? null : routeHref(file.slug, mountPath);
+  // A note's own route first, so a key two notes ask for links the one holding it.
+  const claims: Record<string, string | null> = Object.fromEntries(notes.map((file) => [file.slug, link(file)]));
+  for (const file of notes) {
+    for (const key of [requestedSlug(file), pathRoute(file.path)]) {
+      if (!(key in claims)) claims[key] = link(file);
+    }
+  }
+  return claims;
+}
+
+/** Let readers edit any published Markdown note, or add one in a published folder, as a pull request on `repo`. */
 export function submissions(options: SubmissionsOptions) {
   if (!REPO_PATTERN.test(options.repo)) fail(`repo "${options.repo}" must be "owner/name".`);
   if (options.token && isBlank(options.token.env)) fail('token must name its environment variable: { env: "NAME" }');
@@ -125,15 +145,21 @@ export function submissions(options: SubmissionsOptions) {
       async run(ctx) {
         const checkout = await readCheckout(resolve(ctx.config.path));
         const root = vaultRoot ?? checkout.vaultRoot;
+        const entries = ctx.index?.entries ?? [];
+        const routes = routeClaims(ctx.files, ctx.config.mountPath ?? "");
         // Protected notes stay out: their source must not leave the repository through the site.
-        const notes = (ctx.index?.entries ?? []).filter((entry) => !entry.locked && /\.md$/i.test(entry.path));
-        const pages: Record<string, string> = Object.fromEntries(notes.map((entry) => {
-          const path = entry.path.replaceAll("\\", "/");
-          return [entry.href, root ? `${root}/${path}` : path];
-        }));
+        const published = entries
+          .filter((entry) => !entry.locked)
+          .map((entry) => ({ href: entry.href, path: entry.path.replaceAll("\\", "/") }));
+        const pages: Record<string, string> = Object.fromEntries(published
+          .filter(({ path }) => /\.md$/i.test(path))
+          .map(({ href, path }) => [href, root ? `${root}/${path}` : path]));
+        // New pages go only where a published note already is. Discovery skips hidden folders, so none are here.
+        const folders = [...new Set(published.map(({ path }) => path.slice(0, Math.max(path.lastIndexOf("/"), 0))))]
+          .sort((a, b) => a.localeCompare(b));
 
         const compiler = getCompilerContributions(ctx);
-        compiler.serverData.set(PLUGIN_ID, { commit: checkout.commit, pages } satisfies BuildData);
+        compiler.serverData.set(PLUGIN_ID, { commit: checkout.commit, pages, routes, vaultRoot: root, folders } satisfies BuildData);
         compiler.browserResources.set(PLUGIN_ID, {
           id: PLUGIN_ID,
           kind: "script",
@@ -141,6 +167,7 @@ export function submissions(options: SubmissionsOptions) {
           options: {
             endpoint: `${ctx.config.mountPath}/_svartz/${PLUGIN_ID}`,
             pages: Object.keys(pages),
+            folders,
             ...(guard.turnstile ? { turnstileSiteKey: guard.turnstile.siteKey } : {}),
           } satisfies BrowserOptions,
         });
@@ -150,5 +177,5 @@ export function submissions(options: SubmissionsOptions) {
   }))();
 }
 
-export type { BrowserOptions, EditRequest, EditResponse, ErrorResponse, SourceResponse } from "./api";
+export type { BrowserOptions, EditRequest, EditResponse, ErrorResponse, NewPageRequest, SourceResponse } from "./api";
 export type { RateLimitOptions, TurnstileOptions } from "./guard";

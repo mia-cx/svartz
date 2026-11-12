@@ -32,7 +32,7 @@ export const sourceExchange: Exchange = {
 };
 
 /** The branch for this submission of the page whose route slugs to `slug`: `guide`, or `wiki-guide` below a mount. */
-export const branchFor = (slug: string) => `svartz/submission/edit/${slug}-${SUBMISSION_ID}`;
+export const branchFor = (slug: string, kind: "edit" | "new" = "edit") => `svartz/submission/${kind}/${slug}-${SUBMISSION_ID}`;
 
 /** Looking up the open pull request from `branch`. */
 export const pullLookup = (branch: string, pulls: unknown[] = []): Exchange => ({
@@ -45,10 +45,33 @@ export const labelExchange: Exchange = {
   response: { status: 200, json: [{ name: "submission", color: "ededed" }] },
 };
 
+interface Written {
+  readonly markdown: string;
+  readonly note: string;
+  readonly pageUrl: string;
+  readonly branch: string;
+}
+
+/** Whether the build commit has anything at `path`: GitHub's 404 when it doesn't. */
+export const existenceCheck = (path: string, found = false): Exchange => ({
+  request: { method: "GET", url: `${API}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${BUILD_COMMIT}` },
+  response: found
+    ? { status: 200, json: { type: "file", path, sha: "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391" } }
+    : { status: 404, json: { message: "Not Found", status: "404" } },
+});
+
 /** An edit of `content/guide.md` on `branch`, from the pull request lookup to the labels. */
-export function editExchanges(
-  { markdown, note, pageUrl, branch }: { markdown: string; note: string; pageUrl: string; branch: string },
-): Exchange[] {
+export function editExchanges(written: Written): Exchange[] {
+  return writeExchanges({ ...written, path: "content/guide.md", title: "Edit content/guide.md" });
+}
+
+/** A new note at `path` on `branch`: the lookup, the check that nothing is at `path`, then as an edit. */
+export function newPageExchanges({ path, ...written }: Written & { path: string }): Exchange[] {
+  const [lookup, ...rest] = writeExchanges({ ...written, path, title: `Add ${path}` });
+  return [lookup!, existenceCheck(path), ...rest];
+}
+
+function writeExchanges({ markdown, note, pageUrl, branch, path, title }: Written & { path: string; title: string }): Exchange[] {
   return [
     pullLookup(branch),
     {
@@ -63,7 +86,7 @@ export function editExchanges(
       request: {
         method: "POST",
         url: `${API}/git/trees`,
-        body: { base_tree: BASE_TREE, tree: [{ path: "content/guide.md", mode: "100644", type: "blob", content: markdown }] },
+        body: { base_tree: BASE_TREE, tree: [{ path, mode: "100644", type: "blob", content: markdown }] },
       },
       response: { status: 201, json: { sha: NEW_TREE, truncated: false } },
     },
@@ -71,7 +94,7 @@ export function editExchanges(
       request: {
         method: "POST",
         url: `${API}/git/commits`,
-        body: { message: `Edit content/guide.md\n\n${note}`, tree: NEW_TREE, parents: [BUILD_COMMIT] },
+        body: { message: `${title}\n\n${note}`, tree: NEW_TREE, parents: [BUILD_COMMIT] },
       },
       response: { status: 201, json: { sha: NEW_COMMIT, tree: { sha: NEW_TREE } } },
     },
@@ -84,7 +107,7 @@ export function editExchanges(
         method: "POST",
         url: `${API}/pulls`,
         body: {
-          title: "Edit content/guide.md",
+          title,
           head: branch,
           base: "main",
           body: `${note}\n\n---\nSubmitted anonymously from ${pageUrl}. Based on ${BUILD_COMMIT}.`,

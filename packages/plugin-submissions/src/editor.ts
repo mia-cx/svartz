@@ -1,20 +1,33 @@
 /**
- * The edit panel: a full-height modal dialog with the note's Markdown source in CodeMirror, a "What changed" note,
- * and the pull request link once submitted. Loaded on the first click of Edit.
+ * The submission panel: a full-height modal dialog with a note's Markdown source in CodeMirror, a note for reviewers,
+ * and the pull request link once submitted. Edit opens it on a published note's source; New page opens it blank,
+ * under a title and a section. Loaded on the first click of either.
  */
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { Compartment, EditorState } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
-import { MAX_NOTE_LENGTH, type EditRequest, type EditResponse, type ErrorResponse, type SourceResponse } from "./api";
+import { EditorView, keymap, placeholder } from "@codemirror/view";
+import {
+  MAX_NOTE_LENGTH,
+  MAX_TITLE_LENGTH,
+  type EditRequest,
+  type EditResponse,
+  type ErrorResponse,
+  type NewPageRequest,
+  type SourceResponse,
+} from "./api";
+
+/** What the panel submits: an edit of a published note, or a new note in one of `folders`. */
+export type EditorTarget =
+  | { readonly kind: "edit"; readonly page: string }
+  | { readonly kind: "new"; readonly folders: readonly string[] };
 
 export interface EditorInput {
-  /** The note's route below the deployment base. */
-  readonly page: string;
+  readonly target: EditorTarget;
   /** The plugin's URL path, deployment base included, without a trailing slash. */
   readonly endpoint: string;
   /** Focus returns here when the panel closes. */
   readonly opener: HTMLElement;
-  /** Show the Turnstile challenge with this site key, and send its token with the edit. */
+  /** Show the Turnstile challenge with this site key, and send its token with the submission. */
   readonly turnstileSiteKey?: string;
 }
 
@@ -56,18 +69,34 @@ function loadTurnstile(): Promise<Turnstile> {
 const CLOSE_ICON =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
 
-const PANEL = `
+/** The section a new page goes in, as the picker names it. */
+const sectionName = (folder: string) => folder || "Top level";
+
+/** Title and section, above the source, for a new page. */
+const NEW_PAGE_FIELDS = `
+    <div class="svartz-submissions-fields">
+      <div class="svartz-submissions-field">
+        <label class="sv-label" for="svartz-submissions-page-title">Title</label>
+        <input id="svartz-submissions-page-title" name="title" type="text" maxlength="${MAX_TITLE_LENGTH}" autocomplete="off" required>
+      </div>
+      <div class="svartz-submissions-field">
+        <label class="sv-label" for="svartz-submissions-section">Section</label>
+        <select id="svartz-submissions-section" name="folder"></select>
+      </div>
+    </div>`;
+
+const panel = (target: EditorTarget) => `
 <div class="svartz-submissions-panel">
   <header class="svartz-submissions-header">
-    <h2 id="svartz-submissions-title">Edit page</h2>
+    <h2 id="svartz-submissions-title">${target.kind === "edit" ? "Edit page" : "New page"}</h2>
     <button type="button" class="sv-icon-button" data-close aria-label="Close editor">${CLOSE_ICON}</button>
   </header>
-  <form class="svartz-submissions-form" novalidate>
+  <form class="svartz-submissions-form" data-kind="${target.kind}" novalidate>${target.kind === "new" ? NEW_PAGE_FIELDS : ""}
     <div class="svartz-submissions-source">
-      <p class="svartz-submissions-status" role="status">Loading the page source…</p>
+      <p class="svartz-submissions-status" role="status">${target.kind === "edit" ? "Loading the page source…" : ""}</p>
     </div>
     <div class="svartz-submissions-note">
-      <label class="sv-label" for="svartz-submissions-note">What changed</label>
+      <label class="sv-label" for="svartz-submissions-note">${target.kind === "edit" ? "What changed" : "Why add this page"}</label>
       <textarea id="svartz-submissions-note" name="note" rows="3" maxlength="${MAX_NOTE_LENGTH}"></textarea>
     </div>
     <div class="svartz-submissions-turnstile" hidden></div>
@@ -79,27 +108,41 @@ const PANEL = `
   </form>
 </div>`;
 
-/** JSON from the plugin's server, or an `Error` whose message the reader can act on. */
+/**
+ * A failure the reader can act on. `code` is the server's {@link ErrorResponse.error}; `existing` links the published
+ * page a new page's title is taken by.
+ */
+class ServerError extends Error {
+  constructor(message: string, readonly code?: string, readonly existing?: string) {
+    super(message);
+  }
+}
+
+/** JSON from the plugin's server, or a {@link ServerError} whose message the reader can act on. */
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
     response = await fetch(url, init);
   } catch {
-    throw new Error("Couldn't reach the site. Check your connection and try again.");
+    throw new ServerError("Couldn't reach the site. Check your connection and try again.");
   }
   const body = await response.json().catch(() => undefined) as T | Partial<ErrorResponse> | undefined;
   if (!response.ok) {
-    const message = (body as Partial<ErrorResponse> | undefined)?.message;
-    throw new Error(typeof message === "string" ? message : `The site answered ${response.status}. Try again in a moment.`);
+    const { message, error, existing } = (body ?? {}) as Partial<ErrorResponse>;
+    throw new ServerError(
+      typeof message === "string" ? message : `The site answered ${response.status}. Try again in a moment.`,
+      typeof error === "string" ? error : undefined,
+      typeof existing === "string" ? existing : undefined,
+    );
   }
   return body as T;
 }
 
 /**
- * The last edit sent without a confirmed answer, by page: its id and the exact text and note sent under it. Sending the
- * same payload again reuses the id, so the server finds the pull request a lost attempt may have opened, even after
- * navigation closed the panel mid-send. Different text gets a new id: the server would answer with the earlier pull
- * request, which doesn't hold it.
+ * The last submission sent without a confirmed answer, by endpoint and page (`new` for new pages), so vaults on one
+ * site never share an entry: its id and the exact fields sent under it. Sending the same fields again reuses the id, so
+ * the server finds the pull request a lost attempt may have opened, even after navigation closed the panel mid-send. Different fields get a new id: the server would answer with
+ * the earlier pull request, which doesn't hold them.
  */
 const unconfirmed = new Map<string, { readonly id: string; readonly payload: string }>();
 
@@ -110,16 +153,16 @@ function newSubmissionId(): string {
 
 function query<E extends Element>(root: ParentNode, selector: string): E {
   const element = root.querySelector<E>(selector);
-  if (!element) throw new Error(`[submissions] the edit panel has no ${selector}`);
+  if (!element) throw new Error(`[submissions] the panel has no ${selector}`);
   return element;
 }
 
-/** Open the panel for `page`. Returns a function that closes it without asking, for navigation cleanup. */
-export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorInput): () => void {
+/** Open the panel on `target`. Returns a function that closes it without asking, for navigation cleanup. */
+export function openEditor({ target, endpoint, opener, turnstileSiteKey }: EditorInput): () => void {
   const dialog = document.createElement("dialog");
   dialog.className = "svartz-submissions";
   dialog.setAttribute("aria-labelledby", "svartz-submissions-title");
-  dialog.innerHTML = PANEL;
+  dialog.innerHTML = panel(target);
   const form = query<HTMLFormElement>(dialog, "form");
   const source = query<HTMLElement>(dialog, ".svartz-submissions-source");
   const note = query<HTMLTextAreaElement>(dialog, "textarea");
@@ -128,29 +171,50 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
   const submit = query<HTMLButtonElement>(dialog, '[type="submit"]');
   const challenge = query<HTMLElement>(dialog, ".svartz-submissions-turnstile");
   const closers = dialog.querySelectorAll<HTMLButtonElement>("[data-close]");
+  const title = dialog.querySelector<HTMLInputElement>('input[name="title"]');
+  const folder = dialog.querySelector<HTMLSelectElement>('select[name="folder"]');
+  if (target.kind === "new") {
+    folder?.append(...target.folders.map((path) => Object.assign(document.createElement("option"), { value: path, textContent: sectionName(path) })));
+  }
   let turnstile: { api: Turnstile; id: string } | undefined;
 
   const editable = new Compartment();
   let view: EditorView | undefined;
   let original = "";
-  // The source and note are locked while sending, so the pull request holds exactly what the reader sees. The panel
-  // can't be dismissed then either: the reader would never see the pull request it opens.
+  // The fields are locked while sending, so the pull request holds exactly what the reader sees. The panel can't be
+  // dismissed then either: the reader would never see the pull request it opens.
   let phase: "editing" | "sending" | "sent" = "editing";
-  const edited = () => view !== undefined && view.state.sliceDoc() !== original;
+  /** Whether the error says the title is taken. */
+  let conflict = false;
+  /** Whether there is something to submit: a changed source, or a new page with a title and content. */
+  const ready = () => {
+    if (!view) return false;
+    const markdown = view.state.sliceDoc();
+    return target.kind === "edit" ? markdown !== original : Boolean(title?.value.trim() && markdown.trim());
+  };
+  /** Whether closing would lose anything the reader typed. */
+  const typed = () => (view !== undefined && view.state.sliceDoc() !== original) || Boolean(note.value.trim() || title?.value.trim());
 
   function lock(locked: boolean) {
     view?.dispatch({ effects: editable.reconfigure(EditorView.editable.of(!locked)) });
     note.readOnly = locked;
+    if (title) title.readOnly = locked;
+    if (folder) folder.disabled = locked;
   }
 
   function holdOpen(held: boolean) {
     for (const button of closers) button.disabled = held;
   }
 
-  const showError = (message: string) => {
+  function showError({ message, code, existing }: { message: string; code?: string; existing?: string }) {
     error.textContent = message;
+    conflict = code === "exists";
+    if (existing) {
+      const link = Object.assign(document.createElement("a"), { href: existing, textContent: "Open the existing page" });
+      error.append(" ", link);
+    }
     error.hidden = false;
-  };
+  }
 
   function close() {
     view?.destroy();
@@ -160,10 +224,10 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
     if (opener.isConnected) opener.focus();
   }
 
-  /** Close on request, asking first when an unsubmitted edit would be lost. Ignored while the edit is sending. */
+  /** Close on request, asking first when unsubmitted work would be lost. Ignored while sending. */
   function dismiss(): boolean {
     if (phase === "sending") return false;
-    if (phase !== "sent" && (edited() || note.value.trim()) && !window.confirm("Discard your edit?")) return false;
+    if (phase !== "sent" && typed() && !window.confirm(target.kind === "edit" ? "Discard your edit?" : "Discard this page?")) return false;
     close();
     return true;
   }
@@ -175,33 +239,51 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
   dialog.addEventListener("click", (event) => {
     if ((event.target as Element).closest("[data-close]")) dismiss();
   });
+  // A taken title's message and link describe the name last sent; another name makes them wrong.
+  function dropConflict() {
+    if (!conflict) return;
+    conflict = false;
+    error.hidden = true;
+    error.replaceChildren();
+  }
+  title?.addEventListener("input", () => {
+    dropConflict();
+    if (phase === "editing") submit.disabled = !ready();
+  });
+  folder?.addEventListener("change", dropConflict);
+
+  /** The submission's route, its key in {@link unconfirmed}, and its fields, without its id or Turnstile token. */
+  function fields(markdown: string) {
+    if (target.kind === "edit") return { route: "edit", key: `${endpoint} ${target.page}`, fields: { page: target.page, markdown, note: note.value } };
+    return { route: "new", key: `${endpoint} new`, fields: { folder: folder?.value ?? "", title: title?.value ?? "", markdown, note: note.value } };
+  }
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!view || phase !== "editing" || !edited()) return;
+    if (!view || phase !== "editing" || !ready()) return;
     const turnstileToken = turnstile?.api.getResponse(turnstile.id);
-    if (turnstileSiteKey && !turnstileToken) return showError(UNVERIFIED);
+    if (turnstileSiteKey && !turnstileToken) return showError({ message: UNVERIFIED });
     phase = "sending";
     lock(true);
     holdOpen(true);
     error.hidden = true;
     submit.disabled = true;
     submit.textContent = "Opening pull request…";
-    const markdown = view.state.sliceDoc();
-    const payload = JSON.stringify([markdown, note.value]);
-    const last = unconfirmed.get(page);
+    const submission = fields(view.state.sliceDoc());
+    const payload = JSON.stringify(submission.fields);
+    const last = unconfirmed.get(submission.key);
     const submissionId = last?.payload === payload ? last.id : newSubmissionId();
-    unconfirmed.set(page, { id: submissionId, payload });
+    unconfirmed.set(submission.key, { id: submissionId, payload });
     try {
-      const pull = await request<EditResponse>(`${endpoint}/edit/`, {
+      const pull = await request<EditResponse>(`${endpoint}/${submission.route}/`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ submissionId, page, markdown, note: note.value, turnstileToken } satisfies EditRequest),
+        body: JSON.stringify({ submissionId, ...submission.fields, turnstileToken } satisfies EditRequest | NewPageRequest),
       });
-      // The pull request holds this text now and the panel stays locked; further typing would go nowhere.
+      // The pull request holds these fields now and the panel stays locked; further typing would go nowhere.
       // Confirmed only once the reader can see the link: if navigation already closed the panel, the next panel
       // retries under this id and the server answers with the pull request this attempt opened.
-      if (dialog.isConnected) unconfirmed.delete(page);
+      if (dialog.isConnected) unconfirmed.delete(submission.key);
       phase = "sent";
       challenge.hidden = true;
       holdOpen(false);
@@ -212,7 +294,7 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
       holdOpen(false);
       // The server spent the token; a retry needs a fresh one.
       if (turnstile) turnstile.api.reset(turnstile.id);
-      showError((cause as Error).message);
+      showError(cause as ServerError);
       submit.disabled = false;
       submit.textContent = "Open pull request";
     }
@@ -238,33 +320,39 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
     link.focus();
   }
 
-  async function load() {
+  /** CodeMirror on `markdown`, replacing the loading status. */
+  function showSource(markdown: string) {
+    original = markdown;
+    source.replaceChildren();
+    view = new EditorView({
+      parent: source,
+      state: EditorState.create({
+        doc: markdown,
+        extensions: [
+          // Split and join on the file's own line ending, so untouched lines keep their bytes.
+          EditorState.lineSeparator.of(markdown.includes("\r\n") ? "\r\n" : "\n"),
+          history(),
+          keymap.of([...defaultKeymap, ...historyKeymap]),
+          EditorView.lineWrapping,
+          EditorView.contentAttributes.of({ "aria-label": "Page source" }),
+          editable.of(EditorView.editable.of(true)),
+          ...(target.kind === "new" ? [placeholder("Write the page in Markdown.")] : []),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged && phase === "editing") submit.disabled = !ready();
+          }),
+        ],
+      }),
+    });
+  }
+
+  async function load(page: string) {
     try {
       const { markdown } = await request<SourceResponse>(`${endpoint}/source/?page=${encodeURIComponent(page)}`);
-      original = markdown;
-      source.replaceChildren();
-      view = new EditorView({
-        parent: source,
-        state: EditorState.create({
-          doc: markdown,
-          extensions: [
-            // Split and join on the file's own line ending, so untouched lines keep their bytes.
-            EditorState.lineSeparator.of(markdown.includes("\r\n") ? "\r\n" : "\n"),
-            history(),
-            keymap.of([...defaultKeymap, ...historyKeymap]),
-            EditorView.lineWrapping,
-            EditorView.contentAttributes.of({ "aria-label": "Page source" }),
-            editable.of(EditorView.editable.of(true)),
-            EditorView.updateListener.of((update) => {
-              if (update.docChanged && phase === "editing") submit.disabled = !edited();
-            }),
-          ],
-        }),
-      });
-      view.focus();
+      showSource(markdown);
+      view?.focus();
     } catch (cause) {
       source.replaceChildren();
-      showError((cause as Error).message);
+      showError(cause as ServerError);
     }
   }
 
@@ -277,13 +365,18 @@ export function openEditor({ page, endpoint, opener, turnstileSiteKey }: EditorI
       if (id) turnstile = { api, id };
     } catch (cause) {
       challenge.hidden = true;
-      showError((cause as Error).message);
+      showError(cause as Error);
     }
   }
 
   document.body.append(dialog);
   dialog.showModal();
-  void load();
+  if (target.kind === "edit") {
+    void load(target.page);
+  } else {
+    showSource("");
+    title?.focus();
+  }
   if (turnstileSiteKey) void showChallenge(turnstileSiteKey);
   return close;
 }
