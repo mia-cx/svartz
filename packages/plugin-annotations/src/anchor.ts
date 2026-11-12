@@ -91,7 +91,13 @@ export function locate(text: string, anchor: Anchor): Position | null {
 
   const before = words(prefix, -1);
   const after = words(suffix, 1);
-  const nearest = [...occurrences(text, exact), ...nearMatches(text, anchor)]
+  // The fuzzy search finds exact occurrences again; keep one per range, so each fills one place in a pool.
+  const unique = new Map<string, Candidate>();
+  for (const candidate of [...occurrences(text, exact), ...nearMatches(text, anchor)]) {
+    const key = `${candidate.start}:${candidate.end}`;
+    if (!unique.has(key)) unique.set(key, candidate);
+  }
+  const nearest = [...unique.values()]
     .map((candidate) => {
       const adjacent = wordsInCommon(before, text, candidate.start - 1, -1) + wordsInCommon(after, text, candidate.end, 1);
       return { candidate, rank: candidate.edits - adjacent };

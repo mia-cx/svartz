@@ -229,6 +229,20 @@ describe("after a light edit to the passage", () => {
     expect(locate(text, anchor)).toEqual({ start: start + "stable ".length, end: start + "stable temperature".length });
   });
 
+  it("keeps a passage edited beside its quote between repeats above and below it", () => {
+    const original = "In the northern sheltered garden, temperature is measured once every morning.";
+    const start = original.indexOf("temperature");
+    const anchor = anchorIn(original, start, start + "temperature".length);
+    const above = "temperature reading; ".repeat(20);
+    const text =
+      above +
+      original.replace("garden, temperature is measured", "garden, stable temperature is checked") +
+      " garden, temperature is nonsense.".repeat(20);
+
+    const at = above.length + start + "stable ".length;
+    expect(locate(text, anchor)).toEqual({ start: at, end: at + "temperature".length });
+  });
+
   it("keeps a passage wrapped in punctuation among more repeats than are scored", () => {
     const original = "In the northern sheltered garden, temperature is measured once every morning.";
     const start = original.indexOf("temperature");
