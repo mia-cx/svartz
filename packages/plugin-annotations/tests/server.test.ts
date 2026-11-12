@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "../src/store";
 import { ADA, ALAN, createDatabase, createSite, ENDPOINT, GRACE, ORIGIN, seed, signIn, type Site } from "./harness";
 
@@ -11,10 +11,87 @@ async function database() {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(disposers.splice(0).map((dispose) => dispose()));
 });
 
 const anchor = (exact: string, start: number) => ({ exact, prefix: "", suffix: "", start, end: start + exact.length });
+
+describe("each reader's write budget", () => {
+  const comment = JSON.stringify({ kind: "comment", page: "garden", anchor: anchor("roses", 0), body: "Lovely." });
+  const write = (site: Site, cookie: string, path = "/", method = "POST", body: string | undefined = comment) =>
+    site(`${ENDPOINT}${path}`, { method, headers: { cookie, origin: ORIGIN, "content-type": "application/json" }, body: method === "DELETE" ? undefined : body });
+
+  it.each([
+    ["comment", "/", "POST", comment],
+    ["+1", "/c1/agree/", "POST", JSON.stringify({ agreed: true })],
+    ["delete", "/c1/", "DELETE", undefined],
+  ])("refuses an over-budget %s before it changes storage", async (_case, path, method, body) => {
+    const { db } = await database();
+    await seed(db, [{ id: "c1", page: "garden", author: ADA, body: "First.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
+    const site = createSite({ DB: db }, { writesPerHour: 1 });
+    const cookie = await signIn(site, ADA);
+    expect((await write(site, cookie)).status).toBe(201);
+
+    const response = await write(site, cookie, path, method, body);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("3600");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({ error: "rate_limited", retryAfter: 3600, message: "You've sent too many annotations. Try again in 1 hour." });
+    const listed = await (await site(`${ENDPOINT}/?page=garden`)).json() as { annotations: Array<{ id: string; agreements: unknown[] }> };
+    expect(listed.annotations).toHaveLength(2);
+    expect(listed.annotations.find(({ id }) => id === "c1")?.agreements).toEqual([]);
+  });
+
+  it("gives separate readers separate budgets and resets an exhausted window", async () => {
+    const { db } = await database();
+    const site = createSite({ DB: db }, { writesPerHour: 1 });
+    const ada = await signIn(site, ADA);
+    const alan = await signIn(site, ALAN);
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    expect((await write(site, ada)).status).toBe(201);
+    expect((await write(site, alan)).status).toBe(201);
+    clock.mockReturnValue(now + 90_000);
+    const refused = await write(site, ada);
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toMatchObject({ retryAfter: 3510, message: "You've sent too many annotations. Try again in 59 minutes." });
+
+    clock.mockReturnValue(now + 3_600_000);
+    expect((await write(site, ada)).status).toBe(201);
+    expect((await write(site, ada)).status).toBe(429);
+  });
+
+  it("uses the native binding per identity instead of the in-memory budget", async () => {
+    const { db } = await database();
+    const limit = vi.fn().mockResolvedValueOnce({ success: true }).mockResolvedValueOnce({ success: true }).mockResolvedValueOnce({ success: false });
+    const site = createSite({ DB: db, SVARTZ_ANNOTATIONS_RATE_LIMIT: { limit } }, { writesPerHour: 1 });
+    const ada = await signIn(site, ADA);
+    const alan = await signIn(site, ALAN);
+    expect((await write(site, ada)).status).toBe(201);
+    expect((await write(site, ada)).status).toBe(201);
+    const refused = await write(site, alan);
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toMatchObject({ error: "rate_limited", retryAfter: 3600 });
+    expect(limit.mock.calls).toEqual([[{ key: `identity:${ADA.id}` }], [{ key: `identity:${ADA.id}` }], [{ key: `identity:${ALAN.id}` }]]);
+  });
+
+  it("answers 503 without writing when the native binding rejects", async () => {
+    const { db } = await database();
+    const limit = vi.fn().mockRejectedValue(new Error("unreachable"));
+    const site = createSite({ DB: db, SVARTZ_ANNOTATIONS_RATE_LIMIT: { limit } });
+    const cookie = await signIn(site, ADA);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await write(site, cookie);
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "rate_limit_unavailable", message: "Couldn't count your annotations right now. Try again in a moment." });
+    expect(log).toHaveBeenCalled();
+    expect(await (await site(`${ENDPOINT}/?page=garden`)).json()).toMatchObject({ annotations: [] });
+  });
+});
 
 describe("the annotations database", () => {
   it("is created on the first request, and racing or later isolates leave it as it is", async () => {

@@ -14,6 +14,7 @@ import type { Identity } from "@svartz/auth";
 import { readIdentity } from "@svartz/auth/server";
 import { CONTEXT_LENGTH, type Anchor } from "./anchor";
 import { COMMENT_MAX_LENGTH, QUOTE_MAX_LENGTH } from "./limits";
+import { createWriteLimit } from "./guard";
 import { createComment, deleteAnnotation, listPage, migrate, setAgreement, type Database } from "./store";
 
 /** One of the site's drawn reactions. */
@@ -35,7 +36,7 @@ export interface AnnotationsOptions {
   /** Identity ids, such as `"github:583231"`, that may delete any annotation. */
   readonly moderators?: readonly string[];
   readonly limits?: {
-    /** Comments, reactions and agreements each signed-in reader may write per hour. Default 30. */
+    /** Write attempts (including deletes) each signed-in reader may make per hour in the memory fallback. Default 30. */
     readonly writesPerHour?: number;
   };
 }
@@ -143,16 +144,20 @@ interface WriteMessages {
   readonly notJson: string;
 }
 
+type WriteContext = ServerContext & { readonly checkLimit: ReturnType<typeof createWriteLimit> };
+
 /**
  * The signed-in reader behind a write and the JSON they sent, `undefined` when they sent none, or the refusal: another
- * site, no session, a body over `MAX_REQUEST_BYTES`, or one that isn't JSON. Every write passes through here, so the
- * per-reader rate limit (#274) belongs right after the author is known.
+ * site, no session, an exhausted write budget, a body over `MAX_REQUEST_BYTES`, or one that isn't JSON. Count before
+ * reading the body, so invalid attempts spend the reader's budget too.
  */
-async function readWrite(request: Request, url: URL, context: ServerContext, messages: WriteMessages): Promise<{ author: Identity; input: unknown } | Response> {
+async function readWrite(request: Request, url: URL, context: WriteContext, messages: WriteMessages): Promise<{ author: Identity; input: unknown } | Response> {
   // Browsers name the page's origin on every POST and DELETE, so a missing or foreign one is another site, or no browser at all.
   if (request.headers.get("origin") !== url.origin) return failure(403, "cross_origin", "Post from this site.");
   const author = await readIdentity(request, context.env);
   if (!author) return failure(401, "signed_out", messages.signedOut);
+  const refusal = await context.checkLimit(author.id, context.env);
+  if (refusal) return refusal;
 
   const text = await readText(request);
   if (text === undefined) return failure(413, "too_large", messages.tooLarge);
@@ -163,7 +168,7 @@ async function readWrite(request: Request, url: URL, context: ServerContext, mes
   }
 }
 
-async function create(request: Request, url: URL, context: ServerContext, options: AnnotationsServerOptions): Promise<Response> {
+async function create(request: Request, url: URL, context: WriteContext, options: AnnotationsServerOptions): Promise<Response> {
   const write = await readWrite(request, url, context, {
     signedOut: "Sign in to comment.",
     tooLarge: "This comment is too long to post.",
@@ -179,7 +184,7 @@ async function create(request: Request, url: URL, context: ServerContext, option
 }
 
 /** `{ agreed }` sets the reader's **+1** on comment `id`, and answers `{ agreed, agreements }` with every agreement after it. */
-async function agree(request: Request, url: URL, context: ServerContext, options: AnnotationsServerOptions, id: string): Promise<Response> {
+async function agree(request: Request, url: URL, context: WriteContext, options: AnnotationsServerOptions, id: string): Promise<Response> {
   const write = await readWrite(request, url, context, {
     signedOut: "Sign in to +1 a comment.",
     tooLarge: "Send only { agreed } to +1 a comment.",
@@ -203,7 +208,7 @@ async function agree(request: Request, url: URL, context: ServerContext, options
  * Delete annotation `id` and its agreements, for its author or a moderator, answering 204. An id this vault doesn't
  * have answers 404, so a retried delete finds the annotation already gone.
  */
-async function remove(request: Request, url: URL, context: ServerContext, options: AnnotationsServerOptions, id: string): Promise<Response> {
+async function remove(request: Request, url: URL, context: WriteContext, options: AnnotationsServerOptions, id: string): Promise<Response> {
   const write = await readWrite(request, url, context, {
     signedOut: "Sign in to delete a comment.",
     tooLarge: "Send a delete without a body.",
@@ -226,23 +231,27 @@ const ANNOTATION_PATH = /^\/([^/]+)\/$/;
 const AGREE_PATH = /^\/([^/]+)\/agree\/$/;
 
 /** The `annotations` server module: `server: { module, options }` with {@link AnnotationsServerOptions}. */
-const annotationsServer: ServerModuleFactory<AnnotationsServerOptions> = (options) => async (request, context) => {
-  const url = new URL(request.url);
-  const path = url.pathname.slice(context.base.length);
-  if (path === "/") {
-    if (request.method === "GET") return list(request, url, context, options);
-    if (request.method === "POST") return create(request, url, context, options);
-    return failure(405, "method_not_allowed", "Use GET or POST.", { allow: "GET, POST" });
-  }
-  const annotation = ANNOTATION_PATH.exec(path);
-  if (annotation) {
-    if (request.method !== "DELETE") return failure(405, "method_not_allowed", "Use DELETE.", { allow: "DELETE" });
-    return remove(request, url, context, options, annotation[1]!);
-  }
-  const agreeing = AGREE_PATH.exec(path);
-  if (!agreeing) return undefined;
-  if (request.method !== "POST") return failure(405, "method_not_allowed", "Use POST.", { allow: "POST" });
-  return agree(request, url, context, options, agreeing[1]!);
+const annotationsServer: ServerModuleFactory<AnnotationsServerOptions> = (options) => {
+  const checkLimit = createWriteLimit(options.limits.writesPerHour);
+  return async (request, serverContext) => {
+    const context: WriteContext = { ...serverContext, checkLimit };
+    const url = new URL(request.url);
+    const path = url.pathname.slice(context.base.length);
+    if (path === "/") {
+      if (request.method === "GET") return list(request, url, context, options);
+      if (request.method === "POST") return create(request, url, context, options);
+      return failure(405, "method_not_allowed", "Use GET or POST.", { allow: "GET, POST" });
+    }
+    const annotation = ANNOTATION_PATH.exec(path);
+    if (annotation) {
+      if (request.method !== "DELETE") return failure(405, "method_not_allowed", "Use DELETE.", { allow: "DELETE" });
+      return remove(request, url, context, options, annotation[1]!);
+    }
+    const agreeing = AGREE_PATH.exec(path);
+    if (!agreeing) return undefined;
+    if (request.method !== "POST") return failure(405, "method_not_allowed", "Use POST.", { allow: "POST" });
+    return agree(request, url, context, options, agreeing[1]!);
+  };
 };
 
 export default annotationsServer;

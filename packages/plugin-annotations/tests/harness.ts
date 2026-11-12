@@ -47,7 +47,7 @@ export type Site = ReturnType<typeof createSite>;
  * the plugins read their binding and secrets from; `origin` is where the site is served; `moderators` may delete
  * anyone's annotations.
  */
-export function createSite(env: Record<string, unknown>, { vault = "notes", origin = ORIGIN, moderators = [] as readonly string[] } = {}) {
+export function createSite(env: Record<string, unknown>, { vault = "notes", origin = ORIGIN, moderators = [] as readonly string[], writesPerHour = DEFAULT_WRITES_PER_HOUR } = {}) {
   const handle = createServerHandle({
     basePath: "/notes",
     vault: { id: vault, mountPath: "/notes", site: { title: "Notes" } },
@@ -57,7 +57,7 @@ export function createSite(env: Record<string, unknown>, { vault = "notes", orig
         load: () => import("@svartz/auth/server"),
         options: { providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } } },
       },
-      { id: "annotations", load: () => import("../src/server"), options: { ...OPTIONS, moderators } },
+      { id: "annotations", load: () => import("../src/server"), options: { ...OPTIONS, moderators, limits: { writesPerHour } } },
     ],
   }, { privateEnv: {}, building: false, dev: false });
   return (path: string, init?: RequestInit) => {
