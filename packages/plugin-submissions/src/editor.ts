@@ -3,7 +3,8 @@
  * and the pull request link once submitted. Edit opens it on a published note's source; New page opens it blank,
  * under a title and a section. Loaded on the first click of either.
  *
- * The source opens in Live Preview or Source, as the reader last chose, and suggests published notes after `[[`. What
+ * The source opens in Live Preview, Source or Split, as the reader last chose, and suggests published notes after `[[`.
+ * Split shows the source beside the page as the site renders it, or under Write and Preview tabs on a phone. What
  * the reader writes is kept as a {@link Draft} while they write it; the panel offers it back when it next opens on the
  * same page, warning when the page's source has changed since. When the server asks for sign-in, the panel marks the draft to resume and opens `@svartz/auth`'s sign-in
  * dialog; signing in returns the reader to the page, and the panel reopens with the draft at once.
@@ -11,6 +12,7 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap, placeholder } from "@codemirror/view";
+import type { BrowserScriptContext } from "@svartz/core";
 import { openSignIn } from "@svartz/auth/browser";
 import {
   MAX_NOTE_LENGTH,
@@ -23,6 +25,7 @@ import {
 } from "./api";
 import { draftSlot, hashSource, readDraft, storeDraft, type Draft } from "./draft";
 import { livePreview } from "./live-preview";
+import type { Preview, PreviewSource } from "./preview";
 import { wikilinkCompletion } from "./wikilinks";
 
 /** What the panel submits: an edit of a published note, or a new note in one of `folders`. */
@@ -34,6 +37,10 @@ export interface EditorInput {
   readonly target: EditorTarget;
   /** The plugin's URL path, deployment base included, without a trailing slash. */
   readonly endpoint: string;
+  /** SvelteKit's deployment base, which preview links start with. */
+  readonly base: string;
+  /** Renders the Split preview through the page's content components. Without it, Split isn't offered. */
+  readonly mountContent?: BrowserScriptContext["mountContent"];
   /** The page the panel opened on, which a draft kept for sign-in is saved under. */
   readonly pathname: string;
   /** Focus returns here when the panel closes. */
@@ -44,22 +51,25 @@ export interface EditorInput {
 
 /**
  * How the source shows, as the mode switch lists them, with the extension each installs. Every mode edits the same
- * document, so switching never changes its bytes.
+ * document, so switching never changes its bytes. Split shows the raw source beside the rendered page.
  */
 const MODES = {
   live: { label: "Live Preview", extension: livePreview },
   source: { label: "Source", extension: (): Extension => [] },
+  split: { label: "Split", extension: (): Extension => [] },
 } as const;
 type Mode = keyof typeof MODES;
+/** theme-minimal's phone breakpoint: below it, Split's panes become Write and Preview tabs. */
+const PHONE = "(max-width: 40rem)";
 const MODE_KEY = "svartz-submissions:mode";
 /** Wait this long after the last keystroke before saving the draft. */
 const AUTOSAVE_DELAY_MS = 400;
 
-/** The mode the reader last chose in this browser; Live Preview until they choose. */
-function preferredMode(): Mode {
+/** The mode the reader last chose in this browser, among the `offered` ones; Live Preview until they choose. */
+function preferredMode(offered: readonly Mode[]): Mode {
   try {
     const mode = localStorage.getItem(MODE_KEY);
-    return mode !== null && mode in MODES ? mode as Mode : "live";
+    return offered.includes(mode as Mode) ? mode as Mode : "live";
   } catch {
     return "live";
   }
@@ -129,21 +139,28 @@ const NEW_PAGE_FIELDS = `
       </div>
     </div>`;
 
-const MODE_SWITCH = `
+const modeSwitch = (offered: readonly Mode[]) => `
     <fieldset class="svartz-submissions-modes">
-      <legend class="sv-visually-hidden">Editor mode</legend>${Object.entries(MODES).map(([mode, { label }]) => `
-      <label><input type="radio" name="svartz-submissions-mode" value="${mode}">${label}</label>`).join("")}
+      <legend class="sv-visually-hidden">Editor mode</legend>${offered.map((mode) => `
+      <label><input type="radio" name="svartz-submissions-mode" value="${mode}">${MODES[mode].label}</label>`).join("")}
     </fieldset>`;
 
-const panel = (target: EditorTarget) => `
+const panel = (target: EditorTarget, offered: readonly Mode[]) => `
 <div class="svartz-submissions-panel">
   <header class="svartz-submissions-header">
-    <h2 id="svartz-submissions-title">${target.kind === "edit" ? "Edit page" : "New page"}</h2>${MODE_SWITCH}
+    <h2 id="svartz-submissions-title">${target.kind === "edit" ? "Edit page" : "New page"}</h2>${modeSwitch(offered)}
     <button type="button" class="sv-icon-button" data-close aria-label="Close editor">${CLOSE_ICON}</button>
   </header>
   <form class="svartz-submissions-form" data-kind="${target.kind}" novalidate>${target.kind === "new" ? NEW_PAGE_FIELDS : ""}
-    <div class="svartz-submissions-source">
-      <p class="svartz-submissions-status" role="status">${target.kind === "edit" ? "Loading the page source…" : ""}</p>
+    <div class="svartz-submissions-editor">
+      <div class="svartz-submissions-tabs" role="tablist" aria-label="Split view" hidden>
+        <button type="button" role="tab" id="svartz-submissions-write-tab" aria-controls="svartz-submissions-source">Write</button>
+        <button type="button" role="tab" id="svartz-submissions-preview-tab" aria-controls="svartz-submissions-preview">Preview</button>
+      </div>
+      <div class="svartz-submissions-source" id="svartz-submissions-source">
+        <p class="svartz-submissions-status" role="status">${target.kind === "edit" ? "Loading the page source…" : ""}</p>
+      </div>
+      <div class="svartz-submissions-preview sv-prose" id="svartz-submissions-preview" role="region" aria-label="Preview" hidden></div>
     </div>
     <div class="svartz-submissions-note">
       <label class="sv-label" for="svartz-submissions-note">${target.kind === "edit" ? "What changed" : "Why add this page"}</label>
@@ -207,11 +224,12 @@ function query<E extends Element>(root: ParentNode, selector: string): E {
 }
 
 /** Open the panel on `target`. Returns a function that closes it without asking, for navigation cleanup. */
-export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKey }: EditorInput): () => void {
+export function openEditor({ target, endpoint, base, mountContent, pathname, opener, turnstileSiteKey }: EditorInput): () => void {
+  const offered = (Object.keys(MODES) as Mode[]).filter((mode) => mode !== "split" || mountContent);
   const dialog = document.createElement("dialog");
   dialog.className = "svartz-submissions";
   dialog.setAttribute("aria-labelledby", "svartz-submissions-title");
-  dialog.innerHTML = panel(target);
+  dialog.innerHTML = panel(target, offered);
   const form = query<HTMLFormElement>(dialog, "form");
   const source = query<HTMLElement>(dialog, ".svartz-submissions-source");
   const note = query<HTMLTextAreaElement>(dialog, "textarea");
@@ -240,7 +258,7 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
    */
   let ownSave = draft?.savedAt;
 
-  let mode = preferredMode();
+  let mode = preferredMode(offered);
   const presentation = new Compartment();
   for (const radio of dialog.querySelectorAll<HTMLInputElement>('input[name="svartz-submissions-mode"]')) {
     radio.checked = radio.value === mode;
@@ -248,8 +266,90 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
       mode = radio.value as Mode;
       rememberMode(mode);
       view?.dispatch({ effects: presentation.reconfigure(MODES[mode].extension()) });
+      arrange();
     });
   }
+
+  const panes = query<HTMLElement>(dialog, ".svartz-submissions-editor");
+  const tablist = query<HTMLElement>(dialog, '[role="tablist"]');
+  const tabs = [...tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  const previewPane = query<HTMLElement>(dialog, ".svartz-submissions-preview");
+  const phone = window.matchMedia(PHONE);
+  /** Which of Split's panes shows on a phone. */
+  let tab: "write" | "preview" = "write";
+  /** The preview, once Split first opens; it lives as long as the panel. */
+  let preview: Promise<Preview | undefined> | undefined;
+
+  /** What the preview shows: the source, as the page it edits or the new note its title and section name. */
+  function previewSource(): PreviewSource | undefined {
+    if (!view) return undefined;
+    const markdown = view.state.sliceDoc();
+    if (target.kind === "edit") return { markdown, note: { page: target.page } };
+    const name = title?.value.trim() || "Untitled";
+    return { markdown, note: { path: `${folder?.value ? `${folder.value}/` : ""}${name}.md` } };
+  }
+
+  /** Bring the preview up to date, when Split shows it. */
+  function refreshPreview() {
+    const source = previewSource();
+    if (mode !== "split" || !source || !mountContent) return;
+    preview ??= import("./preview")
+      .then(({ createPreview }) => createPreview(previewPane, { endpoint, base, mountContent }))
+      .catch((cause: unknown) => {
+        previewPane.textContent = "Couldn't load the preview. Check your connection, then reopen the editor.";
+        console.error("[submissions] couldn't load the preview", cause);
+        return undefined;
+      });
+    void preview.then((shown) => dialog.isConnected && shown?.update(previewSource()!));
+  }
+
+  /**
+   * Lay the panes out for the mode: the source alone, or Split's source and preview side by side. On a phone, Split
+   * shows one pane at a time under Write and Preview tabs.
+   */
+  function arrange() {
+    const split = mode === "split";
+    const tabbed = split && phone.matches;
+    panes.dataset.mode = mode;
+    dialog.dataset.mode = mode;
+    tablist.hidden = !tabbed;
+    previewPane.hidden = !split || (tabbed && tab === "write");
+    source.hidden = tabbed && tab === "preview";
+    for (const button of tabs) {
+      const selected = button.id === `svartz-submissions-${tab}-tab`;
+      button.setAttribute("aria-selected", String(selected));
+      button.tabIndex = selected ? 0 : -1;
+    }
+    // The panes are tab panels only while the tabs show.
+    for (const [pane, label] of [[source, "write"], [previewPane, "preview"]] as const) {
+      if (tabbed) {
+        pane.setAttribute("role", "tabpanel");
+        pane.setAttribute("aria-labelledby", `svartz-submissions-${label}-tab`);
+      } else {
+        pane.removeAttribute("aria-labelledby");
+        if (pane === previewPane) pane.setAttribute("role", "region");
+        else pane.removeAttribute("role");
+      }
+    }
+    refreshPreview();
+  }
+
+  function selectTab(next: typeof tab) {
+    tab = next;
+    arrange();
+    tabs.find((button) => button.id === `svartz-submissions-${tab}-tab`)!.focus();
+  }
+  for (const button of tabs) {
+    button.addEventListener("click", () => selectTab(button.id.includes("preview") ? "preview" : "write"));
+  }
+  // Arrow keys, Home and End move between the tabs, and select the one they reach.
+  tablist.addEventListener("keydown", (event) => {
+    const next = { ArrowLeft: tab === "write" ? "preview" : "write", ArrowRight: tab === "write" ? "preview" : "write", Home: "write", End: "preview" }[event.key];
+    if (!next) return;
+    event.preventDefault();
+    selectTab(next as typeof tab);
+  });
+  phone.addEventListener("change", arrange);
 
   const editable = new Compartment();
   let view: EditorView | undefined;
@@ -333,6 +433,8 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
     if (keep) save();
     clearTimeout(autosave);
     window.removeEventListener("pagehide", save);
+    phone.removeEventListener("change", arrange);
+    void preview?.then((shown) => shown?.destroy());
     view?.destroy();
     if (turnstile) turnstile.api.remove(turnstile.id);
     dialog.close();
@@ -366,11 +468,13 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
   }
   title?.addEventListener("input", () => {
     dropConflict();
+    refreshPreview();
     if (phase === "editing") submit.disabled = !ready();
     saveSoon();
   });
   folder?.addEventListener("change", () => {
     dropConflict();
+    refreshPreview();
     saveSoon();
   });
   note.addEventListener("input", saveSoon);
@@ -502,13 +606,16 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
           wikilinkCompletion(endpoint),
           ...(target.kind === "new" ? [placeholder("Write the page in Markdown.")] : []),
           EditorView.updateListener.of((update) => {
-            if (!update.docChanged || phase !== "editing") return;
+            if (!update.docChanged) return;
+            refreshPreview();
+            if (phase !== "editing") return;
             submit.disabled = !ready();
             saveSoon();
           }),
         ],
       }),
     });
+    refreshPreview();
   }
 
   /** The draft's fields, in place of the panel's. Saved at once, so a sign-in draft no longer reopens the panel. */
@@ -608,6 +715,7 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
   }
 
   document.body.append(dialog);
+  arrange();
   dialog.showModal();
   if (target.kind === "edit") {
     void load(target.page);

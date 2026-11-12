@@ -5,6 +5,10 @@ import type { BrowserOptions } from "../src/api";
 import { mount } from "../src/browser";
 import { readDraft, storeDraft } from "../src/draft";
 import { mount as mountAuth } from "@svartz/auth/browser";
+// The site's own renderer and theme-minimal's content components, as a theme page hands them to browser scripts.
+import { svartzContentComponents } from "../../ui/src/lib/content/index";
+import { resolveContentComponents } from "../../ui/src/lib/runtime/content-components";
+import { mountContent } from "../../ui/src/lib/runtime/mount-content.svelte";
 
 // CRLF line endings and frontmatter: the edit must keep every byte it doesn't touch.
 const SOURCE = "---\r\ntitle: Guide\r\n---\r\n\r\n# Guide\r\n";
@@ -15,15 +19,16 @@ let unmount: (() => void) | void;
 
 /** What the build lets a wikilink name: protected and hidden notes are never among them. */
 const NOTES = [
-  { link: "Ada Lovelace", title: "Ada Lovelace" },
-  { link: "People/Grace", title: "Grace Hopper" },
-  { link: "Guide", title: "Guide" },
+  { link: "Ada Lovelace", title: "Ada Lovelace", slug: "ada-lovelace", path: "Ada Lovelace.md", href: "/wiki/ada-lovelace/" },
+  { link: "People/Grace", title: "Grace Hopper", slug: "people/grace", path: "People/Grace.md", href: "/wiki/people/grace/" },
+  { link: "Guide", title: "Guide", slug: "guide", path: "Guide.md", href: "/wiki/guide/" },
 ];
+const LINKS = { notes: NOTES, linkResolution: "shallowest", mountPath: "/wiki", tagsRoute: "tags" };
 
 /** The site's server: `source` for the guide's source, `links/` for the notes, and `edit` for the pull request answer. */
 function serve(edit: () => Response | Promise<Response>, source = () => Response.json({ markdown: SOURCE })) {
   const fetch = vi.fn(async (url: string, init?: RequestInit) =>
-    url.includes("/source/") ? source() : url.includes("/links/") ? Response.json({ notes: NOTES }) : edit());
+    url.includes("/source/") ? source() : url.includes("/links/") ? Response.json(LINKS) : edit());
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
@@ -917,5 +922,92 @@ describe("wikilink autocomplete", () => {
     await userEvent.keyboard("{Escape}");
     await expect.element(page.getByRole("listbox")).not.toBeInTheDocument();
     await expect.element(page.getByRole("dialog")).toBeVisible();
+  });
+});
+
+describe("Split", () => {
+  const components = resolveContentComponents({}, svartzContentComponents);
+  const SPLIT_CONTEXT = { base: "/docs", mountContent: async (target: HTMLElement) => mountContent(target, components) };
+  /** Vitest's own viewport, which is below the phone breakpoint. */
+  const PHONE = { width: 414, height: 896 };
+
+  beforeEach(() => page.viewport(1280, 800));
+  afterEach(() => page.viewport(PHONE.width, PHONE.height));
+
+  /** The guide with LF line endings: the build, and so the preview, finds a callout only on an LF line. */
+  const GUIDE = "---\ntitle: Guide\n---\n\n# Guide\n";
+
+  /** Open the editor on the guide in Split, with the source's cursor at its end. `edit` answers the submission. */
+  async function openSplit(edit: () => Response = () => Response.json({})) {
+    const fetch = serve(edit, () => Response.json({ markdown: GUIDE }));
+    unmount = mount("/docs/wiki/guide/", OPTIONS, SPLIT_CONTEXT);
+    await page.getByRole("button", { name: "Edit" }).click();
+    await page.getByRole("radio", { name: "Split" }).click();
+    const source = page.getByRole("textbox", { name: "Page source" });
+    await expect.element(source).toHaveTextContent("Guide");
+    const mod = navigator.platform.startsWith("Mac") ? "Meta" : "Control";
+    await source.click();
+    await userEvent.keyboard(`{${mod}>}{End}{/${mod}}`);
+    return fetch;
+  }
+
+  it("shows the page as the site renders it beside the source, and follows the reader's edits", async () => {
+    await openSplit();
+    const preview = page.getByRole("region", { name: "Preview" });
+    await expect.element(preview.getByRole("heading", { level: 1 })).toHaveTextContent("Guide");
+    expect(preview.element().textContent).not.toContain("title: Guide");
+
+    // `[[` types one `[`.
+    await userEvent.keyboard("{Enter}> [[!tip] Try it{Enter}> See [[[[Ada Lovelace]] and [[[[Nobody]].");
+
+    await expect.element(preview.getByRole("link", { name: "Ada Lovelace" })).toHaveAttribute("href", "/docs/wiki/ada-lovelace/");
+    // An unresolved link looks as it does on the site: text that names a missing page.
+    await expect.element(preview.getByRole("link", { name: "Nobody" })).toHaveAttribute("aria-disabled", "true");
+    const callout = preview.element().querySelector(".sv-callout");
+    expect(callout?.getAttribute("data-callout")).toBe("tip");
+    expect(callout?.querySelector(".sv-callout-title-text")?.textContent).toBe("Try it");
+    // The site's link component marks internal links.
+    expect(preview.getByRole("link", { name: "Ada Lovelace" }).element().classList).toContain("sv-link-internal");
+  });
+
+  it("leaves the source's bytes as they were", async () => {
+    const fetch = await openSplit(() => Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
+    await userEvent.keyboard("Welcome.");
+    await page.getByRole("radio", { name: "Live Preview" }).click();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+    const sent = fetch.mock.calls.find(([url]) => String(url).endsWith("/edit/"));
+    expect(JSON.parse(String(sent![1]!.body)).markdown).toBe(`${GUIDE}Welcome.`);
+  });
+
+  it("puts the source and the preview under Write and Preview tabs on a phone", async () => {
+    await page.viewport(390, 844);
+    await openSplit();
+    const write = page.getByRole("tab", { name: "Write" });
+    const previewTab = page.getByRole("tab", { name: "Preview" });
+    await expect.element(write).toHaveAttribute("aria-selected", "true");
+    await expect.element(page.getByRole("tabpanel", { name: "Write" })).toBeVisible();
+    expect(page.getByRole("tabpanel", { name: "Preview" }).query()).toBeNull();
+
+    await write.click();
+    await userEvent.keyboard("{ArrowRight}");
+
+    await expect.element(previewTab).toHaveAttribute("aria-selected", "true");
+    await expect.element(previewTab).toHaveFocus();
+    await expect.element(page.getByRole("tabpanel", { name: "Preview" }).getByRole("heading", { level: 1 })).toHaveTextContent("Guide");
+    expect(page.getByRole("textbox", { name: "Page source" }).query()).toBeNull();
+
+    await userEvent.keyboard("{Home}");
+    await expect.element(write).toHaveFocus();
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toBeVisible();
+  });
+
+  it("isn't offered where the page can't render content", async () => {
+    serve(() => Response.json({}));
+    await openEditor();
+
+    await expect.element(page.getByRole("radio", { name: "Live Preview" })).toBeVisible();
+    expect(page.getByRole("radio", { name: "Split" }).query()).toBeNull();
   });
 });

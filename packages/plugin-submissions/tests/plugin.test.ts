@@ -120,6 +120,8 @@ describe("submissions build", () => {
       vaultRoot: "content",
       folders: ["", "people", "tools"],
       links: expect.any(Array),
+      // What the Split preview resolves and routes links by, as the build does.
+      preview: { linkResolution: "closest", mountPath: "/wiki", tagsRoute: "tags" },
     });
     expect(ctx.compiler?.browserResources.get("submissions")?.options).toEqual({
       endpoint: "/wiki/_svartz/submissions",
@@ -143,7 +145,14 @@ describe("submissions build", () => {
       "people/ada lovelace.svx",
       "tools/Guide",
     ]);
-    expect(links).toContainEqual({ link: "tools/Guide", title: "Tool guide" });
+    expect(links).toContainEqual({ link: "tools/Guide", title: "Tool guide", slug: "tools/guide", path: "tools/Guide.md", href: "/wiki/tools/guide/" });
+  });
+
+  it("gives each note's aliases, which the Split preview resolves links by", async () => {
+    const { ctx } = await build({}, [note("people/Ada.md", { aliases: ["Countess", "Lovelace"] })]);
+    const { links } = ctx.compiler?.serverData.get("submissions") as BuildData;
+
+    expect(links).toContainEqual(expect.objectContaining({ link: "Ada", aliases: ["Countess", "Lovelace"] }));
   });
 
   it("names a note's folder when its name resolves to another note's slug", async () => {
@@ -151,8 +160,8 @@ describe("submissions build", () => {
     const { ctx } = await build({}, [note("people/Ada.md", { title: "Ada" }), note("Overview.md", { slug: "ada", title: "Overview" })]);
     const { links } = ctx.compiler?.serverData.get("submissions") as BuildData;
 
-    expect(links).toContainEqual({ link: "people/Ada", title: "Ada" });
-    expect(links).toContainEqual({ link: "Overview", title: "Overview" });
+    expect(links).toContainEqual(expect.objectContaining({ link: "people/Ada", title: "Ada" }));
+    expect(links).toContainEqual(expect.objectContaining({ link: "Overview", title: "Overview" }));
   });
 
   it("uses the configured vault folder over git's", async () => {

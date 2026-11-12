@@ -24,7 +24,7 @@ import {
   type SvartzPlugin,
 } from "@svartz/core";
 import { wikilinkResolver } from "@svartz/plugins";
-import { isNote, pathRoute, requestedSlug, routeHref } from "@svartz/plugins/routes";
+import { alternateNames, isNote, pathRoute, requestedSlug, routeHref } from "@svartz/plugins/routes";
 import { PLUGIN_ID, type BrowserOptions, type LinkTarget } from "./api";
 import type { GuardOptions, RateLimitOptions, TurnstileOptions } from "./guard";
 import type { BuildData, Credentials, ServerOptions } from "./server";
@@ -161,14 +161,17 @@ function routeClaims(files: readonly ProcessedFile[], mountPath: string): Record
 /**
  * What a wikilink to each published note says, as Obsidian writes it: the note's name when the build resolves that
  * to this note from anywhere, or else its vault path. Any note (protected and hidden ones included) taking the name,
- * by file name, slug or alias, makes the link name the path.
+ * by file name, slug or alias, makes the link name the path. Each also carries what the Split preview resolves links
+ * by: its slug, path and aliases.
  */
-function linkTargets(published: ReadonlyArray<{ path: string; slug: string; title: string }>, ctx: PluginContext): LinkTarget[] {
+function linkTargets(published: ReadonlyArray<{ href: string; path: string; slug: string; title: string }>, ctx: PluginContext): LinkTarget[] {
   const resolve = wikilinkResolver(ctx);
-  return published.map(({ path, slug, title }) => {
+  const frontmatter = new Map(ctx.files.map((file) => [file.slug, file.frontmatter]));
+  return published.map(({ href, path, slug, title }) => {
     const link = path.replace(/\.md$/i, "");
     const name = link.slice(link.lastIndexOf("/") + 1);
-    return { link: resolve(name) === slug ? name : link, title };
+    const aliases = alternateNames(frontmatter.get(slug), ctx.config.frontmatter.aliasesField);
+    return { link: resolve(name) === slug ? name : link, title, slug, path, href, ...(aliases.length ? { aliases } : {}) };
   });
 }
 
@@ -233,7 +236,10 @@ export function submissions(options: SubmissionsOptions) {
 
         const compiler = getCompilerContributions(ctx);
         const links = linkTargets(published, ctx);
-        compiler.serverData.set(PLUGIN_ID, { commit: checkout.commit, pages, routes, vaultRoot: root, folders, links } satisfies BuildData);
+        // Inline `#tags` link under the theme's tags route, as core:transform-ofm links them.
+        const tagsRoute = (ctx.config.theme.routes as { tags?: string } | undefined)?.tags ?? "tags";
+        const preview = { linkResolution: ctx.config.linkResolution, mountPath: ctx.config.mountPath ?? "", tagsRoute };
+        compiler.serverData.set(PLUGIN_ID, { commit: checkout.commit, pages, routes, vaultRoot: root, folders, links, preview } satisfies BuildData);
         compiler.browserResources.set(PLUGIN_ID, {
           id: PLUGIN_ID,
           kind: "script",

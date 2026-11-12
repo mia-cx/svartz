@@ -28,6 +28,7 @@ import {
 const ORIGIN = "https://wiki.example";
 // Deployed under /docs, vault mounted at /wiki.
 const BASE = "/docs/wiki/_svartz/submissions";
+const GUIDE_LINK = { link: "guide", title: "Guide", slug: "guide", path: "guide.md", href: "/wiki/guide/" };
 
 /** A vault at `content/` with the guide at its top level and a published `People` folder holding an `.svx` page. */
 const handlerWith = (guard: GuardOptions) => createHandler(
@@ -38,7 +39,8 @@ const handlerWith = (guard: GuardOptions) => createHandler(
     routes: { guide: "/wiki/guide/", "people/timeline": "/wiki/people/timeline/" },
     vaultRoot: "content",
     folders: ["", "People"],
-    links: [{ link: "guide", title: "Guide" }],
+    links: [GUIDE_LINK],
+    preview: { linkResolution: "shallowest", mountPath: "/wiki", tagsRoute: "tags" },
   },
 );
 const handler = handlerWith({ rateLimit: { limit: 100, period: 60 } });
@@ -92,7 +94,12 @@ describe("submissions server", () => {
   it("lists the notes a wikilink can name without calling GitHub", async () => {
     const github = replayGitHub([]);
 
-    expect(await answer(new Request(`${ORIGIN}${BASE}/links/`))).toEqual({ status: 200, body: { notes: [{ link: "guide", title: "Guide" }] } });
+    expect(await answer(new Request(`${ORIGIN}${BASE}/links/`))).toEqual({ status: 200, body: {
+      notes: [GUIDE_LINK],
+      linkResolution: "shallowest",
+      mountPath: "/wiki",
+      tagsRoute: "tags",
+    } });
     expect(github.requests).toEqual([]);
   });
 

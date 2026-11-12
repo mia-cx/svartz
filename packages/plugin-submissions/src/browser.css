@@ -32,6 +32,11 @@
 	box-shadow: var(--sv-shadow);
 }
 
+/* Split needs room for the source and the page side by side. */
+.svartz-submissions[data-mode="split"] .svartz-submissions-panel {
+	inline-size: min(100%, 100rem);
+}
+
 .svartz-submissions[open] .svartz-submissions-panel {
 	animation: svartz-submissions-in var(--sv-duration-slow) var(--sv-ease);
 }
@@ -68,7 +73,7 @@
 	padding: var(--sv-space-4) var(--sv-space-5) var(--sv-space-5);
 }
 
-/* Live Preview and Source as one segmented control, beside the close button. */
+/* Live Preview, Source and Split as one segmented control, beside the close button. */
 .svartz-submissions-modes {
 	display: inline-flex;
 	margin: 0;
@@ -115,6 +120,77 @@
 .svartz-submissions-modes label:has(:focus-visible) {
 	outline: var(--sv-focus-width) solid var(--sv-accent);
 	outline-offset: var(--sv-focus-offset);
+}
+
+/* The source alone, or Split's source and preview; on a phone, Split's tabs above one of them. */
+.svartz-submissions-editor {
+	display: grid;
+	grid-template-rows: minmax(0, 1fr);
+	gap: var(--sv-space-3);
+	min-block-size: 0;
+}
+
+.svartz-submissions-editor[data-mode="split"] {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.svartz-submissions-editor:has(> [role="tablist"]:not([hidden])) {
+	grid-template-rows: auto minmax(0, 1fr);
+	grid-template-columns: minmax(0, 1fr);
+}
+
+/* Write and Preview, drawn as the mode switch is. */
+.svartz-submissions-tabs {
+	display: flex;
+	justify-self: start;
+	padding: 2px;
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	border-radius: var(--sv-radius-m);
+}
+
+.svartz-submissions-tabs button {
+	padding: var(--sv-space-1) var(--sv-space-3);
+	border: 0;
+	border-radius: var(--sv-radius-s);
+	background: transparent;
+	color: var(--sv-muted);
+	font: inherit;
+	font-size: var(--sv-label-size);
+	font-weight: 600;
+	line-height: 1.4;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+
+.svartz-submissions-tabs button:hover,
+.svartz-submissions-tabs [aria-selected="true"] {
+	color: var(--sv-ink);
+}
+
+.svartz-submissions-tabs [aria-selected="true"] {
+	background: var(--sv-surface);
+}
+
+.svartz-submissions-tabs button:focus-visible {
+	outline: var(--sv-focus-width) solid var(--sv-accent);
+	outline-offset: var(--sv-focus-offset);
+}
+
+/* The page as the site renders it; the theme's prose styles come with `.sv-prose`. */
+.svartz-submissions-preview {
+	min-block-size: 0;
+	padding: var(--sv-space-3) var(--sv-space-5);
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	border-radius: var(--sv-radius-m);
+	background: var(--sv-paper);
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+
+.svartz-submissions-tabs[hidden],
+.svartz-submissions-source[hidden],
+.svartz-submissions-preview[hidden] {
+	display: none;
 }
 
 .svartz-submissions-source {
@@ -469,7 +545,12 @@
 	}
 
 	.svartz-submissions-header {
+		flex-wrap: wrap;
 		padding-inline-start: var(--sv-space-4);
+	}
+
+	.svartz-submissions-preview {
+		padding-inline: var(--sv-space-4);
 	}
 
 	.svartz-submissions-form {

@@ -6,27 +6,31 @@
 import { autocompletion, type Completion, type CompletionSource } from "@codemirror/autocomplete";
 import type { Extension } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
-import type { LinkTarget, LinksResponse } from "./api";
+import type { LinksResponse } from "./api";
 
 /** An open `[[` or `![[` and what follows it on the line, up to a heading or label. */
 const OPEN_LINK = /!?\[\[[^\]|#\n]*$/;
 
-/** One load of each endpoint's notes, shared by every panel; a failed load is retried by the next `[[`. */
-const loads = new Map<string, Promise<readonly LinkTarget[]>>();
+/** One load of each endpoint's links, shared by every panel; a failed load is retried by the next caller. */
+const loads = new Map<string, Promise<LinksResponse | undefined>>();
 
-function loadTargets(endpoint: string): Promise<readonly LinkTarget[]> {
+/**
+ * The site's published notes, which `[[` suggests and the Split preview links to, with how the vault resolves links;
+ * `undefined` when they couldn't load.
+ */
+export function loadLinks(endpoint: string): Promise<LinksResponse | undefined> {
   let load = loads.get(endpoint);
   if (!load) {
     load = fetch(`${endpoint}/links/`)
       .then(async (response) => {
         if (!response.ok) throw new Error(`the site answered ${response.status}`);
-        return (await response.json() as LinksResponse).notes;
+        return await response.json() as LinksResponse;
       })
       .catch((cause: unknown) => {
         loads.delete(endpoint);
-        // The editor works without suggestions; the console says why there are none.
-        console.error("[submissions] couldn't load the notes to suggest", cause);
-        return [];
+        // The editor works without them; the console says why links don't resolve.
+        console.error("[submissions] couldn't load the site's notes", cause);
+        return undefined;
       });
     loads.set(endpoint, load);
   }
@@ -57,7 +61,7 @@ function wikilinkSource(endpoint: string): CompletionSource {
     const match = context.matchBefore(OPEN_LINK);
     if (!match) return null;
     const from = match.from + match.text.indexOf("[[") + 2;
-    const targets = await loadTargets(endpoint);
+    const targets = (await loadLinks(endpoint))?.notes ?? [];
     if (context.aborted) return null;
     return {
       from,

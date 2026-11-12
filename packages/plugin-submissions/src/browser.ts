@@ -43,7 +43,15 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
       const { openEditor } = await import("./editor");
       // The page may have gone while the editor loaded; its panel would outlive the cleanup below.
       if (unmounted) return;
-      close = openEditor({ target, endpoint, pathname, opener: button, turnstileSiteKey: options.turnstileSiteKey });
+      close = openEditor({
+        target,
+        endpoint,
+        base: context.base,
+        mountContent: context.mountContent,
+        pathname,
+        opener: button,
+        turnstileSiteKey: options.turnstileSiteKey,
+      });
     };
     button.addEventListener("click", () => void open());
     region.append(button);

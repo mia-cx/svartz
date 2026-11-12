@@ -1,3 +1,5 @@
+import type { PreviewNote, PreviewOptions } from "@svartz/plugins/preview";
+
 /** The plugin's id, and so its URL segment: `<base><mount>/_svartz/submissions/`. */
 export const PLUGIN_ID = "submissions";
 
@@ -12,20 +14,25 @@ export interface SourceResponse {
   readonly markdown: string;
 }
 
-/** A published note a wikilink can name. */
-export interface LinkTarget {
+/**
+ * A published note a wikilink can name. The Split preview resolves links to it by `slug`, `path` and `aliases`, as
+ * the build does, and links them to `href`.
+ */
+export interface LinkTarget extends PreviewNote {
   /**
    * What goes between `[[` and `]]`: the note's name, or its path inside the vault when another note shares the name,
    * without `.md`, as Obsidian writes it.
    */
   readonly link: string;
-  readonly title: string;
 }
 
 /** `GET <endpoint>/links/` answers this: the published notes, never password-protected or hidden ones. */
-export interface LinksResponse {
+export interface LinksResponse extends PreviewSettings {
   readonly notes: readonly LinkTarget[];
 }
+
+/** How the vault resolves and routes links, for the Split preview. */
+export type PreviewSettings = Pick<PreviewOptions, "linkResolution" | "mountPath" | "tagsRoute">;
 
 /** A submission id: 32 lowercase hex digits, 128 random bits. */
 export const SUBMISSION_ID_PATTERN = /^[0-9a-f]{32}$/;
