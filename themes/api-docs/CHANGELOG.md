@@ -1,5 +1,27 @@
 # @svartz/theme-api-docs
 
+## 2.4.0
+
+### Patch Changes
+
+- Updated dependencies [020d144]
+- Updated dependencies [a4c869f]
+- Updated dependencies [7a1d5f9]
+- Updated dependencies [d7303ae]
+- Updated dependencies [d01cd5e]
+- Updated dependencies [e46840b]
+- Updated dependencies [f55f8fa]
+- Updated dependencies [dafcfc9]
+- Updated dependencies [9d8dbee]
+- Updated dependencies [14bc204]
+- Updated dependencies [639e96d]
+- Updated dependencies [274ba31]
+- Updated dependencies [6681829]
+- Updated dependencies [2624a50]
+  - @svartz/core@2.4.0
+  - @svartz/ui@2.4.0
+  - @svartz/theme-minimal@2.4.0
+
 ## 2.3.0
 
 ### Patch Changes

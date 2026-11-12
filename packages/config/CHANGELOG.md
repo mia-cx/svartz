@@ -1,5 +1,25 @@
 # @svartz/config
 
+## 2.4.0
+
+### Minor Changes
+
+- a4c869f: One sign-in covers every host vault in an app. Every vault's sign-in runs through `callbackVault` (default: the first host vault that enables auth), so each provider needs one callback URL, and the session reads as signed in on every vault. A `callbackVault` that names no vault, a vault without auth, or a vault missing one of the providers fails config loading, naming the vault. Plugins can now read sibling vaults through a `forVault({ vault, vaults })` hook that runs at config resolution. See "Several vaults" in `docs/auth.md`.
+- 639e96d: A plugin can answer requests at runtime: give it `server: { module, options }` and a standalone vault on `cloudflare-workers`, `cloudflare-pages` or `node` routes `/_svartz/<plugin-id>/` to its handler while pages stay prerendered. A `static` vault with such a plugin fails the build, naming the vault and plugin. Secrets in options are named with `{ env: "NAME" }`. See `docs/server-plugins.md`.
+
+### Patch Changes
+
+- Updated dependencies [020d144]
+- Updated dependencies [a4c869f]
+- Updated dependencies [7a1d5f9]
+- Updated dependencies [d7303ae]
+- Updated dependencies [d01cd5e]
+- Updated dependencies [e46840b]
+- Updated dependencies [f55f8fa]
+- Updated dependencies [14bc204]
+- Updated dependencies [639e96d]
+  - @svartz/core@2.4.0
+
 ## 2.3.0
 
 ### Minor Changes
