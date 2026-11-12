@@ -28,6 +28,11 @@
 	$effect(() => {
 		if (state.noteModule) document.documentElement.dataset.svartzHostPage = '';
 	});
+	/**
+	 * The body's `data-svartz-note`: the slug plugins key the note by, as on theme-minimal's pages, so the vault's
+	 * annotations attach beside it. A protected note stays unmarked, locked or unlocked, so nothing quotes it.
+	 */
+	const noteKey = $derived(state.noteModule?.svartzProtected ? undefined : state.entry?.slug);
 	useBrowserResources(() =>
 		state.noteModule
 			? { artifacts, pathname: `${artifacts.deploymentBasePath}${appPathname}` }
@@ -44,7 +49,13 @@
 {#if state.noteModule}
 	<!-- Clarity must never record a note body, including content decrypted after hydration.
 	     `data-svartz-note-content` keeps base.css's element defaults off the host page. -->
-	<div class="sv-prose" data-sv-preview data-clarity-mask="true" data-svartz-note-content>
+	<div
+		class="sv-prose"
+		data-sv-preview
+		data-clarity-mask="true"
+		data-svartz-note-content
+		data-svartz-note={noteKey}
+	>
 		<PageBody {state} module={state.noteModule} />
 	</div>
 {/if}

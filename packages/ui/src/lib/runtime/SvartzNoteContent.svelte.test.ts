@@ -38,6 +38,19 @@ it('marks the note body for prose styles and previews', async () => {
 	expect(body?.closest('[data-svartz-note-content]')).not.toBeNull();
 });
 
+it('marks a note body with its slug for plugins, and leaves a protected note unmarked', async () => {
+	const marked = () =>
+		[...document.querySelectorAll<HTMLElement>('[data-svartz-note]')].map((element) => element.dataset.svartzNote);
+	const plain = render(SvartzNoteContent, { pathname: '/work/plain/', stylesheets: [] });
+	await expect.element(page.getByText('Plain body')).toBeVisible();
+	expect(marked()).toEqual(['plain']);
+	plain.unmount();
+
+	render(SvartzNoteContent, { pathname: '/work/secret/', stylesheets: [] });
+	await expect.element(page.getByRole('button', { name: 'Unlock note' })).toBeVisible();
+	expect(marked()).toEqual([]);
+});
+
 it('uses theme content components and lets host overrides win their slot', async () => {
 	const theme = render(SvartzNoteContent, { pathname: '/work/callouts/', stylesheets: [] });
 	await expect.element(page.getByText('Callout body')).toBeVisible();
