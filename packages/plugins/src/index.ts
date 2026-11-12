@@ -30,6 +30,7 @@ import {
   resolveLinks,
   RESOLVE_LINKS_ID,
 } from "./resolve-links";
+export { wikilinkResolver } from "./resolve-links";
 import { transformOfm, TRANSFORM_OFM_ID } from "./transform-ofm";
 import { transformGfm, TRANSFORM_GFM_ID } from "./transform-gfm";
 import { transformToc, TRANSFORM_TOC_ID } from "./transform-toc";

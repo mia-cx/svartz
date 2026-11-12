@@ -133,15 +133,26 @@ describe("submissions build", () => {
     const { links } = ctx.compiler?.serverData.get("submissions") as BuildData;
 
     expect(links.map(({ link }) => link).sort()).toEqual([
-      "Ada Lovelace",
       "Field Guide.svx",
-      "ada lovelace.svx",
+      // The root note keeps its name: the build resolves it there before any same-named note in a folder.
       "guide",
-      // A hidden note shares the name, so the link names the folder too.
+      // Two files share the name, so each link names the folder too.
+      "people/Ada Lovelace",
+      // A hidden note shares the name.
       "people/Grace",
+      "people/ada lovelace.svx",
       "tools/Guide",
     ]);
     expect(links).toContainEqual({ link: "tools/Guide", title: "Tool guide" });
+  });
+
+  it("names a note's folder when its name resolves to another note's slug", async () => {
+    // `[[Ada]]` opens the overview, whose frontmatter slug takes the name.
+    const { ctx } = await build({}, [note("people/Ada.md", { title: "Ada" }), note("Overview.md", { slug: "ada", title: "Overview" })]);
+    const { links } = ctx.compiler?.serverData.get("submissions") as BuildData;
+
+    expect(links).toContainEqual({ link: "people/Ada", title: "Ada" });
+    expect(links).toContainEqual({ link: "Overview", title: "Overview" });
   });
 
   it("uses the configured vault folder over git's", async () => {

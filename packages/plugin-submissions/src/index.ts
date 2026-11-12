@@ -19,9 +19,11 @@ import {
   getCompilerContributions,
   type EnvReference,
   type NormalizedSvartzPlugin,
+  type PluginContext,
   type ProcessedFile,
   type SvartzPlugin,
 } from "@svartz/core";
+import { wikilinkResolver } from "@svartz/plugins";
 import { isNote, pathRoute, requestedSlug, routeHref } from "@svartz/plugins/routes";
 import { PLUGIN_ID, type BrowserOptions, type LinkTarget } from "./api";
 import type { GuardOptions, RateLimitOptions, TurnstileOptions } from "./guard";
@@ -157,17 +159,16 @@ function routeClaims(files: readonly ProcessedFile[], mountPath: string): Record
 }
 
 /**
- * What a wikilink to each published note says, as Obsidian writes it: the note's name, or its vault path when any
- * note in the vault (protected and hidden ones included) shares that name, so the link resolves to this one.
+ * What a wikilink to each published note says, as Obsidian writes it: the note's name when the build resolves that
+ * to this note from anywhere, or else its vault path. Any note (protected and hidden ones included) taking the name,
+ * by file name, slug or alias, makes the link name the path.
  */
-function linkTargets(published: ReadonlyArray<{ path: string; title: string }>, files: readonly ProcessedFile[]): LinkTarget[] {
-  const withoutMd = (path: string) => path.replace(/\.md$/i, "");
-  const name = (path: string) => withoutMd(path.slice(path.lastIndexOf("/") + 1)).toLowerCase();
-  const counts = new Map<string, number>();
-  for (const file of files.filter(isNote)) counts.set(name(file.path), (counts.get(name(file.path)) ?? 0) + 1);
-  return published.map(({ path, title }) => {
-    const link = withoutMd(path);
-    return { link: (counts.get(name(path)) ?? 0) > 1 ? link : link.slice(link.lastIndexOf("/") + 1), title };
+function linkTargets(published: ReadonlyArray<{ path: string; slug: string; title: string }>, ctx: PluginContext): LinkTarget[] {
+  const resolve = wikilinkResolver(ctx);
+  return published.map(({ path, slug, title }) => {
+    const link = path.replace(/\.md$/i, "");
+    const name = link.slice(link.lastIndexOf("/") + 1);
+    return { link: resolve(name) === slug ? name : link, title };
   });
 }
 
@@ -222,7 +223,7 @@ export function submissions(options: SubmissionsOptions) {
         // Protected notes stay out: their source must not leave the repository through the site.
         const published = entries
           .filter((entry) => !entry.locked)
-          .map((entry) => ({ href: entry.href, path: entry.path.replaceAll("\\", "/"), title: entry.title }));
+          .map((entry) => ({ href: entry.href, path: entry.path.replaceAll("\\", "/"), slug: entry.slug, title: entry.title }));
         const pages: Record<string, string> = Object.fromEntries(published
           .filter(({ path }) => /\.md$/i.test(path))
           .map(({ href, path }) => [href, root ? `${root}/${path}` : path]));
@@ -231,7 +232,7 @@ export function submissions(options: SubmissionsOptions) {
           .sort((a, b) => a.localeCompare(b));
 
         const compiler = getCompilerContributions(ctx);
-        const links = linkTargets(published, ctx.files);
+        const links = linkTargets(published, ctx);
         compiler.serverData.set(PLUGIN_ID, { commit: checkout.commit, pages, routes, vaultRoot: root, folders, links } satisfies BuildData);
         compiler.browserResources.set(PLUGIN_ID, {
           id: PLUGIN_ID,
