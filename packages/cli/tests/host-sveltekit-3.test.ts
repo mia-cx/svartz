@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import module from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -20,7 +21,8 @@ async function filesUnder(directory: string): Promise<string[]> {
   return entries.filter((entry) => entry.isFile()).map((entry) => path.join(entry.parentPath, entry.name));
 }
 
-it("prerenders a SvelteKit 3 host that reads the published index without compiling the page runtime", async () => {
+// `host-peers.mjs` needs `module.registerHooks`, new in Node 22.15; CI runs a newer Node.
+it.skipIf(!("registerHooks" in module))("prerenders a SvelteKit 3 host that reads the published index without compiling the page runtime", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "svartz-kit3-host-"));
   roots.push(root);
   await symlink(toolchain, path.join(root, "node_modules"), "dir");

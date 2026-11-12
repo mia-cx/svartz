@@ -3,11 +3,18 @@
 	import { getDeploymentBase } from './deployment-base.js';
 	import type { LogoSettings } from './theme-settings.js';
 
-	let { logo }: { logo: LogoSettings | undefined } = $props();
+	let {
+		logo,
+		base
+	}: {
+		logo: LogoSettings | undefined;
+		/** The deployment base, for a logo outside a Svartz page such as a host's own header. Inside one, the page supplies it. */
+		base?: string;
+	} = $props();
 
 	// Paths from the site root gain the deployment base, like other site asset links; URLs pass through.
-	const base = getDeploymentBase();
-	const resolve = (src: string) => (src.startsWith('/') && !src.startsWith('//') ? `${base()}${src}` : src);
+	const pageBase = getDeploymentBase();
+	const resolve = (src: string) => (src.startsWith('/') && !src.startsWith('//') ? `${base ?? pageBase()}${src}` : src);
 </script>
 
 {#if logo}
