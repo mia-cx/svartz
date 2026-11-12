@@ -489,12 +489,19 @@ const initProjectEffect = (
         ? yield* operation("read host catchall", () =>
           readFile(catchallLoadPath, "utf8"),
         ) : undefined;
+      // Recognize generated loaders from before path decoding without claiming host-owned loaders.
+      const withoutPathDecoding = (source: string) => source
+        .replace("import { decodeRoutePath } from '@svartz/ui/runtime';\n", "")
+        .replace("import { error } from '@sveltejs/kit';\n", "")
+        .replace("decodeRoutePath(base ? url.pathname.slice(base.length) || '/' : url.pathname);\n  if (appPath === undefined) error(404);",
+          "base ? url.pathname.slice(base.length) || '/' : url.pathname;");
+      const generatedLoads = [catchallLoadTemplate, previousUniversalStylesLoad, previousOrderedCatchallLoad, previousStyledCatchallLoad, previousCatchallLoad];
       const compatibleCatchallLoad = existingCatchallLoad !== undefined &&
-        [catchallLoadTemplate, previousUniversalStylesLoad, previousOrderedCatchallLoad, previousStyledCatchallLoad, previousCatchallLoad].includes(existingCatchallLoad) &&
+        [...generatedLoads, ...generatedLoads.map(withoutPathDecoding)].includes(existingCatchallLoad) &&
         !existsSync(path.join(catchallRoot, "+page.server.js")) &&
-        (existingCatchallServer === undefined || existingCatchallServer === catchallServerTemplate);
+        (existingCatchallServer === undefined || [catchallServerTemplate, withoutPathDecoding(catchallServerTemplate)].includes(existingCatchallServer));
       const migrateCatchall = compatibleCatchallLoad && existingCatchallLoad !== catchallLoadTemplate;
-      const installCatchallServer = compatibleCatchallLoad && existingCatchallServer === undefined;
+      const installCatchallServer = compatibleCatchallLoad && existingCatchallServer !== catchallServerTemplate;
       const catchallPageUpdate =
         compatibleCatchallLoad && [previousStyledCatchallPage, previousCatchallPage].includes(existingCatchallPage ?? "")
           ? catchallPageTemplate
@@ -588,7 +595,9 @@ const initProjectEffect = (
       }
       if (installCatchallServer)
         yield* operation("write catchall server load", () =>
-          writeNewFile(catchallServerPath, catchallServerTemplate),
+          existingCatchallServer === undefined
+            ? writeNewFile(catchallServerPath, catchallServerTemplate)
+            : writeFile(catchallServerPath, catchallServerTemplate),
         );
       if (migrateCatchall)
         yield* operation("update host catchall load", () =>

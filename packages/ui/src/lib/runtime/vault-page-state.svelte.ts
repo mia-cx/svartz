@@ -1,5 +1,5 @@
 import type { Component } from 'svelte';
-import { createVaultEntryView, type ProtectedGroupPayload } from '@svartz/core';
+import { createVaultEntryView, decodeRoutePath, type ProtectedGroupPayload } from '@svartz/core';
 import { base } from '$app/paths';
 import { browser } from '$app/environment';
 import {
@@ -12,7 +12,7 @@ type ThemeModule = typeof import('virtual:svartz/theme');
 type ArtifactsModule = typeof import('virtual:svartz/artifacts');
 
 export interface VaultPageInput {
-	/** The app pathname with the deployment base already removed. */
+	/** The encoded app URL pathname with the deployment base already removed. */
 	readonly appPathname: string;
 	readonly runtimeTheme: ThemeModule;
 	readonly artifacts: ArtifactsModule;
@@ -55,6 +55,8 @@ export class VaultPageState {
 	};
 
 	artifacts = $derived.by(() => this.#input().artifacts);
+	// Decode only for index/artifact matching; the page keeps the request URL for relative assets and metadata.
+	appPathname = $derived(decodeRoutePath(this.#input().appPathname) ?? '');
 	discovery = $derived(this.artifacts.createUnlockedVault([...this.unlockedGroups.values()]));
 	vault = $derived(this.discovery.vault);
 	index = $derived(this.discovery.index);
@@ -67,7 +69,7 @@ export class VaultPageState {
 	);
 
 	vaultPathname = $derived.by(() => {
-		const appPathname = this.#input().appPathname;
+		const appPathname = this.appPathname;
 		const mountPath = this.artifacts.routes.mountPath;
 		return mountPath && appPathname.startsWith(`${mountPath}/`)
 			? appPathname.slice(mountPath.length)
@@ -77,7 +79,7 @@ export class VaultPageState {
 	});
 
 	canonicalEntry = $derived.by(() => {
-		const appPathname = this.#input().appPathname;
+		const appPathname = this.appPathname;
 		return this.index.entries.find(
 			(candidate) =>
 				candidate.href === (appPathname.endsWith('/') ? appPathname : `${appPathname}/`)

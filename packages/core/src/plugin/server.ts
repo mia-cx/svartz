@@ -1,4 +1,5 @@
 import type { MaybePromise } from "../types";
+import { decodeRoutePath } from "../route-path";
 
 /** Path segment under which every server plugin answers: `<base><mount>/_svartz/<plugin-id>/`. */
 export const SERVER_ROUTE_SEGMENT = "_svartz";
@@ -182,12 +183,8 @@ function wantsMarkdown(request: Request): boolean {
  */
 export function markdownCopyFor(markdown: Readonly<Record<string, string>> | undefined, pathname: string): string | undefined {
   if (!markdown) return undefined;
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(pathname);
-  } catch {
-    return undefined;
-  }
+  const decoded = decodeRoutePath(pathname);
+  if (decoded === undefined) return undefined;
   const key = decoded.endsWith("/") ? decoded : `${decoded}/`;
   return Object.hasOwn(markdown, key) ? markdown[key] : undefined;
 }
