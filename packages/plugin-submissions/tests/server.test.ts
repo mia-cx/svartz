@@ -38,6 +38,7 @@ const handlerWith = (guard: GuardOptions) => createHandler(
     routes: { guide: "/wiki/guide/", "people/timeline": "/wiki/people/timeline/" },
     vaultRoot: "content",
     folders: ["", "People"],
+    links: [{ link: "guide", title: "Guide" }],
   },
 );
 const handler = handlerWith({ rateLimit: { limit: 100, period: 60 } });
@@ -86,6 +87,13 @@ describe("submissions server", () => {
     replayGitHub([sourceExchange]);
 
     expect(await answer(source("/wiki/guide/"))).toEqual({ status: 200, body: { markdown: GUIDE_SOURCE } });
+  });
+
+  it("lists the notes a wikilink can name without calling GitHub", async () => {
+    const github = replayGitHub([]);
+
+    expect(await answer(new Request(`${ORIGIN}${BASE}/links/`))).toEqual({ status: 200, body: { notes: [{ link: "guide", title: "Guide" }] } });
+    expect(github.requests).toEqual([]);
   });
 
   it("opens a pull request for an edit and answers its link", async () => {
