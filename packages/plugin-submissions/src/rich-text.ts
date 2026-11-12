@@ -14,6 +14,7 @@ import {
   EditorSelection,
   EditorState,
   Prec,
+  Transaction,
   findClusterBreak,
   type ChangeSpec,
   type Extension,
@@ -23,7 +24,7 @@ import {
 import { Decoration, EditorView, ViewPlugin, keymap, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { CALLOUT, frontmatterEnd, markdown, syntaxDecorations } from "./live-preview";
-import { closeProperties, propertiesPanel, updateProperties } from "./properties";
+import { closeProperties, fromPanel, propertiesPanel, updateProperties } from "./properties";
 
 // --- Raw blocks ---------------------------------------------------------------------------------------------------
 
@@ -73,6 +74,41 @@ function bodyStart(doc: Text): number {
   const close = doc.lineAt(end);
   return close.number < doc.lines ? doc.line(close.number + 1).from : end;
 }
+
+/**
+ * A note that is only frontmatter, ending at its closing `---`, has no body line: the panel shows that `---` line
+ * empty in its place. What the reader writes there, typed or from the toolbar, goes on a new line after the `---`, in
+ * the note's line endings, so the frontmatter stays closed. Until the reader writes, the note keeps every byte.
+ */
+const openBody = EditorState.transactionFilter.of((tr) => {
+  const { doc, lineBreak } = tr.startState;
+  const end = frontmatterEnd(doc);
+  if (!tr.docChanged || !end || end < doc.length || tr.annotation(fromPanel)) return tr;
+  const close = doc.lineAt(end).from;
+  const written: Array<{ from: number; to: number }> = [];
+  let text = "";
+  let elsewhere = false;
+  tr.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+    if (fromA < close || toA > fromA) elsewhere = true;
+    written.push({ from: fromB, to: toB });
+    text += inserted.toString();
+  });
+  // Enter, or a redo, already starts the line.
+  if (elsewhere || text.startsWith("\n")) return tr;
+  /** A position after the edit as written, moved to where its text lands on the new line. */
+  const onNewLine = (pos: number) => {
+    if (pos < close) return pos;
+    return written.reduce((at, { from, to }) => at + Math.max(0, Math.min(pos, to) - from), end + 1);
+  };
+  const { ranges, mainIndex } = tr.newSelection;
+  return {
+    changes: { from: end, insert: lineBreak + text },
+    selection: EditorSelection.create(ranges.map((range) => EditorSelection.range(onNewLine(range.anchor), onNewLine(range.head))), mainIndex),
+    effects: tr.effects,
+    scrollIntoView: tr.scrollIntoView,
+    userEvent: tr.annotation(Transaction.userEvent),
+  };
+});
 
 // --- Line prefixes ------------------------------------------------------------------------------------------------
 
@@ -617,6 +653,8 @@ export function richText(): Extension {
     EditorView.atomicRanges.of(hidden),
     propertiesPanel,
     keepOutOfSyntax,
+    // After keepOutOfSyntax, so it runs first: transaction filters run last to first.
+    openBody,
     chrome,
     Prec.high(keymap.of([
       { key: "Mod-b", run: runTool("bold") },

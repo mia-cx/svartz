@@ -113,7 +113,7 @@ function valueSource(field: Field, value: string, lineBreak: string): string {
 const encodeKey = (key: string) => (/^[^\s#:'"\-?,[\]{}&*!|>%@`][^:#]*$/.test(key) && key.trim() === key ? key : JSON.stringify(key));
 
 /** Marks the panel's own edits, which mustn't redraw the panel under the reader's typing. */
-const fromPanel = Annotation.define<true>();
+export const fromPanel = Annotation.define<true>();
 
 // Lucide "x".
 const REMOVE_ICON =
@@ -277,12 +277,18 @@ const widget = new PropertiesWidget();
 
 function placePanel(doc: Text): DecorationSet {
   const end = frontmatterEnd(doc);
-  return Decoration.set(end
-    ? Decoration.replace({ widget, block: true }).range(0, end)
-    : Decoration.widget({ widget, block: true, side: -1 }).range(0));
+  if (!end) return Decoration.set(Decoration.widget({ widget, block: true, side: -1 }).range(0));
+  if (end < doc.length) return Decoration.set(Decoration.replace({ widget, block: true }).range(0, end));
+  // A note that ends at its closing `---` has no body line, so that line shows empty as the body's first: the cursor
+  // has somewhere to go, and Rich text moves what the reader writes there onto a line of its own.
+  const close = doc.lineAt(end).from;
+  return Decoration.set([Decoration.replace({ widget, block: true }).range(0, close - 1), Decoration.replace({}).range(close, end)]);
 }
 
-/** The frontmatter, shown as the properties panel; a note without any gets the panel above its first line. */
+/**
+ * The frontmatter, shown as the properties panel; a note without any gets the panel above its first line. In a note
+ * that is only frontmatter, its closing `---` line shows empty below the panel.
+ */
 export const propertiesPanel = StateField.define<DecorationSet>({
   create: (state) => placePanel(state.doc),
   update: (value, tr) => (tr.docChanged ? placePanel(tr.state.doc) : value),

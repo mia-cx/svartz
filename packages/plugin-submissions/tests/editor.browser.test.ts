@@ -1090,7 +1090,7 @@ describe("Rich text", () => {
 
   afterEach(() => page.viewport(414, 896));
 
-  it.each([["LF", NOTE], ["CRLF", CRLF], ...WIKI])("leaves %s byte for byte as it was, from Live Preview through Rich text and back", async (_, markdown) => {
+  it.each([["LF", NOTE], ["CRLF", CRLF], ["only frontmatter", "---\ntitle: Guide\n---"], ...WIKI])("leaves %s byte for byte as it was, from Live Preview through Rich text and back", async (_, markdown) => {
     await openOn(markdown, 1);
     await page.getByRole("radio", { name: "Rich text" }).click();
     await expect.element(toolbar()).toBeVisible();
@@ -1286,6 +1286,25 @@ describe("Rich text", () => {
     await userEvent.keyboard(`{${mod}>}{Home}{/${mod}}Top {Backspace}{Backspace}{Backspace}{Backspace}{Backspace}`);
 
     expect(await sendFromSource()).toBe("---\ntitle: Guide\n---\nBody\n");
+  });
+
+  it.each([
+    ["LF", "---\ntitle: Guide\n---", "---\ntitle: Guide\n---\nBody"],
+    ["CRLF", "---\r\ntitle: Guide\r\n---", "---\r\ntitle: Guide\r\n---\r\nBody"],
+    ["LF with a final line break", "---\ntitle: Guide\n---\n", "---\ntitle: Guide\n---\nBody"],
+  ])("starts the body of a note that is only frontmatter (%s) on a line of its own", async (_, markdown, written) => {
+    await openRich(markdown, 1);
+    await userEvent.keyboard("Body");
+
+    expect(await sendFromSource()).toBe(written);
+  });
+
+  it("formats the first line of a note that is only frontmatter from the toolbar", async () => {
+    await openRich("---\r\ntitle: Guide\r\n---", 1);
+    await toolbar().getByRole("button", { name: "Heading 1" }).click();
+    await userEvent.keyboard("Guide");
+
+    expect(await sendFromSource()).toBe("---\r\ntitle: Guide\r\n---\r\n# Guide");
   });
 
   it("moves through the toolbar with arrow keys, Home and End, as one stop in the tab order", async () => {
