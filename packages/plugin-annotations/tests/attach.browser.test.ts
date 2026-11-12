@@ -445,6 +445,20 @@ describe("agreeing with a comment", () => {
     expect(sessionStorage.length).toBe(0);
   });
 
+  it("brings a signed-out reader back to the +1 when they close sign-in", async () => {
+    unmountSignIn = mountSignIn(location.pathname, { endpoint: "/notes/_svartz/auth", providers: [{ id: "github", label: "GitHub" }] });
+    const { card, toggle } = await plusOne();
+
+    await userEvent.keyboard(" ");
+    await expect.poll(() => document.querySelector<HTMLDialogElement>("dialog.sv-auth")?.open).toBe(true);
+    await userEvent.keyboard("{Escape}");
+
+    expect(document.querySelector("dialog.sv-auth")).toBeNull();
+    expect(card.matches(":popover-open")).toBe(true);
+    expect(document.activeElement).toBe(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("locks the +1 while it saves, so a second press can't race the first", async () => {
     await commands.signIn(location.origin);
     const realFetch = globalThis.fetch;

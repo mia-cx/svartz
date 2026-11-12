@@ -57,6 +57,23 @@ describe("the sign-in dialog", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("reopens the popover its opener sat in, which the dialog hid, and hands focus back there", async () => {
+    const trigger = page({ endpoint: "/_svartz/auth", providers: [{ id: "github", label: "GitHub" }] });
+    const card = document.createElement("div");
+    card.popover = "auto";
+    card.append(trigger);
+    document.body.append(card);
+    card.showPopover();
+    trigger.focus();
+
+    await userEvent.keyboard("{Enter}");
+    expect(card.matches(":popover-open")).toBe(false);
+    await userEvent.keyboard("{Escape}");
+
+    expect(card.matches(":popover-open")).toBe(true);
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("closes when the page unmounts, so it never follows the reader to the next page", async () => {
     const trigger = page({ endpoint: "/_svartz/auth", providers: [{ id: "github", label: "GitHub" }] });
     await userEvent.click(trigger);

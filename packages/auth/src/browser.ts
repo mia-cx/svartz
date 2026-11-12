@@ -122,9 +122,16 @@ export function openSignIn(returnTo = `${location.pathname}${location.search}${l
   if (!config) throw new Error("[svartz:auth] enable the auth plugin on this vault to open the sign-in dialog");
   if (document.querySelector("dialog.sv-auth[open]")) return;
   const opener = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+  // Opening a modal hides every auto popover, such as a card the opener sits in. They reopen, outermost first, when
+  // the dialog closes, so focus goes back to a control the reader can see.
+  const popovers: HTMLElement[] = [];
+  for (let node = opener?.closest<HTMLElement>(":popover-open"); node; node = node.parentElement?.closest<HTMLElement>(":popover-open")) {
+    popovers.unshift(node);
+  }
   const dialog = render(config, returnTo);
   dialog.addEventListener("close", () => {
     dialog.remove();
+    for (const popover of popovers) if (popover.isConnected && !popover.matches(":popover-open")) popover.showPopover();
     opener?.focus();
   }, { once: true });
   document.body.append(dialog);
