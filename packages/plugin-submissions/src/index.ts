@@ -14,7 +14,8 @@ import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { definePlugin, getCompilerContributions, type EnvReference } from "@svartz/core";
+import { definePlugin, getCompilerContributions, type EnvReference, type ProcessedFile } from "@svartz/core";
+import { isNote, pathRoute, requestedSlug, routeHref } from "@svartz/plugins/routes";
 import { PLUGIN_ID, type BrowserOptions } from "./api";
 import type { GuardOptions, RateLimitOptions, TurnstileOptions } from "./guard";
 import type { BuildData, ServerOptions } from "./server";
@@ -104,6 +105,24 @@ function normalizeVaultRoot(value: string): string {
   return root === "." ? "" : root;
 }
 
+/**
+ * Every route a note holds or would ask for again, of any type and protected ones included, mapped to the page's
+ * public URL, or `null` when the page is hidden. Read from the files rather than the index: the index redacts
+ * protected notes' paths and leaves hidden ones out.
+ */
+function routeClaims(files: readonly ProcessedFile[], mountPath: string): Record<string, string | null> {
+  const notes = files.filter(isNote);
+  const link = (file: ProcessedFile) => file.protection?.hidden ? null : routeHref(file.slug, mountPath);
+  // A note's own route first, so a key two notes ask for links the one holding it.
+  const claims: Record<string, string | null> = Object.fromEntries(notes.map((file) => [file.slug, link(file)]));
+  for (const file of notes) {
+    for (const key of [requestedSlug(file), pathRoute(file.path)]) {
+      if (!(key in claims)) claims[key] = link(file);
+    }
+  }
+  return claims;
+}
+
 /** Let readers edit any published Markdown note, or add one in a published folder, as a pull request on `repo`. */
 export function submissions(options: SubmissionsOptions) {
   if (!REPO_PATTERN.test(options.repo)) fail(`repo "${options.repo}" must be "owner/name".`);
@@ -127,8 +146,7 @@ export function submissions(options: SubmissionsOptions) {
         const checkout = await readCheckout(resolve(ctx.config.path));
         const root = vaultRoot ?? checkout.vaultRoot;
         const entries = ctx.index?.entries ?? [];
-        const routes: Record<string, string> = Object.fromEntries(entries.map(({ href, path }) =>
-          [path.replaceAll("\\", "/").replace(/\.[^./]+$/, "").toLowerCase(), href]));
+        const routes = routeClaims(ctx.files, ctx.config.mountPath ?? "");
         // Protected notes stay out: their source must not leave the repository through the site.
         const published = entries
           .filter((entry) => !entry.locked)

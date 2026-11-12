@@ -54,7 +54,7 @@ Readers never choose a file path; the server works it out:
 
 - An edit must name a published `.md` note. Password-protected notes, other files and paths outside the vault are refused.
 - A new page must name a section from the list. Folders without a published note, folders holding only password-protected notes, and hidden folders are refused. So are titles that start with a dot or contain `\ / : * ? " < > | # ^ [ ]`, and titles over 120 characters.
-- A new page is never written over a file. The server refuses a title that a published page of any type (`.md`, `.svx` and the rest) has, in any letter case, before calling GitHub, and one whose file exists in the commit the site was built from, published or not, before writing anything.
+- A new page is never written over a file. Before calling GitHub, the server refuses a title whose page would ask for a route that a published page of any type (`.md`, `.svx` and the rest, password-protected and hidden ones included) holds or asks for, as the build allocates routes: `ada-lovelace` and `Ada Lovelace` both clash with `Ada Lovelace.md`. Otherwise the new page would take that page's URL or push it to `-2`. Before writing anything, it also refuses a title whose file exists in the commit the site was built from, published or not.
 
 A page's source is capped at 512 KB and the note at 2,000 characters.
 
@@ -102,6 +102,6 @@ The plugin answers under `<base><mount>/_svartz/submissions/`. Failures answer `
 | --- | --- |
 | `GET source/?page=/guides/setup/` | `{ "markdown": "…" }`, the note at the build commit. |
 | `POST edit/` with `{ "submissionId", "page", "markdown", "note"?, "turnstileToken"? }` | 201 `{ "url", "number" }` of the pull request, new or opened by an earlier attempt with the same `submissionId`. 403 when Turnstile is missing or refused, or the reader is anonymous with no visible address; 429 with `retryAfter` past the rate limit; 503 when Cloudflare, the rate limiter or GitHub can't be reached. |
-| `POST new/` with `{ "submissionId", "folder", "title", "markdown", "note"?, "turnstileToken"? }` | As `edit/`. Also 400 `not_a_section` or `invalid_title`, and 409 `exists` when the title is taken, with `existing` set to the published page's URL when there is one. |
+| `POST new/` with `{ "submissionId", "folder", "title", "markdown", "note"?, "turnstileToken"? }` | As `edit/`. Also 400 `not_a_section` or `invalid_title`, and 409 `exists` when the title is taken, with `existing` set to the clashing page's public URL unless that page is hidden. |
 
 `page` is the note's URL path below the deployment base, as it appears in the site's index. `folder` is a section's path inside the vault, `""` for its top level. `submissionId` is 32 lowercase hex digits the client picks at random and repeats on every retry of the same submission.

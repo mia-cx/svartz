@@ -12,6 +12,10 @@ Reference for utility functions and internal modules used across `@svartz/plugin
 - **[[plugins/utilities/sort-plugins-for-stage]]** — Sort plugins by enforce level for a stage
 - **[[plugins/utilities/merge-plugins]]** — Merge plugins from 4 layers with conflict resolution
 
+## Public API (from `@svartz/plugins/routes`)
+
+- **[[plugins/utilities/routes]]** — The route a note asks for, as route allocation derives it
+
 ## Internal Utilities (from `@svartz/plugins/internal`)
 
 - **[[plugins/utilities/slug]]** — Slug generation and conflict detection

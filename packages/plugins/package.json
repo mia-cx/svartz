@@ -29,10 +29,14 @@
       "import": "./dist/browser-presentation.js",
       "types": "./dist/browser-presentation.d.ts"
     },
-    "./browser-presentation.css": "./dist/browser-presentation.css"
+    "./browser-presentation.css": "./dist/browser-presentation.css",
+    "./routes": {
+      "import": "./dist/routes.js",
+      "types": "./dist/routes.d.ts"
+    }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/browser-analytics.ts src/browser-mermaid.ts src/browser-presentation.ts --format esm --dts && node -e \"require('node:fs').copyFileSync('src/browser-presentation.css', 'dist/browser-presentation.css')\"",
+    "build": "tsup src/index.ts src/browser-analytics.ts src/browser-mermaid.ts src/browser-presentation.ts src/routes.ts --format esm --dts && node -e \"require('node:fs').copyFileSync('src/browser-presentation.css', 'dist/browser-presentation.css')\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

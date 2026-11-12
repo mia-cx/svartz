@@ -30,7 +30,13 @@ export function markdownHref(slug: string, mountPath = ""): string {
   return `${mountPath}/${routeSlug(slug)}.md`;
 }
 
-function requestedSlug(file: ProcessedFile): string {
+/** The route a note's filename asks for: `people/Ada Lovelace.md` → `people/ada-lovelace`. */
+export function pathRoute(path: string): string {
+  return routeSlug(fileToSlug(path));
+}
+
+/** The route a note asks for before {@link allocateRoutes} settles clashes: its frontmatter `slug`, else its filename's. */
+export function requestedSlug(file: ProcessedFile): string {
   const source = fileToSlug(file.path);
   if (!file.frontmatter || !("slug" in file.frontmatter)) return routeSlug(source);
 

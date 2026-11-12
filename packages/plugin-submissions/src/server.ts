@@ -11,6 +11,7 @@
  */
 import { readIdentity } from "@svartz/auth/server";
 import type { ServerContext, ServerModuleFactory } from "@svartz/core";
+import { pathRoute } from "@svartz/plugins/routes";
 import {
   MAX_MARKDOWN_BYTES,
   MAX_NOTE_LENGTH,
@@ -40,11 +41,11 @@ export interface BuildData {
   /** Each editable note's route below the deployment base, mapped to its repository-relative path. */
   readonly pages: Readonly<Record<string, string>>;
   /**
-   * Every page the vault routes, of any type and protected ones included, by its vault path without the extension,
-   * lowercased, mapped to its route. A new note named like one would take its route: Obsidian treats names that
-   * differ only in case as the same.
+   * Every route a page holds or asks for, of any type and protected or hidden ones included, as `core:allocate-routes`
+   * derives it, mapped to the page's route below the deployment base, or `null` for a hidden page. A new note asking
+   * for one of these would take that page's URL or move it.
    */
-  readonly routes: Readonly<Record<string, string>>;
+  readonly routes: Readonly<Record<string, string | null>>;
   /** The vault's folder inside the repository, `""` at its root. */
   readonly vaultRoot: string;
   /** Vault folders that hold a published note, where new notes may go. `""` is the vault's top level. */
@@ -179,14 +180,17 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     if (typeof folder !== "string" || typeof title !== "string") throw invalid();
     const vaultPath = newNotePath(folder, title);
     const path = data.vaultRoot ? `${data.vaultRoot}/${vaultPath}` : vaultPath;
-    const existing = routes.get(vaultPath.slice(0, -".md".length).toLowerCase());
+    const existing = routes.get(pathRoute(vaultPath));
     if (existing !== undefined) {
+      // A hidden page gets no link: the site never shows where it is.
       throw new SubmissionError(
         "exists",
         409,
-        "A page with this title already exists. Choose another title, or edit that page.",
+        existing !== null && pages.has(existing)
+          ? "A page with this title already exists. Choose another title, or edit that page."
+          : "A page with this title already exists. Choose another title.",
         undefined,
-        publicUrl(existing, request, context),
+        existing === null ? undefined : publicUrl(existing, request, context),
       );
     }
     // The pull request names where the reader came from: this vault's home page.
