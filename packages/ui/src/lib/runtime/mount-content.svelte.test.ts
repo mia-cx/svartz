@@ -57,6 +57,14 @@ it('draws inline SVG, and HTML inside its foreignObject, in their own namespaces
 	expect(target.querySelector('foreignObject p')?.namespaceURI).toBe('http://www.w3.org/1999/xhtml');
 });
 
+it('keeps HTML inside MathML text, as the HTML parser does', async () => {
+	show('<p><math><mtext><span>Math text</span></mtext></math></p>');
+
+	await expect.element(page.getByText('Math text')).toBeVisible();
+	expect(target.querySelector('mtext')?.namespaceURI).toBe('http://www.w3.org/1998/Math/MathML');
+	expect(target.querySelector('mtext span')?.namespaceURI).toBe('http://www.w3.org/1999/xhtml');
+});
+
 it('replaces what shows on each render', async () => {
 	const view = show('<p>First</p>');
 	await expect.element(page.getByText('First')).toBeVisible();

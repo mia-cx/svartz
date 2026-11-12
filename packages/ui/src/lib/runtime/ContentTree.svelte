@@ -2,11 +2,20 @@
 Renders an inert HTML tree in the browser as the build compiles a note: each callout, code
 block, image, link and embed through `components`, everything else as plain elements, with
 the build's sanitizing. `insideCode` is set below a code block's figure, whose `<pre>` is its own.
-`namespace` is the parent's: `<svg>` and `<math>` start their own, and `<foreignObject>` returns to HTML.
+`namespace` is the parent's: `<svg>` and `<math>` start their own, and the HTML parser's integration
+points (`<foreignObject>`, `<mtext>` and the like) return their children to HTML.
 -->
 <script module lang="ts">
 	const HTML = 'http://www.w3.org/1999/xhtml';
-	const ROOTS: Record<string, string> = { svg: 'http://www.w3.org/2000/svg', math: 'http://www.w3.org/1998/Math/MathML' };
+	const SVG = 'http://www.w3.org/2000/svg';
+	const MATHML = 'http://www.w3.org/1998/Math/MathML';
+	const ROOTS: Record<string, string> = { svg: SVG, math: MATHML };
+	/** Elements whose children the HTML parser puts back in HTML, per namespace. */
+	const INTEGRATION_POINTS: Record<string, ReadonlySet<string>> = {
+		[SVG]: new Set(['foreignObject', 'desc', 'title']),
+		[MATHML]: new Set(['mi', 'mo', 'mn', 'ms', 'mtext'])
+	};
+	const HTML_ENCODINGS = new Set(['text/html', 'application/xhtml+xml']);
 </script>
 
 <script lang="ts">
@@ -36,7 +45,14 @@ the build's sanitizing. `insideCode` is set below a code block's figure, whose `
 
 	// Svelte creates a dynamic element in HTML unless told otherwise, so an SVG shape would never draw.
 	const namespaceOf = (node: Element) => ROOTS[node.tagName] ?? namespace;
-	const childNamespace = (node: Element) => (node.tagName === 'foreignObject' ? HTML : namespaceOf(node));
+	function childNamespace(node: Element): string {
+		const own = namespaceOf(node);
+		const encoding = String(node.properties.encoding ?? '').toLowerCase();
+		const html =
+			INTEGRATION_POINTS[own]?.has(node.tagName) ||
+			(own === MATHML && node.tagName === 'annotation-xml' && HTML_ENCODINGS.has(encoding));
+		return html ? HTML : own;
+	}
 </script>
 
 {#each nodes as node (node)}
