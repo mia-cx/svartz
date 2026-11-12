@@ -40,7 +40,7 @@ const handlerWith = (guard: GuardOptions) => createHandler(
     vaultRoot: "content",
     folders: ["", "People"],
     links: [GUIDE_LINK],
-    preview: { linkResolution: "shallowest", mountPath: "/wiki", tagsRoute: "tags" },
+    preview: { linkResolution: "shallowest", mountPath: "/wiki", tagsRoute: "tags", attachments: ["Assets/chart.png"] },
   },
 );
 const handler = handlerWith({ rateLimit: { limit: 100, period: 60 } });
@@ -99,6 +99,7 @@ describe("submissions server", () => {
       linkResolution: "shallowest",
       mountPath: "/wiki",
       tagsRoute: "tags",
+      attachments: ["Assets/chart.png"],
     } });
     expect(github.requests).toEqual([]);
   });

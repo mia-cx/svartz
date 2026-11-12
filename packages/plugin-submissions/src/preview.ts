@@ -26,7 +26,7 @@ export interface Preview {
 export const PREVIEW_DELAY_MS = 150;
 
 /** Without the site's notes, nothing resolves; links show unresolved rather than the preview failing. */
-const NO_LINKS: LinksResponse = { notes: [], linkResolution: "shallowest", mountPath: "", tagsRoute: "tags" };
+const NO_LINKS: LinksResponse = { notes: [], linkResolution: "shallowest", mountPath: "", tagsRoute: "tags", attachments: [] };
 
 /**
  * Render previews into `pane` with `mountContent`. `base` is the deployment base links start with; `endpoint` serves

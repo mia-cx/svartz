@@ -2,7 +2,8 @@
  * The submissions server module, mounted at `<base><mount>/_svartz/submissions/`:
  *
  * - `GET source/?page=<route>` answers `{ markdown }`, the note's source at the build commit.
- * - `GET links/` answers `{ notes }`, the published notes a wikilink can name, for the editor's autocomplete.
+ * - `GET links/` answers `{ notes, attachments }`, the published notes a wikilink can name and the published
+ *   attachments, for the editor's autocomplete and Split preview.
  * - `POST edit/` with `{ submissionId, page, markdown, note?, turnstileToken? }` opens a pull request and answers 201 `{ url, number }`.
  * - `POST new/` with `{ submissionId, folder, title, markdown, note?, turnstileToken? }` does the same for a new note.
  *

@@ -3,32 +3,11 @@ import { posix } from "node:path";
 import { definePlugin, type RawLink } from "@svartz/core";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
 import { createAssetResolver } from "./internal/asset-references";
+import { encodeAttachmentPath, renderAssetEmbed, splitEmbedInner } from "./internal/attachments";
 import { alternateNames } from "./internal/routes";
 import { replaceEmbeds } from "./internal/link-spans";
 import { extractSectionMarkdown, findWikilinkSpans, type PositionedLink } from "./internal/parse";
 import { transformMarkdown } from "./transform-ofm";
-
-export const IMAGE_EXTENSIONS = new Set([
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".gif",
-  ".webp",
-  ".avif",
-  ".bmp",
-  ".svg",
-]);
-const AUDIO_EXTENSIONS = new Set([
-  ".mp3",
-  ".m4a",
-  ".wav",
-  ".ogg",
-  ".flac",
-  ".webm",
-  ".3gp",
-]);
-const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".mkv", ".ogv", ".webm"]);
-const PDF_EXTENSIONS = new Set([".pdf"]);
 
 function isMarkdownFile(extension: string | undefined): boolean {
   return extension !== undefined && [".md", ".mdx", ".svx"].includes(extension);
@@ -68,47 +47,9 @@ function escapeHtml(value: string): string {
   })[character]!);
 }
 
-export function splitEmbedInner(inner: string): {
-  target: string;
-  section?: string;
-  alias?: string;
-} {
-  const [targetWithSection, ...labelParts] = inner.split("|");
-  const alias = labelParts.length > 0 ? labelParts.join("|").trim() : undefined;
-  const [target, section] = targetWithSection!.split("#");
-  return {
-    target: target?.trim() ?? "",
-    section: section?.trim() || undefined,
-    alias: alias || undefined,
-  };
-}
-
-function renderAssetEmbed(
-  sourceSlug: string,
-  assetPath: string,
-  alias: string | undefined,
-): string {
-  const extension = assetPath.slice(assetPath.lastIndexOf(".")).toLowerCase();
-  const href = relativeHref(sourceSlug, `/${assetPath}`)
-    .split("/").map(encodeURIComponent).join("/");
-
-  if (IMAGE_EXTENSIONS.has(extension)) {
-    return `![${alias ?? ""}](${href})`;
-  }
-
-  if (AUDIO_EXTENSIONS.has(extension)) {
-    return `<audio controls src="${href}"></audio>`;
-  }
-
-  if (VIDEO_EXTENSIONS.has(extension)) {
-    return `<video controls src="${href}"></video>`;
-  }
-
-  if (PDF_EXTENSIONS.has(extension)) {
-    return `<iframe class="svartz-pdf-embed" src="${href}" title="${alias ?? assetPath}"></iframe>`;
-  }
-
-  return `<a href="${href}">${alias ?? assetPath}</a>`;
+/** An attachment embed in the note at `sourceSlug`, linking the attachment relative to the note's page. */
+function embedAsset(sourceSlug: string, assetPath: string, alias: string | undefined): string {
+  return renderAssetEmbed(encodeAttachmentPath(relativeHref(sourceSlug, `/${assetPath}`)), assetPath, alias);
 }
 
 export const transformEmbeds = definePlugin(() => ({
@@ -169,7 +110,7 @@ export const transformEmbeds = definePlugin(() => ({
           const parsed = splitEmbedInner(inner);
           const assetPath = resolveAsset(noteBySlug.get(targetSlug)!, parsed.target);
           if (assetPath) {
-            return renderAssetEmbed(sourceSlug, assetPath, parsed.alias);
+            return embedAsset(sourceSlug, assetPath, parsed.alias);
           }
 
           const resolvedTarget = resolveLink(
@@ -234,7 +175,7 @@ export const transformEmbeds = definePlugin(() => ({
           const parsed = splitEmbedInner(inner);
           const assetPath = resolveAsset(file, parsed.target);
           if (assetPath) {
-            return renderAssetEmbed(file.slug, assetPath, parsed.alias);
+            return embedAsset(file.slug, assetPath, parsed.alias);
           }
 
           const resolvedTarget = resolveLink(

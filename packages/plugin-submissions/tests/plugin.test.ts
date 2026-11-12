@@ -11,9 +11,9 @@ import {
   type ResolvedConfig,
   type ServerContext,
 } from "@svartz/core";
-import { allocateRoutesPlugin, indexContent } from "@svartz/plugins";
-import { afterEach, describe, expect, it } from "vitest";
-import { submissions } from "../src/index";
+import { allocateRoutesPlugin, filterUnpublished, indexContent } from "@svartz/plugins";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { submissions, type LinksResponse } from "../src/index";
 import createHandler, { type BuildData } from "../src/server";
 
 let repo: string | undefined;
@@ -73,8 +73,8 @@ const config = (vault: string) => ({
   plugins: [],
 }) as ResolvedConfig;
 
-/** Route and index the vault with the core plugins, then run the plugin's build hook, in a fresh one-commit repository. */
-async function build(options: Partial<Parameters<typeof submissions>[0]> = {}, extraNotes: readonly ProcessedFile[] = []) {
+/** A fresh one-commit repository with the vault at `content/`. */
+async function checkout() {
   repo = await realpath(await mkdtemp(path.join(os.tmpdir(), "svartz-submissions-")));
   const vault = path.join(repo, "content");
   await mkdir(vault);
@@ -82,7 +82,12 @@ async function build(options: Partial<Parameters<typeof submissions>[0]> = {}, e
   const git = (...args: string[]) => execFileSync("git", ["-C", repo!, ...args], { encoding: "utf8" }).trim();
   git("init", "--quiet");
   git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--quiet", "--allow-empty", "-m", "Build");
+  return { vault, git };
+}
 
+/** Route and index the vault with the core plugins, then run the plugin's build hook, in a fresh one-commit repository. */
+async function build(options: Partial<Parameters<typeof submissions>[0]> = {}, extraNotes: readonly ProcessedFile[] = []) {
+  const { vault, git } = await checkout();
   const ctx: PluginContext = { config: config(vault), files: [...vaultNotes(), ...extraNotes], artifacts: new Map(), meta: new Map() };
   const result = await runStages(
     [allocateRoutesPlugin(), indexContent(), submissions({ repo: "acme/wiki", ...options })],
@@ -121,7 +126,7 @@ describe("submissions build", () => {
       folders: ["", "people", "tools"],
       links: expect.any(Array),
       // What the Split preview resolves and routes links by, as the build does.
-      preview: { linkResolution: "closest", mountPath: "/wiki", tagsRoute: "tags" },
+      preview: { linkResolution: "closest", mountPath: "/wiki", tagsRoute: "tags", attachments: [], sharedNames: [] },
     });
     expect(ctx.compiler?.browserResources.get("submissions")?.options).toEqual({
       endpoint: "/wiki/_svartz/submissions",
@@ -170,6 +175,59 @@ describe("submissions build", () => {
     expect(ctx.compiler?.serverData.get("submissions")).toMatchObject({
       pages: { "/wiki/guide/": "docs/vault/guide.md" },
     });
+  });
+});
+
+describe("the attachments the Split preview can name", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("answers GET links/ with the attachments the site publishes, never unpublished or protected-only ones", async () => {
+    vi.stubEnv("SVARTZ_TEST_TEAM_PASSWORD", "correct horse");
+    const { vault } = await checkout();
+    const attachment = (filePath: string): ProcessedFile => ({
+      path: filePath,
+      extension: filePath.slice(filePath.lastIndexOf(".")),
+      slug: "",
+      content: "",
+      sourcePath: path.join(vault, filePath),
+    });
+    const files = [
+      { ...note("guide.md"), content: "![chart](chart.png) ![[shared.png]] ![[Assets/map.png]]\n" },
+      { ...note("plans.md", { password_group: "team" }), content: "![[plan.png]] ![[shared.png]] ![[Private/map.png]]\n" },
+      { ...note("old.md", { draft: true }), content: "![[draft.png]]\n" },
+      { ...note("excluded.md"), content: "![[excluded.png]]\n" },
+      ...["Assets/chart.png", "shared.png", "plan.png", "draft.png", "excluded.png", "stray.png", "Assets/map.png", "Private/map.png"].map(attachment),
+    ];
+    const ctx: PluginContext = {
+      config: { ...config(vault), exclude: ["excluded.*"], passwordGroups: { team: { env: "SVARTZ_TEST_TEAM_PASSWORD" } } },
+      files,
+      artifacts: new Map(),
+      // The encrypted pipeline, which publishes protected notes, says it is ready.
+      meta: new Map([["svartz:protectionReady", true]]),
+    };
+    const result = await runStages(
+      [filterUnpublished(), allocateRoutesPlugin(), indexContent(), submissions({ repo: "acme/wiki" })],
+      ctx,
+      ["filterUnpublished", "allocateRoutes", "indexContent", "emitArtifacts"],
+    );
+    expect(result.errors).toEqual([]);
+    const handler = createHandler(
+      { repo: "acme/wiki", labels: [], token: { env: "SVARTZ_GITHUB_TOKEN" }, guard: { rateLimit: { limit: 100, period: 60 } } },
+      ctx.compiler!.serverData.get("submissions") as BuildData,
+    );
+
+    const response = await handler(new Request("https://wiki.example/wiki/_svartz/submissions/links/"), {
+      env: {},
+      clientAddress: "203.0.113.7",
+      vault: { id: "wiki", mountPath: "/wiki", site: { title: "Wiki" } },
+      base: "/wiki/_svartz/submissions",
+      waitUntil: () => {},
+    } as ServerContext);
+
+    const links = await response!.json() as LinksResponse;
+    expect(links.attachments).toEqual(["Assets/chart.png", "shared.png", "Assets/map.png"]);
+    // A protected-only `map.png` makes the name ambiguous to the build; the preview learns that, but not its path.
+    expect(links.sharedNames).toEqual(["map.png"]);
   });
 });
 
