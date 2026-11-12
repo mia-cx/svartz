@@ -1,6 +1,6 @@
 # Reader sign-in
 
-`@svartz/auth` lets readers sign in with Google, Discord or GitHub, and lets [server plugins](server-plugins.md) read who is signed in. It runs on Workers and Node with no hosted service: [Arctic](https://arcticjs.dev) handles OAuth, and the session lives in a sealed cookie.
+`@svartz/auth` lets readers sign in with Google, Discord, X or GitHub, and lets [server plugins](server-plugins.md) read who is signed in. It runs on Workers and Node with no hosted service: [Arctic](https://arcticjs.dev) handles OAuth, and the session lives in a sealed cookie.
 
 ```ts
 import { defineConfig } from "@svartz/config";
@@ -16,6 +16,7 @@ export default defineConfig({
       providers: {
         google: { clientId: "1234-example.apps.googleusercontent.com", clientSecret: { env: "PRIVATE_GOOGLE_CLIENT_SECRET" } },
         discord: { clientId: "1234567890123456789", clientSecret: { env: "PRIVATE_DISCORD_CLIENT_SECRET" } },
+        x: { clientId: "M1M5R3BMVy13QmpScXkzTUt5OE46MTpjaQ", clientSecret: { env: "PRIVATE_X_CLIENT_SECRET" } },
         github: { clientId: "Iv23liExample", clientSecret: { env: "PRIVATE_GITHUB_CLIENT_SECRET" } },
       },
       privacyNotice: "/privacy/",
@@ -28,7 +29,7 @@ The vault needs a server target (`cloudflare-workers`, `cloudflare-pages` or `no
 
 | Option | Value |
 | --- | --- |
-| `providers` | The providers readers may use, in the order the sign-in dialog lists them. Each takes the OAuth app's `clientId` and names its secret with `clientSecret: { env: "NAME" }`. Choose from `google`, `discord` and `github`. |
+| `providers` | The providers readers may use, in the order the sign-in dialog lists them. Each takes the OAuth app's `clientId` and names its secret with `clientSecret: { env: "NAME" }`. Choose from `google`, `discord`, `x` and `github`. |
 | `privacyNotice` | Optional URL of the site's privacy notice. The sign-in dialog links to it. A site that stores readers' names and avatars owes them one. |
 | `callbackVault` | Optional id of the host vault that runs every sign-in in the app. Defaults to the first host vault that enables auth. See [several vaults](#several-vaults). |
 
@@ -85,6 +86,16 @@ Sign-in asks Google for `openid profile`: the account's name and picture, not it
 
 Sign-in asks Discord for `identify`: the account's username, display name and avatar, not its email address.
 
+## X setup
+
+1. In the [X Developer Console](https://console.x.com), create an app.
+2. In the app's user authentication settings, turn on OAuth 2.0 and choose **Web App**, which makes it a confidential client with a client secret.
+3. Add the callback URL, ending in `/callback/x/`, as a callback URL; in a host app with several vaults, that is the [callback vault's](#several-vaults). It must match exactly, trailing slash included. An app takes up to 10. X refuses `localhost`, so for local development use `http://127.0.0.1:<port>`.
+4. Copy the **OAuth 2.0 Client ID** into `providers.x.clientId`, and store the **Client Secret** under the env name you chose. X shows the secret once.
+5. Buy API credits. The X API is [pay-per-usage](https://docs.x.com/x-api/getting-started/pricing): each sign-in reads the account once, billed as one **User: Read**. Without credits, sign-in fails with "X didn't confirm the sign-in".
+
+Sign-in asks X for `users.read tweet.read`. Reading the signed-in account requires both, and neither reveals the email address. Sign-in never reads or posts on the reader's behalf.
+
 ## GitHub setup
 
 1. Create an OAuth app on GitHub: **Settings → Developer settings → OAuth Apps → New OAuth App**.
@@ -114,6 +125,7 @@ A signed-in reader is an identity and nothing more:
 | --- | --- | --- | --- | --- |
 | Google | `google:<sub>` | none | the account's picture, when Google gives one | none |
 | Discord | `discord:<user id>` | username | the avatar, or Discord's default one | `https://discord.com/users/<user id>` |
+| X | `x:<user id>` | username | the profile picture, when X gives one | `https://x.com/<username>` |
 | GitHub | `github:<user id>` | login | the avatar | the profile page |
 
 `name` is always set: the display name, falling back to the handle, or to "Google user" when Google withholds the name. Check `handle`, `avatarUrl` and `profileUrl` before showing them.

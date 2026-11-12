@@ -9,8 +9,9 @@ const ENV = {
   PRIVATE_GITHUB_SECRET: "fake-client-secret",
   PRIVATE_GOOGLE_SECRET: "fake-client-secret",
   PRIVATE_DISCORD_SECRET: "fake-client-secret",
+  PRIVATE_X_SECRET: "fake-client-secret",
 };
-const ALL_PROVIDERS: ProviderId[] = ["github", "google", "discord"];
+const ALL_PROVIDERS: ProviderId[] = ["github", "google", "discord", "x"];
 
 /** Each provider at its HTTP edge: where it sends the reader, where it trades the code, and the profile it answers. */
 const PROVIDERS = {
@@ -70,6 +71,29 @@ const PROVIDERS = {
       // No avatar of their own: Discord's default picture number (80351110224678912 >> 22) % 6 = 5.
       avatarUrl: "https://cdn.discordapp.com/embed/avatars/5.png",
       profileUrl: "https://discord.com/users/80351110224678912",
+    },
+  },
+  x: {
+    authorize: "https://x.com/i/oauth2/authorize",
+    // What `/2/users/me` requires, and nothing more.
+    scope: "users.read tweet.read",
+    token: "https://api.x.com/2/oauth2/token",
+    userinfo: "https://api.x.com/2/users/me?user.fields=profile_image_url",
+    user: {
+      data: {
+        id: "2244994945",
+        name: "X Developers",
+        username: "XDevelopers",
+        profile_image_url: "https://pbs.twimg.com/profile_images/1683325380441128960/yRsRRjGO_normal.jpg",
+      },
+    },
+    identity: {
+      id: "x:2244994945",
+      provider: "x",
+      name: "X Developers",
+      handle: "XDevelopers",
+      avatarUrl: "https://pbs.twimg.com/profile_images/1683325380441128960/yRsRRjGO_normal.jpg",
+      profileUrl: "https://x.com/XDevelopers",
     },
   },
 } as const;
@@ -189,22 +213,22 @@ describe("a sign-in that goes wrong", () => {
     expect(cookiesFrom(callback)).toEqual(["__Host-svartz-oauth="]);
   });
 
-  it("gives up on a profile request that never answers, without signing the reader in", async () => {
-    const github = stubProvider("github");
+  it.each(ALL_PROVIDERS)("gives up when %s's profile request never answers, without signing the reader in", async (id) => {
+    const provider = stubProvider(id);
     const answer = globalThis.fetch;
-    // GitHub's API hangs. Only a request carrying a deadline ever settles, when that deadline fires.
+    // The profile API hangs. Only a request carrying a deadline ever settles, when that deadline fires.
     vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
       // Read the URL without wrapping a Request: that would consume the token request's body.
       const url = input instanceof Request ? input.url : String(input);
-      if (url !== "https://api.github.com/user") return answer(input, init);
+      if (url !== PROVIDERS[id].userinfo) return answer(input, init);
       return new Promise((_resolve, reject) => {
         if (init?.signal) reject(new DOMException("The operation timed out.", "TimeoutError"));
       });
     });
     const request = site();
-    const { state, flowCookies } = await authorize(request, github, "/notes/");
+    const { state, flowCookies } = await authorize(request, provider, "/notes/");
 
-    const callback = await request(`${AUTH}/callback/github/?code=issued-code&state=${state}`, { cookies: flowCookies });
+    const callback = await request(`${AUTH}/callback/${id}/?code=issued-code&state=${state}`, { cookies: flowCookies });
 
     expect(callback.status).toBe(502);
     expect(cookiesFrom(callback).some((pair) => pair.startsWith("__Host-svartz-session="))).toBe(false);
@@ -224,12 +248,12 @@ describe("a sign-in that goes wrong", () => {
     }
   });
 
-  it("refuses a callback for a different provider than the one the sign-in started with", async () => {
-    const github = stubProvider("github");
+  it.each([["github", "discord"], ["x", "github"]] as const)("refuses a sign-in started with %s that calls back at %s's route", async (started, returned) => {
+    const provider = stubProvider(started);
     const request = site();
-    const { state, flowCookies } = await authorize(request, github, "/notes/");
+    const { state, flowCookies } = await authorize(request, provider, "/notes/");
 
-    const callback = await request(`${AUTH}/callback/discord/?code=issued-code&state=${state}`, { cookies: flowCookies });
+    const callback = await request(`${AUTH}/callback/${returned}/?code=issued-code&state=${state}`, { cookies: flowCookies });
 
     expect(callback.status).toBe(400);
     expect(cookiesFrom(callback).some((pair) => pair.startsWith("__Host-svartz-session="))).toBe(false);

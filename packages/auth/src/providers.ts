@@ -1,6 +1,6 @@
 /** The sign-in providers `@svartz/auth` supports. Adding one extends `ProviderId`, adds its entry here and its mark in the browser module. */
 
-export type ProviderId = "github" | "google" | "discord";
+export type ProviderId = "github" | "google" | "discord" | "x";
 
 /** Who is signed in. Nothing else about the account is kept, and provider tokens never outlive the callback. */
 export interface Identity {
@@ -116,6 +116,30 @@ export const PROVIDERS: Readonly<Record<ProviderId, ProviderDefinition>> = {
         handle,
         avatarUrl: avatar ? `https://cdn.discordapp.com/avatars/${id}/${avatar}.png` : discordDefaultAvatar(id, text(user.discriminator)),
         profileUrl: `https://discord.com/users/${id}`,
+      };
+    },
+  },
+  x: {
+    label: "X",
+    authorizationEndpoint: "https://x.com/i/oauth2/authorize",
+    tokenEndpoint: "https://api.x.com/2/oauth2/token",
+    // `/2/users/me` requires both; X has no narrower scope, and none that reveals the email address.
+    scopes: ["users.read", "tweet.read"],
+    async profile(accessToken) {
+      // https://docs.x.com/x-api/users/get-my-user: the account sits under `data`; the picture only when asked for.
+      const { data } = await readProfile("X", "https://api.x.com/2/users/me?user.fields=profile_image_url", accessToken);
+      const user = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+      const id = text(user.id);
+      const handle = text(user.username);
+      if (!id || !/^\d+$/.test(id) || !handle) throw new Error("X's user response has no id or username");
+      const avatarUrl = text(user.profile_image_url);
+      return {
+        id: `x:${id}`,
+        provider: "x",
+        name: text(user.name) ?? handle,
+        handle,
+        ...avatarUrl ? { avatarUrl } : {},
+        profileUrl: `https://x.com/${handle}`,
       };
     },
   },
