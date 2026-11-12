@@ -1,5 +1,29 @@
 # @svartz/plugins
 
+## 2.4.0
+
+### Minor Changes
+
+- 7a1d5f9: Browser scripts can show HTML as the page shows notes. `context.mountContent(element)` returns a view whose `render(html)` draws the HTML through the page's content components (the host's overrides, then the theme's callout, code block, image, link and embed), sanitized as the build sanitizes, keeping the blocks a render didn't change. `@svartz/plugins/preview` renders a note's Markdown to that HTML in the browser, with GitHub Flavored Markdown, Obsidian's comments, highlights, callouts and tags, and links resolved against the published notes; it imports no Node built-ins, so it also runs in a web worker. `@svartz/plugins/content` exports the content-slot classification the build and the browser renderer share.
+- 6907ba3: `@svartz/plugins/routes` exports how `core:allocate-routes` derives a note's route: `pathRoute(path)`, `requestedSlug(file)`, `routeHref(slug, mountPath)` and `isNote(file)`. Code that must predict a route, such as a server refusing a new note that would take an existing page's URL, can import it. It has no dependencies, so server bundles can import it too.
+- 8bdba67: `@svartz/plugins/preview` finds attachments as the build does: from the note's folder, then by vault path, then by a file name no other attachment has, so Obsidian's shortest links such as `![chart](chart.png)` show their image. `![[…]]` attachment embeds render as images, audio, video, PDF frames or links. `renderPreview` takes the published attachments' vault paths as `attachments`, and as `sharedNames` the file names unpublished files share with them; a link to any other file, or by a shared name alone, stays unresolved. `publishedAttachments(ctx)` lists the attachments a build publishes, and `sharedAttachmentNames(ctx)` those shared names.
+
+### Patch Changes
+
+- 64ba28f: Preserve authored title and description properties in the index while keeping generated display values in Markdown copies.
+- 9e3cabc: Preserve embed syntax inside inline, fenced, and indented code when publishing notes and rendering the Split preview, including code in embedded notes.
+- 101770b: Render callouts in CRLF notes like LF notes in published pages and the Split preview.
+- Updated dependencies [020d144]
+- Updated dependencies [a4c869f]
+- Updated dependencies [7a1d5f9]
+- Updated dependencies [d7303ae]
+- Updated dependencies [d01cd5e]
+- Updated dependencies [e46840b]
+- Updated dependencies [f55f8fa]
+- Updated dependencies [14bc204]
+- Updated dependencies [639e96d]
+  - @svartz/core@2.4.0
+
 ## 2.3.0
 
 ### Minor Changes

@@ -1,5 +1,36 @@
 # @svartz/ui
 
+## 2.4.0
+
+### Minor Changes
+
+- 7a1d5f9: Browser scripts can show HTML as the page shows notes. `context.mountContent(element)` returns a view whose `render(html)` draws the HTML through the page's content components (the host's overrides, then the theme's callout, code block, image, link and embed), sanitized as the build sanitizes, keeping the blocks a render didn't change. `@svartz/plugins/preview` renders a note's Markdown to that HTML in the browser, with GitHub Flavored Markdown, Obsidian's comments, highlights, callouts and tags, and links resolved against the published notes; it imports no Node built-ins, so it also runs in a web worker. `@svartz/plugins/content` exports the content-slot classification the build and the browser renderer share.
+- d7303ae: Browser scripts get the note body they serve on a host page. When a host page renders a note with `SvartzNoteContent`, each mount's `context.note` is that note's body, so plugins work on it instead of the document's first `[data-svartz-note]`, and a page with several notes keeps each one's plugin features apart. Theme pages leave it unset.
+- dafcfc9: Host apps get annotations on their own pages. `SvartzNoteContent` marks a public note's body like theme-minimal does, so the vault's annotations show on it with no code. On markup the host renders itself, `attach(element, { vault, slug })` takes a vault from `virtual:svartz/host` and the note's slug, and finds the routes under the deployment base and mount itself. See "Annotations" in `docs/host-vaults.md`.
+- 2624a50: Plugins can add actions to every page. Each note's page actions end with a page-actions region (`[data-svartz-region="page-actions"]`), and every page has a site-actions region (`[data-svartz-region="site-actions"]`) in the rail or site navigation, inside the phone drawer on narrow screens. A plugin's browser script mounts links or buttons there and removes them in its cleanup; empty regions take no space. The wiki shows page actions beside the article title and site actions under Random page. Theme authors place the new `SiteActions` component from `@svartz/ui`, and `PageActions` now renders on notes without a Markdown copy.
+
+### Patch Changes
+
+- f55f8fa: Prerender and serve notes with non-ASCII names in standalone builds and generated host routes. Share guarded URL-path decoding with Markdown negotiation and return 404 for malformed escapes.
+- 274ba31: Take the deployment base from Svartz's generated `deploymentBasePath` instead of `$app/paths`, whose `base` SvelteKit 3 removed. Site logos and protected note payloads now use the absolute base during server rendering too, as vault links already did. A `SiteLogo` outside a Svartz page, such as in a host's own header, takes the base as a prop: `<SiteLogo {logo} base={vaults[0].basePath} />`.
+- 6681829: Render Svartz pages in SvelteKit 3 hosts. `virtual:svartz/host` exports SvelteKit's `base` and `assets`, which SvelteKit 3's `$app/paths` dropped; the generated catchall and `noteStylesheets` read them there, so they build on SvelteKit 2 and 3. Run `svartz init` to upgrade an existing generated catchall. A SvelteKit 3 host that sets `adapter-cloudflare` in `sveltekit({ adapter })` now gets its Wrangler bindings under `svartz dev`. `@svartz/vite` adds `svelteKitPaths`, which reads SvelteKit's `assets` as well as its `base`.
+- Updated dependencies [020d144]
+- Updated dependencies [a4c869f]
+- Updated dependencies [64ba28f]
+- Updated dependencies [7a1d5f9]
+- Updated dependencies [d7303ae]
+- Updated dependencies [d01cd5e]
+- Updated dependencies [e46840b]
+- Updated dependencies [f55f8fa]
+- Updated dependencies [14bc204]
+- Updated dependencies [639e96d]
+- Updated dependencies [6907ba3]
+- Updated dependencies [8bdba67]
+- Updated dependencies [9e3cabc]
+- Updated dependencies [101770b]
+  - @svartz/core@2.4.0
+  - @svartz/plugins@2.4.0
+
 ## 2.3.0
 
 ### Patch Changes
