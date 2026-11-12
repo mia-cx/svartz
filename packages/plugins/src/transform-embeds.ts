@@ -4,10 +4,10 @@ import { definePlugin, type RawLink } from "@svartz/core";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
 import { createAssetResolver } from "./internal/asset-references";
 import { alternateNames } from "./internal/routes";
+import { replaceEmbeds } from "./internal/link-spans";
 import { extractSectionMarkdown, findWikilinkSpans, type PositionedLink } from "./internal/parse";
 import { transformMarkdown } from "./transform-ofm";
 
-const EMBED_REGEX = /!\[\[([^\]]+)\]\]/g;
 export const IMAGE_EXTENSIONS = new Set([
   ".png",
   ".jpg",
@@ -165,7 +165,7 @@ export const transformEmbeds = definePlugin(() => ({
           ? extractSectionMarkdown(targetSource, new GithubSlugger().slug(section)) ?? targetSource
           : targetSource;
 
-        const expanded = embeddedMarkdown.replace(EMBED_REGEX, (_raw: string, inner: string) => {
+        const expanded = replaceEmbeds(embeddedMarkdown, (_raw, inner) => {
           const parsed = splitEmbedInner(inner);
           const assetPath = resolveAsset(noteBySlug.get(targetSlug)!, parsed.target);
           if (assetPath) {
@@ -230,7 +230,7 @@ export const transformEmbeds = definePlugin(() => ({
 
       for (const file of noteFiles) {
         const hostTags = new Set(file.inlineTags ?? []);
-        file.content = file.content.replace(EMBED_REGEX, (_raw: string, inner: string) => {
+        file.content = replaceEmbeds(file.content, (_raw, inner) => {
           const parsed = splitEmbedInner(inner);
           const assetPath = resolveAsset(file, parsed.target);
           if (assetPath) {

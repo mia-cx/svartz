@@ -11,6 +11,20 @@ import { SKIP, visit } from "unist-util-visit";
 
 const markdownParser = unified().use(remarkParse);
 
+/** Replace embeds in prose while preserving parsed inline, fenced, and indented code in build and preview. */
+export function replaceEmbeds(markdown: string, render: (raw: string, inner: string) => string): string {
+  const code: { start: number; end: number }[] = [];
+  visit(markdownParser.parse(markdown), (node) => {
+    if (node.type !== "code" && node.type !== "inlineCode") return;
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (start !== undefined && end !== undefined) code.push({ start, end });
+  });
+  return markdown.replace(/!\[\[([^\]]+)\]\]/g, (raw, inner: string, offset: number) =>
+    code.some(({ start, end }) => offset < end && offset + raw.length > start) ? raw : render(raw, inner),
+  );
+}
+
 function isEscaped(source: string, offset: number): boolean {
   let slashes = 0;
   for (let index = offset - 1; source[index] === "\\"; index -= 1) slashes += 1;
