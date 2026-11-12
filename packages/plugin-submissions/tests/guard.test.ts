@@ -37,20 +37,25 @@ async function sessionCookie(id: string): Promise<string> {
   return `__Host-svartz-session=${await seal(identity, SESSION_SECRET, "session", 60)}`;
 }
 
-/** POST an edit to `handler` as a reader at `ip` (`null`: an address the server can't see), optionally signed in. */
+/**
+ * POST an edit (or, with `kind: "new"`, a new page) to `handler` as a reader at `ip` (`null`: an address the server
+ * can't see), optionally signed in.
+ */
 async function submit(
   handler: ReturnType<typeof handlerWith>,
-  { token, ip = "203.0.113.7", cookie, env = GUARD_ONLY_ENV }: {
+  { token, ip = "203.0.113.7", cookie, env = GUARD_ONLY_ENV, kind = "edit" }: {
     token?: string;
     ip?: string | null;
     cookie?: string;
     env?: Record<string, unknown>;
+    kind?: "edit" | "new";
   } = {},
 ) {
-  const request = new Request(`${ORIGIN}${BASE}/edit/`, {
+  const fields = kind === "edit" ? { page: "/wiki/guide/" } : { folder: "", title: "Timeline" };
+  const request = new Request(`${ORIGIN}${BASE}/${kind}/`, {
     method: "POST",
     headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
-    body: JSON.stringify({ submissionId: SUBMISSION_ID, page: "/wiki/guide/", markdown: MARKDOWN, note: "Timing.", turnstileToken: token }),
+    body: JSON.stringify({ submissionId: SUBMISSION_ID, ...fields, markdown: MARKDOWN, note: "Timing.", turnstileToken: token }),
   });
   const context: ServerContext = {
     env,
@@ -187,11 +192,34 @@ describe("submission guard", () => {
     const handler = handlerWith({ rateLimit: { limit: 1, period: 60 } });
 
     expect(await submit(handler, { ip: null })).toMatchObject({
-      status: 403,
+      status: 401,
       body: { error: "sign_in_required", message: "Sign in to send edits from this site, then open the pull request." },
     });
     // Another reader behind the same proxy isn't held to the first one's quota: they're refused for the same reason.
     expect((await submit(handler, { ip: null })).body).toMatchObject({ error: "sign_in_required" });
     expect((await submit(handler, { ip: null, cookie: await sessionCookie("github:1") })).status).toBe(503);
+  });
+});
+
+describe("required sign-in", () => {
+  const required = { signInRequired: true, rateLimit: { limit: 5, period: 60 } } as const;
+
+  it.each(["edit", "new"] as const)("refuses an anonymous %s with 401 before calling GitHub", async (kind) => {
+    const github = replayGitHub([]);
+
+    const answer = await submit(handlerWith(required), { kind, env: { ...GUARD_ONLY_ENV, SVARTZ_GITHUB_TOKEN: TOKEN } });
+
+    expect(answer).toMatchObject({ status: 401, body: { error: "sign_in_required" } });
+    expect(github.requests).toEqual([]);
+  });
+
+  it("lets a signed-in reader through without a Turnstile token, counting them per identity", async () => {
+    const verifications = stubSiteverify(verdict(true));
+    const handler = handlerWith({ ...required, turnstile: TURNSTILE, rateLimit: { limit: 1, period: 60 } });
+    const ada = await sessionCookie("github:1");
+
+    expect(await submit(handler, { cookie: ada })).toMatchObject({ status: 503, body: { error: "misconfigured" } });
+    expect(await submit(handler, { cookie: ada, ip: "198.51.100.4" })).toMatchObject({ status: 429 });
+    expect(verifications).toEqual([]);
   });
 });

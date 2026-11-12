@@ -1,7 +1,7 @@
 /**
  * The submission guard. Every submission passes a rate limit, keyed by the signed-in identity or else the client's
- * IP, and is refused when it has neither. When Turnstile is configured, it must also carry a token Cloudflare
- * verifies. Runs before any GitHub call.
+ * IP, and is refused when it has neither. When sign-in is required, anonymous submissions are refused; otherwise,
+ * when Turnstile is configured, they must also carry a token Cloudflare verifies. Runs before any GitHub call.
  */
 import type { Identity } from "@svartz/auth/server";
 import { SubmissionError } from "./errors";
@@ -21,6 +21,8 @@ export interface RateLimitOptions {
 }
 
 export interface GuardOptions {
+  /** Refuse anonymous submissions. Turnstile is then skipped: a signed-in reader is already known. */
+  readonly signInRequired?: boolean;
   readonly turnstile?: TurnstileOptions;
   readonly rateLimit: RateLimitOptions;
 }
@@ -99,9 +101,9 @@ const turnstileUnavailable = () =>
 const rateLimitUnavailable = () =>
   new SubmissionError("rate_limit_unavailable", 503, "Couldn't count your edits right now. Try again in a moment.");
 
-// Behind a proxy that hides client addresses, anonymous readers would all share one quota: one reader could use it up.
+// Also behind a proxy that hides client addresses: anonymous readers would all share one quota, and one could use it up.
 const signInRequired = () =>
-  new SubmissionError("sign_in_required", 403, "Sign in to send edits from this site, then open the pull request.");
+  new SubmissionError("sign_in_required", 401, "Sign in to send edits from this site, then open the pull request.");
 
 /** Whether Cloudflare accepts `token`. Network failure, a timeout or an error status throw instead of answering. */
 async function verifyTurnstile(secret: string, token: string, clientAddress: string | undefined): Promise<boolean> {
@@ -120,7 +122,7 @@ async function verifyTurnstile(secret: string, token: string, clientAddress: str
 }
 
 /** Build the guard once per server module; its in-memory window lives as long as the module does. */
-export function createGuard({ turnstile, rateLimit }: GuardOptions) {
+export function createGuard({ signInRequired: required = false, turnstile, rateLimit }: GuardOptions) {
   const countInMemory = memoryWindow(rateLimit);
 
   async function limit(key: string, env: GuardInput["env"]): Promise<void> {
@@ -140,9 +142,9 @@ export function createGuard({ turnstile, rateLimit }: GuardOptions) {
 
   /** Resolves when the submission may go ahead; otherwise throws the {@link SubmissionError} to answer. */
   return async function check({ token, identity, clientAddress, env }: GuardInput): Promise<void> {
-    if (!identity && !clientAddress) throw signInRequired();
+    if (!identity && (required || !clientAddress)) throw signInRequired();
     const key = identity ? `identity:${identity.id}` : `ip:${clientAddress}`;
-    if (!turnstile) return limit(key, env);
+    if (!turnstile || required) return limit(key, env);
     if (!token) throw new SubmissionError("turnstile_required", 403, "Finish the check that you're human, then open the pull request.");
     // Counted before verifying, so a flood of bad tokens spends its own quota rather than Cloudflare round trips.
     await limit(key, env);

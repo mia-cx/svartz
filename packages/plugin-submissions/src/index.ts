@@ -14,7 +14,14 @@ import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { definePlugin, getCompilerContributions, type EnvReference, type ProcessedFile } from "@svartz/core";
+import {
+  definePlugin,
+  getCompilerContributions,
+  type EnvReference,
+  type NormalizedSvartzPlugin,
+  type ProcessedFile,
+  type SvartzPlugin,
+} from "@svartz/core";
 import { isNote, pathRoute, requestedSlug, routeHref } from "@svartz/plugins/routes";
 import { PLUGIN_ID, type BrowserOptions } from "./api";
 import type { GuardOptions, RateLimitOptions, TurnstileOptions } from "./guard";
@@ -43,9 +50,14 @@ export interface SubmissionsOptions {
     /** The App's installation ID on `repo`. Default: looked up from the repository. */
     readonly installation?: number;
   };
+  /** Reader sign-in, through the `auth` plugin on the same vault. */
+  readonly signIn?: {
+    /** Refuse submissions from readers who aren't signed in; the editor asks them to sign in. Default: `false`. */
+    readonly required?: boolean;
+  };
   /** What every submission must pass before it reaches GitHub. */
   readonly guard?: {
-    /** Show a Cloudflare Turnstile challenge in the editor and verify its token on the server. */
+    /** Show a Cloudflare Turnstile challenge in the editor and verify its token on the server. Skipped when sign-in is required. */
     readonly turnstile?: TurnstileOptions;
     /** Submissions allowed per signed-in identity, or per IP when anonymous. Default: 10 an hour. */
     readonly rateLimit?: RateLimitOptions;
@@ -64,8 +76,10 @@ const isBlank = (value: unknown) => typeof value !== "string" || !value.trim();
 const isPositiveInteger = (value: unknown) => Number.isInteger(value) && (value as number) > 0;
 
 /** Refuse guard config the server could never apply, so a typo fails the build instead of every submission. */
-function guardOptions(guard: SubmissionsOptions["guard"] = {}): GuardOptions {
+function guardOptions({ signIn = {}, guard = {} }: SubmissionsOptions): GuardOptions {
   const { turnstile, rateLimit = DEFAULT_RATE_LIMIT } = guard;
+  const { required = false } = signIn;
+  if (typeof required !== "boolean") fail("signIn.required must be true or false");
   if (turnstile) {
     if (isBlank(turnstile.siteKey)) fail("guard.turnstile.siteKey must be the widget's site key");
     if (isBlank(turnstile.secret?.env)) fail('guard.turnstile.secret must name its environment variable: { env: "NAME" }');
@@ -74,9 +88,19 @@ function guardOptions(guard: SubmissionsOptions["guard"] = {}): GuardOptions {
     fail("guard.rateLimit needs a whole number of submissions (limit) per whole number of seconds (period)");
   }
   return {
-    ...(turnstile ? { turnstile: { siteKey: turnstile.siteKey, secret: { env: turnstile.secret.env } } } : {}),
+    ...(required ? { signInRequired: true } : {}),
+    // Signed-in readers skip the challenge, so a site that requires sign-in never shows it.
+    ...(turnstile && !required ? { turnstile: { siteKey: turnstile.siteKey, secret: { env: turnstile.secret.env } } } : {}),
     rateLimit: { limit: rateLimit.limit, period: rateLimit.period },
   };
+}
+
+/** Required sign-in needs the `auth` plugin on the same vault, or no reader could ever submit. */
+function checkVault(vault: { readonly id: string; readonly plugins: readonly unknown[] }): void {
+  const auth = (vault.plugins as readonly SvartzPlugin[]).find(({ id }) => id === "auth");
+  if (!auth?.server || auth.disabled) {
+    fail(`vault "${vault.id}" requires sign-in for submissions without auth; add auth({ providers: … }) to the same vault`);
+  }
 }
 
 // Beside this module in dist.
@@ -156,7 +180,7 @@ function credentials({ token, app }: SubmissionsOptions): Credentials {
 /** Let readers edit any published Markdown note, or add one in a published folder, as a pull request on `repo`. */
 export function submissions(options: SubmissionsOptions) {
   if (!REPO_PATTERN.test(options.repo)) fail(`repo "${options.repo}" must be "owner/name".`);
-  const guard = guardOptions(options.guard);
+  const guard = guardOptions(options);
   const vaultRoot = options.vaultRoot === undefined ? undefined : normalizeVaultRoot(options.vaultRoot);
   const serverOptions: ServerOptions = {
     repo: options.repo,
@@ -166,9 +190,13 @@ export function submissions(options: SubmissionsOptions) {
     guard,
   };
 
-  return definePlugin(() => ({
+  const plugin: NormalizedSvartzPlugin = definePlugin(() => ({
     id: PLUGIN_ID,
     server: { module: SERVER_MODULE, options: serverOptions },
+    forVault({ vault }) {
+      if (guard.signInRequired) checkVault(vault);
+      return plugin;
+    },
     emitArtifacts: {
       options: { fatal: true },
       async run(ctx) {
@@ -204,6 +232,7 @@ export function submissions(options: SubmissionsOptions) {
       },
     },
   }))();
+  return plugin;
 }
 
 export type { BrowserOptions, EditRequest, EditResponse, ErrorResponse, NewPageRequest, SourceResponse } from "./api";

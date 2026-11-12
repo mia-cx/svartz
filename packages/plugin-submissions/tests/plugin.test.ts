@@ -2,7 +2,15 @@ import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { runStages, type PluginContext, type ProcessedFile, type ResolvedConfig, type ServerContext } from "@svartz/core";
+import { auth } from "@svartz/auth";
+import {
+  runStages,
+  type NormalizedSvartzPlugin,
+  type PluginContext,
+  type ProcessedFile,
+  type ResolvedConfig,
+  type ServerContext,
+} from "@svartz/core";
 import { allocateRoutesPlugin, indexContent } from "@svartz/plugins";
 import { afterEach, describe, expect, it } from "vitest";
 import { submissions } from "../src/index";
@@ -195,6 +203,37 @@ describe("submissions guard config", () => {
     ["a zero period", { rateLimit: { limit: 5, period: 0 } }, /rateLimit/],
   ])("refuses %s when the config loads", (_case, guard, message) => {
     expect(() => submissions({ repo: "acme/wiki", guard } as Parameters<typeof submissions>[0])).toThrow(message);
+  });
+});
+
+describe("submissions sign-in config", () => {
+  const turnstile = { siteKey: "0x4AAAAAAAtest", secret: { env: "TURNSTILE_SECRET" } };
+  const signIn = auth({ providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } } });
+
+  /** Resolve `plugin` for a vault the way config resolution does, once every vault is known. */
+  function resolveFor(plugin: NormalizedSvartzPlugin, others: unknown[] = [signIn]) {
+    const vault = { id: "wiki", mountPath: "/wiki", target: { type: "node" }, plugins: [...others, plugin] } as unknown as ResolvedConfig;
+    return plugin.forVault!({ vault, vaults: [vault] });
+  }
+
+  it("requires sign-in on the server and skips Turnstile in the editor and the guard", async () => {
+    const { ctx } = await build({ signIn: { required: true }, guard: { turnstile } });
+
+    expect(ctx.compiler?.browserResources.get("submissions")?.options).not.toHaveProperty("turnstileSiteKey");
+    const plugin = submissions({ repo: "acme/wiki", signIn: { required: true }, guard: { turnstile } });
+    expect(plugin.server?.options).toMatchObject({ guard: { signInRequired: true } });
+    expect(plugin.server?.options).not.toHaveProperty("guard.turnstile");
+    expect(resolveFor(plugin)).toBe(plugin);
+  });
+
+  it("refuses required sign-in on a vault without auth", () => {
+    expect(() => resolveFor(submissions({ repo: "acme/wiki", signIn: { required: true } }), []))
+      .toThrow(/vault "wiki" requires sign-in for submissions without auth/);
+  });
+
+  it("refuses a required flag that isn't true or false", () => {
+    expect(() => submissions({ repo: "acme/wiki", signIn: { required: "yes" } } as unknown as Parameters<typeof submissions>[0]))
+      .toThrow(/signIn\.required/);
   });
 });
 
