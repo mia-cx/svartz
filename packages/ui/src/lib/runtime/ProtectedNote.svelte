@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { base } from '$app/paths';
 	import { onMount } from 'svelte';
+	import { getDeploymentBase } from '../deployment-base.js';
 	import type { ProtectedGroupPayload } from '@svartz/core';
 	import {
 		isProtectedGroupUnlocked,
@@ -29,7 +29,8 @@
 	let error = $state('');
 	let unlocked = $state<UnlockedNote>();
 	const NoteComponent = $derived(unlocked?.component);
-	const reference = $derived({ ...protection, payloadPath: `${base}${protection.payloadPath}` });
+	const base = getDeploymentBase();
+	const reference = $derived({ ...protection, payloadPath: `${base()}${protection.payloadPath}` });
 
 	async function unlock(secret: string): Promise<void> {
 		busy = true;

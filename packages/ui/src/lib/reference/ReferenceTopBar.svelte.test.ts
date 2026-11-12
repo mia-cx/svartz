@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import '../styles/base.css';
 import ReferenceTopBar from './ReferenceTopBar.svelte';
 
-vi.mock('$app/paths', () => ({ base: '/docs', assets: '/docs' }));
+vi.mock('../deployment-base.js', () => ({ getDeploymentBase: () => () => '/docs' }));
 
 const renderTopBar = (themeConfig: Record<string, unknown>) => {
 	const shell = {
