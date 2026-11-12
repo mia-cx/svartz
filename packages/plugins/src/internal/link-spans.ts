@@ -5,11 +5,27 @@
 
 import type { RawLink } from "@svartz/core";
 import { toString } from "mdast-util-to-string";
+import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { SKIP, visit } from "unist-util-visit";
 
-const markdownParser = unified().use(remarkParse);
+// The renderer's grammar, GFM tables included, so a backtick in one table cell never pairs with one in the next.
+const markdownParser = unified().use(remarkParse).use(remarkGfm);
+
+/** Replace embeds in prose while preserving parsed inline, fenced, and indented code in build and preview. */
+export function replaceEmbeds(markdown: string, render: (raw: string, inner: string) => string): string {
+  const code: { start: number; end: number }[] = [];
+  visit(markdownParser.parse(markdown), (node) => {
+    if (node.type !== "code" && node.type !== "inlineCode") return;
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (start !== undefined && end !== undefined) code.push({ start, end });
+  });
+  return markdown.replace(/!\[\[([^\]]+)\]\]/g, (raw, inner: string, offset: number) =>
+    code.some(({ start, end }) => offset < end && offset + raw.length > start) ? raw : render(raw, inner),
+  );
+}
 
 function isEscaped(source: string, offset: number): boolean {
   let slashes = 0;

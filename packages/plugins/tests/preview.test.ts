@@ -15,6 +15,29 @@ const OPTIONS: PreviewOptions = {
 const render = (markdown: string, options: Partial<PreviewOptions> = {}) => renderPreview(markdown, { ...OPTIONS, ...options });
 
 describe("renderPreview", () => {
+  it.each(["Ada", "diagram.png", "missing"])("keeps %s embed examples verbatim in inline, fenced and indented code", async (target) => {
+    const embed = `![[${target}]]`;
+    const html = await render([
+      `\`${embed}\``,
+      `\`\`literal \` ${embed}\`\``,
+      `\`\`\`\n${embed}\n\`\`\``,
+      `~~~\n${embed}\n~~~`,
+      `    ${embed}`,
+    ].join("\n\n"));
+
+    expect(html).toContain(`<code>${embed}</code>`);
+    expect(html).toContain(`<code>literal \` ${embed}</code>`);
+    expect(html.split(`<pre><code>${embed}\n</code></pre>`)).toHaveLength(4);
+    expect(html).not.toContain("svartz-embed");
+  });
+
+  it("finds code in a table as the renderer does: backticks in separate cells protect nothing", async () => {
+    const html = await render("| Before | Embed | After | Code |\n| - | - | - | - |\n| ` | ![[Ada]] | ` | `![[Ada]]` |\n");
+
+    expect(html).toContain('data-embed="people/ada-lovelace"');
+    expect(html).toContain("<code>![[Ada]]</code>");
+  });
+
   it("links published notes by name, alias, heading and Markdown path", async () => {
     const html = await render("[[Ada Lovelace]], [[Ada|the countess]], [[Ada Lovelace#Early life]] and [her](People/Ada%20Lovelace.md).");
 

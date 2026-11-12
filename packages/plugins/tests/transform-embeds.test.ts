@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { PluginContext, ProcessedFile } from "@svartz/core";
+import { toHtml } from "hast-util-to-html";
+import { renderMarkdownTree } from "../src/internal/render-markdown";
 import { transformEmbeds } from "../src/transform-embeds";
+import { transformOfm } from "../src/transform-ofm";
 
 const note = (path: string, content: string): ProcessedFile => ({
   path,
@@ -22,6 +25,43 @@ const context = (files: ProcessedFile[]): PluginContext =>
   }) as unknown as PluginContext;
 
 describe("note embeds", () => {
+  describe.each([false, true])("code examples, transcluded: %s", (transcluded) => {
+    it.each(["Ada", "diagram.png", "missing"])("publishes %s embeds verbatim in code, expanding only prose", async (target) => {
+      const embed = `![[${target}]]`;
+      const code = [
+        `\`${embed}\``,
+        `\`\`literal \` ${embed}\`\``,
+        `\`\`\`\n${embed}\n\`\`\``,
+        `~~~\n${embed}\n~~~`,
+        `    ${embed}`,
+      ].join("\n\n");
+      const body = `${embed}\n\n${code}\n\n${embed}`;
+      const source = note("guide.md", transcluded ? "![[examples]]" : body);
+      const files = [source, note("Ada.md", "Ada's body."), {
+        path: "diagram.png", slug: "diagram.png", extension: ".png", content: "",
+      }];
+      if (transcluded) files.push(note("examples.md", body));
+      const ctx = context(files);
+      ctx.meta.set("sourceBodies", new Map(files.map((file) => [file.path, file.content])));
+      transformOfm().transformOfm!.run(ctx);
+      transformEmbeds().transformEmbeds!.run(ctx);
+
+      expect(source.content).toContain(code);
+      const html = toHtml(await renderMarkdownTree(ctx, source.content));
+      expect(html).toContain(`<code>${embed}</code>`);
+      expect(html).toContain(`<code>literal \` ${embed}</code>`);
+      expect(html.split(`<pre><code>${embed}\n</code></pre>`)).toHaveLength(4);
+      if (target === "Ada") {
+        expect(html.match(/data-embed="Ada"/g)).toHaveLength(2);
+        expect(html).toContain("Ada's body.");
+      } else if (target === "diagram.png") {
+        expect(html.match(/<img src="\.\.\/diagram.png"/g)).toHaveLength(2);
+      } else {
+        expect(html.match(/<p>missing<\/p>/g)).toHaveLength(2);
+      }
+    });
+  });
+
   it("transcludes a section as Markdown, with links resolved and callouts marked", () => {
     const source = note("guide/setup.md", "Before.\n\n![[sensors#Humidity]]\n\nAfter.");
     const target = note(

@@ -12,7 +12,7 @@ import type { Root } from "hast";
 import { toHtml } from "hast-util-to-html";
 import remarkGfm from "remark-gfm";
 import { visit } from "unist-util-visit";
-import { findLinkSpans, type PositionedLink } from "./internal/link-spans";
+import { findLinkSpans, replaceEmbeds, type PositionedLink } from "./internal/link-spans";
 import { markdownProcessor } from "./internal/markdown-processor";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
 import { fileToSlug } from "./internal/slug";
@@ -45,7 +45,6 @@ export interface PreviewOptions {
 
 /** As `parse.ts` reads it: YAML or TOML between fences on the first line. */
 const FRONTMATTER = /^(---|\+\+\+)\s*\r?\n([\s\S]*?)\r?\n\1\s*(?:\r?\n|$)/;
-const EMBED = /!\[\[([^\]]+)\]\]/g;
 const SCHEME = /^[a-z][a-z\d+.-]*:/i;
 
 function escapeHtml(value: string): string {
@@ -80,7 +79,7 @@ function prepare(markdown: string, options: PreviewOptions): string {
 
   // core:transform-ofm, then core:transform-embeds without the embedded body, which only the build can read.
   const { content } = transformMarkdown(linked, sourceSlug, options.tagsRoute ?? "tags", false);
-  const embedded = content.replace(EMBED, (raw, inner: string) => {
+  const embedded = replaceEmbeds(content, (raw, inner) => {
     const [targetWithSection = "", ...label] = inner.split("|");
     const [target = "", section] = targetWithSection.split("#");
     const slug = resolve({ target: target.trim(), type: "wikilink" });
