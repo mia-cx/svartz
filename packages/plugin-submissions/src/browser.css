@@ -366,7 +366,8 @@
 	overflow: hidden;
 }
 
-.svartz-submissions .cm-tooltip-autocomplete > ul {
+/* `.cm-editor` too, to outrank CodeMirror's monospace list. */
+.svartz-submissions .cm-editor .cm-tooltip-autocomplete > ul {
 	max-block-size: 16rem;
 	font-family: var(--sv-font-sans);
 	font-size: var(--sv-step--1);

@@ -184,7 +184,8 @@ function decorate(view: EditorView): DecorationSet {
           for (let at = node.from; at <= node.to;) {
             const current = state.doc.lineAt(at);
             ranges.push(callout
-              ? line("cm-lp-callout", { "data-callout": callout[1]!.toLowerCase() }).range(current.from)
+              // `data-sv-signal` derives the theme's signal colours from the type's hue.
+              ? line("cm-lp-callout", { "data-callout": callout[1]!.toLowerCase(), "data-sv-signal": "" }).range(current.from)
               : line("cm-lp-quote").range(current.from));
             at = current.to + 1;
           }
