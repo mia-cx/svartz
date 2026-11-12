@@ -57,10 +57,11 @@ export const MIN_AGREEMENT = 0.6;
 /** Cells of the fuzzy search's table, which bounds its work: a long quote searches a narrower stretch around where it was. */
 const SEARCH_CELLS = 4_000_000;
 /**
- * Candidates scored in full, so a common word stays cheap. They are ranked by how much of the quote and the words right
- * beside it agree, the nearest of equals first, so unrelated repeats of a quote never crowd out its passage.
+ * Candidates scored in full from each pool, so a common word stays cheap: those whose quote and adjacent words agree
+ * most, and those nearest the stored position. Repeats can then crowd out neither a passage that moved nor one whose
+ * adjacent words changed, unless they beat it on both.
  */
-const MAX_CANDIDATES = 64;
+const POOL_SIZE = 32;
 
 interface Candidate extends Position {
   /** Edits between the quote and the text here. */
@@ -90,17 +91,18 @@ export function locate(text: string, anchor: Anchor): Position | null {
 
   const before = words(prefix, -1);
   const after = words(suffix, 1);
-  const candidates = [...occurrences(text, exact), ...nearMatches(text, anchor)]
+  const nearest = [...occurrences(text, exact), ...nearMatches(text, anchor)]
     .map((candidate) => {
       const adjacent = wordsInCommon(before, text, candidate.start - 1, -1) + wordsInCommon(after, text, candidate.end, 1);
       return { candidate, rank: candidate.edits - adjacent };
     })
-    // Distance only breaks ties: weighing it in lets nearby repeats crowd out a passage that moved and was edited.
-    .sort((a, b) => a.rank - b.rank || distance(a.candidate) - distance(b.candidate))
-    .slice(0, MAX_CANDIDATES);
+    .sort((a, b) => distance(a.candidate) - distance(b.candidate));
+  // The sort is stable, so the nearest of an equal rank come first.
+  const closest = [...nearest].sort((a, b) => a.rank - b.rank);
+  const candidates = new Set([...closest.slice(0, POOL_SIZE), ...nearest.slice(0, POOL_SIZE)].map(({ candidate }) => candidate));
   let best: Candidate | undefined;
   let bestScore = MIN_AGREEMENT;
-  for (const { candidate } of candidates) {
+  for (const candidate of candidates) {
     const score = agreement(text, anchor, candidate);
     if (score < bestScore || (score === bestScore && best && distance(candidate) >= distance(best))) continue;
     best = candidate;
