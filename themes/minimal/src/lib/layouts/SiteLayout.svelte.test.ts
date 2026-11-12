@@ -124,3 +124,26 @@ it('marks the note body with its slug for plugins, and nothing on list pages or 
 	await expect.element(page.getByRole('heading', { name: 'The secret note' })).toBeVisible();
 	expect(marked()).toEqual([]);
 });
+
+it('marks the home note, and nothing on a generated home page', async () => {
+	const marked = () => [...document.querySelectorAll<HTMLElement>('[data-svartz-note]')].map((element) => element.dataset.svartzNote);
+	const home = createVaultView({ ...index, entries: [note('index'), note('plain')] }, 'garden');
+	const renderHome = (entry?: IndexEntry) =>
+		render(SiteLayout, {
+			vault: home,
+			entry,
+			site: { title: 'Garden' } as ResolvedSiteConfig,
+			match: { route: { id: 'home', pattern: '/' }, pathname: '/', params: {} },
+			theme: composeThemes([]),
+			children: body
+		});
+
+	const homeNote = renderHome(home.entries.find((entry) => entry.slug === 'index'));
+	await expect.element(page.getByText('Body')).toBeVisible();
+	expect(marked()).toEqual(['index']);
+	homeNote.unmount();
+
+	renderHome();
+	await expect.element(page.getByText('Body')).toBeVisible();
+	expect(marked()).toEqual([]);
+});

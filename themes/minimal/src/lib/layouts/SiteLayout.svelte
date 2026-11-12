@@ -212,8 +212,11 @@
 
 {#snippet body()}
 	{#if ListPage}
-		<!-- A home note a renderer claims reaches the home page rendered, infobox or symbol included. -->
-		<ListPage {...props} children={props.entry && choice?.renderer ? claimed : children} />
+		<!--
+			A home note reaches the home page as its marked body, or rendered when a renderer claims it, infobox or symbol
+			included. A generated listing has no entry and passes through unmarked.
+		-->
+		<ListPage {...props} children={props.entry ? (choice?.renderer ? claimed : content) : children} />
 	{:else if props.entry && choice?.renderer}
 		{@render claimed()}
 	{:else if props.entry && Note}

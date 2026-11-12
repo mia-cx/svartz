@@ -23,7 +23,7 @@ The explorer lists folders, then notes, each by title. An `order` number in a no
 
 Page actions are Copy page and View as Markdown, followed by any a plugin adds, such as Edit. Site actions, such as New page, come only from plugins; with none, nothing shows. Plugins fill both through their browser scripts ([Create a plugin](../../vaults/docs/guides/create-plugin.md#add-actions-to-every-page)), and every theme that extends minimal keeps them.
 
-Each note's body carries `data-svartz-note="<slug>"`, so a plugin can find the note and key it, as annotations do. List pages and password-protected notes have no marked body.
+Each note's body carries `data-svartz-note="<slug>"`, so a plugin can find the note and key it, as annotations do. That includes the home note on an extending theme's home page, which receives it marked in `children`. Generated list pages and password-protected notes have no marked body.
 
 Below 1200px the right column moves under the note and the contents hide. Below 800px the left column becomes a top bar and the explorer a drawer. Internal links show a preview on hover.
 
