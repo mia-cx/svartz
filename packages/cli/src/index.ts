@@ -17,9 +17,11 @@ import {
   getGeneratedRuntimeArtifactsModulePath,
   getGeneratedPagesRoot,
   getGeneratedRuntimeThemeModulePath,
+  createHostIndexSource,
   createHostRegistrySource,
   createHostServerSource,
   getGeneratedHostStylesPath,
+  getGeneratedHostIndexPath,
   getGeneratedHostRegistryPath,
   getGeneratedHostServerPath,
   svelteKitBasePath,
@@ -30,7 +32,7 @@ import {
   clearPublicAssets,
 } from "@svartz/vite";
 import {
-  build as viteBuild,
+  createBuilder,
   createServer,
   loadConfigFromFile,
   mergeConfig,
@@ -485,7 +487,9 @@ const createAppConfig = (
     process.env["SVARTZ_ARTIFACTS_MODULE_PATH"] = getGeneratedRuntimeArtifactsModulePath(vault);
     const hostRegistryPath = getGeneratedHostRegistryPath(projectRoot);
     const hostServerPath = getGeneratedHostServerPath(projectRoot);
+    const hostIndexPath = getGeneratedHostIndexPath(projectRoot);
     process.env["SVARTZ_HOST_MODULE_PATH"] = hostRegistryPath;
+    process.env["SVARTZ_INDEX_MODULE_PATH"] = hostIndexPath;
     const styleManifests = vaults.map((item) => ({
       modules: [getGeneratedRuntimeArtifactsModulePath(item), getGeneratedRuntimeThemeModulePath(item)],
       pagesRoot: getGeneratedPagesRoot(item),
@@ -504,6 +508,7 @@ const createAppConfig = (
           await writeFile(stylesPath, '{"shared":[],"notes":{}}\n');
         }));
         await writeFile(hostRegistryPath, createHostRegistrySource(vaults));
+        await writeFile(hostIndexPath, createHostIndexSource(vaults));
         if (hostApp) await writeFile(hostServerPath, createHostServerSource(vaults));
         if (!hostApp) await writeFile(standalonePluginPath, [
           `import { hostStylesPlugin, publicAssetsPlugin } from ${JSON.stringify(import.meta.resolve("@svartz/vite/host"))};`,
@@ -565,12 +570,14 @@ const createAppConfig = (
             if (!hostApp) return;
             const kitBasePath = svelteKitBasePath(resolved.define) ?? "";
             await writeFile(hostRegistryPath, createHostRegistrySource(vaults, kitBasePath));
+            await writeFile(hostIndexPath, createHostIndexSource(vaults, kitBasePath));
           },
         },
       ],
       resolve: {
         alias: {
           "virtual:svartz/host": hostRegistryPath,
+          "virtual:svartz/index": hostIndexPath,
           // The standalone shell's `virtual:svartz/server` is its one vault's module, aliased by the svartz plugin.
           ...(hostApp ? { "virtual:svartz/server": hostServerPath } : {}),
         },
@@ -603,7 +610,9 @@ const buildVaults = (
             const config = await runEffect(
               createAppConfig(workspace, supportedVaults, "production", "build"),
             );
-            await viteBuild(config);
+            // `vite build` builds the app: SvelteKit 3 builds its server, prerenders, and adapts only in `buildApp`.
+            // `null` keeps Vite's own choice of builder, so SvelteKit 2's single build is unchanged.
+            await (await createBuilder(config, null)).buildApp();
           } finally {
             if (!workspace.hostApp) await removeVaultKitSymlink(workspace.appRoot, supportedVaults[0]!);
           }

@@ -113,6 +113,20 @@ it('renders the decrypted note body after unlocking', async () => {
 	await expect.element(page.getByText('Unlocked body')).toBeVisible();
 });
 
+it('fetches the sealed payload under the deployment base Svartz generated', async () => {
+	const fetchPayload = vi.fn(async () => new Response('{}', { status: 404 }));
+	vi.stubGlobal('fetch', fetchPayload);
+	artifacts.deploymentBasePath = '/site';
+	try {
+		render(SvartzNoteContent, { pathname: '/work/secret/', stylesheets: [] });
+		await page.getByLabelText('Password').fill('any-password');
+		await page.getByRole('button', { name: 'Unlock note' }).click();
+		await expect.poll(() => fetchPayload.mock.calls.at(0)?.at(0)).toBe('/site/work/secret.json');
+	} finally {
+		artifacts.deploymentBasePath = '';
+	}
+});
+
 it('mounts browser resources only while a note renders', async () => {
 	const mount = vi.spyOn(artifacts, 'mountBrowserResources');
 	const nonNote = render(SvartzNoteContent, {

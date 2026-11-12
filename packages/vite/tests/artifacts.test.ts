@@ -92,8 +92,9 @@ describe("@svartz/vite artifact helpers", () => {
     );
     expect(source).toContain('export const siteConfig = {"title":"Svartz"};');
     expect(source).toContain('export const deploymentBasePath = "";');
-    expect(source).toContain('import { base } from "$app/paths";');
-    expect(source).toContain('export const vault = createVaultView(index, "default", base);');
+    // SvelteKit 3's `$app/paths` has no `base`; the vault view takes the base Svartz generated.
+    expect(source).not.toContain("$app/paths");
+    expect(source).toContain('export const vault = createVaultView(index, "default", deploymentBasePath);');
     expect(source).toContain('export const searchOptions = SEARCH_INDEX_OPTIONS;');
     expect(source).toContain("export function hasNoteArtifact(key)");
     expect(source).toContain("export function getNoteArtifact(key)");

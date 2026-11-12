@@ -156,6 +156,7 @@ export function withSvartzHost(config: UserConfigExport): UserConfigExport {
             "virtual:svartz/theme": process.env.SVARTZ_THEME_MODULE_PATH,
             "virtual:svartz/artifacts": process.env.SVARTZ_ARTIFACTS_MODULE_PATH,
             "virtual:svartz/host": process.env.SVARTZ_HOST_MODULE_PATH,
+            "virtual:svartz/index": process.env.SVARTZ_INDEX_MODULE_PATH,
             "virtual:svartz/tailwind-sources.css": process.env.SVARTZ_TAILWIND_SOURCES_PATH,
           }).flatMap(([find, replacement]) => (replacement ? [{ find, replacement }] : [])),
         ],

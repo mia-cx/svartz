@@ -22,6 +22,24 @@ Each vault gets its own theme, publication filter, generated artifacts, and asse
 
 The generated `virtual:svartz/host` module exposes `vaults`, combined `routes`, `resolveHostVault(pathname)`, and `prepareHostVault(pathname)`. `vaults` holds each mount's published index and site settings for route lookup and opt-in discovery. Runtime artifacts and theme code load only when `prepareHostVault` selects that mount. The default catchall uses `routes` for redirects and 404s, then awaits `prepareHostVault` before rendering. If a custom route renders `SvartzRuntimePage`, call `prepareHostVault` in its universal `load` too, using the pathname after removing SvelteKit's deployment base. This prepares lazy theme components for both server rendering and client hydration. Hosts can import `virtual:svartz/artifacts` for a single-vault build or use the registry to select a vault in a composed build. See the [published vault view](vault-view.md) for typed note data.
 
+### Index-only hosts
+
+A host that lists notes or links their published Markdown, and never renders a Svartz page, imports `virtual:svartz/index` instead. It exports `vaults`, one record per host vault in config order, each with `id`, `mountPath`, `basePath`, the published `index`, and `siteConfig`. It imports no page runtime or theme, so the host compiles none of Svartz's Svelte code. Entry hrefs start at the app root; prefix them with `basePath`, SvelteKit's `paths.base`.
+
+```svelte
+<!-- src/routes/+page.svelte -->
+<script lang="ts">
+  import { vaults } from 'virtual:svartz/index';
+  const course = vaults.find((vault) => vault.id === 'course')!;
+</script>
+
+{#each course.index.entries as entry}
+  <a href={course.basePath + entry.markdownHref}>{entry.title}</a>
+{/each}
+```
+
+`markdownHref` is set when the vault publishes Markdown with `index: { markdown: true }`. This is the supported way into a SvelteKit 3 host: `svartz build` builds, prerenders, and adapts it.
+
 During `svartz dev`, edits to a local workspace theme rebuild that theme package before the host restarts. This keeps package exports pointing at `dist` in sync with source edits.
 
 Each vault can emit its own RSS feed and sitemap. A host can also select vaults for a combined feed or sitemap in a manual SvelteKit route. See [feeds, sitemaps, and llms.txt](discovery.md).

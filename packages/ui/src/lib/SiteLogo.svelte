@@ -1,12 +1,20 @@
 <!-- The site's mark (`theme.logo`), placed inside a `.sv-wordmark` link before the title. With a dark variant, base.css shows each image only in its colour mode. -->
 <script lang="ts">
-	import { base } from '$app/paths';
+	import { getDeploymentBase } from './deployment-base.js';
 	import type { LogoSettings } from './theme-settings.js';
 
-	let { logo }: { logo: LogoSettings | undefined } = $props();
+	let {
+		logo,
+		base
+	}: {
+		logo: LogoSettings | undefined;
+		/** The deployment base, for a logo outside a Svartz page such as a host's own header. Inside one, the page supplies it. */
+		base?: string;
+	} = $props();
 
 	// Paths from the site root gain the deployment base, like other site asset links; URLs pass through.
-	const resolve = (src: string) => (src.startsWith('/') && !src.startsWith('//') ? `${base}${src}` : src);
+	const pageBase = getDeploymentBase();
+	const resolve = (src: string) => (src.startsWith('/') && !src.startsWith('//') ? `${base ?? pageBase()}${src}` : src);
 </script>
 
 {#if logo}

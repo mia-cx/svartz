@@ -1,6 +1,6 @@
 import type { Component } from 'svelte';
 import { createVaultEntryView, decodeRoutePath, type ProtectedGroupPayload } from '@svartz/core';
-import { base } from '$app/paths';
+import { setDeploymentBase } from '../deployment-base.js';
 import { browser } from '$app/environment';
 import {
 	resolveContentComponents,
@@ -38,8 +38,10 @@ export function artifactKeyToSlug(artifactKey: string | undefined): string | und
 export class VaultPageState {
 	#input: () => VaultPageInput;
 
+	/** Construct during component init: it gives descendants (logos, protected notes) the vault's deployment base. */
 	constructor(input: () => VaultPageInput) {
 		this.#input = input;
+		setDeploymentBase(() => this.artifacts.deploymentBasePath);
 	}
 
 	unlockedGroups = $state<ReadonlyMap<string, ProtectedGroupPayload>>(new Map());
@@ -112,7 +114,7 @@ export class VaultPageState {
 		const hidden = [...this.unlockedGroups.values()]
 			.flatMap((group) => group.entries)
 			.find((candidate) => candidate.slug === slug);
-		return hidden ? createVaultEntryView(hidden, base) : undefined;
+		return hidden ? createVaultEntryView(hidden, this.artifacts.deploymentBasePath) : undefined;
 	});
 
 	/** The common props every theme layout and page body receive. */
