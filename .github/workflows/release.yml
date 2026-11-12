@@ -110,15 +110,21 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm i --frozen-lockfile
+      # changesets/action can't find an open release PR in a fork (scripts/release-pr.mjs says why), so these two
+      # steps do its job: version on a fresh release branch, then open or update the pull request.
+      - name: Version the packages on the release branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C changeset-release/sveltekit-rewrite
+          pnpm release:version
+          git add -A
+          git commit -m 'chore(release): version packages'
+          git push --force origin HEAD:refs/heads/changeset-release/sveltekit-rewrite
       - name: Open or update the release pull request
-        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2
-        with:
-          version-script: pnpm release:version
-          commit-message: 'chore(release): version packages'
-          pr-title: 'chore(release): version packages'
-          pr-base-branch: sveltekit-rewrite
-          create-github-releases: false
-          push-git-tags: false
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-pr.mjs
 
   validation:
     needs: plan
