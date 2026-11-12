@@ -207,6 +207,15 @@ describe("after a light edit to the passage", () => {
     expect(found && text.slice(found.end)).toBe(" is measured once every morning.");
   });
 
+  it("keeps a passage wrapped in punctuation among more repeats than are scored", () => {
+    const original = "In the northern sheltered garden, temperature is measured once every morning.";
+    const start = original.indexOf("temperature");
+    const anchor = anchorIn(original, start, start + "temperature".length);
+    const text = original.replace("temperature", "(temperature)") + " temperature reading;".repeat(70);
+
+    expect(locate(text, anchor)).toEqual({ start: start + 1, end: start + 1 + "temperature".length });
+  });
+
   it("stays fast on a long note with a long passage that changed", () => {
     const root = render();
     const quote = root.querySelector(".sv-callout-body")!.textContent!.slice(0, 200);

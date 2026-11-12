@@ -57,8 +57,9 @@ export const MIN_AGREEMENT = 0.6;
 /** Cells of the fuzzy search's table, which bounds its work: a long quote searches a narrower stretch around where it was. */
 const SEARCH_CELLS = 4_000_000;
 /**
- * Candidates scored in full, so a common word stays cheap. They are picked by how much of the quote and the context
- * right beside it agree, then nearest first, so unrelated repeats of a quote never crowd out its passage.
+ * Candidates scored in full, so a common word stays cheap. They are ranked by how much of the quote and the words right
+ * beside it agree, less a cost for distance from the stored position, so unrelated repeats of a quote never crowd out
+ * its passage.
  */
 const MAX_CANDIDATES = 64;
 
@@ -88,9 +89,15 @@ export function locate(text: string, anchor: Anchor): Position | null {
   }
   if (at) return at;
 
+  const before = words(prefix, -1);
+  const after = words(suffix, 1);
   const candidates = [...occurrences(text, exact), ...nearMatches(text, anchor)]
-    .map((candidate) => ({ candidate, disagreement: candidate.edits - adjacentAgreement(text, anchor, candidate) }))
-    .sort((a, b) => a.disagreement - b.disagreement || distance(a.candidate) - distance(b.candidate))
+    .map((candidate) => {
+      const adjacent = wordsInCommon(before, text, candidate.start - 1, -1) + wordsInCommon(after, text, candidate.end, 1);
+      // Twice as far costs one more character, so a nearby passage outranks distant repeats with a little more context.
+      return { candidate, rank: candidate.edits - adjacent + Math.log2(1 + distance(candidate)) };
+    })
+    .sort((a, b) => a.rank - b.rank)
     .slice(0, MAX_CANDIDATES);
   let best: Candidate | undefined;
   let bestScore = MIN_AGREEMENT;
@@ -157,17 +164,36 @@ function agreement(text: string, { exact, prefix, suffix }: Anchor, candidate: C
   return 1 - (candidate.edits + before + after) / (exact.length + prefix.length + suffix.length);
 }
 
+/** Letters, marks and digits: what {@link wordsInCommon} compares, so punctuation and spacing carry no weight. */
+const WORD = /[\p{L}\p{M}\p{N}]/u;
+
+function isWord(code: number): boolean {
+  return WORD.test(String.fromCharCode(code));
+}
+
+/** The word characters of `context`, read away from the quote: backwards for a prefix (`step` -1), forwards for a suffix. */
+function words(context: string, step: 1 | -1): string {
+  let kept = "";
+  for (let i = step > 0 ? 0 : context.length - 1; i >= 0 && i < context.length; i += step) {
+    if (isWord(context.charCodeAt(i))) kept += context[i];
+  }
+  return kept;
+}
+
 /**
- * Characters of `anchor`'s context that match the text right beside `candidate`, up to the first difference on each
- * side: a cheap estimate of {@link agreement} for choosing which candidates it scores.
+ * How many of `kept`'s characters the text's word characters repeat from `from`, stepping by `step` away from a
+ * candidate up to the first difference: a cheap estimate of {@link agreement} for choosing which candidates it scores.
+ * It reads at most twice the context's length, as {@link agreement} does.
  */
-function adjacentAgreement(text: string, { prefix, suffix }: Anchor, { start, end }: Candidate): number {
-  let before = 0;
-  // Past either end of the text `charCodeAt` is NaN, which matches nothing.
-  while (before < prefix.length && unit(prefix.charCodeAt(prefix.length - 1 - before)) === unit(text.charCodeAt(start - 1 - before))) before++;
-  let after = 0;
-  while (after < suffix.length && unit(suffix.charCodeAt(after)) === unit(text.charCodeAt(end + after))) after++;
-  return before + after;
+function wordsInCommon(kept: string, text: string, from: number, step: 1 | -1): number {
+  let matched = 0;
+  for (let j = from, reach = 2 * CONTEXT_LENGTH; matched < kept.length && reach > 0 && j >= 0 && j < text.length; j += step, reach--) {
+    const code = text.charCodeAt(j);
+    if (!isWord(code)) continue;
+    if (code !== kept.charCodeAt(matched)) break;
+    matched++;
+  }
+  return matched;
 }
 
 /**
