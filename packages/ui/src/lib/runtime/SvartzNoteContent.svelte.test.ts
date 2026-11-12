@@ -124,7 +124,21 @@ it('mounts browser resources only while a note renders', async () => {
 	nonNote.unmount();
 
 	render(SvartzNoteContent, { pathname: '/work/plain/', stylesheets: [] });
-	await expect.poll(() => mount.mock.calls).toEqual([['/work/plain/']]);
+	await expect.poll(() => mount.mock.calls.length).toBe(1);
+	expect(mount.mock.calls[0]).toEqual(['/work/plain/', document.querySelector('[data-svartz-note="plain"]')]);
+});
+
+it('mounts browser resources for each note on a page with its own body', async () => {
+	const mount = vi.spyOn(artifacts, 'mountBrowserResources');
+	render(SvartzNoteContent, { pathname: '/work/plain/', stylesheets: [] });
+	render(SvartzNoteContent, { pathname: '/work/callouts/', stylesheets: [] });
+	await expect.poll(() => mount.mock.calls.length).toBe(2);
+	expect(
+		mount.mock.calls.map(([pathname, note]) => [pathname, note?.dataset.svartzNote]).sort()
+	).toEqual([
+		['/work/callouts/', 'callouts'],
+		['/work/plain/', 'plain']
+	]);
 });
 
 it('renders nothing for non-note pathnames', async () => {

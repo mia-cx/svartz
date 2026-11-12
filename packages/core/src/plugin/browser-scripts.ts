@@ -2,6 +2,12 @@
 export interface BrowserScriptContext {
   /** SvelteKit's deployment base path (`paths.base`), without a trailing slash; `""` at the domain root. */
   readonly base: string;
+  /**
+   * The note body this mount is for, when a host page renders the note with `SvartzNoteContent`: it carries
+   * `data-svartz-note` when the note is public. A host page can show several, each mounting the scripts with its own.
+   * Absent on theme pages, where the document holds one page; look up `[data-svartz-note]` there.
+   */
+  readonly note?: HTMLElement;
 }
 
 /** Lifecycle contract for a script contributed by a content plugin. */

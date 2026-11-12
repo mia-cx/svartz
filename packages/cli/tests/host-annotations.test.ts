@@ -19,6 +19,7 @@ const roots: string[] = [];
 const BASE = "/site";
 const ROSES = "Roses want six hours of sun and a deep weekly soak.";
 const TULIPS = "Tulips open in the morning sun and close again at dusk.";
+const PEARS = "Pears ripen off the tree, in a cool and dark drawer.";
 
 async function freePort(): Promise<number> {
   const server = createServer();
@@ -110,12 +111,40 @@ export const load = ({ params }) => {
 `,
 };
 
+/** A host page showing several notes, each through its own SvartzNoteContent. */
+const notesRoute = (pathnames: readonly string[]) => ({
+  "+page.server.ts": `import { noteStylesheets } from '@svartz/ui/runtime';
+const pathnames = ${JSON.stringify(pathnames)};
+export const load = async () => ({ stylesheets: (await Promise.all(pathnames.map(noteStylesheets))).flat() });
+`,
+  "+page.ts": `import { prepareHostVault } from 'virtual:svartz/host';
+export const trailingSlash = 'always';
+const pathnames = ${JSON.stringify(pathnames)};
+export const load = async ({ data }) => {
+  await Promise.all(pathnames.map(prepareHostVault));
+  return { ...data, pathnames };
+};
+`,
+  "+page.svelte": `<script lang="ts">
+  import { SvartzNoteContent } from '@svartz/ui/runtime';
+  let { data } = $props();
+</script>
+<h1>Host notes page</h1>
+{#each data.pathnames as pathname (pathname)}
+  <section data-note={pathname}><SvartzNoteContent {pathname} stylesheets={data.stylesheets} /></section>
+{/each}
+`,
+});
+
 async function writeRoute(root: string, route: string, files: Record<string, string>) {
   await mkdir(path.join(root, "src/routes", route), { recursive: true });
   for (const [name, source] of Object.entries(files)) await writeFile(path.join(root, "src/routes", route, name), source);
 }
 
-/** A host app on adapter-cloudflare under the deployment base `/site`, with a `garden` vault running auth and annotations. */
+/**
+ * A host app on adapter-cloudflare under the deployment base `/site`, with `garden` and `orchard` vaults running auth
+ * and annotations on one D1.
+ */
 async function createHost(): Promise<string> {
   // SvelteKit writes relative imports from the kit dir; macOS's /var symlink would break them.
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "svartz-host-annotations-")));
@@ -125,6 +154,8 @@ async function createHost(): Promise<string> {
   await mkdir(path.join(root, "src/routes"), { recursive: true });
   await writeFile(path.join(root, "garden/roses.md"), `${ROSES}\n`);
   await writeFile(path.join(root, "garden/essays/tulips.md"), `${TULIPS}\n`);
+  await mkdir(path.join(root, "orchard"));
+  await writeFile(path.join(root, "orchard/pears.md"), `${PEARS}\n`);
   await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "svartz-host-annotations", private: true, type: "module", devDependencies: { "@sveltejs/kit": "^2.0.0" } }));
   await writeFile(path.join(root, "vite.config.ts"), [
     "import { sveltekit } from '@sveltejs/kit/vite';",
@@ -148,23 +179,22 @@ async function createHost(): Promise<string> {
   await writeFile(path.join(root, "src/routes/+page.svelte"), "<h1>Host home</h1>\n");
   await writeRoute(root, "garden/[...slug]", NOTE_ROUTE);
   await writeRoute(root, "essays/[slug]", ESSAY_ROUTE);
+  await writeRoute(root, "same-vault", notesRoute(["/garden/roses/", "/garden/essays/tulips/"]));
+  await writeRoute(root, "two-vaults", notesRoute(["/garden/roses/", "/orchard/pears/"]));
   await writeFile(path.join(root, "svartz.config.ts"), `
 import { auth } from ${JSON.stringify(path.join(authDist, "index.js"))};
 import { annotations } from ${JSON.stringify(path.join(annotationsDist, "index.js"))};
+const plugins = () => [
+  auth({ providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } } }),
+  annotations({ database: { env: "DB" } }),
+];
+const theme = ${JSON.stringify(path.join(workspaceRoot, "themes/minimal"))};
 export default {
   version: "1.0.0",
-  vaults: [{
-    id: "garden",
-    path: "garden",
-    mountPath: "/garden",
-    theme: ${JSON.stringify(path.join(workspaceRoot, "themes/minimal"))},
-    target: { type: "host" },
-    index: { markdown: true },
-    plugins: [
-      auth({ providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } } }),
-      annotations({ database: { env: "DB" } }),
-    ],
-  }],
+  vaults: [
+    { id: "garden", path: "garden", mountPath: "/garden", theme, target: { type: "host" }, index: { markdown: true }, plugins: plugins() },
+    { id: "orchard", path: "orchard", mountPath: "/orchard", theme, target: { type: "host" }, plugins: plugins() },
+  ],
 };\n`);
   return root;
 }
@@ -218,7 +248,7 @@ async function signIn(origin: string): Promise<string> {
 /** Select `quote` in the note body under `selector` and post `body` on it from the toolbar. */
 async function comment(page: Page, selector: string, quote: string, body: string) {
   // The layer beside the note: annotations have attached and listen for the selection.
-  await page.locator(".sv-annotations").waitFor({ state: "attached" });
+  await page.locator(`${selector} + .sv-annotations`).waitFor({ state: "attached" });
   await page.evaluate(({ selector, quote }) => {
     const root = document.querySelector(selector)!;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -243,11 +273,11 @@ const highlighted = (page: Page) =>
   page.evaluate(() => [...CSS.highlights.get("svartz-annotations") ?? []].map((range) => range.toString()));
 
 /** The annotations `wrangler d1 execute --local` reads from the host's local D1. */
-async function storedComments(root: string): Promise<Array<{ page: string; body: string }>> {
+async function storedComments(root: string): Promise<Array<{ vault: string; page: string; body: string }>> {
   const { stdout } = await execFileAsync(path.join(shellModules, ".bin/wrangler"), [
-    "d1", "execute", "DB", "--local", "--json", "--command", "SELECT page, body FROM annotations ORDER BY page",
+    "d1", "execute", "DB", "--local", "--json", "--command", "SELECT vault, page, body FROM annotations ORDER BY vault, page",
   ], { cwd: root, env: { ...process.env, CI: "1" } });
-  const [result] = JSON.parse(stdout) as Array<{ results: Array<{ page: string; body: string }> }>;
+  const [result] = JSON.parse(stdout) as Array<{ results: Array<{ vault: string; page: string; body: string }> }>;
   return result?.results ?? [];
 }
 
@@ -315,7 +345,55 @@ it("shows annotations on a host's own pages under a deployment base, and detache
   }
 
   expect(await storedComments(root)).toEqual([
-    { page: "essays/tulips", body: "Mine stay shut on grey days." },
-    { page: "roses", body: "Twice in a heatwave." },
+    { vault: "garden", page: "essays/tulips", body: "Mine stay shut on grey days." },
+    { vault: "garden", page: "roses", body: "Twice in a heatwave." },
+  ]);
+}, 300_000);
+
+it("keeps each note's annotations on its own body when a host page shows two, from one vault or two", async () => {
+  const root = await createHost();
+  const dev = await startDev(root, `${BASE}/`);
+  const browser = await chromium.launch();
+  try {
+    const session = await signIn(dev.origin);
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await context.addCookies([{ name: "__Host-svartz-session", value: session, url: dev.origin.replace(/^http:/, "https:"), secure: true, httpOnly: true, sameSite: "Lax" }]);
+    const page = await context.newPage();
+    const failures: string[] = [];
+    page.on("pageerror", (error) => failures.push(error.message));
+    // Vite reloads the page once it has optimized dependencies on first visit; settle that before counting failures.
+    for (const route of ["/same-vault/", "/two-vaults/"]) await page.goto(`${dev.origin}${BASE}${route}`, { waitUntil: "networkidle" });
+
+    /** Each note's marker labels, by the pathname its section shows. */
+    const markersByNote = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>("[data-note]")].map((section) => {
+      const body = section.querySelector("[data-svartz-note]")!;
+      const layer = body.nextElementSibling?.matches(".sv-annotations") ? body.nextElementSibling : null;
+      return [section.dataset.note, [...layer?.querySelectorAll(".sv-annotations-marker") ?? []].map((marker) => marker.getAttribute("aria-label"))];
+    })));
+
+    for (const [route, second, quote, body] of [
+      ["/same-vault/", "/garden/essays/tulips/", "close again at dusk", "Mine stay shut on grey days."],
+      ["/two-vaults/", "/orchard/pears/", "a cool and dark drawer", "The vegetable drawer works."],
+    ] as const) {
+      await page.goto(`${dev.origin}${BASE}${route}`);
+      await page.getByRole("heading", { name: "Host notes page" }).waitFor();
+      await expect.poll(() => page.locator(".sv-annotations").count()).toBe(2);
+      // A comment on the second note marks that note alone.
+      await comment(page, `[data-note="${second}"] [data-svartz-note]`, quote, body);
+      await page.getByRole("button", { name: new RegExp(`^Comment by The Octocat on “${quote}”`) }).waitFor();
+      await page.reload();
+      await page.getByRole("button", { name: new RegExp(`^Comment by The Octocat on “${quote}”`) }).waitFor();
+      expect(await markersByNote()).toEqual({ "/garden/roses/": [], [second]: [`Comment by The Octocat on “${quote}”`] });
+    }
+    expect(failures).toEqual([]);
+  } finally {
+    await browser.close();
+    await dev.stop();
+  }
+
+  // Stored under the vault and slug of the note commented on.
+  expect(await storedComments(root)).toEqual([
+    { vault: "garden", page: "essays/tulips", body: "Mine stay shut on grey days." },
+    { vault: "orchard", page: "pears", body: "The vegetable drawer works." },
   ]);
 }, 300_000);

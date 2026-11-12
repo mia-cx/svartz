@@ -168,7 +168,7 @@ export const entries: EntryGenerator = () =>
 
 With [`@svartz/plugin-annotations`](annotations.md) and `auth` on a host vault, `svartzHandle` serves both plugins' routes (see [server plugins](#server-plugins)). The app runs on `@sveltejs/adapter-cloudflare` with the D1 binding in its Wrangler config, and under `svartz dev` the plugin reads a local D1 from that config (see [bindings under `svartz dev`](server-plugins.md#bindings-under-svartz-dev)).
 
-`SvartzNoteContent` marks a public note's body as theme-minimal does, so a page that renders a note with it shows the note's annotations with no code. Protected notes get none.
+`SvartzNoteContent` marks a public note's body as theme-minimal does, so a page that renders a note with it shows the note's annotations with no code. A page can render several notes, from one vault or several, and each shows its own. Protected notes get none.
 
 On notes the host renders itself (see [render notes with your own renderer](#render-notes-with-your-own-renderer)), call `attach` from `@svartz/plugin-annotations/browser` with the note's vault and slug. Svelte's `{@attach}` removes the annotations when the reader leaves the page, and attaches again when the slug changes:
 

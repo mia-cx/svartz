@@ -845,11 +845,12 @@ export interface MountOptions {
 }
 
 /**
- * Browser resource entry, which Svartz calls after every navigation: attach to the note body the theme marks with
- * `data-svartz-note="<slug>"`, keyed by that slug. A page without one, such as a list page, gets nothing.
+ * Browser resource entry, which Svartz calls after every navigation: attach to the note body marked with
+ * `data-svartz-note="<slug>"`, keyed by that slug. On a host page that is the `SvartzNoteContent` body the mount is
+ * for, so each of several notes gets its own; on a theme page, the document's. A page without one gets nothing.
  */
-export function mount(_pathname: string, { endpoint }: MountOptions, { base }: BrowserScriptContext = { base: "" }) {
-  const content = document.querySelector<HTMLElement>("[data-svartz-note]");
+export function mount(_pathname: string, { endpoint }: MountOptions, { base, note }: BrowserScriptContext = { base: "" }) {
+  const content = note ?? document.querySelector<HTMLElement>("[data-svartz-note]");
   const page = content?.dataset.svartzNote;
   if (!content || !page) return undefined;
   return attach(content, { endpoint: `${base}${endpoint}`, page });
