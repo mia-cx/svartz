@@ -257,6 +257,20 @@ a.sv-annotations-name:hover {
 	margin-inline-start: -0.5rem;
 }
 
+/* Each face over the next, so the first, the reader's when they agree, is never covered. */
+.sv-annotations-faces .sv-annotations-avatar {
+	position: relative;
+	z-index: 1;
+}
+
+.sv-annotations-faces .sv-annotations-avatar:nth-child(1) {
+	z-index: 3;
+}
+
+.sv-annotations-faces .sv-annotations-avatar:nth-child(2) {
+	z-index: 2;
+}
+
 .sv-annotations-card .sv-annotations-problem {
 	margin-block-start: var(--sv-space-2, 0.5rem);
 }
