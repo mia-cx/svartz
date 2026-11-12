@@ -234,6 +234,11 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
   /** Set once sign-in is asked for: the saved draft then reopens the panel when the reader is back on this page. */
   let resumeOn: string | undefined;
   let autosave: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * When the kept draft this panel read or last saved was saved. Tabs share the slot: a draft another tab saved since
+   * has another time, and this panel never forgets it.
+   */
+  let ownSave = draft?.savedAt;
 
   let mode = preferredMode();
   const presentation = new Compartment();
@@ -263,6 +268,11 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
   /** Whether closing would lose anything the reader typed. */
   const typed = () => (view !== undefined && view.state.sliceDoc() !== original) || Boolean(note.value.trim() || title?.value.trim());
 
+  /** Forget the kept draft, unless another tab saved it. Answers whether storage holds no draft of this panel's. */
+  function forget(): boolean {
+    return readDraft(endpoint, target)?.savedAt !== ownSave || storeDraft(endpoint, target, undefined);
+  }
+
   /**
    * Keep what the reader has written, or forget the kept draft when they've written nothing. Skipped while there is no
    * source to save, while a kept draft is still on offer, and once the pull request holds it. Answers whether storage
@@ -271,8 +281,10 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
   function save(): boolean {
     clearTimeout(autosave);
     if (!view || offer || phase === "sent") return true;
-    if (!typed()) return storeDraft(endpoint, target, undefined);
-    const common = { markdown: view.state.sliceDoc(), note: note.value, savedAt: Date.now(), ...(resumeOn ? { resume: resumeOn } : {}) };
+    if (!typed()) return forget();
+    const savedAt = Date.now();
+    const common = { markdown: view.state.sliceDoc(), note: note.value, savedAt, ...(resumeOn ? { resume: resumeOn } : {}) };
+    ownSave = savedAt;
     return storeDraft(endpoint, target, target.kind === "edit"
       ? { ...common, kind: "edit", page: target.page }
       : { ...common, kind: "new", folder: folder?.value ?? "", title: title?.value ?? "" });
@@ -305,8 +317,12 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
     error.hidden = false;
   }
 
-  /** Close the panel. Navigation keeps what the reader wrote; a dismissal has already decided its fate. */
+  /**
+   * Close the panel. Navigation keeps what the reader wrote; a dismissal has already decided its fate, so the page's
+   * cleanup closing it again does nothing.
+   */
   function close(keep = true) {
+    if (!dialog.isConnected) return;
     if (keep) save();
     clearTimeout(autosave);
     window.removeEventListener("pagehide", save);
@@ -322,7 +338,7 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
     if (phase === "sending") return false;
     if (phase !== "sent" && typed() && !window.confirm(target.kind === "edit" ? "Discard your edit?" : "Discard this page?")) return false;
     // The reader discarded what they wrote; a draft still on offer, or one the panel couldn't load the source for, stays.
-    if (!unrestored) storeDraft(endpoint, target, undefined);
+    if (!unrestored) forget();
     close(false);
     return true;
   }
@@ -416,7 +432,7 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
       if (!dialog.isConnected) return;
       // The pull request holds these fields now and the panel stays locked; further typing would go nowhere.
       unconfirmed.delete(submission.key);
-      storeDraft(endpoint, target, undefined);
+      forget();
       phase = "sent";
       challenge.hidden = true;
       holdOpen(false);
@@ -504,10 +520,15 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
     offer?.remove();
     offer = undefined;
     unrestored = undefined;
+    lock(false);
   }
 
-  /** Offer the kept draft back above the source, focusing its first button. */
+  /**
+   * Offer the kept draft back above the source, focusing its first button. The fields take no writing until the reader
+   * answers: the draft isn't saved over while it shows, so that writing would be lost.
+   */
   function offerDraft(kept: Draft) {
+    lock(true);
     const noun = target.kind === "edit" ? "edit" : "page";
     offer = document.createElement("div");
     offer.className = "svartz-submissions-restore";
@@ -524,7 +545,7 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
     });
     query<HTMLElement>(offer, "[data-discard]").addEventListener("click", () => {
       dropOffer();
-      storeDraft(endpoint, target, undefined);
+      forget();
       save();
       (title ?? view)?.focus();
     });

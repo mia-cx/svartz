@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import "../src/browser.css";
 import type { BrowserOptions } from "../src/api";
 import { mount } from "../src/browser";
+import { readDraft, storeDraft } from "../src/draft";
 import { mount as mountAuth } from "@svartz/auth/browser";
 
 // CRLF line endings and frontmatter: the edit must keep every byte it doesn't touch.
@@ -36,6 +37,13 @@ async function openEditor(options: BrowserOptions = OPTIONS) {
   const mod = navigator.platform.startsWith("Mac") ? "Meta" : "Control";
   await source.click();
   await userEvent.keyboard(`{${mod}>}{End}{/${mod}}Welcome.`);
+}
+
+/** Reopen the editor on the guide and restore the edit navigation kept. */
+async function restoreDraft() {
+  unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Restore edit" }).click();
 }
 
 beforeEach(() => {
@@ -170,7 +178,7 @@ describe("Edit", () => {
     // Navigation closes the panel without asking.
     if (unmount) unmount();
 
-    await openEditor();
+    await restoreDraft();
     await page.getByRole("button", { name: "Open pull request" }).click();
     await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
     if (unmount) unmount();
@@ -200,7 +208,7 @@ describe("Edit", () => {
     land(Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    await openEditor();
+    await restoreDraft();
     await page.getByRole("button", { name: "Open pull request" }).click();
     await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
 
@@ -575,6 +583,50 @@ describe("Live Preview", () => {
     expect(sentMarkdown()).toBe(NOTE.replace("- [ ]", "- [x]"));
   });
 
+  it("opens a note whose link syntax spans lines, showing that syntax", async () => {
+    await openOn('# Guide\n\n[link](https://example.com "Title\ncontinued")\n\nSee [[target\ncontinued|label]].\n', 1);
+
+    expect(shownLine(3).textContent).toBe('link "Title');
+    // A wikilink stays on one line, so Markdown reads only the inner brackets, as a link.
+    expect(shownLine(7).textContent).toBe("continued|label].");
+  });
+
+  it("ticks a task from the keyboard, keeping focus on its checkbox", async () => {
+    await openOn(NOTE, 1);
+    await userEvent.tab();
+    const box = page.getByRole("checkbox", { name: "Done" });
+    await expect.element(box).toHaveFocus();
+    await userEvent.keyboard(" ");
+
+    await expect.element(box).toBeChecked();
+    await expect.element(box).toHaveFocus();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+    expect(sentMarkdown()).toBe(NOTE.replace("- [ ]", "- [x]"));
+  });
+
+  it("leaves tasks alone while the pull request opens", async () => {
+    let answer!: (response: Response) => void;
+    await openOn(NOTE, 1);
+    await userEvent.keyboard("{End}!");
+    serve(() => new Promise((resolve) => { answer = resolve; }), () => Response.json({ markdown: NOTE }));
+    await page.getByRole("button", { name: "Open pull request" }).click();
+
+    const box = page.getByRole("checkbox", { name: "Done" });
+    await expect.element(box).toBeDisabled();
+    // What a script or assistive technology could still send to it.
+    box.element().dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    (box.element() as HTMLInputElement).click();
+    answer(Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+
+    await expect.element(box).not.toBeChecked();
+    await expect.element(box).toBeDisabled();
+    expect(sentMarkdown()).toBe(NOTE.replace("# Guide", "# Guide!"));
+    await page.getByRole("radio", { name: "Source" }).click();
+    expect(shownLine(10).textContent).toBe("- [ ] Write the page");
+  });
+
   it("switches to Source and back without changing a byte, and remembers the choice", async () => {
     await openOn(SOURCE, 5);
     await userEvent.keyboard("{End} today");
@@ -632,6 +684,21 @@ describe("drafts", () => {
     await expect.element(page.getByRole("group", { name: /^Unsent edit/ })).not.toBeInTheDocument();
   });
 
+  it("takes no new writing until the reader answers the offer, so none goes unsaved", async () => {
+    serve(() => Response.json({}));
+    await writeThenCrash();
+    await page.getByRole("textbox", { name: "Page source" }).click();
+    await userEvent.keyboard("Lost?");
+    await page.getByLabelText("What changed").click();
+    await userEvent.keyboard("Lost?");
+
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).not.toHaveTextContent("Lost?");
+    await expect.element(page.getByLabelText("What changed")).toHaveValue("");
+    await page.getByRole("button", { name: "Discard edit" }).click();
+    await page.getByLabelText("What changed").fill("Kept.");
+    await expect.element(page.getByLabelText("What changed")).toHaveValue("Kept.");
+  });
+
   it("forgets the draft the reader discards", async () => {
     serve(() => Response.json({}));
     await writeThenCrash();
@@ -662,6 +729,35 @@ describe("drafts", () => {
     await expect.element(page.getByRole("textbox", { name: "Title" })).toHaveValue("Ada Lovelace");
     await expect.element(page.getByRole("combobox", { name: "Section" })).toHaveValue("People");
     await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("She wrote the first program.");
+  });
+
+  it("keeps a draft another tab saved while this one had nothing written", async () => {
+    serve(() => Response.json({}));
+    const endpoint = "/docs/wiki/_svartz/submissions";
+    const target = { kind: "edit", page: "/wiki/guide/" } as const;
+    const other = { kind: "edit", page: "/wiki/guide/", markdown: "From the other tab.", note: "", savedAt: Date.now() } as const;
+    for (const leave of ["navigation", "close"] as const) {
+      unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+      await page.getByRole("button", { name: "Edit" }).click();
+      await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("Guide");
+      storeDraft(endpoint, target, other);
+      if (leave === "close") await page.getByRole("button", { name: "Close editor" }).click();
+      unmount?.();
+      unmount = undefined;
+
+      expect(readDraft(endpoint, target)).toEqual(other);
+    }
+  });
+
+  it("keeps a discarded edit discarded when the page is left afterwards", async () => {
+    serve(() => Response.json({}));
+    vi.stubGlobal("confirm", () => true);
+    await openEditor();
+    await page.getByRole("button", { name: "Close editor" }).click();
+    unmount?.();
+    unmount = undefined;
+
+    expect(readDraft("/docs/wiki/_svartz/submissions", { kind: "edit", page: "/wiki/guide/" })).toBeUndefined();
   });
 
   it("forgets the draft once the pull request opens", async () => {
@@ -699,6 +795,24 @@ describe("wikilink autocomplete", () => {
 
     await page.getByRole("radio", { name: "Source" }).click();
     await expect.element(source).toHaveTextContent("See [[People/Grace]] today.");
+  });
+
+  // `[[` types one `[` in userEvent's syntax; the cursor goes back before `after`, where the reader types `Gr`.
+  it.each([
+    ["a label", "|label]]", "See [[People/Grace|label]]"],
+    ["a heading", "#Heading]]", "See [[People/Grace#Heading]]"],
+    ["the rest of the name", "ace]]", "See [[People/Grace]]"],
+    ["text after an unclosed link", " and more.", "See [[People/Grace]] and more."],
+  ])("completes a link before %s without breaking it", async (_, after, expected) => {
+    const source = await openOn("# Guide\n", 2);
+    await userEvent.keyboard(`See [[[[${after}{ArrowLeft>${after.length}/}Gr`);
+    await expect.element(page.getByRole("option", { name: /People\/Grace/ })).toBeVisible();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await userEvent.keyboard("{Enter}");
+
+    await page.getByRole("radio", { name: "Source" }).click();
+    await expect.element(source).toHaveTextContent(expected);
+    expect(shownLine(2).textContent).toBe(expected);
   });
 
   it("narrows the suggestions as the reader types, and Escape closes them", async () => {

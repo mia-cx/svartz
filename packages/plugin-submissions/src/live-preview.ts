@@ -11,7 +11,7 @@ import { Strikethrough, TaskList, parser, type MarkdownConfig } from "@lezer/mar
 const OPEN_BRACKET = 91; // [
 const BANG = 33; // !
 
-/** `[[target]]` and `![[target]]`, as Obsidian writes links and embeds. */
+/** `[[target]]` and `![[target]]`, as Obsidian writes links and embeds: on one line. */
 const Wikilinks: MarkdownConfig = {
   defineNodes: ["Wikilink", "Embed", "WikilinkMark"],
   parseInline: [{
@@ -20,8 +20,9 @@ const Wikilinks: MarkdownConfig = {
       const embed = next === BANG;
       const open = embed ? pos + 1 : pos;
       if ((!embed && next !== OPEN_BRACKET) || cx.char(open) !== OPEN_BRACKET || cx.char(open + 1) !== OPEN_BRACKET) return -1;
-      const close = cx.slice(open + 2, cx.offset + cx.text.length).indexOf("]]");
-      if (close < 1) return -1;
+      const rest = cx.slice(open + 2, cx.offset + cx.text.length);
+      const close = rest.indexOf("]]");
+      if (close < 1 || rest.slice(0, close).includes("\n")) return -1;
       const end = open + 2 + close + 2;
       return cx.addElement(cx.elt(embed ? "Embed" : "Wikilink", pos, end, [
         cx.elt("WikilinkMark", pos, open + 2),
@@ -71,24 +72,33 @@ const HIDDEN_MARKS = new Set(["EmphasisMark", "StrikethroughMark", "CodeMark"]);
 /** A link's syntax, which hides inside an inline link only: a reference definition's URL is its content. */
 const LINK_SYNTAX = new Set(["LinkMark", "URL", "LinkTitle", "LinkLabel"]);
 
-/** A task's `[ ]` or `[x]`, as a checkbox that toggles it. */
+/**
+ * A task's `[ ]` or `[x]`, as a native checkbox that toggles it: by click, Space or assistive technology alike, and
+ * disabled while the editor is locked. CodeMirror ignores its events, so a click doesn't move the cursor onto the line.
+ */
 class TaskWidget extends WidgetType {
-  constructor(readonly checked: boolean) {
+  constructor(readonly checked: boolean, readonly enabled: boolean) {
     super();
   }
 
   override eq(other: TaskWidget) {
-    return other.checked === this.checked;
+    return other.checked === this.checked && other.enabled === this.enabled;
   }
 
-  toDOM() {
-    const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: this.checked, tabIndex: -1, className: "cm-lp-task" });
+  toDOM(view: EditorView) {
+    const box = Object.assign(document.createElement("input"), { type: "checkbox", className: "cm-lp-task" });
     box.setAttribute("aria-label", "Done");
+    box.addEventListener("change", () => {
+      if (!toggleTask(view, box)) box.checked = !box.checked;
+    });
+    this.updateDOM(box);
     return box;
   }
 
-  override ignoreEvent() {
-    return false;
+  /** Update the checkbox in place, so it keeps focus through its own toggle. */
+  override updateDOM(dom: HTMLElement) {
+    Object.assign(dom, { checked: this.checked, disabled: !this.enabled });
+    return true;
   }
 }
 
@@ -121,6 +131,7 @@ function decorate(view: EditorView): DecorationSet {
   const ranges: Array<Range<Decoration>> = [];
   const frontmatter = frontmatterEnd(state.doc);
   const tree = syntaxTree(state);
+  const editable = state.facet(EditorView.editable);
 
   for (const { from, to } of view.visibleRanges) {
     tree.iterate({
@@ -157,9 +168,10 @@ function decorate(view: EditorView): DecorationSet {
           if (!shown && node.node.parent?.name === "Wikilink") ranges.push(hide.range(node.from, node.to));
           return;
         }
-        // An image's syntax stays, as images don't render here.
+        // An image's syntax stays, as images don't render here. So does syntax spanning lines, such as a link title:
+        // a plugin's replacement may not cover a line break.
         if (HIDDEN_MARKS.has(name) || (LINK_SYNTAX.has(name) && node.node.parent?.name === "Link")) {
-          if (!shown && node.to > node.from) ranges.push(hide.range(node.from, node.to));
+          if (!shown && node.to > node.from && state.doc.lineAt(node.from).to >= node.to) ranges.push(hide.range(node.from, node.to));
           return;
         }
         if (name === "Embed") {
@@ -167,11 +179,12 @@ function decorate(view: EditorView): DecorationSet {
           return false;
         }
         if (name === "TaskMarker") {
-          if (!shown) ranges.push(Decoration.replace({ widget: new TaskWidget(/x/i.test(state.sliceDoc(node.from, node.to))) }).range(node.from, node.to));
+          if (!shown) ranges.push(Decoration.replace({ widget: new TaskWidget(/x/i.test(state.sliceDoc(node.from, node.to)), editable) }).range(node.from, node.to));
           return;
         }
+        // A block's lines are styled only where they show: a long block above or below adds no work.
         if (name === "FencedCode") {
-          for (let at = node.from; at <= node.to;) {
+          for (let at = Math.max(node.from, from); at <= Math.min(node.to, to);) {
             const { from: start, to: end } = state.doc.lineAt(at);
             ranges.push(line("cm-lp-codeblock").range(start));
             at = end + 1;
@@ -181,7 +194,7 @@ function decorate(view: EditorView): DecorationSet {
         if (name === "Blockquote") {
           const first = state.doc.lineAt(node.from);
           const callout = CALLOUT.exec(first.text);
-          for (let at = node.from; at <= node.to;) {
+          for (let at = Math.max(node.from, from); at <= Math.min(node.to, to);) {
             const current = state.doc.lineAt(at);
             ranges.push(callout
               // `data-sv-signal` derives the theme's signal colours from the type's hue.
@@ -207,8 +220,9 @@ function decorate(view: EditorView): DecorationSet {
   return Decoration.set(ranges, true);
 }
 
-/** Toggle the task whose checkbox was clicked. */
+/** Toggle the task whose checkbox changed, unless the editor is locked. Answers whether the document changed. */
 function toggleTask(view: EditorView, box: HTMLElement): boolean {
+  if (!view.state.facet(EditorView.editable)) return false;
   const at = view.posAtDOM(box);
   const marker = view.state.sliceDoc(at, at + 3);
   if (!/^\[[ xX]\]$/.test(marker)) return false;
@@ -225,20 +239,16 @@ const decorations = ViewPlugin.fromClass(
     }
 
     update(update: ViewUpdate) {
-      if (update.docChanged || update.selectionSet || update.viewportChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+      if (
+        update.docChanged || update.selectionSet || update.viewportChanged ||
+        syntaxTree(update.startState) !== syntaxTree(update.state) ||
+        update.startState.facet(EditorView.editable) !== update.state.facet(EditorView.editable)
+      ) {
         this.decorations = decorate(update.view);
       }
     }
   },
-  {
-    decorations: (plugin) => plugin.decorations,
-    eventHandlers: {
-      mousedown(event, view) {
-        const target = event.target as HTMLElement;
-        return target.matches(".cm-lp-task") && toggleTask(view, target);
-      },
-    },
-  },
+  { decorations: (plugin) => plugin.decorations },
 );
 
 /** The extension a mode switch installs for Live Preview. */

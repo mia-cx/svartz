@@ -33,12 +33,19 @@ function loadTargets(endpoint: string): Promise<readonly LinkTarget[]> {
   return load;
 }
 
-/** Insert `link`, closing it with `]]` unless the brackets are already there. */
+/** The rest of a link's target after the cursor, then whatever closes it on the line: a heading or label, then `]]`. */
+const LINK_REST = /^([^\]|#\n]*)((?:[|#][^\]\n]*)?\]\])?/;
+
+/**
+ * Insert `link` in place of the target. In a closed link, that is the whole target, and the cursor lands after the
+ * link, or after the target when a heading or label follows. Otherwise the link ends at the cursor and gets its `]]`.
+ */
 function insertLink(link: string) {
   return (view: EditorView, _completion: Completion, from: number, to: number) => {
-    const closed = view.state.sliceDoc(to, to + 2) === "]]";
-    const insert = closed ? link : `${link}]]`;
-    view.dispatch({ changes: { from, to, insert }, selection: { anchor: from + insert.length + (closed ? 2 : 0) }, userEvent: "input.complete" });
+    const [, rest = "", close] = LINK_REST.exec(view.state.sliceDoc(to, view.state.doc.lineAt(to).to))!;
+    const changes = close ? { from, to: to + rest.length, insert: link } : { from, to, insert: `${link}]]` };
+    const anchor = from + changes.insert.length + (close === "]]" ? 2 : 0);
+    view.dispatch({ changes, selection: { anchor }, userEvent: "input.complete" });
   };
 }
 
