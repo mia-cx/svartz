@@ -172,6 +172,13 @@
 	const sources = $derived(props.entry ? readSources(props.entry.properties) : []);
 	// Notes only: list pages and 404s must not open discussions.
 	const comments = $derived(props.entry?.page.comments ? themeSettings(props.themeConfig).comments : undefined);
+	/**
+	 * The note body's `data-svartz-note`: the slug plugins key the note by, such as annotations attaching beside it.
+	 * A protected note stays unmarked, locked or unlocked, so nothing quotes it where its password doesn't reach.
+	 */
+	const noteKey = $derived(
+		props.entry && !props.entry.locked && props.entry.properties.password_group === undefined ? props.entry.slug : undefined
+	);
 </script>
 
 {#snippet header()}<Header {shell} />{/snippet}
@@ -190,7 +197,7 @@
 	{#if sources.length > 0}<SourceLinks {sources} />{/if}
 {/snippet}
 {#snippet content()}
-	<div class="sv-prose note-body">{@render children?.()}</div>
+	<div class="sv-prose note-body" data-svartz-note={noteKey}>{@render children?.()}</div>
 	{@render sourceLinks()}
 {/snippet}
 {#snippet intro()}
@@ -212,7 +219,7 @@
 	{:else if props.entry && Note}
 		<Note {shell} data={undefined} entry={props.entry} {summary} {actions} {content}>{@render intro()}</Note>
 	{:else if props.entry}
-		<article class="sv-prose">{@render children?.()}</article>
+		<article class="sv-prose" data-svartz-note={noteKey}>{@render children?.()}</article>
 		{@render sourceLinks()}
 	{:else}
 		{@render children?.()}
