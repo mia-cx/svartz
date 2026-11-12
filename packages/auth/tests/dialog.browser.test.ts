@@ -21,7 +21,7 @@ describe("the sign-in dialog", () => {
     history.replaceState(null, "", "/notes/garden/?view=all#reply");
     const trigger = page({
       endpoint: "/notes/_svartz/auth",
-      providers: [{ id: "google", label: "Google" }, { id: "discord", label: "Discord" }, { id: "github", label: "GitHub" }],
+      providers: [{ id: "google", label: "Google" }, { id: "discord", label: "Discord" }, { id: "x", label: "X" }, { id: "github", label: "GitHub" }],
       privacyNotice: "/notes/privacy/",
     });
 
@@ -35,8 +35,15 @@ describe("the sign-in dialog", () => {
     expect(providers.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
       ["Continue with Google", `/notes/_svartz/auth/start/google/?returnTo=${returnTo}`],
       ["Continue with Discord", `/notes/_svartz/auth/start/discord/?returnTo=${returnTo}`],
+      ["Continue with X", `/notes/_svartz/auth/start/x/?returnTo=${returnTo}`],
       ["Continue with GitHub", `/notes/_svartz/auth/start/github/?returnTo=${returnTo}`],
     ]);
+    // Each provider shows its mark beside its name, hidden from screen readers, which read the name alone.
+    for (const link of providers) {
+      const mark = link.querySelector("svg");
+      expect(mark?.getAttribute("aria-hidden")).toBe("true");
+      expect(mark?.querySelector("path")?.getAttribute("d")).toBeTruthy();
+    }
     // SvelteKit's router listens on the whole document; sign-in must reach the server, not a client route.
     expect(providers.every((link) => link.hasAttribute("data-sveltekit-reload"))).toBe(true);
     expect([...dialog.querySelectorAll("a")].find((link) => link.textContent === "Privacy notice")?.getAttribute("href")).toBe("/notes/privacy/");
