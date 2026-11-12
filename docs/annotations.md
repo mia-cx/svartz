@@ -71,7 +71,7 @@ A theme that doesn't extend minimal opts in by marking the note body (see [creat
 
 The note's own DOM is never changed: highlights use the [CSS Custom Highlight API](https://developer.mozilla.org/docs/Web/API/CSS_Custom_Highlight_API), and markers sit in a layer after the note's body, so they follow the note in tab order. Comment text is always shown as text, with web addresses made links.
 
-A comment stays on its passage when the author edits the note lightly: fixes a typo in it, inserts a word, rewraps the sentence, or adds text before it. When the passage is deleted or rewritten, the comment is listed after the note instead, under "1 comment on a passage no longer in the note", with its author and the quote it responded to. That list starts closed, and it is hidden in print like the rest.
+A comment stays on its passage when the author edits the note lightly: fixes a typo in it, inserts a word, rewraps the sentence, or adds text before it. When the passage is deleted or rewritten, the comment is listed after the note instead, under "1 comment on a passage no longer in the note", with its author and the quote it responded to. Each entry has the same **+1** and **Delete** as a card. That list starts closed, and it is hidden in print like the rest.
 
 How a passage is found again: the plugin stores the quote, 32 characters of text on each side, and its position. It tries the stored position, every exact occurrence of the quote, and the near matches of a fuzzy search around the stored position, where the quote may differ by up to a quarter of its characters. It keeps the candidate where the most of the quote and its context still agree, if that is at least 60% of their characters. A long quote can carry rewritten surroundings on its own; a short one also needs its surroundings, so a deleted passage never jumps to the same words elsewhere. The fuzzy search covers a stretch sized to the quote, so a long note stays fast.
 
@@ -108,11 +108,13 @@ A signed-out reader who posts gets `auth`'s sign-in dialog. The draft, its passa
 
 Each comment's card ends with **+1** and its count, beside the faces and names of who agrees: "You, Grace Hopper, and 2 others agree". **+1** is a toggle button, so Enter or Space adds the reader's agreement and takes it back, and screen readers hear whether it's pressed. A reader agrees with a comment once. While a **+1** saves, the button ignores presses, so the answer always matches the last one sent. Only comments take a **+1**, never reactions.
 
-A signed-out reader who presses **+1** gets the sign-in dialog too. When they come back, the comment's card opens with their **+1** applied.
+A signed-out reader who presses **+1** gets the sign-in dialog too. When they come back, the comment's card, or the list of comments on passages no longer in the note, opens with their **+1** applied.
 
 ### Deleting
 
 A signed-in reader's own comments end with **Delete**. It asks first, "Delete your comment?", with **Cancel** focused so a second Enter can't delete by accident; **Delete comment** deletes it and its **+1**s. The marker, card and highlight go at once, the line's other markers close up, and focus moves to the next marker. While the delete is sent, the confirmation ignores presses. When the site refuses, the card stays open and says why. A comment someone else deleted first goes too.
+
+A comment on a passage no longer in the note is deleted the same way from its entry in the list. The entry goes, the list's count drops, and focus moves to the next entry's **+1**; with the last entry, the list goes and the note takes focus.
 
 ### Moderating
 
