@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import type { Database } from "../src/store";
 import { ADA, createDatabase, createSite, ENDPOINT, GRACE, ORIGIN, seed, signIn, type Site } from "./harness";
 
 const disposers: Array<() => Promise<void>> = [];
@@ -28,7 +29,7 @@ describe("the annotations database", () => {
     const later = await createSite({ DB: await binding() })(`${ENDPOINT}/?page=garden`);
 
     expect(later.status).toBe(200);
-    expect(await later.json()).toEqual({ annotations: [] });
+    expect(await later.json()).toEqual({ annotations: [], viewer: null });
     expect(await tables()).toEqual(["agreements", "annotations", "identities", "svartz_annotations_migrations"]);
     const { results } = await db.prepare("SELECT version FROM svartz_annotations_migrations").all();
     expect(results).toEqual([{ version: 1 }]);
@@ -50,6 +51,7 @@ describe("GET ?page=", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual({
+      viewer: null,
       annotations: [
         {
           id: "c1",
@@ -145,7 +147,7 @@ describe("POST", () => {
 
     expect(response.status).toBe(status);
     expect(await response.json()).toEqual({ error, message });
-    expect(await (await site(`${ENDPOINT}/?page=garden`)).json()).toEqual({ annotations: [] });
+    expect(await (await site(`${ENDPOINT}/?page=garden`)).json()).toEqual({ annotations: [], viewer: null });
   });
 
   describe("a body over 32 KiB, sent without a Content-Length", () => {
@@ -177,7 +179,7 @@ describe("POST", () => {
 
       expect(response.status).toBe(413);
       expect(await response.json()).toEqual({ error: "too_large", message: "This comment is too long to post." });
-      expect(await (await site(`${ENDPOINT}/?page=garden`)).json()).toEqual({ annotations: [] });
+      expect(await (await site(`${ENDPOINT}/?page=garden`)).json()).toEqual({ annotations: [], viewer: null });
     });
 
     it("is refused as soon as it passes the limit, without reading the rest", async () => {
@@ -191,5 +193,126 @@ describe("POST", () => {
       // 32 KiB is four chunks; the fifth passes it. A stream may buffer one more ahead.
       expect(pulled()).toBeLessThanOrEqual(6);
     });
+  });
+});
+
+describe("POST <id>/agree/", () => {
+  /** Grace's comment in the notes vault, a reaction beside it, and a comment in another vault. */
+  async function seeded() {
+    const created = await database();
+    await seed(created.db, [
+      { id: "c1", page: "garden", author: GRACE, body: "Roses first.", anchor: anchor("roses", 40), createdAt: "2026-11-02T00:00:00.000Z" },
+      { id: "elsewhere", vault: "journal", page: "garden", author: GRACE, body: "Another vault", anchor: anchor("roses", 40), createdAt: "2026-11-02T00:00:00.000Z" },
+    ]);
+    await created.db.prepare(`INSERT INTO annotations (id, vault, page, kind, reaction, exact, prefix, suffix, start, "end", author_id, created_at)
+      VALUES ('r1', 'notes', 'garden', 'reaction', 'heart', 'roses', '', '', 40, 45, ?, '2026-11-02T00:00:00.000Z')`).bind(GRACE.id).run();
+    return created;
+  }
+
+  const agree = (site: Site, id: string, body: string, headers: Record<string, string>) =>
+    site(`${ENDPOINT}/${id}/agree/`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body });
+  const agreed = (value: boolean) => JSON.stringify({ agreed: value });
+  const stored = async (db: Database) =>
+    (await db.prepare("SELECT annotation_id, author_id FROM agreements ORDER BY author_id").all()).results;
+
+  it("adds the signed-in reader's +1 and takes it back, answering who agrees", async () => {
+    const { db } = await seeded();
+    const site = createSite({ DB: db });
+    const session = await signIn(site, ADA);
+    const headers = { cookie: session, origin: ORIGIN };
+
+    const on = await agree(site, "c1", agreed(true), headers);
+
+    expect(on.status).toBe(200);
+    expect(on.headers.get("cache-control")).toBe("no-store");
+    const { agreements } = await on.json() as { agreements: Array<{ createdAt: string }> };
+    expect(agreements).toEqual([{ author: ADA, createdAt: expect.any(String) }]);
+    // The list names the reader, so their +1 shows as theirs.
+    const listed = await (await site(`${ENDPOINT}/?page=garden`, { headers: { cookie: session } })).json() as {
+      viewer: unknown; annotations: Array<{ id: string; agreements: unknown }>;
+    };
+    expect(listed.viewer).toEqual({ id: ADA.id });
+    expect(listed.annotations.find(({ id }) => id === "c1")?.agreements).toEqual(agreements);
+    const { results: [identity] } = await db.prepare("SELECT name, avatar_url FROM identities WHERE id = ?").bind(ADA.id).all();
+    expect(identity).toEqual({ name: ADA.name, avatar_url: ADA.avatarUrl });
+
+    const off = await agree(site, "c1", agreed(false), headers);
+
+    expect(off.status).toBe(200);
+    expect(await off.json()).toEqual({ agreed: false, agreements: [] });
+    expect(await stored(db)).toEqual([]);
+  });
+
+  it("changes nothing more when a request is retried", async () => {
+    const { db } = await seeded();
+    const site = createSite({ DB: db });
+    const headers = { cookie: await signIn(site, ADA), origin: ORIGIN };
+
+    const first = await (await agree(site, "c1", agreed(true), headers)).json();
+    const retried = await agree(site, "c1", agreed(true), headers);
+
+    expect(retried.status).toBe(200);
+    // The first agreement stands, time and all.
+    expect(await retried.json()).toEqual(first);
+    expect(await stored(db)).toEqual([{ annotation_id: "c1", author_id: ADA.id }]);
+
+    await agree(site, "c1", agreed(false), headers);
+    const retriedOff = await agree(site, "c1", agreed(false), headers);
+
+    expect(await retriedOff.json()).toEqual({ agreed: false, agreements: [] });
+    expect(await stored(db)).toEqual([]);
+  });
+
+  it("keeps one +1 per reader when their requests race through separate isolates", async () => {
+    const { db, binding } = await seeded();
+    const alan = { id: "github:1912", provider: "github", name: "Alan Turing", handle: "alan" } as const;
+    const ada = await signIn(createSite({ DB: db }), ADA);
+    const other = await signIn(createSite({ DB: db }), alan);
+
+    const answers = await Promise.all([
+      ...Array.from({ length: 4 }, async () => agree(createSite({ DB: await binding() }), "c1", agreed(true), { cookie: ada, origin: ORIGIN })),
+      agree(createSite({ DB: await binding() }), "c1", agreed(true), { cookie: other, origin: ORIGIN }),
+    ]);
+
+    expect(answers.map(({ status }) => status)).toEqual([200, 200, 200, 200, 200]);
+    expect(await stored(db)).toEqual([{ annotation_id: "c1", author_id: ADA.id }, { annotation_id: "c1", author_id: alan.id }]);
+  });
+
+  it.each([
+    ["signed out", "c1", agreed(true), {}, 401, "signed_out", "Sign in to +1 a comment."],
+    ["from another site", "c1", agreed(true), { session: true, origin: "https://evil.test" }, 403, "cross_origin", "Post from this site."],
+    ["with no Origin", "c1", agreed(true), { session: true, origin: null }, 403, "cross_origin", "Post from this site."],
+    ["that isn't JSON", "c1", "agreed=true", { session: true }, 400, "invalid_json", "Send the +1 as JSON."],
+    ["without agreed", "c1", JSON.stringify({ agreed: "yes" }), { session: true }, 400, "invalid_agreement",
+      "Send { agreed: true } to +1 a comment, or { agreed: false } to take it back."],
+    ["over 32 KiB", "c1", JSON.stringify({ agreed: true, padding: "x".repeat(33 * 1024) }), { session: true }, 413, "too_large",
+      "Send only { agreed } to +1 a comment."],
+    ["on a reaction", "r1", agreed(true), { session: true }, 400, "invalid_agreement", "Only comments take a +1."],
+    ["on a comment that doesn't exist", "deleted", agreed(true), { session: true }, 404, "not_found", "This comment has been deleted."],
+    ["on another vault's comment", "elsewhere", agreed(true), { session: true }, 404, "not_found", "This comment has been deleted."],
+  ])("refuses a +1 %s, storing nothing", async (_case, id, body, { session = false, origin = ORIGIN }: { session?: boolean; origin?: string | null }, status, error, message) => {
+    const { db } = await seeded();
+    const site = createSite({ DB: db });
+    const headers: Record<string, string> = {};
+    if (session) headers.cookie = await signIn(site, ADA);
+    if (origin) headers.origin = origin;
+
+    const response = await agree(site, id, body, headers);
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error, message });
+    expect(await stored(db)).toEqual([]);
+    // Refused before anything is written about the reader.
+    const { results } = await db.prepare("SELECT id FROM identities WHERE id = ?").bind(ADA.id).all();
+    expect(results).toEqual([]);
+  });
+
+  it("answers only POST", async () => {
+    const { db } = await seeded();
+
+    const response = await createSite({ DB: db })(`${ENDPOINT}/c1/agree/`);
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("POST");
   });
 });

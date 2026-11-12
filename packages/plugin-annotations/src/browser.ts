@@ -1,11 +1,12 @@
 /**
  * Readers' comments beside their passages. `attach(element, { endpoint, page })` loads the page's annotations,
  * highlights each passage with the CSS Custom Highlight API, so `element`'s DOM is never rewritten, and puts a marker
- * in the margin on the passage's first line. Each marker opens a card with the comment and its author.
+ * in the margin on the passage's first line. Each marker opens a card with the comment, its author, and **+1**, which
+ * toggles the reader's agreement and shows who agrees.
  *
  * Selecting text inside `element` shows a toolbar beside it; **Comment** opens a composer that posts to the plugin's
- * route. A signed-out reader gets `@svartz/auth`'s sign-in dialog, and the draft waits in `sessionStorage` until they
- * come back.
+ * route. A signed-out reader gets `@svartz/auth`'s sign-in dialog, and the draft or +1 waits in `sessionStorage` until
+ * they come back.
  *
  * Style it with `@svartz/plugin-annotations/browser.css` and the custom properties it documents.
  */
@@ -13,7 +14,7 @@ import type { Identity } from "@svartz/auth";
 import { openSignIn } from "@svartz/auth/browser";
 import { describe, locate, rangeOf, type Anchor, type Position } from "./anchor";
 import { COMMENT_MAX_LENGTH } from "./limits";
-import type { Annotation } from "./store";
+import type { Agreement, Annotation } from "./store";
 
 export interface AttachOptions {
   /** The annotations routes' base path, such as `/notes/_svartz/annotations`. */
@@ -40,18 +41,16 @@ const GAP = 8;
 const URL_PATTERN = /\bhttps?:\/\/[^\s<>"]+/g;
 const TRAILING_PUNCTUATION = /[.,;:!?'")\]}]+$/;
 const POST_FAILED = "Couldn't post your comment. Try again.";
+const AGREE_FAILED = "Couldn't save your +1. Try again.";
 
 /**
- * A comment being written, kept in `sessionStorage` while its author signs in so the composer reopens on the same
- * passage when they return. `action` is what to resume.
+ * What a signed-out reader was doing, kept in `sessionStorage` while they sign in so it resumes when they return:
+ * a comment's composer reopens on the same passage with the draft as it was, and a **+1** is applied.
  */
-interface Draft {
-  readonly endpoint: string;
-  readonly page: string;
-  readonly action: "comment";
-  readonly anchor: Anchor;
-  readonly body: string;
-}
+type Draft = { readonly endpoint: string; readonly page: string } & (
+  | { readonly action: "comment"; readonly anchor: Anchor; readonly body: string }
+  | { readonly action: "agree"; readonly annotation: string }
+);
 
 const DRAFT_KEY = "svartz-annotations:draft";
 
@@ -59,7 +58,8 @@ const DRAFT_KEY = "svartz-annotations:draft";
 function takeDraft(endpoint: string, page: string): Draft | undefined {
   try {
     const draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? "null") as Draft | null;
-    if (draft?.endpoint !== endpoint || draft.page !== page || draft.action !== "comment" || typeof draft.body !== "string") return undefined;
+    if (draft?.endpoint !== endpoint || draft.page !== page) return undefined;
+    if (draft.action === "comment" ? typeof draft.body !== "string" : draft.action !== "agree" || typeof draft.annotation !== "string") return undefined;
     sessionStorage.removeItem(DRAFT_KEY);
     return draft;
   } catch {
@@ -154,12 +154,24 @@ function author(identity: Identity): HTMLElement {
   return who;
 }
 
-function card(comment: Comment, id: string): HTMLElement {
+/** Names shown before the rest of the agreements become "N others". */
+const AGREEMENT_NAMES = 3;
+const NAMES = new Intl.ListFormat("en", { type: "conjunction" });
+
+/** Who agrees, the reader first as "You": "You, Grace Hopper, and 2 others agree". Empty when nobody does. */
+function agreedBy(people: readonly Identity[], viewer: string | undefined): string {
+  if (!people.length) return "";
+  const names = people.map(({ id, name }) => id === viewer ? "You" : name);
+  const shown = names.length > AGREEMENT_NAMES ? [...names.slice(0, AGREEMENT_NAMES - 1), `${names.length - AGREEMENT_NAMES + 1} others`] : names;
+  return `${NAMES.format(shown)} ${names.length === 1 && names[0] !== "You" ? "agrees" : "agree"}`;
+}
+
+function card(comment: Comment, id: string, ...footer: HTMLElement[]): HTMLElement {
   const time = create("time", "sv-annotations-time", new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(comment.createdAt)));
   time.dateTime = comment.createdAt;
   const body = create("p", "sv-annotations-body", ...linkify(comment.body));
   const node = create("div", "sv-annotations-card",
-    create("div", "sv-annotations-byline", avatar(comment.author), author(comment.author), time), body);
+    create("div", "sv-annotations-byline", avatar(comment.author), author(comment.author), time), body, ...footer);
   node.id = id;
   node.popover = "auto";
   // Cards render in the top layer, outside the hidden layer, so each hides itself.
@@ -253,8 +265,27 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
   const base = endpoint.replace(/\/+$/, "");
   const prefix = `sv-annotations-${++attached}`;
   let cards = 0;
+  /** The signed-in reader's identity id, once the site has named them. */
+  let viewer: string | undefined;
+  /** A shown comment: its passage, marker and card, and its **+1** as the site last confirmed it. */
+  interface Placed {
+    readonly id: string;
+    readonly start: number;
+    readonly range: Range;
+    readonly marker: HTMLButtonElement;
+    readonly card: HTMLElement;
+    readonly toggle: HTMLButtonElement;
+    readonly count: HTMLElement;
+    readonly faces: HTMLElement;
+    readonly names: HTMLElement;
+    readonly problem: HTMLElement;
+    agreements: readonly Agreement[];
+    agreed: boolean;
+    /** While a +1 is being saved, its toggle is locked, so a late answer can't overwrite a newer one. */
+    pending: boolean;
+  }
   /** In reading order, which is also tab order. */
-  const placed: Array<{ id: string; start: number; range: Range; marker: HTMLButtonElement; card: HTMLElement }> = [];
+  const placed: Placed[] = [];
 
   // Beside the content rather than in it, so its DOM and text stay the author's. Out of flow, so it never shifts the
   // layout; markers follow the content in tab order.
@@ -456,6 +487,7 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
       }
       storeDraft(undefined);
       closeComposer();
+      viewer = answer.annotation.author.id;
       const markerNode = add(answer.annotation, position);
       layout();
       markerNode.focus();
@@ -515,7 +547,21 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
     const range = rangeOf(content, position);
     const cardId = `${prefix}-${cards++}`;
     const markerNode = marker(comment, cardId);
-    const cardNode = card(comment, cardId);
+
+    // A native toggle button: Enter and Space work, and aria-pressed tells screen readers whether it's on.
+    const count = create("span", "sv-annotations-count");
+    const toggle = create("button", "sv-annotations-agree", "+1 ", count);
+    toggle.type = "button";
+    // Decorative: the names beside them say who they are.
+    const faces = create("span", "sv-annotations-faces");
+    faces.setAttribute("aria-hidden", "true");
+    const names = create("span", "sv-annotations-names");
+    const agreedLine = create("p", "sv-annotations-agreed", faces, names);
+    agreedLine.id = `${cardId}-agreed`;
+    toggle.setAttribute("aria-describedby", agreedLine.id);
+    const problem = create("p", "sv-annotations-problem");
+    problem.setAttribute("role", "alert");
+    const cardNode = card(comment, cardId, create("div", "sv-annotations-agreement", toggle, agreedLine), problem);
     cardNode.addEventListener("toggle", (event) => {
       if ((event as ToggleEvent).newState === "open") {
         place(cardNode, markerNode.getBoundingClientRect());
@@ -526,7 +572,13 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
     }, { signal });
     // Looked up now, not held across a fetch: another element detaching meanwhile may have unregistered the shared one.
     highlightNamed(HIGHLIGHT)?.add(range);
-    const entry = { id: comment.id, start: position.start, range, marker: markerNode, card: cardNode };
+    const entry: Placed = {
+      id: comment.id, start: position.start, range, marker: markerNode, card: cardNode,
+      toggle, count, faces, names, problem,
+      agreements: comment.agreements, agreed: comment.agreements.some(({ author }) => author.id === viewer), pending: false,
+    };
+    showAgreements(entry);
+    toggle.addEventListener("click", () => void agree(entry, !entry.agreed), { signal });
     const next = placed.findIndex(({ start }) => start > position.start);
     if (next === -1) {
       layer.append(markerNode, cardNode);
@@ -538,6 +590,57 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
     return markerNode;
   }
 
+  /** Show `entry`'s count, who agrees, and whether the reader is one of them. */
+  function showAgreements(entry: Placed): void {
+    entry.toggle.setAttribute("aria-pressed", String(entry.agreed));
+    entry.count.textContent = entry.agreements.length ? String(entry.agreements.length) : "";
+    // Oldest first, but the reader before everyone.
+    const people = entry.agreements.map(({ author: person }) => person).sort((a, b) => Number(b.id === viewer) - Number(a.id === viewer));
+    entry.names.textContent = agreedBy(people, viewer);
+    entry.faces.replaceChildren(...people.slice(0, AGREEMENT_NAMES).map(avatar));
+  }
+
+  /** Set the reader's **+1** on `entry` to `agreed`. Signed out, it waits through sign-in and is applied on return. */
+  async function agree(entry: Placed, agreed: boolean): Promise<void> {
+    if (entry.pending) return;
+    entry.pending = true;
+    entry.toggle.setAttribute("aria-busy", "true");
+    entry.problem.textContent = "";
+    try {
+      const response = await fetch(`${base}/${encodeURIComponent(entry.id)}/agree/`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ agreed }),
+        signal,
+      });
+      const answer = await response.json().catch(() => ({})) as { agreed?: boolean; agreements?: Agreement[]; message?: string };
+      if (response.status === 401) {
+        storeDraft({ endpoint: base, page, action: "agree", annotation: entry.id });
+        try {
+          openSignIn();
+        } catch (cause) {
+          console.error("[svartz:annotations] couldn't open sign-in", cause);
+          entry.problem.textContent = answer.message ?? "Sign in to +1 a comment.";
+        }
+        return;
+      }
+      if (!response.ok || !answer.agreements) {
+        entry.problem.textContent = answer.message ?? AGREE_FAILED;
+        return;
+      }
+      entry.agreed = answer.agreed === true;
+      entry.agreements = answer.agreements;
+      showAgreements(entry);
+    } catch (cause) {
+      if (signal.aborted) return;
+      console.error("[svartz:annotations] couldn't save a +1", cause);
+      entry.problem.textContent = AGREE_FAILED;
+    } finally {
+      entry.pending = false;
+      entry.toggle.removeAttribute("aria-busy");
+    }
+  }
+
   const show = (comments: readonly Comment[]) => {
     const text = content.textContent ?? "";
     for (const comment of comments) {
@@ -547,20 +650,29 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
     layout();
   };
 
+  // Back from signing in: the composer reopens on the passage with the draft as it was, or the +1 is applied once
+  // its comment is shown.
+  const draft = takeDraft(base, page);
+  if (draft?.action === "comment") compose(draft.anchor, draft.body);
+
   const url = `${base}/?page=${encodeURIComponent(page)}`;
   fetch(url, { signal, headers: { accept: "application/json" } })
     .then(async (response) => {
       if (!response.ok) throw new Error(`${url} answered ${response.status}`);
-      const { annotations } = await response.json() as { annotations: Annotation[] };
-      if (!signal.aborted) show(annotations.filter((annotation): annotation is Comment => annotation.kind === "comment"));
+      const answer = await response.json() as { annotations: Annotation[]; viewer: { id: string } | null };
+      if (signal.aborted) return;
+      viewer = answer.viewer?.id;
+      show(answer.annotations.filter((annotation): annotation is Comment => annotation.kind === "comment"));
+      if (draft?.action !== "agree") return;
+      const entry = placed.find(({ id }) => id === draft.annotation);
+      if (!entry) return;
+      entry.card.showPopover();
+      entry.toggle.focus();
+      void agree(entry, true);
     })
     .catch((error: unknown) => {
       if (!signal.aborted) console.error("[svartz:annotations] couldn't load this page's comments", error);
     });
-
-  // Back from signing in: the composer reopens on the passage with the draft as it was.
-  const draft = takeDraft(base, page);
-  if (draft) compose(draft.anchor, draft.body);
 
   return () => {
     controller.abort();

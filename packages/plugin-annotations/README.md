@@ -1,6 +1,6 @@
 # `@svartz/plugin-annotations`
 
-Readers' comments beside the passage they respond to, highlighted in the note with a marker in the margin. Signed-in readers select a passage and comment on it. Stored in Cloudflare D1, which the plugin sets up on first use. Needs `@svartz/auth` on the same vault.
+Readers' comments beside the passage they respond to, highlighted in the note with a marker in the margin. Signed-in readers select a passage and comment on it, and **+1** the comments they agree with. Stored in Cloudflare D1, which the plugin sets up on first use. Needs `@svartz/auth` on the same vault.
 
 ```ts
 import { auth } from "@svartz/auth";

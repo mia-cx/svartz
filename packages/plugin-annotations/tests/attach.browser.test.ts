@@ -372,3 +372,121 @@ describe("commenting on a selection", () => {
     }
   });
 });
+
+describe("agreeing with a comment", () => {
+  /** Open the pressure comment's card from the keyboard and Tab to its +1, as a keyboard reader would. */
+  async function plusOne() {
+    const [, pressure] = await attached();
+    pressure!.focus();
+    await userEvent.keyboard("{Enter}");
+    const card = document.getElementById(pressure!.getAttribute("popovertarget")!)!;
+    await userEvent.keyboard("{Tab}");
+    const toggle = card.querySelector<HTMLButtonElement>(".sv-annotations-agree")!;
+    expect(document.activeElement).toBe(toggle);
+    return { card, toggle, agreed: () => card.querySelector(".sv-annotations-names")!.textContent };
+  }
+
+  beforeEach(async () => {
+    const root = render();
+    await commands.seedComments([
+      { id: "pressure", page: "hardware/sensors", author: GRACE, anchor: anchorOf(root, PRESSURE), createdAt: "2026-11-03T09:00:00.000Z", body: "Which model?", agreedBy: [GRACE] },
+      { id: "dew-point", page: "hardware/sensors", author: ADA, anchor: anchorOf(root, DEW_POINT), createdAt: "2026-11-02T09:00:00.000Z", body: "Every morning." },
+    ]);
+  });
+
+  it("toggles the reader's +1 from the keyboard and the mouse, showing the count and who agrees", async () => {
+    await commands.signIn(location.origin);
+    const { toggle, agreed } = await plusOne();
+
+    await expect.element(toggle).toHaveAccessibleName("+1 1");
+    await expect.element(toggle).toHaveAccessibleDescription("Grace Hopper agrees");
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+
+    await userEvent.keyboard(" ");
+
+    await expect.poll(() => toggle.getAttribute("aria-pressed")).toBe("true");
+    await expect.element(toggle).toHaveAccessibleName("+1 2");
+    expect(agreed()).toBe("You and Grace Hopper agree");
+    expect(document.activeElement).toBe(toggle);
+
+    await userEvent.click(toggle);
+
+    await expect.poll(() => toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(agreed()).toBe("Grace Hopper agrees");
+
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => toggle.getAttribute("aria-pressed")).toBe("true");
+    // Stored: a fresh page shows the +1 as the reader's.
+    detach!();
+    const again = await plusOne();
+    expect(again.toggle.getAttribute("aria-pressed")).toBe("true");
+    expect(again.agreed()).toBe("You and Grace Hopper agree");
+  });
+
+  it("takes a signed-out reader's +1 through sign-in and applies it on return", async () => {
+    unmountSignIn = mountSignIn(location.pathname, { endpoint: "/notes/_svartz/auth", providers: [{ id: "github", label: "GitHub" }] });
+    const { toggle } = await plusOne();
+
+    await userEvent.keyboard(" ");
+
+    await expect.poll(() => document.querySelector<HTMLDialogElement>("dialog.sv-auth")?.open).toBe(true);
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+
+    // GitHub signs the reader in and sends them back: the card opens with their +1 applied and focused.
+    await commands.signIn(location.origin);
+    detach!();
+    detach = attach(render(), { endpoint: ENDPOINT, page: "hardware/sensors" });
+
+    await expect.poll(() => document.querySelector(".sv-annotations-card:popover-open .sv-annotations-agree[aria-pressed=true]")).not.toBeNull();
+    const card = document.querySelector<HTMLElement>(".sv-annotations-card:popover-open")!;
+    expect(card.getAttribute("aria-label")).toBe("Comment by Grace Hopper");
+    expect(document.activeElement).toBe(card.querySelector(".sv-annotations-agree"));
+    expect(card.querySelector(".sv-annotations-names")!.textContent).toBe("You and Grace Hopper agree");
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it("brings a signed-out reader back to the +1 when they close sign-in", async () => {
+    unmountSignIn = mountSignIn(location.pathname, { endpoint: "/notes/_svartz/auth", providers: [{ id: "github", label: "GitHub" }] });
+    const { card, toggle } = await plusOne();
+
+    await userEvent.keyboard(" ");
+    await expect.poll(() => document.querySelector<HTMLDialogElement>("dialog.sv-auth")?.open).toBe(true);
+    await userEvent.keyboard("{Escape}");
+
+    expect(document.querySelector("dialog.sv-auth")).toBeNull();
+    expect(card.matches(":popover-open")).toBe(true);
+    expect(document.activeElement).toBe(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("locks the +1 while it saves, so a second press can't race the first", async () => {
+    await commands.signIn(location.origin);
+    const realFetch = globalThis.fetch;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let posts = 0;
+    globalThis.fetch = async (input, init) => {
+      if (init?.method === "POST") {
+        posts++;
+        await held;
+      }
+      return realFetch(input, init);
+    };
+    try {
+      const { toggle, agreed } = await plusOne();
+
+      await userEvent.click(toggle);
+      expect(toggle.getAttribute("aria-busy")).toBe("true");
+      await userEvent.click(toggle);
+      await userEvent.keyboard(" ");
+      release();
+
+      await expect.poll(() => toggle.getAttribute("aria-busy")).toBeNull();
+      expect(posts).toBe(1);
+      expect(toggle.getAttribute("aria-pressed")).toBe("true");
+      expect(agreed()).toBe("You and Grace Hopper agree");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+});
