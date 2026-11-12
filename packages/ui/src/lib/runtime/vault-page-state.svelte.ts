@@ -4,7 +4,8 @@ import { setDeploymentBase } from '../deployment-base.js';
 import { browser } from '$app/environment';
 import {
 	resolveContentComponents,
-	type ContentComponentOverrides
+	type ContentComponentOverrides,
+	type ContentComponents
 } from './content-components.js';
 import type { ProtectedNoteReference } from './protected-client.js';
 
@@ -153,10 +154,17 @@ export class VaultPageState {
  * They remount when `pathname` or the rendered note (`noteHref`) changes: unlocking a hidden
  * note renders its header, and the page-actions region in it, without navigating. `note` is the
  * body a host page's `SvartzNoteContent` renders, which scripts then work on instead of the document's.
+ * `contentComponents` are the page's, which scripts render HTML through (`context.mountContent`).
  */
 export function useBrowserResources(
 	input: () =>
-		| { artifacts: ArtifactsModule; pathname: string; noteHref?: string; note?: HTMLElement }
+		| {
+				artifacts: ArtifactsModule;
+				pathname: string;
+				contentComponents: ContentComponents;
+				noteHref?: string;
+				note?: HTMLElement;
+		  }
 		| undefined
 ): void {
 	$effect(() => {
@@ -164,11 +172,14 @@ export function useBrowserResources(
 		// Calling `input` tracks everything it reads, `noteHref` included; scripts get the pathname and note.
 		const resources = input();
 		if (!resources) return;
-		const { artifacts, pathname, note } = resources;
+		const { artifacts, pathname, note, contentComponents } = resources;
+		// The renderer loads only when a script first shows content.
+		const mountContent = async (target: HTMLElement) =>
+			(await import('./mount-content.svelte.js')).mountContent(target, contentComponents);
 		let released = false;
 		let dispose: (() => void) | undefined;
 		void artifacts
-			.mountBrowserResources(pathname, note)
+			.mountBrowserResources(pathname, note, mountContent)
 			.then((cleanup) => {
 				if (released) cleanup();
 				else dispose = cleanup;

@@ -63,6 +63,8 @@ A host app can render several notes on one page with `SvartzNoteContent`, each m
 
 `mount` also receives the resource's `options` and a `context` whose `base` is the deployment base path (`""` at the domain root). `pathname` includes it. Build URLs from it, such as `${context.base}${mountPath}/_svartz/<id>/` for a plugin's own server.
 
+To show Markdown as the page shows notes, render it to HTML and pass it to `context.mountContent(element)`. Its `render(html)` draws the HTML in `element` through the page's content components (the host's overrides, then the theme's callout, code block, image, link and embed) and drops scripts, event handlers and `javascript:` URLs, as the build does. Give `element` the `sv-prose` class for the theme's prose styles. Each `render` replaces what shows, keeping the blocks it didn't change; call `destroy()` in your cleanup. The renderer loads on first use, and `mountContent` is absent where the page renders no vault content. `@svartz/plugins/preview` renders a note's Markdown to that HTML in the browser, as the submissions editor's Split mode does.
+
 ## Test
 
 Test the hook with `runStages` from `@svartz/core` and a small `PluginContext`. For compiler features, also test the generated `.svelte` artifact. `.md` and `.mdx` must keep authored Svelte inert; `.svx` may execute it. Check the disabled and same-ID replacement cases so they do not leave compiler steps or browser resources behind.

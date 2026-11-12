@@ -1,14 +1,9 @@
 import { getCompilerContributions, type PluginContext } from "@svartz/core";
-import type { Element, Root } from "hast";
+import type { Root } from "hast";
 import { toHtml } from "hast-util-to-html";
-import rehypeAutolinkHeadings from "rehype-autolink-headings";
-import rehypeRaw from "rehype-raw";
-import rehypeSlug from "rehype-slug";
 import rehypeStringify from "rehype-stringify";
-import remarkParse from "remark-parse";
-import remarkRehype from "remark-rehype";
-import { unified } from "unified";
 import { visit } from "unist-util-visit";
+import { markdownProcessor } from "./markdown-processor";
 
 function absoluteOrAuthored(value: string, baseUrl: string): string {
   try {
@@ -43,33 +38,9 @@ function resolveSrcset(value: string, baseUrl: string): string {
   return candidates.join(", ");
 }
 
-/**
- * rehype-raw rebuilds the tree and drops `data`, including a code fence's meta
- * (`title="…" {2-4}`). Keep it as the `metastring` property rehype-pretty-code reads.
- */
-function preserveCodeMeta() {
-  return (tree: Root) => {
-    visit(tree, "element", (node: Element) => {
-      const meta = (node.data as { meta?: string } | undefined)?.meta;
-      if (node.tagName === "code" && meta) node.properties.metastring = meta;
-    });
-  };
-}
-
 function createMarkdownProcessor(ctx: PluginContext) {
   const compiler = getCompilerContributions(ctx);
-  return unified()
-    .use(remarkParse)
-    .use({ plugins: compiler.remarkPlugins })
-    .use(remarkRehype, { allowDangerousHtml: true })
-    .use(preserveCodeMeta)
-    .use(rehypeRaw)
-    .use(rehypeSlug)
-    .use(rehypeAutolinkHeadings, {
-      behavior: "append",
-      properties: { ariaHidden: true, tabIndex: -1, className: ["heading-anchor"] },
-    })
-    .use({ plugins: compiler.rehypePlugins });
+  return markdownProcessor(compiler.remarkPlugins, compiler.rehypePlugins);
 }
 
 /** Parse inert Markdown with the active vault's compiler plugins. */

@@ -3,7 +3,8 @@
  * Deterministic tie-break: shared depth -> path depth -> lexicographic.
  */
 
-import { posix } from "node:path";
+// pathe, not node:path: the editor preview runs this in the browser.
+import { dirname, join, normalize } from "pathe";
 import type { RawLink, LinkResolutionStrategy } from "@svartz/core";
 import { fileToSlug } from "./slug";
 import { routeSlug } from "./routes";
@@ -46,8 +47,8 @@ const resolveMarkdownPath = (
   const path = decodePath(target).replaceAll("\\", "/");
   const sourcePath = sources.find((entry) => entry.slug === sourceSlug)?.path ?? sourceSlug;
   const vaultPath = path.startsWith("/")
-    ? posix.normalize(path).slice(1)
-    : posix.join(posix.dirname(sourcePath), path);
+    ? normalize(path).slice(1)
+    : join(dirname(sourcePath), path);
   if (vaultPath.startsWith("../")) return;
   return slugMap[vaultPath.toLowerCase()] ?? slugMap[fileToSlug(vaultPath)];
 };

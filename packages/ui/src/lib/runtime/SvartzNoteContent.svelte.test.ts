@@ -139,7 +139,12 @@ it('mounts browser resources only while a note renders', async () => {
 
 	render(SvartzNoteContent, { pathname: '/work/plain/', stylesheets: [] });
 	await expect.poll(() => mount.mock.calls.length).toBe(1);
-	expect(mount.mock.calls[0]).toEqual(['/work/plain/', document.querySelector('[data-svartz-note="plain"]')]);
+	// Scripts get the note body and the page's content renderer.
+	expect(mount.mock.calls[0]).toEqual([
+		'/work/plain/',
+		document.querySelector('[data-svartz-note="plain"]'),
+		expect.any(Function)
+	]);
 });
 
 it('mounts browser resources for each note on a page with its own body', async () => {
