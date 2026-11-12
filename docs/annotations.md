@@ -69,7 +69,11 @@ On a site built with theme-minimal, or any theme that extends it, enabling the p
 
 A theme that doesn't extend minimal opts in by marking the note body (see [creating a theme](../vaults/docs/guides/create-theme.md#notes-and-browser-resources)).
 
-The note's own DOM is never changed: highlights use the [CSS Custom Highlight API](https://developer.mozilla.org/docs/Web/API/CSS_Custom_Highlight_API), and markers sit in a layer after the note's body, so they follow the note in tab order. A comment whose passage is no longer in the note is left out. Comment text is always shown as text, with web addresses made links.
+The note's own DOM is never changed: highlights use the [CSS Custom Highlight API](https://developer.mozilla.org/docs/Web/API/CSS_Custom_Highlight_API), and markers sit in a layer after the note's body, so they follow the note in tab order. Comment text is always shown as text, with web addresses made links.
+
+A comment stays on its passage when the author edits the note lightly: fixes a typo in it, inserts a word, rewraps the sentence, or adds text before it. When the passage is deleted or rewritten, the comment is listed after the note instead, under "1 comment on a passage no longer in the note", with its author and the quote it responded to. That list starts closed, and it is hidden in print like the rest.
+
+How a passage is found again: the plugin stores the quote, 32 characters of text on each side, and its position. It tries the stored position, every exact occurrence of the quote, and the near matches of a fuzzy search around the stored position, where the quote may differ by up to a quarter of its characters. It keeps the candidate where the most of the quote and its context still agree, if that is at least 60% of their characters. A long quote can carry rewritten surroundings on its own; a short one also needs its surroundings, so a deleted passage never jumps to the same words elsewhere. The fuzzy search covers a stretch sized to the quote, so a long note stays fast.
 
 Each marker is a button named for its comment, such as "Comment by Ada Lovelace on “the dew point”". Enter or a click opens the comment as a popover beside the marker, or under it when the margin is too narrow; Escape closes it and returns focus to the marker. An author without an avatar gets their initials; without a profile link, their name isn't a link.
 
