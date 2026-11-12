@@ -64,13 +64,13 @@ Every published Markdown note gets an **Edit** action beside Copy page. It opens
 
 ### The editor
 
-The source opens in **Live Preview**, as in Obsidian: headings, bold, italics, links, wikilinks, inline code, callouts, embeds and task checkboxes show formatted, and the line holding the cursor shows its Markdown. Clicking a task's checkbox ticks it. **Source** shows the raw Markdown throughout. The switch is remembered in the browser, and neither mode changes a byte the reader didn't edit.
+The source opens in **Live Preview**, as in Obsidian: headings, bold, italics, links, wikilinks, inline code, callouts, embeds and task checkboxes show formatted, and the line holding the cursor shows its Markdown. Clicking a task's checkbox, or pressing Space on it, ticks it. **Source** shows the raw Markdown throughout. The switch is remembered in the browser, and neither mode changes a byte the reader didn't edit.
 
-Typing `[[` suggests the site's published notes. Arrow keys choose one, Enter inserts it as `[[Name]]`, or `[[folder/Name]]` when another note shares its name, and Escape closes the list. Password-protected and hidden notes are never suggested.
+Typing `[[` suggests the site's published notes. Arrow keys choose one, Enter inserts it as `[[Name]]`, or `[[folder/Name]]` when another note's name, slug or alias would take `[[Name]]`, and Escape closes the list. Password-protected and hidden notes are never suggested.
 
 ### Drafts
 
-The editor saves what a reader writes in the browser's `localStorage` as they write it, per page (and one new page per vault), so a closed tab or a crash loses nothing. The next time they open the editor on that page, it offers the draft back above the source with **Restore edit** and **Discard edit** (**Restore page** and **Discard page** for a new page). A draft is forgotten once its pull request opens, or when the reader discards it or closes the editor and confirms discarding their changes.
+The editor saves what a reader writes in the browser's `localStorage` as they write it, per page (and one new page per vault), so a closed tab loses nothing and a crash loses at most the last moment of typing. The next time they open the editor on that page, it offers the draft back above the source with **Restore edit** and **Discard edit** (**Restore page** and **Discard page** for a new page); the fields take no writing until they choose. A draft is forgotten once its pull request opens, or when the reader discards it or closes the editor and confirms discarding their changes.
 
 ### New page
 

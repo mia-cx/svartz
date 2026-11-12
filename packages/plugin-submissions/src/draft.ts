@@ -1,5 +1,6 @@
 /**
- * Unsent submissions, kept in `localStorage` per page so a closed tab, a crash or a sign-in round trip loses nothing.
+ * Unsent submissions, kept in `localStorage` per page so a closed tab or a sign-in round trip loses nothing, and a
+ * crash at most the typing since the last autosave.
  * The panel saves what the reader writes as they write it, offers it back when it next opens on the same page, and
  * forgets it once the pull request is open or the reader discards it.
  */
