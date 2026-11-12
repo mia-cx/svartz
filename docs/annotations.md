@@ -28,7 +28,15 @@ Enable it per vault. It needs [`auth`](auth.md) on the same vault, and a Cloudfl
 | `database` | The D1 binding to store annotations in: `{ env: "DB" }`. |
 | `reactions` | Optional. The site's drawn reactions, `[{ id, label, src }]`, in the order readers are offered them. `id` is lowercase letters, digits and hyphens; `label` is what screen readers announce. |
 | `moderators` | Optional. Identity ids, such as `"github:583231"`, that may delete any annotation. See [moderating](#moderating) for finding yours. |
-| `limits` | Optional. `{ writesPerHour }`: comments, reactions and agreements each signed-in reader may write per hour. Default 30. |
+| `limits` | Optional. `{ writesPerHour }`: write attempts each signed-in reader may make per clock hour. Default 30. See [write limits](#write-limits). |
+
+## Write limits
+
+Every signed-in write attempt spends from one budget per identity: posting a comment, setting or removing a **+1**, and deleting. Repeated or invalid writes count too; signed-out and cross-origin requests do not. Reading comments spends nothing. Set the budget with `limits: { writesPerHour: 30 }`.
+
+The budget is counted in the annotations database, in the `write_counts` table, so every isolate and every restart sees the same count, and racing writes can't spend more than it. It needs no extra binding. Each clock hour starts a fresh budget, and counts from past hours are swept as readers write. Vaults sharing one database share each reader's budget.
+
+An exhausted budget answers `429 { error: "rate_limited", message, retryAfter }`, with `retryAfter` the seconds until the hour ends and the same value in the `Retry-After` header. The composer or card shows the wait in words, and the composer keeps the draft.
 
 ## The D1 database
 
@@ -152,4 +160,5 @@ Failures answer `{ error, message }`, where `message` is written for the reader:
 | 403 | `forbidden` | A delete by someone who neither wrote the annotation nor moderates. |
 | 404 | `not_found` | A **+1** or delete on an annotation that isn't in this vault, or was deleted. |
 | 413 | `too_large` | A write body over 32 KiB. |
+| 429 | `rate_limited` | The signed-in reader has spent their write budget. Also includes `retryAfter` in seconds. |
 | 503 | `misconfigured` | No D1 binding under `database.env`. |

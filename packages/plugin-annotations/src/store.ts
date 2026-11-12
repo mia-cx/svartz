@@ -81,6 +81,16 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       PRIMARY KEY (annotation_id, author_id)
     )`,
   ],
+  [
+    // Writes per reader per clock hour, for {@link spendWrite}. `window_start` leads the key so sweeping past hours is
+    // an index range, and nothing references identities: a refused first write has no identity row yet.
+    `CREATE TABLE IF NOT EXISTS write_counts (
+      window_start INTEGER NOT NULL,
+      identity_id TEXT NOT NULL,
+      writes INTEGER NOT NULL,
+      PRIMARY KEY (window_start, identity_id)
+    )`,
+  ],
 ];
 
 const migrated = new WeakMap<Database, Promise<void>>();
@@ -109,6 +119,27 @@ async function applyMigrations(db: Database): Promise<void> {
       db.prepare(`INSERT OR IGNORE INTO ${MIGRATIONS_TABLE} (version, applied_at) VALUES (?, ?)`).bind(version, new Date().toISOString()),
     ]);
   }
+}
+
+const HOUR_MS = 3_600_000;
+const MS_PER_SECOND = 1000;
+
+/**
+ * Spend one of `identity`'s `limit` writes in the current clock hour, or answer the seconds until that hour ends when
+ * none are left. One upsert counts and stops at `limit`, so isolates racing on the same database can't overspend.
+ * Past hours are swept in the same batch.
+ */
+export async function spendWrite(db: Database, identity: string, limit: number): Promise<number | undefined> {
+  const now = Date.now();
+  const windowStart = now - now % HOUR_MS;
+  const [, spent] = await db.batch([
+    db.prepare("DELETE FROM write_counts WHERE window_start < ?").bind(windowStart),
+    // An exhausted row fails the update's WHERE, so RETURNING answers nothing.
+    db.prepare(`INSERT INTO write_counts (window_start, identity_id, writes) VALUES (?1, ?2, 1)
+      ON CONFLICT (window_start, identity_id) DO UPDATE SET writes = writes + 1 WHERE writes < ?3
+      RETURNING writes`).bind(windowStart, identity, limit),
+  ]);
+  return spent!.results.length > 0 ? undefined : Math.ceil((windowStart + HOUR_MS - now) / MS_PER_SECOND);
 }
 
 interface IdentityRow {

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "../src/store";
 import { ADA, ALAN, createDatabase, createSite, ENDPOINT, GRACE, ORIGIN, seed, signIn, type Site } from "./harness";
 
@@ -11,10 +11,95 @@ async function database() {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(disposers.splice(0).map((dispose) => dispose()));
 });
 
 const anchor = (exact: string, start: number) => ({ exact, prefix: "", suffix: "", start, end: start + exact.length });
+
+const HOUR_MS = 3_600_000;
+/** The start of the next clock hour, near enough to now that sessions signed in now are still valid. */
+const nextHour = () => Math.ceil(Date.now() / HOUR_MS) * HOUR_MS;
+
+describe("each reader's write budget", () => {
+  const comment = JSON.stringify({ kind: "comment", page: "garden", anchor: anchor("roses", 0), body: "Lovely." });
+  const write = (site: Site, cookie: string, path = "/", method = "POST", body: string | undefined = comment) =>
+    site(`${ENDPOINT}${path}`, { method, headers: { cookie, origin: ORIGIN, "content-type": "application/json" }, body: method === "DELETE" ? undefined : body });
+
+  it.each([
+    ["comment", "/", "POST", comment],
+    ["+1", "/c1/agree/", "POST", JSON.stringify({ agreed: true })],
+    ["delete", "/c1/", "DELETE", undefined],
+  ])("refuses an over-budget %s before it changes storage", async (_case, path, method, body) => {
+    const { db } = await database();
+    await seed(db, [{ id: "c1", page: "garden", author: ADA, body: "First.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
+    const site = createSite({ DB: db }, { writesPerHour: 1 });
+    const cookie = await signIn(site, ADA);
+    vi.spyOn(Date, "now").mockReturnValue(nextHour());
+    expect((await write(site, cookie)).status).toBe(201);
+
+    const response = await write(site, cookie, path, method, body);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("3600");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({ error: "rate_limited", retryAfter: 3600, message: "You've sent too many annotations. Try again in 1 hour." });
+    const listed = await (await site(`${ENDPOINT}/?page=garden`)).json() as { annotations: Array<{ id: string; agreements: unknown[] }> };
+    expect(listed.annotations).toHaveLength(2);
+    expect(listed.annotations.find(({ id }) => id === "c1")?.agreements).toEqual([]);
+  });
+
+  it("shares each reader's budget across isolates on one database, and keeps readers apart", async () => {
+    const { binding } = await database();
+    const one = createSite({ DB: await binding() }, { writesPerHour: 2 });
+    const two = createSite({ DB: await binding() }, { writesPerHour: 2 });
+    const ada = await signIn(one, ADA);
+    const alan = await signIn(two, ALAN);
+
+    const statuses = async (...writes: Array<[Site, string]>) => {
+      const answers = [];
+      for (const [site, cookie] of writes) answers.push((await write(site, cookie)).status);
+      return answers;
+    };
+
+    expect(await statuses([one, ada], [two, ada], [one, ada], [two, ada])).toEqual([201, 201, 429, 429]);
+    expect(await statuses([two, alan], [one, alan], [two, alan])).toEqual([201, 201, 429]);
+  });
+
+  it("lets no more than the budget through when writes race across isolates", async () => {
+    const { db, binding } = await database();
+    const sites = [createSite({ DB: await binding() }, { writesPerHour: 3 }), createSite({ DB: await binding() }, { writesPerHour: 3 })];
+    const cookie = await signIn(sites[0]!, ADA);
+
+    const answers = await Promise.all(Array.from({ length: 10 }, (_, index) => write(sites[index % 2]!, cookie)));
+
+    expect(answers.filter(({ status }) => status === 201)).toHaveLength(3);
+    expect(answers.filter(({ status }) => status === 429)).toHaveLength(7);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM annotations").all<{ n: number }>()).results).toEqual([{ n: 3 }]);
+  });
+
+  it("waits out the clock hour, then starts a fresh one and sweeps the past ones", async () => {
+    const { db } = await database();
+    const site = createSite({ DB: db }, { writesPerHour: 1 });
+    const cookie = await signIn(site, ADA);
+    const hour = nextHour();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(hour - 30 * 60_000);
+    expect((await write(site, cookie)).status).toBe(201);
+
+    for (const [before, retryAfter, wait] of [[90_500, 91, "2 minutes"], [59_000, 59, "59 seconds"], [1, 1, "1 second"]] as const) {
+      clock.mockReturnValue(hour - before);
+      const refused = await write(site, cookie);
+      expect(refused.headers.get("retry-after")).toBe(String(retryAfter));
+      expect(await refused.json()).toEqual({ error: "rate_limited", retryAfter, message: `You've sent too many annotations. Try again in ${wait}.` });
+    }
+
+    clock.mockReturnValue(hour);
+    expect((await write(site, cookie)).status).toBe(201);
+    expect((await write(site, cookie)).status).toBe(429);
+    expect((await db.prepare("SELECT window_start, identity_id, writes FROM write_counts").all()).results)
+      .toEqual([{ window_start: hour, identity_id: ADA.id, writes: 1 }]);
+  });
+});
 
 describe("the annotations database", () => {
   it("is created on the first request, and racing or later isolates leave it as it is", async () => {
@@ -30,9 +115,28 @@ describe("the annotations database", () => {
 
     expect(later.status).toBe(200);
     expect(await later.json()).toEqual({ annotations: [], viewer: null });
-    expect(await tables()).toEqual(["agreements", "annotations", "identities", "svartz_annotations_migrations"]);
-    const { results } = await db.prepare("SELECT version FROM svartz_annotations_migrations").all();
-    expect(results).toEqual([{ version: 1 }]);
+    expect(await tables()).toEqual(["agreements", "annotations", "identities", "svartz_annotations_migrations", "write_counts"]);
+    const { results } = await db.prepare("SELECT version FROM svartz_annotations_migrations ORDER BY version").all();
+    expect(results).toEqual([{ version: 1 }, { version: 2 }]);
+  });
+
+  it("brings a version 1 database up to date, keeping its comments", async () => {
+    const { db, binding } = await database();
+    await seed(db, [{ id: "c1", page: "garden", author: ADA, body: "First.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
+    // What a database migrated before write counts existed looks like.
+    await db.batch([db.prepare("DROP TABLE write_counts"), db.prepare("DELETE FROM svartz_annotations_migrations WHERE version = 2")]);
+
+    const site = createSite({ DB: await binding() }, { writesPerHour: 1 });
+    const cookie = await signIn(site, ADA);
+    const posted = await site(`${ENDPOINT}/`, {
+      method: "POST",
+      headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
+      body: JSON.stringify({ kind: "comment", page: "garden", anchor: anchor("roses", 0), body: "Second." }),
+    });
+
+    expect(posted.status).toBe(201);
+    expect((await db.prepare("SELECT version FROM svartz_annotations_migrations ORDER BY version").all()).results).toEqual([{ version: 1 }, { version: 2 }]);
+    expect((await db.prepare("SELECT id FROM annotations WHERE id = 'c1'").all()).results).toEqual([{ id: "c1" }]);
   });
 });
 

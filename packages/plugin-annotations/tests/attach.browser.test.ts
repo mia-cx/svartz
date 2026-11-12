@@ -303,6 +303,44 @@ describe("commenting on a selection", () => {
     expect(document.activeElement).toBe(pressure);
   });
 
+  it("shows the rate-limit wait in the composer and cards without losing the draft or comment", async () => {
+    await commands.signIn(location.origin);
+    const root = render();
+    const [dewPoint] = await attached(root);
+    // Spend the default 30-write budget through the real server; retries count too.
+    for (let index = 0; index < 30; index++) {
+      const response = await fetch(`${ENDPOINT}/pressure/agree/`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agreed: true }),
+      });
+      expect(response.status).toBe(200);
+    }
+    const start = root.textContent!.indexOf(SHADE);
+    await select(rangeOf(root, { start, end: start + SHADE.length }));
+    await userEvent.click(document.querySelector(".sv-annotations-action")!);
+    await userEvent.keyboard("Mine sits under the eaves.");
+    await userEvent.click(composer().querySelector<HTMLButtonElement>("button[type=submit]")!);
+
+    // The budget runs to the end of the real clock hour, so the wait is whatever is left of it.
+    const message = /^You've sent too many annotations\. Try again in (1 hour|\d+ minutes?|\d+ seconds?)\.$/;
+    await expect.poll(() => composer().querySelector("[role=alert]")?.textContent).toMatch(message);
+    expect(composer().matches(":popover-open")).toBe(true);
+    expect(composer().querySelector("textarea")!.value).toBe("Mine sits under the eaves.");
+    expect(composer().querySelector("textarea")!.readOnly).toBe(false);
+    dewPoint!.focus();
+    await userEvent.keyboard("{Enter}");
+    const card = document.getElementById(dewPoint!.getAttribute("popovertarget")!)!;
+    await userEvent.click(card.querySelector<HTMLButtonElement>(".sv-annotations-agree")!);
+    await expect.poll(() => card.querySelector("[role=alert]")?.textContent).toMatch(message);
+    expect(card.querySelector(".sv-annotations-agree")?.getAttribute("aria-pressed")).toBe("false");
+    await userEvent.click(card.querySelector<HTMLButtonElement>(".sv-annotations-delete")!);
+    await userEvent.click(card.querySelector<HTMLButtonElement>(".sv-annotations-danger")!);
+    await expect.poll(() => card.querySelector(".sv-annotations-confirm")?.getAttribute("aria-busy")).toBeNull();
+    expect(card.querySelector("[role=alert]")?.textContent).toMatch(message);
+    expect(card.matches(":popover-open")).toBe(true);
+    expect(composer().querySelector("textarea")!.value).toBe("Mine sits under the eaves.");
+    expect(document.querySelectorAll(".sv-annotations-marker")).toHaveLength(2);
+  });
+
   it("holds the draft as it was sent until the site answers", async () => {
     await commands.signIn(location.origin);
     const root = render();
