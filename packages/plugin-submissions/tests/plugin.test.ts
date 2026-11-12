@@ -126,7 +126,7 @@ describe("submissions build", () => {
       folders: ["", "people", "tools"],
       links: expect.any(Array),
       // What the Split preview resolves and routes links by, as the build does.
-      preview: { linkResolution: "closest", mountPath: "/wiki", tagsRoute: "tags", attachments: [] },
+      preview: { linkResolution: "closest", mountPath: "/wiki", tagsRoute: "tags", attachments: [], sharedNames: [] },
     });
     expect(ctx.compiler?.browserResources.get("submissions")?.options).toEqual({
       endpoint: "/wiki/_svartz/submissions",
@@ -192,11 +192,11 @@ describe("the attachments the Split preview can name", () => {
       sourcePath: path.join(vault, filePath),
     });
     const files = [
-      { ...note("guide.md"), content: "![chart](chart.png) ![[shared.png]]\n" },
-      { ...note("plans.md", { password_group: "team" }), content: "![[plan.png]] ![[shared.png]]\n" },
+      { ...note("guide.md"), content: "![chart](chart.png) ![[shared.png]] ![[Assets/map.png]]\n" },
+      { ...note("plans.md", { password_group: "team" }), content: "![[plan.png]] ![[shared.png]] ![[Private/map.png]]\n" },
       { ...note("old.md", { draft: true }), content: "![[draft.png]]\n" },
       { ...note("excluded.md"), content: "![[excluded.png]]\n" },
-      ...["Assets/chart.png", "shared.png", "plan.png", "draft.png", "excluded.png", "stray.png"].map(attachment),
+      ...["Assets/chart.png", "shared.png", "plan.png", "draft.png", "excluded.png", "stray.png", "Assets/map.png", "Private/map.png"].map(attachment),
     ];
     const ctx: PluginContext = {
       config: { ...config(vault), exclude: ["excluded.*"], passwordGroups: { team: { env: "SVARTZ_TEST_TEAM_PASSWORD" } } },
@@ -224,7 +224,10 @@ describe("the attachments the Split preview can name", () => {
       waitUntil: () => {},
     } as ServerContext);
 
-    expect((await response!.json() as LinksResponse).attachments).toEqual(["Assets/chart.png", "shared.png"]);
+    const links = await response!.json() as LinksResponse;
+    expect(links.attachments).toEqual(["Assets/chart.png", "shared.png", "Assets/map.png"]);
+    // A protected-only `map.png` makes the name ambiguous to the build; the preview learns that, but not its path.
+    expect(links.sharedNames).toEqual(["map.png"]);
   });
 });
 

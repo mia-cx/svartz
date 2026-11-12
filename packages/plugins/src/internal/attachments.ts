@@ -23,12 +23,16 @@ function attachmentTarget(target: string): string | undefined {
 /**
  * Resolve a link from the note at `notePath` to one of `paths`, the vault's attachments: from the note's folder, then
  * as a vault path, then by a file name no other attachment has. A target starting with `/` tries the vault path first.
- * Case-insensitive, as Obsidian matches.
+ * Case-insensitive, as Obsidian matches. `sharedNames` are file names that files outside `paths` also have, so they
+ * never resolve by name alone.
  */
-export function attachmentResolver(paths: readonly string[]): (notePath: string, raw: string) => string | undefined {
+export function attachmentResolver(
+  paths: readonly string[],
+  sharedNames: readonly string[] = [],
+): (notePath: string, raw: string) => string | undefined {
   const byPath = new Map(paths.map((path) => [path.toLowerCase(), path]));
   const byName = new Map<string, string>();
-  const ambiguousNames = new Set<string>();
+  const ambiguousNames = new Set(sharedNames.map((name) => name.toLowerCase()));
   for (const path of paths) {
     const name = basename(path).toLowerCase();
     if (ambiguousNames.has(name)) continue;

@@ -43,6 +43,8 @@ export interface PreviewOptions {
   readonly mountPath: string;
   /** The vault paths of the attachments the site publishes; links and embeds naming any other file stay unresolved. */
   readonly attachments: readonly string[];
+  /** File names of `attachments` that unpublished files share too: as on the site, they never resolve by name alone. */
+  readonly sharedNames?: readonly string[];
   /** The theme's tags route, as `theme.routes.tags`. */
   readonly tagsRoute?: string;
 }
@@ -113,7 +115,7 @@ export async function renderPreview(markdown: string, options: PreviewOptions): 
   const { notes, path, base, mountPath } = options;
   const note = notes.find((candidate) => candidate.path === path);
   const sourceSlug = note?.slug ?? fileToSlug(path);
-  const resolveAttachment = attachmentResolver(options.attachments);
+  const resolveAttachment = attachmentResolver(options.attachments, options.sharedNames);
   // URLs the preview wrote itself: they name pages and attachments already, so the pass below leaves them alone.
   const generated = new Set<string>();
   const attachment: Attachment = (target) => {

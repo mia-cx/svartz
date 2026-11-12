@@ -13,7 +13,7 @@ import MiniSearch from "minisearch";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSlug from "rehype-slug";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { definePlugin, getCompilerContributions, SEARCH_INDEX_OPTIONS, type Artifact, type Index, type PluginContext, type ProcessedFile } from "@svartz/core";
 import { renderMarkdownTree } from "./internal/render-markdown";
 import { compileContent } from "./internal/compile-content";
@@ -45,6 +45,22 @@ export function publishedAttachments(ctx: PluginContext): ProcessedFile[] {
     (!file.extension || ![".md", ".mdx", ".svx"].includes(file.extension)) &&
     file.sourcePath &&
     (!publicPaths || publicPaths.has(file.path)));
+}
+
+/**
+ * File names of published attachments that another attachment in the vault shares. The build resolves those by path
+ * only, so a resolver that sees only {@link publishedAttachments} needs them to resolve the same; their names are
+ * already public, and the other files' paths stay in the build.
+ */
+export function sharedAttachmentNames(ctx: PluginContext): string[] {
+  const counts = new Map<string, number>();
+  for (const file of ctx.files) {
+    if (file.extension && [".md", ".mdx", ".svx"].includes(file.extension)) continue;
+    const name = basename(file.path).toLowerCase();
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const published = new Set(publishedAttachments(ctx).map((file) => basename(file.path).toLowerCase()));
+  return [...published].filter((name) => counts.get(name)! > 1);
 }
 
 function getArtifactsRoot(outDir: string): string {

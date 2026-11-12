@@ -35,7 +35,7 @@ export interface LinksResponse extends PreviewSettings {
 }
 
 /** How the vault resolves and routes links, and the attachments they can name, for the Split preview. */
-export type PreviewSettings = Pick<PreviewOptions, "linkResolution" | "mountPath" | "tagsRoute" | "attachments">;
+export type PreviewSettings = Pick<PreviewOptions, "linkResolution" | "mountPath" | "tagsRoute" | "attachments" | "sharedNames">;
 
 /** A submission id: 32 lowercase hex digits, 128 random bits. */
 export const SUBMISSION_ID_PATTERN = /^[0-9a-f]{32}$/;

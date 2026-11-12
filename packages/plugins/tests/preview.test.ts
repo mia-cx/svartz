@@ -124,6 +124,12 @@ describe("renderPreview", () => {
     expect(html).toContain('src="/docs/wiki/guide/logo.png"');
   });
 
+  it("leaves a name an unpublished file shares unresolved, as the site does", async () => {
+    const html = await render("![chart](chart.png)", { attachments: ["Assets/chart.png"], sharedNames: ["chart.png"] });
+
+    expect(html).toContain('src="/docs/wiki/guide/chart.png"');
+  });
+
   it("leaves a file the site doesn't publish unresolved, as Markdown and as an embed", async () => {
     const html = await render("![plan](plan.png)\n\n![[plan.png]]");
 
