@@ -54,7 +54,8 @@ The server signs a short-lived token with the key, finds the App's installation 
 | `labels` | none | Labels every pull request gets. |
 | `token` | `{ env: "SVARTZ_GITHUB_TOKEN" }` | The server environment variable that holds the token. |
 | `app` | none | `{ id, privateKey: { env: "NAME" }, installation? }`: open pull requests as a [GitHub App](#github-app) instead of with `token`. Set one or the other. |
-| `guard.turnstile` | none | `{ siteKey, secret: { env: "NAME" } }`: the editor shows a [Turnstile](#turnstile) challenge and the server verifies it. |
+| `signIn.required` | `false` | Only signed-in readers may submit. See [Sign-in](#sign-in). |
+| `guard.turnstile` | none | `{ siteKey, secret: { env: "NAME" } }`: the editor shows a [Turnstile](#turnstile) challenge and the server verifies it. Skipped when sign-in is required. |
 | `guard.rateLimit` | `{ limit: 10, period: 3600 }` | Submissions allowed per `period` seconds, per signed-in reader or per IP. See [Rate limit](#rate-limit). |
 
 ## What readers see
@@ -68,6 +69,7 @@ Every page gets a **New page** action in the site actions (the rail or site navi
 - For an edit, a branch `svartz/submission/edit/<page>-<submission id>` from the commit the site was built from, with one commit replacing the note. When the page changed since, GitHub shows a conflict instead of the edit overwriting it. The pull request is titled `Edit <path>`.
 - For a new page, a branch `svartz/submission/new/<vault folder>-<section>-<title>-<submission id>` from the same commit, with one commit adding the note. The pull request is titled `Add <path>`.
 - Every pull request gets the configured labels, the reader's note, and the page or site it came from.
+- A signed-in reader is named in the pull request with a link to their profile and the provider they signed in with, such as "Submitted by [Ada Lovelace](https://github.com/ada) (signed in with GitHub)". A reader signed in with GitHub also authors the commit, as their `<id>+<login>@users.noreply.github.com` address, so GitHub links it to their account. Google and Discord accounts have no GitHub account to link, so their commit keeps the token's owner, or the App, as author.
 
 Each opened editor makes a random submission id and sends it with every attempt. When GitHub's answer is lost, a retry finds the pull request the first attempt opened instead of opening a second one. When GitHub refuses the pull request, the branch stays: another attempt at the same edit may be opening a pull request from it, and a retry reuses it. Every GitHub request gives up after 10 seconds, and the reader is told to try again.
 
@@ -78,6 +80,23 @@ Readers never choose a file path; the server works it out:
 - A new page is never written over a file. Before calling GitHub, the server refuses a title whose page would ask for a route that a published page of any type (`.md`, `.svx` and the rest, password-protected and hidden ones included) holds or asks for, as the build allocates routes: `ada-lovelace` and `Ada Lovelace` both clash with `Ada Lovelace.md`. Otherwise the new page would take that page's URL or push it to `-2`. Before writing anything, it also refuses a title whose file exists in the commit the site was built from, published or not.
 
 A page's source is capped at 512 KB and the note at 2,000 characters.
+
+## Sign-in
+
+Readers sign in through the [`auth` plugin](../../docs/auth.md) on the same vault. Signed-in readers are credited in their pull request and get their own rate limit, whether or not sign-in is required.
+
+To take submissions from signed-in readers only, set `signIn.required`:
+
+```ts
+plugins: [
+  auth({ providers: { github: { clientId: "Ov23li…", clientSecret: { env: "PRIVATE_GITHUB_CLIENT_SECRET" } } } }),
+  submissions({ repo: "wikiplace/wikiplace.live", signIn: { required: true } }),
+]
+```
+
+The server then refuses anonymous edits and new pages with 401 `sign_in_required` before it calls GitHub, and Turnstile is skipped: the editor shows no challenge and the server verifies none. A vault that requires sign-in without the `auth` plugin fails the build.
+
+Readers can open the editor and write while signed out. When they send, the editor keeps their edit for the browser tab and opens the sign-in dialog. Signing in brings them back to the same page, where the editor reopens with their source, note, title and section as they left them, ready to send. If the page's source fails to load then, the edit stays kept until the editor next opens on it. If the browser blocks storage, the editor says so and asks them to copy their changes before signing in.
 
 ## Guard
 
@@ -102,7 +121,7 @@ The editor then shows the challenge above its buttons and sends its token with t
 
 Each signed-in reader (see [Reader sign-in](../../docs/auth.md)) gets `limit` submissions per `period` seconds; anonymous readers share that budget per IP. Past it, the server answers 429 with `retryAfter` in seconds and a `Retry-After` header, and the editor says when to try again, such as "Try again in 10 minutes."
 
-When the server can't see a reader's address, as behind a proxy that hides it, anonymous edits are refused with 403 `sign_in_required`: one shared budget would let one reader use it up for everyone. Such a site needs reader sign-in.
+When the server can't see a reader's address, as behind a proxy that hides it, anonymous edits are refused with 401 `sign_in_required`: one shared budget would let one reader use it up for everyone. Such a site needs reader sign-in, and the editor offers it as when sign-in is required.
 
 By default the count lives in the server's memory. Each Node process and each Workers isolate keeps its own count, so a site with several instances allows up to `limit` per instance, and a restart clears it.
 
@@ -122,7 +141,7 @@ The plugin answers under `<base><mount>/_svartz/submissions/`. Failures answer `
 | Request | Answer |
 | --- | --- |
 | `GET source/?page=/guides/setup/` | `{ "markdown": "…" }`, the note at the build commit. |
-| `POST edit/` with `{ "submissionId", "page", "markdown", "note"?, "turnstileToken"? }` | 201 `{ "url", "number" }` of the pull request, new or opened by an earlier attempt with the same `submissionId`. 403 when Turnstile is missing or refused, or the reader is anonymous with no visible address; 429 with `retryAfter` past the rate limit; 503 when Cloudflare, the rate limiter or GitHub can't be reached. |
+| `POST edit/` with `{ "submissionId", "page", "markdown", "note"?, "turnstileToken"? }` | 201 `{ "url", "number" }` of the pull request, new or opened by an earlier attempt with the same `submissionId`. 401 `sign_in_required` when the reader is anonymous and sign-in is required or their address isn't visible; 403 when Turnstile is missing or refused; 429 with `retryAfter` past the rate limit; 503 when Cloudflare, the rate limiter or GitHub can't be reached. |
 | `POST new/` with `{ "submissionId", "folder", "title", "markdown", "note"?, "turnstileToken"? }` | As `edit/`. Also 400 `not_a_section` or `invalid_title`, and 409 `exists` when the title is taken, with `existing` set to the clashing page's public URL unless that page is hidden. |
 
 `page` is the note's URL path below the deployment base, as it appears in the site's index. `folder` is a section's path inside the vault, `""` for its top level. `submissionId` is 32 lowercase hex digits the client picks at random and repeats on every retry of the same submission.

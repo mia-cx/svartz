@@ -1,9 +1,10 @@
 /**
  * Adds Edit to the page actions of every editable note, and New page to the site actions of every page. The editor
- * itself loads on first use.
+ * itself loads on first use, or at once when the reader comes back from signing in with a draft for this page.
  */
 import type { BrowserScriptContext } from "@svartz/core";
 import type { BrowserOptions } from "./api";
+import { readDraft, type Draft } from "./draft";
 import type { EditorTarget } from "./editor";
 
 // Lucide "pencil" and "file-plus", as the theme's other actions draw their icons.
@@ -25,29 +26,37 @@ function editablePage(path: string, pages: readonly string[]): string | undefine
 }
 
 export function mount(pathname: string, options: BrowserOptions, context: BrowserScriptContext = { base: "" }) {
+  const endpoint = `${context.base}${options.endpoint}`;
   const buttons: HTMLButtonElement[] = [];
   let close: (() => void) | undefined;
   let unmounted = false;
+  /** Opens the panel the reader left to sign in, when this page holds its draft. */
+  let resume: (() => Promise<void>) | undefined;
 
-  /** A button in `region` that opens the editor on `target`. */
+  /** The draft saved on this page for `target`'s panel. */
+  function draftFor(target: EditorTarget): Draft | undefined {
+    const draft = readDraft(endpoint, pathname);
+    if (draft?.kind === "new") return target.kind === "new" ? draft : undefined;
+    return draft && target.kind === "edit" && draft.page === target.page ? draft : undefined;
+  }
+
+  /** A button in `region` that opens the editor on `target`, with the draft saved for it if there is one. */
   function action(region: Element | null, icon: string, label: string, target: EditorTarget) {
     if (!region) return;
     const button = document.createElement("button");
     button.type = "button";
     button.innerHTML = `${icon}${label}`;
-    button.addEventListener("click", async () => {
+    const open = async () => {
       const { openEditor } = await import("./editor");
       // The page may have gone while the editor loaded; its panel would outlive the cleanup below.
       if (unmounted) return;
-      close = openEditor({
-        target,
-        endpoint: `${context.base}${options.endpoint}`,
-        opener: button,
-        turnstileSiteKey: options.turnstileSiteKey,
-      });
-    });
+      const draft = draftFor(target);
+      close = openEditor({ target, endpoint, pathname, opener: button, turnstileSiteKey: options.turnstileSiteKey, draft });
+    };
+    button.addEventListener("click", () => void open());
     region.append(button);
     buttons.push(button);
+    if (draftFor(target)) resume = open;
   }
 
   const page = editablePage(pathname.slice(context.base.length), options.pages);
@@ -56,6 +65,9 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
     action(document.querySelector('[data-svartz-region="site-actions"]'), FILE_PLUS_ICON, "New page", { kind: "new", folders: options.folders });
   }
   if (buttons.length === 0) return;
+
+  // Back from signing in: the panel the reader left reopens with their draft.
+  void resume?.();
 
   return () => {
     unmounted = true;

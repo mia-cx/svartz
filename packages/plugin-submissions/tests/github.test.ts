@@ -31,6 +31,7 @@ const submission: Submission = {
   pageUrl,
   markdown,
   note: "Added the time it takes.",
+  submitter: null,
 };
 
 /** The edit's exchanges, with the one for `METHOD /path` swapped for `replace` (none: dropped) and the rest cut. */
@@ -61,6 +62,33 @@ describe("PR writer", () => {
     const github = replayGitHub(editExchanges({ markdown, note: submission.note, pageUrl, branch }));
 
     expect(await openSubmission(target, submission)).toEqual({ url: PULL_42.html_url, number: 42 });
+    expect(github.pending).toEqual([]);
+  });
+
+  it("authors the commit as a GitHub reader's noreply address and credits them in the pull request", async () => {
+    const ada = {
+      id: "github:583231", provider: "github", name: "Ada <Countess> Lovelace", handle: "ada",
+      profileUrl: "https://github.com/ada", avatarUrl: "https://github.com/ada.png",
+    } as const;
+    const github = replayGitHub(editExchanges({
+      markdown, note: submission.note, pageUrl, branch,
+      author: { name: "Ada Countess Lovelace", email: "583231+ada@users.noreply.github.com" },
+      credit: "by [Ada \\<Countess\\> Lovelace](<https://github.com/ada>) (signed in with GitHub)",
+    }));
+
+    expect(await openSubmission(target, { ...submission, submitter: ada })).toEqual({ url: PULL_42.html_url, number: 42 });
+    expect(github.pending).toEqual([]);
+  });
+
+  it("credits a Google reader by name alone, leaving the commit's author to the site", async () => {
+    const grace = { id: "google:1093", provider: "google", name: "Grace @hopper [1]" } as const;
+    const github = replayGitHub(editExchanges({
+      markdown, note: submission.note, pageUrl, branch,
+      // The mention gets a word joiner after its `@`, so it notifies no one.
+      credit: "by Grace @⁠hopper \\[1\\] (signed in with Google)",
+    }));
+
+    expect(await openSubmission(target, { ...submission, submitter: grace })).toEqual({ url: PULL_42.html_url, number: 42 });
     expect(github.pending).toEqual([]);
   });
 

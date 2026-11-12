@@ -212,9 +212,15 @@
 	display: none;
 }
 
-.svartz-submissions-error a {
+/* Links, and Sign in when the draft can't be kept: inline, in the message's colour. */
+.svartz-submissions-error :is(a, button) {
+	padding: 0;
+	border: 0;
+	background: none;
 	color: inherit;
+	font: inherit;
 	text-decoration: underline;
+	cursor: pointer;
 }
 
 .svartz-submissions-actions {

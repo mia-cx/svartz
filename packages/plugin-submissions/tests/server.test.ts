@@ -193,13 +193,15 @@ describe("as a GitHub App", () => {
     expect(github.pending).toEqual([]);
   });
 
-  it("passes the guard before exchanging the App's credentials", async () => {
+  it.each([
+    ["Turnstile", { turnstile: { siteKey: "0x4AAAAAAAtest", secret: { env: "TURNSTILE_SECRET" } }, rateLimit: { limit: 5, period: 60 } }, 403, "turnstile_required"],
+    ["required sign-in", { signInRequired: true, rateLimit: { limit: 5, period: 60 } }, 401, "sign_in_required"],
+  ] as const)("passes the guard (%s) before exchanging the App's credentials", async (_case, guard, status, error) => {
     const github = replayGitHub([]);
-    const guarded = appHandler({ turnstile: { siteKey: "0x4AAAAAAAtest", secret: { env: "TURNSTILE_SECRET" } }, rateLimit: { limit: 5, period: 60 } });
 
-    expect(await answer(edit({ page: "/wiki/guide/", markdown: "x" }), appEnv, guarded)).toMatchObject({
-      status: 403,
-      body: { error: "turnstile_required" },
+    expect(await answer(edit({ page: "/wiki/guide/", markdown: "x" }), appEnv, appHandler(guard))).toMatchObject({
+      status,
+      body: { error },
     });
     expect(github.requests).toEqual([]);
   });
@@ -284,7 +286,7 @@ describe("new pages", () => {
 
   it.each([
     ["without a Turnstile token", { turnstile: { siteKey: "0x4AAAAAAAtest", secret: { env: "TURNSTILE_SECRET" } }, rateLimit: { limit: 5, period: 60 } }, "203.0.113.7", 403, "turnstile_required"],
-    ["from a reader the server can't see", { rateLimit: { limit: 5, period: 60 } }, null, 403, "sign_in_required"],
+    ["from a reader the server can't see", { rateLimit: { limit: 5, period: 60 } }, null, 401, "sign_in_required"],
   ] as const)("passes the guard first: refuses a new page %s before calling GitHub", async (_case, guard, ip, status, error) => {
     const github = replayGitHub([]);
 

@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import "../src/browser.css";
 import type { BrowserOptions } from "../src/api";
 import { mount } from "../src/browser";
+import { mount as mountAuth } from "@svartz/auth/browser";
 
 // CRLF line endings and frontmatter: the edit must keep every byte it doesn't touch.
 const SOURCE = "---\r\ntitle: Guide\r\n---\r\n\r\n# Guide\r\n";
@@ -11,10 +12,9 @@ const CONTEXT = { base: "/docs" };
 
 let unmount: (() => void) | void;
 
-/** The site's server: source for the guide, and `edit` for the pull request answer. */
-function serve(edit: () => Response | Promise<Response>) {
-  const fetch = vi.fn(async (url: string, init?: RequestInit) =>
-    url.includes("/source/") ? Response.json({ markdown: SOURCE }) : edit());
+/** The site's server: `source` for the guide's source, and `edit` for the pull request answer. */
+function serve(edit: () => Response | Promise<Response>, source = () => Response.json({ markdown: SOURCE })) {
+  const fetch = vi.fn(async (url: string, init?: RequestInit) => url.includes("/source/") ? source() : edit());
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
@@ -252,6 +252,135 @@ describe("Edit", () => {
     unmount = mount(pathname, OPTIONS, CONTEXT);
 
     expect(document.querySelector('[data-svartz-region="page-actions"]')?.children).toHaveLength(0);
+  });
+});
+
+describe("sign-in", () => {
+  // Sign-in returns the reader to the page they left, so the panel is mounted on the test page's own path.
+  const HERE = location.pathname;
+  const SIGN_IN_OPTIONS = { ...OPTIONS, pages: [HERE] };
+  const SIGNED_OUT = { error: "sign_in_required", message: "Sign in to send edits from this site, then open the pull request." };
+  let unmountAuth: (() => void) | undefined;
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    unmountAuth = mountAuth(HERE, { endpoint: "/_svartz/auth", providers: [{ id: "github", label: "GitHub" }] });
+  });
+
+  afterEach(() => {
+    unmountAuth?.();
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  /** Leave for the provider and come back signed in: the page unmounts, then mounts afresh. */
+  function returnFromSignIn() {
+    if (unmount) unmount();
+    document.querySelector("dialog.sv-auth")?.remove();
+    unmount = mount(HERE, SIGN_IN_OPTIONS, { base: "" });
+  }
+
+  /** Open Edit on this page and add a word to the source. */
+  async function writeEdit() {
+    unmount = mount(HERE, SIGN_IN_OPTIONS, { base: "" });
+    await page.getByRole("button", { name: "Edit" }).click();
+    const source = page.getByRole("textbox", { name: "Page source" });
+    await expect.element(source).toHaveTextContent("# Guide");
+    await source.click();
+    await userEvent.keyboard("Welcome.");
+  }
+
+  it("keeps an edit through the sign-in round trip and sends it once the reader is back", async () => {
+    const answers = [Response.json(SIGNED_OUT, { status: 401 }), Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 })];
+    const fetch = serve(() => answers.shift()!);
+    await writeEdit();
+    await page.getByLabelText("What changed").fill("Greet readers.");
+    await page.getByRole("button", { name: "Open pull request" }).click();
+
+    await expect.element(page.getByRole("link", { name: "Continue with GitHub" }))
+      .toHaveAttribute("href", expect.stringContaining(`/_svartz/auth/start/github/?returnTo=${encodeURIComponent(HERE)}`));
+    returnFromSignIn();
+
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("Welcome.");
+    await expect.element(page.getByLabelText("What changed")).toHaveValue("Greet readers.");
+    await expect.element(page.getByRole("button", { name: "Open pull request" })).toHaveFocus();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
+
+    const [signedOut, signedIn] = fetch.mock.calls.filter(([url]) => url.includes("/edit/")).map(([, init]) => JSON.parse(String(init!.body)));
+    expect(signedIn).toMatchObject({ page: HERE, markdown: signedOut.markdown, note: "Greet readers." });
+    expect(signedIn.markdown).toContain("Welcome.");
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it("keeps a new page's title and section through the round trip", async () => {
+    serve(() => Response.json(SIGNED_OUT, { status: 401 }));
+    unmount = mount(HERE, SIGN_IN_OPTIONS, { base: "" });
+    await page.getByRole("button", { name: "New page" }).click();
+    await userEvent.keyboard("Ada Lovelace");
+    await page.getByRole("combobox", { name: "Section" }).selectOptions("People");
+    await page.getByRole("textbox", { name: "Page source" }).click();
+    await userEvent.keyboard("# Ada Lovelace");
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "Continue with GitHub" })).toBeVisible();
+
+    returnFromSignIn();
+
+    await expect.element(page.getByRole("textbox", { name: "Title" })).toHaveValue("Ada Lovelace");
+    await expect.element(page.getByRole("combobox", { name: "Section" })).toHaveValue("People");
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("# Ada Lovelace");
+    await expect.element(page.getByRole("button", { name: "Open pull request" })).toBeEnabled();
+  });
+
+  it("keeps the draft when the source fails to load after sign-in, so reopening the editor restores it", async () => {
+    let sourceDown = false;
+    serve(
+      () => Response.json(SIGNED_OUT, { status: 401 }),
+      () => sourceDown
+        ? Response.json({ error: "github_unavailable", message: "Couldn't reach GitHub right now." }, { status: 503 })
+        : Response.json({ markdown: SOURCE }),
+    );
+    await writeEdit();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    await expect.element(page.getByRole("link", { name: "Continue with GitHub" })).toBeVisible();
+
+    sourceDown = true;
+    returnFromSignIn();
+    await expect.element(page.getByRole("alert")).toHaveTextContent("Couldn't reach GitHub right now.");
+    await page.getByRole("button", { name: "Close editor" }).click();
+
+    sourceDown = false;
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toHaveTextContent("Welcome.");
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it("ignores a sign-in refusal that arrives after navigation closed the panel", async () => {
+    let refuse!: (response: Response) => void;
+    serve(() => new Promise((resolve) => { refuse = resolve; }));
+    await writeEdit();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+    // Navigation closes the panel before the server answers.
+    if (unmount) unmount();
+    refuse(Response.json(SIGNED_OUT, { status: 401 }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(document.querySelector("dialog.sv-auth")).toBeNull();
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it("asks the reader to copy their changes when the browser can't keep them", async () => {
+    serve(() => Response.json(SIGNED_OUT, { status: 401 }));
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Storage is disabled", "SecurityError");
+    });
+    await writeEdit();
+    await page.getByRole("button", { name: "Open pull request" }).click();
+
+    await expect.element(page.getByRole("alert")).toHaveTextContent("This browser can't keep your changes while you sign in, so copy them first.");
+    expect(document.querySelector("dialog.sv-auth")).toBeNull();
+    await page.getByRole("alert").getByRole("button", { name: "Sign in" }).click();
+    await expect.element(page.getByRole("link", { name: "Continue with GitHub" })).toBeVisible();
   });
 });
 

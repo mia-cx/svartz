@@ -7,7 +7,8 @@
  *
  * The client never names a file path. Edits must target a note in the build's manifest; a new note goes in one of the
  * manifest's folders, named after its title, and never where a file already is. Every submission passes the guard
- * (rate limit, and Turnstile when configured) before any GitHub call, a GitHub App's token exchange included.
+ * (required sign-in, rate limit, and Turnstile when configured) before any GitHub call, a GitHub App's token exchange
+ * included. A signed-in reader is credited in the pull request, and authors its commit when signed in with GitHub.
  * Failures answer `{ error, message }`.
  */
 import { readIdentity } from "@svartz/auth/server";
@@ -155,15 +156,16 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     return new URL(`${deploymentBase}${route}`, request.url).href;
   }
 
-  /** Pass the guard, then open the pull request. */
-  async function open(request: Request, context: ServerContext, turnstileToken: string | undefined, submission: Submission) {
-    await guard({
-      token: turnstileToken,
-      identity: await readIdentity(request, context.env),
-      clientAddress: context.clientAddress,
-      env: context.env,
-    });
-    const pull = await openSubmission(await target(context), submission);
+  /** Pass the guard, then open the pull request, crediting the signed-in reader. */
+  async function open(
+    request: Request,
+    context: ServerContext,
+    turnstileToken: string | undefined,
+    submission: Omit<Submission, "submitter">,
+  ) {
+    const submitter = await readIdentity(request, context.env);
+    await guard({ token: turnstileToken, identity: submitter, clientAddress: context.clientAddress, env: context.env });
+    const pull = await openSubmission(await target(context), { ...submission, submitter });
     return Response.json(pull satisfies EditResponse, { status: 201 });
   }
 
