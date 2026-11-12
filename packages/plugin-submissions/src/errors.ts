@@ -21,3 +21,7 @@ export class SubmissionError extends Error {
     return Response.json(body, { status, headers: retryAfter === undefined ? {} : { "retry-after": String(retryAfter) } });
   }
 }
+
+/** The site's GitHub credentials are missing or wrong: `reason` tells the site owner which, without any secret. */
+export const misconfigured = (reason: string) =>
+  new SubmissionError("misconfigured", 503, `This site can't open pull requests yet: ${reason}.`);

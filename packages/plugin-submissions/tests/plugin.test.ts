@@ -197,3 +197,28 @@ describe("submissions guard config", () => {
     expect(() => submissions({ repo: "acme/wiki", guard } as Parameters<typeof submissions>[0])).toThrow(message);
   });
 });
+
+describe("submissions credentials config", () => {
+  const privateKey = { env: "SVARTZ_GITHUB_APP_KEY" };
+  const serverOptions = (options: Partial<Parameters<typeof submissions>[0]>) =>
+    submissions({ repo: "acme/wiki", ...options }).server?.options;
+
+  it("opens pull requests with the default token, or with the App alone when one is set", () => {
+    expect(serverOptions({})).toMatchObject({ token: { env: "SVARTZ_GITHUB_TOKEN" } });
+    const asApp = serverOptions({ app: { id: 1234567, privateKey, installation: 89012345 } });
+    expect(asApp).toMatchObject({ app: { id: 1234567, privateKey, installation: 89012345 } });
+    expect(asApp).not.toHaveProperty("token");
+  });
+
+  it.each([
+    ["both a token and an App", { token: { env: "SVARTZ_GITHUB_TOKEN" }, app: { id: 1234567, privateKey } }, /either token or app/],
+    ["a blank token name", { token: { env: " " } }, /token must name/],
+    ["an App without an ID", { app: { id: "", privateKey } }, /app\.id/],
+    ["an App with a negative ID", { app: { id: -1, privateKey } }, /app\.id/],
+    ["an inlined private key", { app: { id: 1234567, privateKey: "-----BEGIN RSA PRIVATE KEY-----" } }, /privateKey must name/],
+    ["a blank private key name", { app: { id: "Iv23liExample", privateKey: { env: "" } } }, /privateKey must name/],
+    ["an installation that isn't an ID", { app: { id: 1234567, privateKey, installation: "acme" } }, /app\.installation/],
+  ])("refuses %s when the config loads", (_case, options, message) => {
+    expect(() => submissions({ repo: "acme/wiki", ...options } as Parameters<typeof submissions>[0])).toThrow(message);
+  });
+});

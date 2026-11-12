@@ -2,6 +2,7 @@
  * GitHub's side of a submission, as request/response pairs replayed in order. Response bodies follow GitHub's
  * REST API, trimmed to the fields the PR writer reads plus enough context to recognise them.
  */
+import { generateKeyPairSync } from "node:crypto";
 import { expect, vi } from "vitest";
 
 export const TOKEN = "github_pat_test";
@@ -21,6 +22,8 @@ export const PULL_42 = { number: 42, html_url: `https://github.com/${REPO}/pull/
 
 export interface Exchange {
   readonly request: { readonly method: string; readonly url: string; readonly body?: unknown };
+  /** The `Authorization` header GitHub expects, or a matcher for it. Default: the token `replayGitHub` was given. */
+  readonly authorization?: unknown;
   /** `hang`: GitHub never answers; the request ends only when its signal aborts. No `json` or `raw`: an empty body. */
   readonly response: { readonly status: number; readonly json?: unknown; readonly raw?: string; readonly hang?: true };
 }
@@ -119,21 +122,61 @@ function writeExchanges({ markdown, note, pageUrl, branch, path, title }: Writte
   ];
 }
 
-/** Stub `fetch` with GitHub answering `exchanges` in order; each request must match the next one. */
-export function replayGitHub(exchanges: readonly Exchange[]) {
+/** A throwaway App private key, made per test run: `pkcs1` as GitHub's `.pem` download, `pkcs8` as OpenSSL's default. */
+export const APP_KEY = (() => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  return {
+    pkcs1: privateKey.export({ type: "pkcs1", format: "pem" }) as string,
+    pkcs8: privateKey.export({ type: "pkcs8", format: "pem" }) as string,
+    publicKey,
+  };
+})();
+export const APP_ID = 1_234_567;
+export const INSTALLATION_ID = 89_012_345;
+export const INSTALLATION_TOKEN = "ghs_installation_test";
+/** An App's JWT: three base64url parts. */
+const APP_JWT = expect.stringMatching(/^Bearer [\w-]+\.[\w-]+\.[\w-]+$/);
+
+/** Finding the App's installation on the repository with its JWT. */
+export const installationLookup: Exchange = {
+  request: { method: "GET", url: `${API}/installation` },
+  authorization: APP_JWT,
+  response: { status: 200, json: { id: INSTALLATION_ID, app_id: APP_ID, account: { login: "wikiplace" }, target_type: "Organization" } },
+};
+
+/** Exchanging the App's JWT for an installation token scoped to the repository, which expires at `expiresAt`. */
+export const tokenExchange = (expiresAt: string, token = INSTALLATION_TOKEN): Exchange => ({
+  request: {
+    method: "POST",
+    url: `https://api.github.com/app/installations/${INSTALLATION_ID}/access_tokens`,
+    body: { repositories: ["wikiplace.live"] },
+  },
+  authorization: APP_JWT,
+  response: {
+    status: 201,
+    json: { token, expires_at: expiresAt, permissions: { contents: "write", pull_requests: "write", metadata: "read" }, repository_selection: "selected" },
+  },
+});
+
+/**
+ * Stub `fetch` with GitHub answering `exchanges` in order; each request must match the next one, and carry `token`
+ * unless the exchange expects other credentials.
+ */
+export function replayGitHub(exchanges: readonly Exchange[], token = TOKEN) {
   const pending = [...exchanges];
-  const requests: Array<{ method: string; url: string; body?: unknown }> = [];
+  const requests: Array<{ method: string; url: string; body?: unknown; authorization: string | null }> = [];
   const fetch = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const request = {
       method: init.method ?? "GET",
       url: String(input),
       ...(init.body === undefined ? {} : { body: JSON.parse(String(init.body)) as unknown }),
     };
-    requests.push(request);
+    const authorization = new Headers(init.headers).get("authorization");
+    requests.push({ ...request, authorization });
     const next = pending.shift();
     if (!next) throw new Error(`GitHub got an unexpected ${request.method} ${request.url}`);
     expect(request).toEqual(next.request);
-    expect(new Headers(init.headers).get("authorization")).toBe(`Bearer ${TOKEN}`);
+    expect(authorization).toEqual(next.authorization ?? `Bearer ${token}`);
     const { status, json, raw, hang } = next.response;
     if (hang) return new Promise<Response>((_, reject) => init.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
     if (raw !== undefined) return new Response(raw, { status });

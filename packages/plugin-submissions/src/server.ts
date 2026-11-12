@@ -7,7 +7,8 @@
  *
  * The client never names a file path. Edits must target a note in the build's manifest; a new note goes in one of the
  * manifest's folders, named after its title, and never where a file already is. Every submission passes the guard
- * (rate limit, and Turnstile when configured) before any GitHub call. Failures answer `{ error, message }`.
+ * (rate limit, and Turnstile when configured) before any GitHub call, a GitHub App's token exchange included.
+ * Failures answer `{ error, message }`.
  */
 import { readIdentity } from "@svartz/auth/server";
 import type { ServerContext, ServerModuleFactory } from "@svartz/core";
@@ -21,18 +22,23 @@ import {
   type EditResponse,
   type SourceResponse,
 } from "./api";
-import { SubmissionError } from "./errors";
+import { appTokens, type AppCredentials } from "./app";
+import { misconfigured, SubmissionError } from "./errors";
 import { openSubmission, readSource, type GitHubTarget, type Submission } from "./github";
 import { createGuard, type GuardOptions } from "./guard";
 
+/** Exactly one kind of GitHub credentials: a token, or a GitHub App. */
+export type Credentials =
+  | { readonly token: { readonly env: string }; readonly app?: never }
+  | { readonly app: AppCredentials; readonly token?: never };
+
 /** The plugin's server options, as written into the server bundle. */
-export interface ServerOptions {
+export type ServerOptions = Credentials & {
   readonly repo: string;
   readonly branch?: string;
   readonly labels: readonly string[];
-  readonly token: { readonly env: string };
   readonly guard: GuardOptions;
-}
+};
 
 /** What the build records for the server: never sent to the browser. */
 export interface BuildData {
@@ -131,15 +137,15 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     return folder ? `${folder}/${title}.md` : `${title}.md`;
   }
 
-  function target(context: ServerContext): GitHubTarget {
-    const token = context.env[options.token.env];
-    if (typeof token !== "string" || !token) {
-      throw new SubmissionError(
-        "misconfigured",
-        503,
-        `This site can't open pull requests yet: its server has no ${options.token.env} set.`,
-      );
-    }
+  /** The token every GitHub call authenticates with: the configured one, or the App's installation token. */
+  const githubToken = options.app ? appTokens(options.repo, options.app) : async (env: ServerContext["env"]) => {
+    const token = env[options.token.env];
+    if (typeof token !== "string" || !token) throw misconfigured(`its server has no ${options.token.env} set`);
+    return token;
+  };
+
+  async function target(context: ServerContext): Promise<GitHubTarget> {
+    const token = await githubToken(context.env);
     return { repo: options.repo, token, branch: options.branch, labels: options.labels, commit: data.commit };
   }
 
@@ -157,13 +163,13 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
       clientAddress: context.clientAddress,
       env: context.env,
     });
-    const pull = await openSubmission(target(context), submission);
+    const pull = await openSubmission(await target(context), submission);
     return Response.json(pull satisfies EditResponse, { status: 201 });
   }
 
   async function source(request: Request, context: ServerContext): Promise<Response> {
     const path = notePath(new URL(request.url).searchParams.get("page"));
-    const markdown = await readSource(target(context), path);
+    const markdown = await readSource(await target(context), path);
     return Response.json({ markdown } satisfies SourceResponse);
   }
 

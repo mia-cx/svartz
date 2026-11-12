@@ -58,7 +58,7 @@ export default {
     theme: ${JSON.stringify(path.join(workspaceRoot, "themes/minimal"))},
     target: { type: "node" },
     site: { title: "Wiki" },
-    plugins: [submissions({ repo: "acme/wiki", labels: ["submission"] })],
+    plugins: [submissions({ repo: "acme/wiki", labels: ["submission"], app: { id: 1234567, privateKey: { env: "SVARTZ_GITHUB_APP_KEY" } } })],
   }],
 };\n`);
   const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
@@ -78,12 +78,12 @@ afterAll(async () => {
 });
 
 describe("a Node build with submissions", () => {
-  it("ships the editor to the browser but keeps the token name and build manifest on the server", async () => {
+  it("ships the editor to the browser but keeps the key's name and build manifest on the server", async () => {
     const client = await readTree(path.join(root, ".svartz/vaults/site/dist/client"));
 
     expect(client.some((file) => file.includes("Open pull request"))).toBe(true);
     expect(client.some((file) => file.includes("New page"))).toBe(true);
-    expect(client.filter((file) => file.includes("SVARTZ_GITHUB_TOKEN"))).toEqual([]);
+    expect(client.filter((file) => file.includes("SVARTZ_GITHUB_APP_KEY"))).toEqual([]);
     expect(client.filter((file) => file.includes(commit))).toEqual([]);
   });
 
@@ -92,10 +92,12 @@ describe("a Node build with submissions", () => {
     const port = await freePort();
     const { SVARTZ_GITHUB_TOKEN: _token, ...env } = process.env;
     const origin = `http://127.0.0.1:${port}`;
+    // A PEM that isn't a key: the server's WebCrypto import refuses it before anything reaches GitHub.
+    const key = "-----BEGIN RSA PRIVATE KEY-----\nbm90IGEgcmVhbCBrZXk=\n-----END RSA PRIVATE KEY-----\n";
     const server = spawn(process.execPath, [path.join(dist, "index.js")], {
       cwd: root,
       // adapter-node's public origin, which page links in answers are built on.
-      env: { ...env, HOST: "127.0.0.1", PORT: String(port), ORIGIN: origin },
+      env: { ...env, HOST: "127.0.0.1", PORT: String(port), ORIGIN: origin, SVARTZ_GITHUB_APP_KEY: key },
       stdio: "pipe",
     });
     let stderr = "";
@@ -108,11 +110,11 @@ describe("a Node build with submissions", () => {
       }
       expect(ready, stderr).toBe(true);
 
-      // A published note reaches the GitHub step, which needs the token.
+      // A published note reaches the GitHub step, which needs the App's key.
       const guide = await fetch(`${origin}/_svartz/submissions/source/?page=/guide/`);
       expect([guide.status, await guide.json()]).toEqual([503, {
         error: "misconfigured",
-        message: "This site can't open pull requests yet: its server has no SVARTZ_GITHUB_TOKEN set.",
+        message: "This site can't open pull requests yet: its server's SVARTZ_GITHUB_APP_KEY isn't a GitHub App private key.",
       }]);
       const outside = await fetch(`${origin}/_svartz/submissions/edit/`, {
         method: "POST",
@@ -127,7 +129,7 @@ describe("a Node build with submissions", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ submissionId: "1".repeat(32), folder, title, markdown: "# Page\n" }),
       }).then(async (response) => [response.status, await response.json()]);
-      // A new page in the vault's one published folder passes the path policy and the guard, then needs the token.
+      // A new page in the vault's one published folder passes the path policy and the guard, then needs the App's key.
       expect(await create("", "Setup")).toEqual([503, expect.objectContaining({ error: "misconfigured" })]);
       expect(await create("..", "svartz.config")).toEqual([400, expect.objectContaining({ error: "not_a_section" })]);
       expect(await create("", "Guide")).toEqual([409, expect.objectContaining({ error: "exists", existing: `${origin}/guide/` })]);

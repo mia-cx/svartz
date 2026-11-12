@@ -5,7 +5,7 @@ Readers edit a page, or write a new one, from your Svartz site, and the site ope
 ## Set up
 
 1. Give the vault a server target: `cloudflare-workers`, `cloudflare-pages` or `node`. A `static` vault with this plugin fails the build.
-2. Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new) for the repository with **Contents** and **Pull requests** set to *Read and write*.
+2. Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new) for the repository with **Contents** and **Pull requests** set to *Read and write*. To have pull requests come from a bot instead, use a [GitHub App](#github-app).
 3. Set it on the server as `SVARTZ_GITHUB_TOKEN`: `wrangler secret put SVARTZ_GITHUB_TOKEN` on Cloudflare, or the process environment on Node. Under `svartz dev`, put it in `.env`.
 4. Add the plugin:
 
@@ -26,6 +26,26 @@ export default defineConfig({
 
 The site must be built from a git checkout of that repository, and the commit it was built from must be on GitHub: the editor reads each page's source at that commit.
 
+### GitHub App
+
+With a GitHub App, pull requests come from `<app name>[bot]` rather than from the token's owner, and no one's personal token sits on the server.
+
+1. [Register a GitHub App](https://github.com/settings/apps/new) (under an organization: its **Settings → Developer settings → GitHub Apps**). It needs no callback or webhook: untick **Webhook → Active**.
+2. Under **Repository permissions**, set **Contents** and **Pull requests** to *Read and write*. **Metadata** stays *Read-only*, as GitHub requires.
+3. Create the App, note its **App ID** (or **Client ID**), and under **Private keys** generate a key. GitHub downloads it as a `.pem` file.
+4. **Install App** on the account that owns the repository, for that repository.
+5. Set the whole `.pem` file on the server under a name of your choice, such as `SVARTZ_GITHUB_APP_KEY`: `wrangler secret put SVARTZ_GITHUB_APP_KEY < app.private-key.pem` on Cloudflare, or the process environment on Node. In a one-line `.env` value, write its line breaks as `\n`.
+6. Name the App in the plugin:
+
+```ts
+submissions({
+  repo: "wikiplace/wikiplace.live",
+  app: { id: 1234567, privateKey: { env: "SVARTZ_GITHUB_APP_KEY" } },
+})
+```
+
+The server signs a short-lived token with the key, finds the App's installation on `repo` (set `installation` to its ID to skip that lookup), and exchanges the token for an installation token limited to `repo`. It reuses that token until five minutes before it expires, an hour after it was made. When the key is missing or isn't one, GitHub rejects the App, or the App isn't installed on `repo`, the editor says so without showing the key.
+
 | Option | Default | |
 | --- | --- | --- |
 | `repo` | required | The repository, as `owner/name`. |
@@ -33,6 +53,7 @@ The site must be built from a git checkout of that repository, and the commit it
 | `vaultRoot` | read from git | The vault folder's path inside the repository, such as `"content"`. Set it when the build doesn't run in the repository's checkout. |
 | `labels` | none | Labels every pull request gets. |
 | `token` | `{ env: "SVARTZ_GITHUB_TOKEN" }` | The server environment variable that holds the token. |
+| `app` | none | `{ id, privateKey: { env: "NAME" }, installation? }`: open pull requests as a [GitHub App](#github-app) instead of with `token`. Set one or the other. |
 | `guard.turnstile` | none | `{ siteKey, secret: { env: "NAME" } }`: the editor shows a [Turnstile](#turnstile) challenge and the server verifies it. |
 | `guard.rateLimit` | `{ limit: 10, period: 3600 }` | Submissions allowed per `period` seconds, per signed-in reader or per IP. See [Rate limit](#rate-limit). |
 
