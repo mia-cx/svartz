@@ -1,6 +1,6 @@
 # Annotations
 
-`@svartz/plugin-annotations` shows readers' comments beside the passage they respond to. Each commented passage is highlighted, with a marker in the margin on its first line that opens the comment, its author's name and avatar. Everyone sees them, signed in or not. Comments live in a Cloudflare D1 database that the plugin sets up itself.
+`@svartz/plugin-annotations` shows readers' comments beside the passage they respond to. Each commented passage is highlighted, with a marker in the margin on its first line that opens the comment, its author's name and avatar. Everyone sees them, signed in or not; signed-in readers select a passage and add their own. Comments live in a Cloudflare D1 database that the plugin sets up itself.
 
 ```ts
 import { defineConfig } from "@svartz/config";
@@ -78,6 +78,14 @@ Each marker is a button named for its comment, such as "Comment by Ada Lovelace 
 
 Annotations are hidden when the page prints (everything carries `data-print-hide`) and never appear in a note's Markdown twin, which is built from the note's source.
 
+### Commenting
+
+Selecting text inside the element shows a toolbar above the selection with **Comment**. The selection stays an ordinary selection, so copying works, until the reader picks an action. From the keyboard, Tab moves from the selection to the toolbar and Escape leaves it. **Comment** opens a composer beside the passage: **Post comment** (or Ctrl/⌘+Enter) posts it, and **Cancel** (or Escape) goes back to the selection. A posted comment gets its highlight and marker at once, and focus moves to the marker.
+
+A comment is plain text up to 2,000 characters, on a passage of up to 1,000. When the site refuses one, the composer keeps the draft and shows why.
+
+A signed-out reader who posts gets `auth`'s sign-in dialog. The draft, its passage and the pending action wait in `sessionStorage`, and when sign-in brings the reader back to the page, `attach` reopens the composer on the same passage with the draft as it was. The dialog is [`auth`'s](auth.md#the-sign-in-dialog), which the `auth` plugin puts on every page of its vault.
+
 ### Styling
 
 The stylesheet follows theme-minimal's tokens (`--sv-accent`, `--sv-paper`, …) and falls back to system colours elsewhere. Set these to restyle it:
@@ -88,7 +96,7 @@ The stylesheet follows theme-minimal's tokens (`--sv-accent`, `--sv-paper`, …)
 | `--sv-annotations-highlight-active` | The accent at 34%, for the passage whose comment is open |
 | `--sv-annotations-marker` | The accent's text colour |
 | `--sv-annotations-marker-size` | `1.75rem` |
-| `--sv-annotations-card-width` | `18rem` |
+| `--sv-annotations-card-width` | `18rem`, for comment cards and the composer |
 
 Style the highlights directly with `::highlight(svartz-annotations)` and `::highlight(svartz-annotations-active)`.
 
@@ -99,5 +107,18 @@ Under `<base><mount>/_svartz/annotations/`:
 | Route | Answers |
 | --- | --- |
 | `GET ?page=<note path>` | `{ annotations }`: the page's comments and reactions, oldest first, each with its anchor, author and agreements. Public. |
+| `POST` | Stores a comment, `{ kind: "comment", page, anchor, body }`, for the signed-in reader, and answers `201 { annotation }`. Writing also refreshes the reader's stored identity. |
 
-A missing `page` answers 400, and a missing D1 binding 503, each as `{ error, message }`.
+`anchor` is what `describe` returns for the selection: `{ exact, prefix, suffix, start, end }`, where `end - start` is the length of `exact`.
+
+Failures answer `{ error, message }`, where `message` is written for the reader:
+
+| Status | `error` | When |
+| --- | --- | --- |
+| 400 | `invalid_page` | `GET` without `page`. |
+| 400 | `invalid_annotation` | An empty body or one over 2,000 characters, a quote over 1,000, or an anchor whose position doesn't cover its quote. |
+| 400 | `invalid_json` | A `POST` body that isn't JSON. |
+| 401 | `signed_out` | A `POST` from a reader who isn't signed in. |
+| 403 | `cross_origin` | A `POST` whose `Origin` header is missing or names another site. |
+| 413 | `too_large` | A `POST` body over 32 KiB. |
+| 503 | `misconfigured` | No D1 binding under `database.env`. |

@@ -151,6 +151,43 @@ function identityOf(row: IdentityRow): Identity {
   };
 }
 
+/** A comment as a reader posts it; the store adds its id and time. */
+export interface NewComment {
+  readonly vault: string;
+  readonly page: string;
+  readonly anchor: Anchor;
+  readonly body: string;
+  readonly author: Identity;
+}
+
+/**
+ * Store `comment`, refreshing its author's identity row with what their session says now: name, handle, avatar and
+ * profile link, nothing more. One batch, so the comment never lands without its author.
+ */
+export async function createComment(db: Database, { vault, page, anchor, body, author }: NewComment): Promise<Annotation> {
+  const id = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
+  const row: IdentityRow = {
+    author_id: author.id,
+    provider: author.provider,
+    name: author.name,
+    handle: author.handle ?? null,
+    avatar_url: author.avatarUrl ?? null,
+    profile_url: author.profileUrl ?? null,
+  };
+  await db.batch([
+    db.prepare(`INSERT INTO identities (id, provider, name, handle, avatar_url, profile_url, updated_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+      ON CONFLICT (id) DO UPDATE SET provider = excluded.provider, name = excluded.name, handle = excluded.handle,
+        avatar_url = excluded.avatar_url, profile_url = excluded.profile_url, updated_at = excluded.updated_at`)
+      .bind(row.author_id, row.provider, row.name, row.handle, row.avatar_url, row.profile_url, createdAt),
+    db.prepare(`INSERT INTO annotations (id, vault, page, kind, body, exact, prefix, suffix, start, "end", author_id, created_at)
+      VALUES (?, ?, ?, 'comment', ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(id, vault, page, body, anchor.exact, anchor.prefix, anchor.suffix, anchor.start, anchor.end, author.id, createdAt),
+  ]);
+  return { id, kind: "comment", body, anchor, author: identityOf(row), createdAt, agreements: [] };
+}
+
 /** Every annotation on `page` of `vault`, oldest first, with its author and agreements. */
 export async function listPage(db: Database, vault: string, page: string): Promise<Annotation[]> {
   const [annotationRows, agreementRows] = await db.batch([

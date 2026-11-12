@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { ADA, createDatabase, createSite, ENDPOINT, GRACE, seed } from "./harness";
+import { ADA, createDatabase, createSite, ENDPOINT, GRACE, ORIGIN, seed, signIn, type Site } from "./harness";
 
 const disposers: Array<() => Promise<void>> = [];
 
@@ -82,5 +82,114 @@ describe("GET ?page=", () => {
 
     expect(response.status).toBe(status);
     expect(await response.json()).toMatchObject({ error });
+  });
+});
+
+describe("POST", () => {
+  const quote = "the garden";
+  const comment = (overrides: Record<string, unknown> = {}) => JSON.stringify({
+    kind: "comment", page: "garden", anchor: { exact: quote, prefix: "Walk to ", suffix: " at dusk", start: 8, end: 18 }, body: "Lovely.", ...overrides,
+  });
+  const post = (site: Site, body: string, headers: Record<string, string>) =>
+    site(`${ENDPOINT}/`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body });
+
+  it("stores a signed-in reader's comment, refreshing who they are, and lists it at once", async () => {
+    const { db } = await database();
+    // Ada commented before under an older name and picture.
+    await seed(db, [{ id: "older", page: "garden", author: { ...ADA, name: "Ada Byron", avatarUrl: "https://example.com/old.png" }, body: "Earlier", anchor: anchor("roses", 40), createdAt: "2026-11-01T00:00:00.000Z" }]);
+    const site = createSite({ DB: db });
+    const session = await signIn(site, ADA);
+
+    const response = await post(site, comment({ body: "  <b>Lovely</b> at dusk.\r\nTruly.  " }), { cookie: session, origin: ORIGIN });
+
+    expect(response.status).toBe(201);
+    const { annotation } = await response.json() as { annotation: { id: string; createdAt: string } };
+    expect(annotation).toEqual({
+      id: expect.any(String),
+      kind: "comment",
+      // Plain text, trimmed, with one kind of line break; markup stays characters.
+      body: "<b>Lovely</b> at dusk.\nTruly.",
+      anchor: { exact: quote, prefix: "Walk to ", suffix: " at dusk", start: 8, end: 18 },
+      author: ADA,
+      createdAt: expect.any(String),
+      agreements: [],
+    });
+    const listed = await (await site(`${ENDPOINT}/?page=garden`)).json() as { annotations: Array<{ id: string; author: unknown }> };
+    expect(listed.annotations.map(({ id, author }) => [id, author])).toEqual([["older", ADA], [annotation.id, ADA]]);
+    // Identity only: never a token, email or anything else the provider knows.
+    const { results } = await db.prepare("SELECT * FROM identities").all();
+    expect(results).toEqual([{
+      id: ADA.id, provider: "github", name: ADA.name, handle: ADA.handle, avatar_url: ADA.avatarUrl, profile_url: ADA.profileUrl, updated_at: annotation.createdAt,
+    }]);
+  });
+
+  it.each([
+    ["signed out", comment(), {}, 401, "signed_out", "Sign in to comment."],
+    ["from another site", comment(), { session: true, origin: "https://evil.test" }, 403, "cross_origin", "Post from this site."],
+    ["with no Origin", comment(), { session: true, origin: null }, 403, "cross_origin", "Post from this site."],
+    ["over 2,000 characters", comment({ body: "a".repeat(2001) }), { session: true }, 400, "invalid_annotation", "Comments can be up to 2,000 characters."],
+    ["quoting over 1,000 characters", comment({ anchor: { exact: "b".repeat(1001), prefix: "", suffix: "", start: 0, end: 1001 } }), { session: true },
+      400, "invalid_annotation", "Select up to 1,000 characters to respond to."],
+    ["with nothing written", comment({ body: " \n " }), { session: true }, 400, "invalid_annotation", "Write a comment before posting."],
+    ["whose position doesn't cover its quote", comment({ anchor: { exact: quote, prefix: "", suffix: "", start: 8, end: 30 } }), { session: true },
+      400, "invalid_annotation", "Select the passage in the note you're responding to."],
+    ["that isn't JSON", "body=Lovely", { session: true }, 400, "invalid_json", "Send the comment as JSON."],
+  ])("refuses a comment %s, storing nothing", async (_case, body, { session = false, origin = ORIGIN }: { session?: boolean; origin?: string | null }, status, error, message) => {
+    const { db } = await database();
+    const site = createSite({ DB: db });
+    const headers: Record<string, string> = {};
+    if (session) headers.cookie = await signIn(site, ADA);
+    if (origin) headers.origin = origin;
+
+    const response = await post(site, body, headers);
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error, message });
+    expect(await (await site(`${ENDPOINT}/?page=garden`)).json()).toEqual({ annotations: [] });
+  });
+
+  describe("a body over 32 KiB, sent without a Content-Length", () => {
+    const CHUNK = 8 * 1024;
+    /** `chunks` chunks of `bytes`, streamed so no Content-Length is sent, counting how many the server pulled. */
+    function stream(chunks: Uint8Array[]) {
+      let pulled = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          const next = chunks[pulled++];
+          if (next) controller.enqueue(next);
+          else controller.close();
+        },
+      });
+      return { body, pulled: () => pulled };
+    }
+    const send = async (site: Site, body: ReadableStream<Uint8Array>) => site(`${ENDPOINT}/`, {
+      method: "POST", headers: { "content-type": "application/json", origin: ORIGIN, cookie: await signIn(site, ADA) }, body, duplex: "half",
+    } as RequestInit);
+
+    it("is refused, even when its characters fit, storing nothing", async () => {
+      const { db } = await database();
+      const site = createSite({ DB: db });
+      // 20,000 three-byte characters: under 32 Ki code units, over 32 KiB.
+      const bytes = new TextEncoder().encode(comment({ ignored: "界".repeat(20_000) }));
+      const { body } = stream(Array.from({ length: Math.ceil(bytes.length / CHUNK) }, (_, index) => bytes.subarray(index * CHUNK, (index + 1) * CHUNK)));
+
+      const response = await send(site, body);
+
+      expect(response.status).toBe(413);
+      expect(await response.json()).toEqual({ error: "too_large", message: "This comment is too long to post." });
+      expect(await (await site(`${ENDPOINT}/?page=garden`)).json()).toEqual({ annotations: [] });
+    });
+
+    it("is refused as soon as it passes the limit, without reading the rest", async () => {
+      const { db } = await database();
+      const site = createSite({ DB: db });
+      const { body, pulled } = stream(Array.from({ length: 100 }, () => new Uint8Array(CHUNK).fill(0x20)));
+
+      const response = await send(site, body);
+
+      expect(response.status).toBe(413);
+      // 32 KiB is four chunks; the fifth passes it. A stream may buffer one more ahead.
+      expect(pulled()).toBeLessThanOrEqual(6);
+    });
   });
 });
