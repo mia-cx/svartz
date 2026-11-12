@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { PluginContext, ProcessedFile } from "@svartz/core";
 import { transformOfm } from "../src/transform-ofm";
 import { transformEmbeds } from "../src/transform-embeds";
+import { renderMarkdownTree } from "../src/internal/render-markdown";
+import { compileContent } from "../src/internal/compile-content";
 
 function makeCtx(content: string): PluginContext {
   const files: ProcessedFile[] = [
@@ -119,6 +121,21 @@ describe("transformOfm", () => {
       '> <span class="callout-marker" data-callout="warning" data-callout-fold="closed" aria-hidden="true"></span> **Read this first**',
     );
     expect(ctx.files[0]!.content).toContain("> Callout body");
+  });
+
+  it.each(["+", "-"])("compiles CRLF callouts with a title, %s fold marker and body like LF callouts", async (fold) => {
+    const source = `> [!warning]${fold} Read this first\n> Callout body\n`;
+    const lf = makeCtx(source);
+    const crlf = makeCtx(source.replaceAll("\n", "\r\n"));
+    transformOfm().transformOfm!.run(lf);
+    transformOfm().transformOfm!.run(crlf);
+
+    const expected = compileContent(await renderMarkdownTree(lf, lf.files[0]!.content));
+    expect(expected).toContain("<contentComponents.callout");
+    expect(expected).toContain('"title":"Read this first"');
+    expect(expected).toContain(`"fold":"${fold === "+" ? "open" : "closed"}"`);
+    expect(expected).toContain("Callout body");
+    expect(compileContent(await renderMarkdownTree(crlf, crlf.files[0]!.content))).toBe(expected);
   });
 
   it("uses the callout type as the default title and preserves open fold state", () => {

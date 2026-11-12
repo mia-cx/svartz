@@ -50,6 +50,15 @@ describe("renderPreview", () => {
     expect(html).toContain("<code>![[diagram.png]]</code>");
   });
 
+  it("renders CRLF callouts with a title, fold marker and body exactly like LF callouts", async () => {
+    const source = "> [!warning]- Read this first\n> Callout body\n";
+    const expected = await render(source);
+    expect(expected).toContain('data-callout="warning" data-callout-fold="closed"');
+    expect(expected).toContain("<strong>Read this first</strong>");
+    expect(expected).toContain("Callout body");
+    expect(await render(source.replaceAll("\n", "\r\n"))).toBe(expected);
+  });
+
   it("keeps code as plain code, links inside it included", async () => {
     const html = await render("```mermaid\ngraph TD; [[Ada]]\n```");
 
