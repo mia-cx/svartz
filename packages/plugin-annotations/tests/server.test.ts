@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { Database } from "../src/store";
-import { ADA, createDatabase, createSite, ENDPOINT, GRACE, ORIGIN, seed, signIn, type Site } from "./harness";
+import { ADA, ALAN, createDatabase, createSite, ENDPOINT, GRACE, ORIGIN, seed, signIn, type Site } from "./harness";
 
 const disposers: Array<() => Promise<void>> = [];
 
@@ -231,7 +231,7 @@ describe("POST <id>/agree/", () => {
     const listed = await (await site(`${ENDPOINT}/?page=garden`, { headers: { cookie: session } })).json() as {
       viewer: unknown; annotations: Array<{ id: string; agreements: unknown }>;
     };
-    expect(listed.viewer).toEqual({ id: ADA.id });
+    expect(listed.viewer).toEqual({ id: ADA.id, moderator: false });
     expect(listed.annotations.find(({ id }) => id === "c1")?.agreements).toEqual(agreements);
     const { results: [identity] } = await db.prepare("SELECT name, avatar_url FROM identities WHERE id = ?").bind(ADA.id).all();
     expect(identity).toEqual({ name: ADA.name, avatar_url: ADA.avatarUrl });
@@ -314,5 +314,98 @@ describe("POST <id>/agree/", () => {
 
     expect(response.status).toBe(405);
     expect(response.headers.get("allow")).toBe("POST");
+  });
+});
+
+describe("DELETE <id>/", () => {
+  /** Grace's comment that Ada and Alan agree with, Ada's comment, Grace's reaction, and Ada's comment in another vault. */
+  async function seeded() {
+    const created = await database();
+    await seed(created.db, [
+      { id: "c1", page: "garden", author: GRACE, body: "Roses first.", anchor: anchor("roses", 40), createdAt: "2026-11-02T00:00:00.000Z", agreedBy: [ADA, ALAN] },
+      { id: "c2", page: "garden", author: ADA, body: "Then tulips.", anchor: anchor("tulips", 60), createdAt: "2026-11-03T00:00:00.000Z", agreedBy: [ALAN] },
+      { id: "elsewhere", vault: "journal", page: "garden", author: ADA, body: "Another vault", anchor: anchor("roses", 40), createdAt: "2026-11-02T00:00:00.000Z" },
+    ]);
+    await created.db.prepare(`INSERT INTO annotations (id, vault, page, kind, reaction, exact, prefix, suffix, start, "end", author_id, created_at)
+      VALUES ('r1', 'notes', 'garden', 'reaction', 'heart', 'roses', '', '', 40, 45, ?, '2026-11-02T00:00:00.000Z')`).bind(GRACE.id).run();
+    return { ...created, site: createSite({ DB: created.db }, { moderators: [ALAN.id] }) };
+  }
+
+  const remove = (site: Site, id: string, headers: Record<string, string>) => site(`${ENDPOINT}/${id}/`, { method: "DELETE", headers });
+  const stored = async (db: Database) => ({
+    annotations: (await db.prepare("SELECT id FROM annotations ORDER BY id").all<{ id: string }>()).results.map(({ id }) => id),
+    agreements: (await db.prepare("SELECT annotation_id, author_id FROM agreements ORDER BY author_id").all()).results,
+  });
+
+  it("deletes the reader's own comment and its agreements, leaving everyone else's", async () => {
+    const { db, site } = await seeded();
+    const headers = { cookie: await signIn(site, ADA), origin: ORIGIN };
+
+    const response = await remove(site, "c2", headers);
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await stored(db)).toEqual({
+      annotations: ["c1", "elsewhere", "r1"],
+      // Alan's agreement with Ada's comment went with it; his and Ada's with Grace's stay.
+      agreements: [{ annotation_id: "c1", author_id: ADA.id }, { annotation_id: "c1", author_id: ALAN.id }],
+    });
+  });
+
+  it("lets a moderator delete anyone's comment, with its agreements, and anyone's reaction", async () => {
+    const { db, site } = await seeded();
+    const session = await signIn(site, ALAN);
+    const listed = await (await site(`${ENDPOINT}/?page=garden`, { headers: { cookie: session } })).json() as { viewer: unknown };
+    expect(listed.viewer).toEqual({ id: ALAN.id, moderator: true });
+
+    const comment = await remove(site, "c1", { cookie: session, origin: ORIGIN });
+    const reaction = await remove(site, "r1", { cookie: session, origin: ORIGIN });
+
+    expect([comment.status, reaction.status]).toEqual([204, 204]);
+    expect(await stored(db)).toEqual({ annotations: ["c2", "elsewhere"], agreements: [{ annotation_id: "c2", author_id: ALAN.id }] });
+  });
+
+  it("answers a retried delete with 404, changing nothing more", async () => {
+    const { db, site } = await seeded();
+    const headers = { cookie: await signIn(site, ADA), origin: ORIGIN };
+
+    const first = await remove(site, "c2", headers);
+    const after = await stored(db);
+    const retried = await remove(site, "c2", headers);
+
+    expect(first.status).toBe(204);
+    expect(retried.status).toBe(404);
+    expect(await retried.json()).toEqual({ error: "not_found", message: "This comment has been deleted." });
+    expect(await stored(db)).toEqual(after);
+  });
+
+  it.each([
+    ["signed out", "c2", {}, 401, "signed_out", "Sign in to delete a comment."],
+    ["from another site", "c2", { as: ADA, origin: "https://evil.test" }, 403, "cross_origin", "Post from this site."],
+    ["with no Origin", "c2", { as: ADA, origin: null }, 403, "cross_origin", "Post from this site."],
+    ["by someone who didn't write it", "c1", { as: ADA }, 403, "forbidden", "Only its author or a moderator can delete this comment."],
+    ["of a comment that doesn't exist", "deleted", { as: ADA }, 404, "not_found", "This comment has been deleted."],
+    ["of another vault's comment, even its author's", "elsewhere", { as: ADA }, 404, "not_found", "This comment has been deleted."],
+  ])("refuses a delete %s, changing nothing", async (_case, id, { as, origin = ORIGIN }: { as?: typeof ADA; origin?: string | null }, status, error, message) => {
+    const { db, site } = await seeded();
+    const before = await stored(db);
+    const headers: Record<string, string> = {};
+    if (as) headers.cookie = await signIn(site, as);
+    if (origin) headers.origin = origin;
+
+    const response = await remove(site, id, headers);
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error, message });
+    expect(await stored(db)).toEqual(before);
+  });
+
+  it("answers only DELETE", async () => {
+    const { site } = await seeded();
+
+    const response = await site(`${ENDPOINT}/c1/`);
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("DELETE");
   });
 });

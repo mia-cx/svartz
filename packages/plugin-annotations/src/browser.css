@@ -275,6 +275,36 @@ a.sv-annotations-name:hover {
 	margin-block-start: var(--sv-space-2, 0.5rem);
 }
 
+.sv-annotations-confirm {
+	display: grid;
+	gap: var(--sv-space-2, 0.5rem);
+	margin-block-start: var(--sv-space-3, 0.75rem);
+	padding-block-start: var(--sv-space-3, 0.75rem);
+	border-block-start: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+}
+
+.sv-annotations-confirm[hidden] {
+	display: none;
+}
+
+.sv-annotations-question {
+	margin: 0;
+	color: var(--sv-ink, CanvasText);
+	font-weight: 600;
+}
+
+/* Read out, never shown. */
+.sv-annotations-status {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
 /* The toolbar beside a selection, and the composer beside its passage: popovers placed by script, like cards. */
 .sv-annotations-toolbar,
 .sv-annotations-composer {
@@ -402,6 +432,44 @@ a.sv-annotations-name:hover {
 .sv-annotations-composer[aria-busy="true"] .sv-annotations-primary {
 	cursor: progress;
 	opacity: 0.6;
+}
+
+/* Quiet and small, at the far end of the +1 row, so who agrees keeps the room. */
+.sv-annotations-delete {
+	flex: none;
+	margin-inline-start: auto;
+	padding-inline: var(--sv-space-2, 0.5rem);
+	color: var(--sv-muted, GrayText);
+	font-size: var(--sv-step--2, 0.8rem);
+	font-weight: 500;
+}
+
+.sv-annotations-delete:hover {
+	color: var(--sv-ink, CanvasText);
+}
+
+.sv-annotations-danger {
+	background: light-dark(oklch(0.53 0.15 var(--sv-hue-red, 25)), oklch(0.76 0.12 var(--sv-hue-red, 25)));
+	color: var(--sv-paper, Canvas);
+}
+
+.sv-annotations-danger:hover {
+	background: light-dark(oklch(0.47 0.15 var(--sv-hue-red, 25)), oklch(0.82 0.1 var(--sv-hue-red, 25)));
+}
+
+.sv-annotations-confirm[aria-busy="true"] .sv-annotations-danger {
+	cursor: progress;
+	opacity: 0.6;
+}
+
+.sv-annotations-button[aria-disabled="true"] {
+	cursor: not-allowed;
+}
+
+@media (forced-colors: active) {
+	.sv-annotations-danger {
+		border: 1px solid ButtonText;
+	}
 }
 
 @media print {

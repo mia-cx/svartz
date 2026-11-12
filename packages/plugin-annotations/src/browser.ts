@@ -2,7 +2,8 @@
  * Readers' comments beside their passages. `attach(element, { endpoint, page })` loads the page's annotations,
  * highlights each passage with the CSS Custom Highlight API, so `element`'s DOM is never rewritten, and puts a marker
  * in the margin on the passage's first line. Each marker opens a card with the comment, its author, and **+1**, which
- * toggles the reader's agreement and shows who agrees.
+ * toggles the reader's agreement and shows who agrees. The card offers **Delete**, behind a confirmation, on the
+ * reader's own comments, and on every comment for a moderator.
  *
  * Selecting text inside `element` shows a toolbar beside it; **Comment** opens a composer that posts to the plugin's
  * route. A signed-out reader gets `@svartz/auth`'s sign-in dialog, and the draft or +1 waits in `sessionStorage` until
@@ -45,6 +46,7 @@ const URL_PATTERN = /\bhttps?:\/\/[^\s<>"]+/g;
 const TRAILING_PUNCTUATION = /[.,;:!?'")\]}]+$/;
 const POST_FAILED = "Couldn't post your comment. Try again.";
 const AGREE_FAILED = "Couldn't save your +1. Try again.";
+const DELETE_FAILED = "Couldn't delete the comment. Try again.";
 
 /**
  * What a signed-out reader was doing, kept in `sessionStorage` while they sign in so it resumes when they return:
@@ -270,9 +272,15 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
   let cards = 0;
   /** The signed-in reader's identity id, once the site has named them. */
   let viewer: string | undefined;
+  /** Whether the site lets the reader delete anyone's comment. */
+  let moderator = false;
+  /** Comments deleted here, kept out of a page list that was answered before they went. */
+  const deleted = new Set<string>();
   /** A shown comment: its passage, marker and card, and its **+1** as the site last confirmed it. */
   interface Placed {
     readonly id: string;
+    /** The author's identity id. */
+    readonly author: string;
     readonly start: number;
     readonly range: Range;
     readonly marker: HTMLButtonElement;
@@ -282,10 +290,17 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
     readonly faces: HTMLElement;
     readonly names: HTMLElement;
     readonly problem: HTMLElement;
+    /** **Delete**, and the confirmation that takes its place. */
+    readonly remove: HTMLButtonElement;
+    readonly confirm: HTMLElement;
+    readonly question: HTMLElement;
+    readonly keep: HTMLButtonElement;
     agreements: readonly Agreement[];
     agreed: boolean;
     /** While a +1 is being saved, its toggle is locked, so a late answer can't overwrite a newer one. */
     pending: boolean;
+    /** While a delete is being sent, its confirmation is locked. */
+    deleting: boolean;
   }
   /** In reading order, which is also tab order. */
   const placed: Placed[] = [];
@@ -316,8 +331,11 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
   submit.type = "submit";
   const composer = popover("form", "sv-annotations-composer", "Comment", input, problem, create("div", "sv-annotations-actions", cancel, submit));
   composer.setAttribute("role", "dialog");
+  // Says a delete went through, since the card it was pressed in goes with it.
+  const status = create("p", "sv-annotations-status");
+  status.setAttribute("role", "status");
 
-  layer.append(toolbar, composer);
+  layer.append(toolbar, composer, status);
   content.after(layer);
 
   /** The reader's selection the toolbar answers, copied so it outlives the selection itself. */
@@ -490,7 +508,8 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
       }
       storeDraft(undefined);
       closeComposer();
-      viewer = answer.annotation.author.id;
+      const author = answer.annotation.author.id;
+      setViewer(author, author === viewer && moderator);
       const markerNode = add(answer.annotation, position);
       layout();
       markerNode.focus();
@@ -564,24 +583,48 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
     toggle.setAttribute("aria-describedby", agreedLine.id);
     const problem = create("p", "sv-annotations-problem");
     problem.setAttribute("role", "alert");
-    const cardNode = card(comment, cardId, create("div", "sv-annotations-agreement", toggle, agreedLine), problem);
+    // Visible as "Delete" beside +1; named in full for a screen reader landing on it.
+    const remove = create("button", "sv-annotations-button sv-annotations-delete", "Delete");
+    remove.type = "button";
+    remove.setAttribute("aria-label", "Delete comment");
+    const question = create("p", "sv-annotations-question");
+    question.id = `${cardId}-question`;
+    const keep = create("button", "sv-annotations-button", "Cancel");
+    keep.type = "button";
+    const confirmDelete = create("button", "sv-annotations-button sv-annotations-danger", "Delete comment");
+    confirmDelete.type = "button";
+    const confirm = create("div", "sv-annotations-confirm", question, create("div", "sv-annotations-actions", keep, confirmDelete));
+    confirm.setAttribute("role", "group");
+    confirm.setAttribute("aria-labelledby", question.id);
+    confirm.hidden = true;
+    const cardNode = card(comment, cardId, create("div", "sv-annotations-agreement", toggle, agreedLine, remove), confirm, problem);
     cardNode.addEventListener("toggle", (event) => {
       if ((event as ToggleEvent).newState === "open") {
         place(cardNode, markerNode.getBoundingClientRect());
         activate(range);
       } else {
         deactivate(range);
+        // Closing the card answers the question with "no", unless the delete is already on its way.
+        if (!entry.deleting) closeConfirm(entry);
       }
     }, { signal });
     // Looked up now, not held across a fetch: another element detaching meanwhile may have unregistered the shared one.
     highlightNamed(HIGHLIGHT)?.add(range);
     const entry: Placed = {
-      id: comment.id, start: position.start, range, marker: markerNode, card: cardNode,
-      toggle, count, faces, names, problem,
-      agreements: comment.agreements, agreed: comment.agreements.some(({ author }) => author.id === viewer), pending: false,
+      id: comment.id, author: comment.author.id, start: position.start, range, marker: markerNode, card: cardNode,
+      toggle, count, faces, names, problem, remove, confirm, question, keep,
+      agreements: comment.agreements, agreed: comment.agreements.some(({ author }) => author.id === viewer), pending: false, deleting: false,
     };
     showAgreements(entry);
+    offerDelete(entry);
     toggle.addEventListener("click", () => void agree(entry, !entry.agreed), { signal });
+    remove.addEventListener("click", () => askDelete(entry, comment.author.name), { signal });
+    keep.addEventListener("click", () => {
+      if (entry.deleting) return;
+      closeConfirm(entry);
+      entry.remove.focus();
+    }, { signal });
+    confirmDelete.addEventListener("click", () => void deleteComment(entry), { signal });
     const next = placed.findIndex(({ start }) => start > position.start);
     if (next === -1) {
       layer.append(markerNode, cardNode);
@@ -644,10 +687,95 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
     }
   }
 
+  /** Offer **Delete** on `entry` when it's the reader's own comment, or the reader moderates, and they aren't confirming. */
+  function offerDelete(entry: Placed): void {
+    entry.remove.hidden = viewer === undefined || !(moderator || entry.author === viewer) || !entry.confirm.hidden;
+  }
+
+  /** Name the signed-in reader, and offer **Delete** on what they may now delete. */
+  function setViewer(id: string | undefined, moderates: boolean): void {
+    viewer = id;
+    moderator = moderates;
+    for (const entry of placed) offerDelete(entry);
+  }
+
+  /** Swap **Delete** for its confirmation, focused on **Cancel** so a second Enter can't delete by accident. */
+  function askDelete(entry: Placed, name: string): void {
+    entry.problem.textContent = "";
+    entry.question.textContent = entry.author === viewer ? "Delete your comment?" : `Delete ${name}'s comment?`;
+    entry.confirm.hidden = false;
+    entry.remove.hidden = true;
+    entry.keep.focus();
+  }
+
+  function closeConfirm(entry: Placed): void {
+    entry.confirm.hidden = true;
+    offerDelete(entry);
+  }
+
+  /**
+   * Delete `entry`'s comment. While it's sent the confirmation is locked; a refusal keeps it open with the reason.
+   * A 404 means it's already gone, deleted by a moderator or by this same request answered too late, so it goes here too.
+   */
+  async function deleteComment(entry: Placed): Promise<void> {
+    if (entry.deleting) return;
+    entry.deleting = true;
+    // Busy rather than disabled: disabling the focused button would drop keyboard focus.
+    entry.confirm.setAttribute("aria-busy", "true");
+    entry.keep.setAttribute("aria-disabled", "true");
+    entry.problem.textContent = "";
+    try {
+      const response = await fetch(`${base}/${encodeURIComponent(entry.id)}/`, { method: "DELETE", headers: { accept: "application/json" }, signal });
+      if (response.ok || response.status === 404) {
+        unplace(entry);
+        return;
+      }
+      const answer = await response.json().catch(() => ({})) as { message?: string };
+      entry.problem.textContent = answer.message ?? DELETE_FAILED;
+    } catch (cause) {
+      if (signal.aborted) return;
+      console.error("[svartz:annotations] couldn't delete a comment", cause);
+      entry.problem.textContent = DELETE_FAILED;
+    } finally {
+      entry.deleting = false;
+      entry.confirm.removeAttribute("aria-busy");
+      entry.keep.removeAttribute("aria-disabled");
+    }
+  }
+
+  /** Take a deleted comment's marker, card and highlight away, and move focus that was on them to the next marker. */
+  function unplace(entry: Placed): void {
+    deleted.add(entry.id);
+    const index = placed.indexOf(entry);
+    placed.splice(index, 1);
+    const focused = document.activeElement === entry.marker || entry.card.contains(document.activeElement);
+    if (entry.card.matches(":popover-open")) entry.card.hidePopover();
+    // Looked up now: the shared highlight may have been replaced since this comment was added.
+    CSS.highlights?.get(HIGHLIGHT)?.delete(entry.range);
+    deactivate(entry.range);
+    entry.marker.remove();
+    entry.card.remove();
+    status.textContent = "Comment deleted.";
+    layout();
+    if (!focused) return;
+    const next = (placed[index] ?? placed[index - 1])?.marker;
+    if (next) {
+      next.focus();
+      return;
+    }
+    // No marker left: the note takes focus, where the deleted comment's passage was. Focusable only for this visit,
+    // so the note's own markup is left as the author wrote it.
+    if (!content.hasAttribute("tabindex")) {
+      content.setAttribute("tabindex", "-1");
+      content.addEventListener("blur", () => content.removeAttribute("tabindex"), { once: true });
+    }
+    content.focus({ preventScroll: true });
+  }
+
   const show = (comments: readonly Comment[]) => {
     const text = content.textContent ?? "";
     for (const comment of comments) {
-      const position = locate(text, comment.anchor);
+      const position = !deleted.has(comment.id) && locate(text, comment.anchor);
       if (position) add(comment, position);
     }
     layout();
@@ -662,9 +790,9 @@ export function attach(content: HTMLElement, { endpoint, page }: AttachOptions):
   fetch(url, { signal, headers: { accept: "application/json" } })
     .then(async (response) => {
       if (!response.ok) throw new Error(`${url} answered ${response.status}`);
-      const answer = await response.json() as { annotations: Annotation[]; viewer: { id: string } | null };
+      const answer = await response.json() as { annotations: Annotation[]; viewer: { id: string; moderator: boolean } | null };
       if (signal.aborted) return;
-      viewer = answer.viewer?.id;
+      setViewer(answer.viewer?.id, answer.viewer?.moderator === true);
       show(answer.annotations.filter((annotation): annotation is Comment => annotation.kind === "comment"));
       if (draft?.action !== "agree") return;
       const entry = placed.find(({ id }) => id === draft.annotation);

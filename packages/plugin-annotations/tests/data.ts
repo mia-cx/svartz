@@ -26,3 +26,5 @@ export const ADA: Identity = {
   profileUrl: "https://github.com/ada",
 };
 export const GRACE: Identity = { id: "google:1906", provider: "google", name: "Grace Hopper" };
+/** The site's moderator wherever a test names one. */
+export const ALAN: Identity = { id: "github:1912", provider: "github", name: "Alan Turing", handle: "alan" };

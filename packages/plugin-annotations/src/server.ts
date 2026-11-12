@@ -1,9 +1,10 @@
 /**
  * The `annotations` server plugin. Routes, under `<mount>/_svartz/annotations/`:
  * - `GET ?page=<note path>` lists the page's annotations with their authors and agreements, to anyone, and names the
- *   signed-in reader as `viewer`.
+ *   signed-in reader as `viewer`, with whether they moderate.
  * - `POST` with `{ kind: "comment", page, anchor, body }` stores a signed-in reader's comment and answers it, 201.
  * - `POST <id>/agree/` with `{ agreed }` sets the reader's **+1** on a comment.
+ * - `DELETE <id>/` deletes an annotation and its agreements, for its author or a moderator, and answers 204.
  *   Writes need a session from `@svartz/auth` and an `Origin` header naming this site.
  *
  * The first request that reaches the database migrates it to the plugin's schema.
@@ -13,7 +14,7 @@ import type { Identity } from "@svartz/auth";
 import { readIdentity } from "@svartz/auth/server";
 import { CONTEXT_LENGTH, type Anchor } from "./anchor";
 import { COMMENT_MAX_LENGTH, QUOTE_MAX_LENGTH } from "./limits";
-import { createComment, listPage, migrate, setAgreement, type Database } from "./store";
+import { createComment, deleteAnnotation, listPage, migrate, setAgreement, type Database } from "./store";
 
 /** One of the site's drawn reactions. */
 export interface Reaction {
@@ -129,7 +130,10 @@ async function list(request: Request, url: URL, context: ServerContext, options:
   const db = await databaseFor(context, options);
   if (db instanceof Response) return db;
   const reader = await readIdentity(request, context.env);
-  return json({ annotations: await listPage(db, context.vault.id, page), viewer: reader && { id: reader.id } });
+  return json({
+    annotations: await listPage(db, context.vault.id, page),
+    viewer: reader && { id: reader.id, moderator: options.moderators.includes(reader.id) },
+  });
 }
 
 /** What a write route tells the reader when its request can't be read. */
@@ -140,12 +144,12 @@ interface WriteMessages {
 }
 
 /**
- * The signed-in reader behind a write and the JSON they sent, or the refusal: another site, no session, a body over
- * `MAX_REQUEST_BYTES`, or one that isn't JSON. Every write passes through here, so the per-reader rate limit (#274)
- * belongs right after the author is known.
+ * The signed-in reader behind a write and the JSON they sent, `undefined` when they sent none, or the refusal: another
+ * site, no session, a body over `MAX_REQUEST_BYTES`, or one that isn't JSON. Every write passes through here, so the
+ * per-reader rate limit (#274) belongs right after the author is known.
  */
 async function readWrite(request: Request, url: URL, context: ServerContext, messages: WriteMessages): Promise<{ author: Identity; input: unknown } | Response> {
-  // Browsers name the page's origin on every POST, so a missing or foreign one is another site, or no browser at all.
+  // Browsers name the page's origin on every POST and DELETE, so a missing or foreign one is another site, or no browser at all.
   if (request.headers.get("origin") !== url.origin) return failure(403, "cross_origin", "Post from this site.");
   const author = await readIdentity(request, context.env);
   if (!author) return failure(401, "signed_out", messages.signedOut);
@@ -153,7 +157,7 @@ async function readWrite(request: Request, url: URL, context: ServerContext, mes
   const text = await readText(request);
   if (text === undefined) return failure(413, "too_large", messages.tooLarge);
   try {
-    return { author, input: JSON.parse(text) };
+    return { author, input: text === "" ? undefined : JSON.parse(text) };
   } catch {
     return failure(400, "invalid_json", messages.notJson);
   }
@@ -195,6 +199,29 @@ async function agree(request: Request, url: URL, context: ServerContext, options
   return json({ agreed: input.agreed, agreements });
 }
 
+/**
+ * Delete annotation `id` and its agreements, for its author or a moderator, answering 204. An id this vault doesn't
+ * have answers 404, so a retried delete finds the annotation already gone.
+ */
+async function remove(request: Request, url: URL, context: ServerContext, options: AnnotationsServerOptions, id: string): Promise<Response> {
+  const write = await readWrite(request, url, context, {
+    signedOut: "Sign in to delete a comment.",
+    tooLarge: "Send a delete without a body.",
+    notJson: "Send a delete without a body.",
+  });
+  if (write instanceof Response) return write;
+
+  const db = await databaseFor(context, options);
+  if (db instanceof Response) return db;
+  const { id: by } = write.author;
+  const deleted = await deleteAnnotation(db, { vault: context.vault.id, annotation: id, by, moderator: options.moderators.includes(by) });
+  if (deleted === "missing") return failure(404, "not_found", "This comment has been deleted.");
+  if (deleted === "forbidden") return failure(403, "forbidden", "Only its author or a moderator can delete this comment.");
+  return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+}
+
+/** `/<annotation id>/`, below the plugin's base. */
+const ANNOTATION_PATH = /^\/([^/]+)\/$/;
 /** `/<annotation id>/agree/`, below the plugin's base. */
 const AGREE_PATH = /^\/([^/]+)\/agree\/$/;
 
@@ -206,6 +233,11 @@ const annotationsServer: ServerModuleFactory<AnnotationsServerOptions> = (option
     if (request.method === "GET") return list(request, url, context, options);
     if (request.method === "POST") return create(request, url, context, options);
     return failure(405, "method_not_allowed", "Use GET or POST.", { allow: "GET, POST" });
+  }
+  const annotation = ANNOTATION_PATH.exec(path);
+  if (annotation) {
+    if (request.method !== "DELETE") return failure(405, "method_not_allowed", "Use DELETE.", { allow: "DELETE" });
+    return remove(request, url, context, options, annotation[1]!);
   }
   const agreeing = AGREE_PATH.exec(path);
   if (!agreeing) return undefined;

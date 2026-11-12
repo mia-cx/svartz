@@ -1,6 +1,6 @@
 # Annotations
 
-`@svartz/plugin-annotations` shows readers' comments beside the passage they respond to. Each commented passage is highlighted, with a marker in the margin on its first line that opens the comment, its author's name and avatar. Everyone sees them, signed in or not; signed-in readers select a passage and add their own, and **+1** the comments they agree with. Comments live in a Cloudflare D1 database that the plugin sets up itself.
+`@svartz/plugin-annotations` shows readers' comments beside the passage they respond to. Each commented passage is highlighted, with a marker in the margin on its first line that opens the comment, its author's name and avatar. Everyone sees them, signed in or not; signed-in readers select a passage and add their own, **+1** the comments they agree with, and delete their own; moderators delete anyone's. Comments live in a Cloudflare D1 database that the plugin sets up itself.
 
 ```ts
 import { defineConfig } from "@svartz/config";
@@ -27,7 +27,7 @@ Enable it per vault. It needs [`auth`](auth.md) on the same vault, and a Cloudfl
 | --- | --- |
 | `database` | The D1 binding to store annotations in: `{ env: "DB" }`. |
 | `reactions` | Optional. The site's drawn reactions, `[{ id, label, src }]`, in the order readers are offered them. `id` is lowercase letters, digits and hyphens; `label` is what screen readers announce. |
-| `moderators` | Optional. Identity ids, such as `"github:583231"`, that may delete any annotation. |
+| `moderators` | Optional. Identity ids, such as `"github:583231"`, that may delete any annotation. See [moderating](#moderating) for finding yours. |
 | `limits` | Optional. `{ writesPerHour }`: comments, reactions and agreements each signed-in reader may write per hour. Default 30. |
 
 ## The D1 database
@@ -98,6 +98,20 @@ Each comment's card ends with **+1** and its count, beside the faces and names o
 
 A signed-out reader who presses **+1** gets the sign-in dialog too. When they come back, the comment's card opens with their **+1** applied.
 
+### Deleting
+
+A signed-in reader's own comments end with **Delete**. It asks first, "Delete your comment?", with **Cancel** focused so a second Enter can't delete by accident; **Delete comment** deletes it and its **+1**s. The marker, card and highlight go at once, the line's other markers close up, and focus moves to the next marker. While the delete is sent, the confirmation ignores presses. When the site refuses, the card stays open and says why. A comment someone else deleted first goes too.
+
+### Moderating
+
+Moderators see **Delete** on every comment, and delete it from the page itself. To make yourself one, sign in on the site, open `<base><mount>/_svartz/auth/me/`, and copy its `id` into `moderators`:
+
+```ts
+annotations({ database: { env: "DB" }, moderators: ["github:583231"] }),
+```
+
+The id is the provider and its stable account number, never a username, so it survives a rename.
+
 ### Styling
 
 The stylesheet follows theme-minimal's tokens (`--sv-accent`, `--sv-paper`, …) and falls back to system colours elsewhere. Set these to restyle it:
@@ -118,9 +132,10 @@ Under `<base><mount>/_svartz/annotations/`:
 
 | Route | Answers |
 | --- | --- |
-| `GET ?page=<note path>` | `{ annotations, viewer }`: the page's comments and reactions, oldest first, each with its anchor, author and agreements, and `viewer: { id }` for the signed-in reader, or `null`. Public. |
+| `GET ?page=<note path>` | `{ annotations, viewer }`: the page's comments and reactions, oldest first, each with its anchor, author and agreements, and `viewer: { id, moderator }` for the signed-in reader, or `null`. Public. |
 | `POST` | Stores a comment, `{ kind: "comment", page, anchor, body }`, for the signed-in reader, and answers `201 { annotation }`. Writing also refreshes the reader's stored identity. |
 | `POST <id>/agree/` | Sets the signed-in reader's **+1** on comment `<id>`: `{ agreed: true }` adds it, `{ agreed: false }` takes it back. Answers `{ agreed, agreements }`, the comment's agreements after the change, oldest first. Sending the same state again changes nothing, so a retry is safe. |
+| `DELETE <id>/` | Deletes annotation `<id>` and its agreements, for its author or a moderator, and answers `204`. A retry finds it gone and answers `404`. |
 
 `anchor` is what `describe` returns for the selection: `{ exact, prefix, suffix, start, end }`, where `end - start` is the length of `exact`.
 
@@ -131,9 +146,10 @@ Failures answer `{ error, message }`, where `message` is written for the reader:
 | 400 | `invalid_page` | `GET` without `page`. |
 | 400 | `invalid_annotation` | An empty body or one over 2,000 characters, a quote over 1,000, or an anchor whose position doesn't cover its quote. |
 | 400 | `invalid_agreement` | A **+1** without a boolean `agreed`, or on a reaction. |
-| 400 | `invalid_json` | A `POST` body that isn't JSON. |
-| 401 | `signed_out` | A `POST` from a reader who isn't signed in. |
-| 403 | `cross_origin` | A `POST` whose `Origin` header is missing or names another site. |
-| 404 | `not_found` | A **+1** on a comment that isn't in this vault, or was deleted. |
-| 413 | `too_large` | A `POST` body over 32 KiB. |
+| 400 | `invalid_json` | A write body that isn't JSON. |
+| 401 | `signed_out` | A write from a reader who isn't signed in. |
+| 403 | `cross_origin` | A write whose `Origin` header is missing or names another site. |
+| 403 | `forbidden` | A delete by someone who neither wrote the annotation nor moderates. |
+| 404 | `not_found` | A **+1** or delete on an annotation that isn't in this vault, or was deleted. |
+| 413 | `too_large` | A write body over 32 KiB. |
 | 503 | `misconfigured` | No D1 binding under `database.env`. |
