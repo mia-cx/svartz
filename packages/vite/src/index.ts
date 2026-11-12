@@ -73,6 +73,7 @@ import {
   getGeneratedHostServerPath,
   getGeneratedHostStylesPath,
   readHostAdapterName,
+  svelteKitBasePath,
   svelteKitPaths,
 } from "./host-registry";
 import { emitProtectedGroupArtifacts } from "./protected-payload";
@@ -561,6 +562,7 @@ export {
   getGeneratedHostRegistryPath,
   getGeneratedHostServerPath,
   getGeneratedHostStylesPath,
+  svelteKitBasePath,
   svelteKitPaths,
   clearPublicAssets,
 };

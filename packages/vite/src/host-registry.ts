@@ -28,6 +28,11 @@ export function svelteKitPaths(define: Readonly<Record<string, unknown>> | undef
   return base === undefined ? undefined : { base, assets: read("__SVELTEKIT_PATHS_ASSETS__") || base };
 }
 
+/** SvelteKit's `paths.base` alone, from the same definitions as {@link svelteKitPaths}. */
+export function svelteKitBasePath(define: Readonly<Record<string, unknown>> | undefined): string | undefined {
+  return svelteKitPaths(define)?.base;
+}
+
 /** Standalone targets declare their base; hosts use SvelteKit's configured base. */
 export function deploymentBasePath(config: ResolvedConfig, kitBasePath?: string): string {
   if (config.target.type === "static" || config.target.type === "node") {
