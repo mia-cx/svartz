@@ -538,6 +538,10 @@ describe("Live Preview", () => {
     "> Inside the callout.",
     "",
     "- [ ] Write the page",
+    "",
+    "Read [the docs][docs].",
+    "",
+    "[docs]: https://example.com/docs",
   ].join("\n");
 
   it("shows Markdown formatted away from the cursor, and raw on the cursor's line", async () => {
@@ -553,6 +557,9 @@ describe("Live Preview", () => {
     expect(shownLine(7).dataset.callout).toBe("warning");
     expect(shownLine(8).textContent).toBe("Inside the callout.");
     await expect.element(page.getByRole("checkbox", { name: "Done" })).not.toBeChecked();
+    expect(shownLine(12).textContent).toBe("Read the docs.");
+    // A reference definition is content, not syntax.
+    expect(shownLine(14).textContent).toBe("[docs]: https://example.com/docs");
 
     await cursorTo(5);
     await expect.poll(() => shownLine(5).textContent).toBe("See [[People/Ada Lovelace|Ada]] and ![[diagram.png]].");

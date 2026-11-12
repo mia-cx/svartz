@@ -66,8 +66,10 @@ const MARKS = {
   Link: mark("cm-lp-link"),
   Wikilink: mark("cm-lp-link cm-lp-wikilink"),
 } as const;
-/** Syntax that hides away from the cursor, as its parent node names it. */
-const HIDDEN_MARKS = new Set(["EmphasisMark", "StrikethroughMark", "CodeMark", "LinkMark", "URL", "LinkTitle"]);
+/** Emphasis and code syntax, which hides away from the cursor. */
+const HIDDEN_MARKS = new Set(["EmphasisMark", "StrikethroughMark", "CodeMark"]);
+/** A link's syntax, which hides inside an inline link only: a reference definition's URL is its content. */
+const LINK_SYNTAX = new Set(["LinkMark", "URL", "LinkTitle", "LinkLabel"]);
 
 /** A task's `[ ]` or `[x]`, as a checkbox that toggles it. */
 class TaskWidget extends WidgetType {
@@ -155,10 +157,9 @@ function decorate(view: EditorView): DecorationSet {
           if (!shown && node.node.parent?.name === "Wikilink") ranges.push(hide.range(node.from, node.to));
           return;
         }
-        if (HIDDEN_MARKS.has(name)) {
-          // A link's own syntax hides; an image's stays, as images don't render here.
-          const parent = node.node.parent?.name;
-          if (!shown && parent !== "Image" && parent !== "Autolink" && node.to > node.from) ranges.push(hide.range(node.from, node.to));
+        // An image's syntax stays, as images don't render here.
+        if (HIDDEN_MARKS.has(name) || (LINK_SYNTAX.has(name) && node.node.parent?.name === "Link")) {
+          if (!shown && node.to > node.from) ranges.push(hide.range(node.from, node.to));
           return;
         }
         if (name === "Embed") {
