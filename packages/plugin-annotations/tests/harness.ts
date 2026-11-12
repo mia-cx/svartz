@@ -11,7 +11,7 @@ import { DEFAULT_WRITES_PER_HOUR } from "../src/index";
 import type { AnnotationsServerOptions } from "../src/server";
 import { migrate, type Database } from "../src/store";
 
-export { ADA, ENDPOINT, GRACE, type SeedComment } from "./data";
+export { ADA, ALAN, ENDPOINT, GRACE, type SeedComment } from "./data";
 
 /** Where the router answers unless a test says otherwise; writes must name it as their `Origin`. */
 export const ORIGIN = "https://notes.test";
@@ -44,9 +44,10 @@ export type Site = ReturnType<typeof createSite>;
 
 /**
  * One vault's router with `auth` and `annotations`, answering like the deployed Worker would. `env` is the Workers env
- * the plugins read their binding and secrets from; `origin` is where the site is served.
+ * the plugins read their binding and secrets from; `origin` is where the site is served; `moderators` may delete
+ * anyone's annotations.
  */
-export function createSite(env: Record<string, unknown>, { vault = "notes", origin = ORIGIN } = {}) {
+export function createSite(env: Record<string, unknown>, { vault = "notes", origin = ORIGIN, moderators = [] as readonly string[] } = {}) {
   const handle = createServerHandle({
     basePath: "/notes",
     vault: { id: vault, mountPath: "/notes", site: { title: "Notes" } },
@@ -56,7 +57,7 @@ export function createSite(env: Record<string, unknown>, { vault = "notes", orig
         load: () => import("@svartz/auth/server"),
         options: { providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } } },
       },
-      { id: "annotations", load: () => import("../src/server"), options: OPTIONS },
+      { id: "annotations", load: () => import("../src/server"), options: { ...OPTIONS, moderators } },
     ],
   }, { privateEnv: {}, building: false, dev: false });
   return (path: string, init?: RequestInit) => {
