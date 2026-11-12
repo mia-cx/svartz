@@ -4,7 +4,7 @@
  */
 import type { BrowserScriptContext } from "@svartz/core";
 import type { BrowserOptions } from "./api";
-import { readDraft, type Draft } from "./draft";
+import { readDraft } from "./draft";
 import type { EditorTarget } from "./editor";
 
 // Lucide "pencil" and "file-plus", as the theme's other actions draw their icons.
@@ -30,17 +30,10 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
   const buttons: HTMLButtonElement[] = [];
   let close: (() => void) | undefined;
   let unmounted = false;
-  /** Opens the panel the reader left to sign in, when this page holds its draft. */
+  /** Opens the panel the reader left to sign in from this page. */
   let resume: (() => Promise<void>) | undefined;
 
-  /** The draft saved on this page for `target`'s panel. */
-  function draftFor(target: EditorTarget): Draft | undefined {
-    const draft = readDraft(endpoint, pathname);
-    if (draft?.kind === "new") return target.kind === "new" ? draft : undefined;
-    return draft && target.kind === "edit" && draft.page === target.page ? draft : undefined;
-  }
-
-  /** A button in `region` that opens the editor on `target`, with the draft saved for it if there is one. */
+  /** A button in `region` that opens the editor on `target`. */
   function action(region: Element | null, icon: string, label: string, target: EditorTarget) {
     if (!region) return;
     const button = document.createElement("button");
@@ -50,13 +43,12 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
       const { openEditor } = await import("./editor");
       // The page may have gone while the editor loaded; its panel would outlive the cleanup below.
       if (unmounted) return;
-      const draft = draftFor(target);
-      close = openEditor({ target, endpoint, pathname, opener: button, turnstileSiteKey: options.turnstileSiteKey, draft });
+      close = openEditor({ target, endpoint, pathname, opener: button, turnstileSiteKey: options.turnstileSiteKey });
     };
     button.addEventListener("click", () => void open());
     region.append(button);
     buttons.push(button);
-    if (draftFor(target)) resume = open;
+    if (readDraft(endpoint, target)?.resume === pathname) resume = open;
   }
 
   const page = editablePage(pathname.slice(context.base.length), options.pages);
