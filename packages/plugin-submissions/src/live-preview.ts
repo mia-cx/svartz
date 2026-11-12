@@ -2,8 +2,11 @@
  * Live Preview: Obsidian-style rendering of Markdown while it is edited. Headings, emphasis, links, wikilinks, inline
  * code, callouts, embeds and task checkboxes show formatted; the line holding the cursor shows its raw syntax. Only
  * decorations change: the document's bytes are the same in every mode.
+ *
+ * Rich text draws the same decorations through {@link syntaxDecorations}, with the syntax hidden everywhere.
  */
 import { Language, defineLanguageFacet, languageDataProp, syntaxTree } from "@codemirror/language";
+import type { SyntaxNode } from "@lezer/common";
 import type { EditorState, Extension, Range, Text } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { Strikethrough, TaskList, parser, type MarkdownConfig } from "@lezer/markdown";
@@ -36,7 +39,7 @@ const Wikilinks: MarkdownConfig = {
 const data = defineLanguageFacet();
 const markdownParser = parser.configure([Strikethrough, TaskList, Wikilinks, { props: [languageDataProp.add({ Document: data })] }]);
 /** Markdown with Obsidian's links and GitHub's task lists and strikethrough, for the decorations to read. */
-const markdown = new Language(data, markdownParser, [], "markdown");
+export const markdown = new Language(data, markdownParser, [], "markdown");
 
 /** Lines searched for frontmatter's closing `---`. */
 const FRONTMATTER_LINES = 500;
@@ -45,7 +48,7 @@ const FRONTMATTER_LINES = 500;
  * Where frontmatter at the top of the note ends, or 0: YAML that Markdown would misread as a heading or a rule. Read by
  * line, as document positions count every line break as one character, CRLF included.
  */
-function frontmatterEnd(doc: Text): number {
+export function frontmatterEnd(doc: Text): number {
   if (doc.lines < 2 || doc.line(1).text.trimEnd() !== "---") return 0;
   for (let number = 2; number <= Math.min(doc.lines, FRONTMATTER_LINES); number++) {
     const line = doc.line(number);
@@ -54,7 +57,7 @@ function frontmatterEnd(doc: Text): number {
   return 0;
 }
 /** A callout's first line: `> [!note] Title`. */
-const CALLOUT = /^\s*>\s*\[!([\w-]+)\][+-]?/;
+export const CALLOUT = /^\s*>\s*\[!([\w-]+)\][+-]?/;
 
 const hide = Decoration.replace({});
 const mark = (className: string) => Decoration.mark({ class: className });
@@ -119,14 +122,28 @@ class LabelWidget extends WidgetType {
 
 const calloutName = (type: string) => type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
 
-/** Whether a selection touches any line from `from` to `to`: those lines show their syntax. */
-function revealed(state: EditorState, from: number, to: number): boolean {
-  const start = state.doc.lineAt(from).from;
-  const end = state.doc.lineAt(to).to;
-  return state.selection.ranges.some((range) => range.from <= end && range.to >= start);
+/** How {@link syntaxDecorations} shows the source. */
+export interface SyntaxDisplay {
+  /** Whether the syntax of the node from `from` to `to` shows. */
+  readonly reveal: (state: EditorState, from: number, to: number) => boolean;
+  /** Whether a top-level block shows as its raw source, unformatted. */
+  readonly raw?: (state: EditorState, node: SyntaxNode) => boolean;
+  /** Draw a bullet list's markers as bullets, and hide a task item's, whose checkbox marks it. */
+  readonly bullets?: boolean;
 }
 
-function decorate(view: EditorView): DecorationSet {
+/** Live Preview's: a selection reveals the syntax of every line it touches. */
+const LIVE: SyntaxDisplay = {
+  reveal(state, from, to) {
+    const start = state.doc.lineAt(from).from;
+    const end = state.doc.lineAt(to).to;
+    return state.selection.ranges.some((range) => range.from <= end && range.to >= start);
+  },
+};
+
+const bullet = Decoration.replace({ widget: new LabelWidget("•", "cm-lp-bullet") });
+
+function decorate(view: EditorView, { reveal, raw, bullets }: SyntaxDisplay): DecorationSet {
   const { state } = view;
   const ranges: Array<Range<Decoration>> = [];
   const frontmatter = frontmatterEnd(state.doc);
@@ -134,13 +151,26 @@ function decorate(view: EditorView): DecorationSet {
   const editable = state.facet(EditorView.editable);
 
   for (const { from, to } of view.visibleRanges) {
+    /** Style each of the node's lines that shows: a long block above or below adds no work. */
+    const styleLines = (node: { from: number; to: number }, decoration: Decoration) => {
+      for (let at = Math.max(node.from, from); at <= Math.min(node.to, to);) {
+        const current = state.doc.lineAt(at);
+        ranges.push(decoration.range(current.from));
+        at = current.to + 1;
+      }
+    };
+
     tree.iterate({
       from: Math.max(from, frontmatter),
       to,
       enter(node) {
         if (node.from < frontmatter) return;
         const name = node.name;
-        const shown = revealed(state, node.from, node.to);
+        if (raw && node.node.parent?.name === "Document" && raw(state, node.node)) {
+          styleLines(node, line("cm-lp-raw"));
+          return false;
+        }
+        const shown = reveal(state, node.from, node.to);
 
         const heading = /^ATXHeading(\d)$/.exec(name);
         if (heading) {
@@ -155,6 +185,8 @@ function decorate(view: EditorView): DecorationSet {
           ranges.push(hide.range(hideFrom, hideTo));
           return;
         }
+        // A footnote reference, `[^1]`, is no link: it shows as written.
+        if (name === "Link" && state.sliceDoc(node.from, node.from + 2) === "[^") return false;
         if (name in MARKS) {
           if (node.to > node.from) ranges.push(MARKS[name as keyof typeof MARKS].range(node.from, node.to));
           if (name === "Wikilink" && !shown) {
@@ -170,7 +202,8 @@ function decorate(view: EditorView): DecorationSet {
         }
         // An image's syntax stays, as images don't render here. So does syntax spanning lines, such as a link title:
         // a plugin's replacement may not cover a line break.
-        if (HIDDEN_MARKS.has(name) || (LINK_SYNTAX.has(name) && node.node.parent?.name === "Link")) {
+        const parent = node.node.parent;
+        if (HIDDEN_MARKS.has(name) || (LINK_SYNTAX.has(name) && parent?.name === "Link")) {
           if (!shown && node.to > node.from && state.doc.lineAt(node.from).to >= node.to) ranges.push(hide.range(node.from, node.to));
           return;
         }
@@ -182,27 +215,21 @@ function decorate(view: EditorView): DecorationSet {
           if (!shown) ranges.push(Decoration.replace({ widget: new TaskWidget(/x/i.test(state.sliceDoc(node.from, node.to)), editable) }).range(node.from, node.to));
           return;
         }
-        // A block's lines are styled only where they show: a long block above or below adds no work.
+        if (name === "ListMark" && bullets && !shown && parent?.parent?.name === "BulletList") {
+          const end = state.sliceDoc(node.to, node.to + 1) === " " ? node.to + 1 : node.to;
+          ranges.push((node.node.nextSibling?.name === "Task" ? hide : bullet).range(node.from, end));
+          return;
+        }
         if (name === "FencedCode") {
-          for (let at = Math.max(node.from, from); at <= Math.min(node.to, to);) {
-            const { from: start, to: end } = state.doc.lineAt(at);
-            ranges.push(line("cm-lp-codeblock").range(start));
-            at = end + 1;
-          }
+          styleLines(node, line("cm-lp-codeblock"));
           return false;
         }
         if (name === "Blockquote") {
           const first = state.doc.lineAt(node.from);
           const callout = CALLOUT.exec(first.text);
-          for (let at = Math.max(node.from, from); at <= Math.min(node.to, to);) {
-            const current = state.doc.lineAt(at);
-            ranges.push(callout
-              // `data-sv-signal` derives the theme's signal colours from the type's hue.
-              ? line("cm-lp-callout", { "data-callout": callout[1]!.toLowerCase(), "data-sv-signal": "" }).range(current.from)
-              : line("cm-lp-quote").range(current.from));
-            at = current.to + 1;
-          }
-          if (callout && !revealed(state, first.from, first.from)) {
+          // `data-sv-signal` derives the theme's signal colours from the type's hue.
+          styleLines(node, callout ? line("cm-lp-callout", { "data-callout": callout[1]!.toLowerCase(), "data-sv-signal": "" }) : line("cm-lp-quote"));
+          if (callout && !reveal(state, first.from, first.from)) {
             const type = first.text.indexOf("[!");
             ranges.push(Decoration.replace({ widget: new LabelWidget(calloutName(callout[1]!), "cm-lp-callout-type") })
               .range(first.from + type, first.from + callout[0].length));
@@ -230,28 +257,31 @@ function toggleTask(view: EditorView, box: HTMLElement): boolean {
   return true;
 }
 
-const decorations = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
+/** The formatting decorations, as `display` shows the source. `view.plugin(…).decorations` holds them. */
+export function syntaxDecorations(display: SyntaxDisplay) {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
 
-    constructor(view: EditorView) {
-      this.decorations = decorate(view);
-    }
-
-    update(update: ViewUpdate) {
-      if (
-        update.docChanged || update.selectionSet || update.viewportChanged ||
-        syntaxTree(update.startState) !== syntaxTree(update.state) ||
-        update.startState.facet(EditorView.editable) !== update.state.facet(EditorView.editable)
-      ) {
-        this.decorations = decorate(update.view);
+      constructor(view: EditorView) {
+        this.decorations = decorate(view, display);
       }
-    }
-  },
-  { decorations: (plugin) => plugin.decorations },
-);
+
+      update(update: ViewUpdate) {
+        if (
+          update.docChanged || update.selectionSet || update.viewportChanged ||
+          syntaxTree(update.startState) !== syntaxTree(update.state) ||
+          update.startState.facet(EditorView.editable) !== update.state.facet(EditorView.editable)
+        ) {
+          this.decorations = decorate(update.view, display);
+        }
+      }
+    },
+    { decorations: (plugin) => plugin.decorations },
+  );
+}
 
 /** The extension a mode switch installs for Live Preview. */
 export function livePreview(): Extension {
-  return [markdown, decorations, EditorView.editorAttributes.of({ class: "cm-lp" })];
+  return [markdown, syntaxDecorations(LIVE), EditorView.editorAttributes.of({ class: "cm-lp" })];
 }
