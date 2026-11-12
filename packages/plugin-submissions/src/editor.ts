@@ -284,10 +284,12 @@ export function openEditor({ target, endpoint, pathname, opener, turnstileSiteKe
     if (!typed()) return forget();
     const savedAt = Date.now();
     const common = { markdown: view.state.sliceDoc(), note: note.value, savedAt, ...(resumeOn ? { resume: resumeOn } : {}) };
-    ownSave = savedAt;
-    return storeDraft(endpoint, target, target.kind === "edit"
+    const stored = storeDraft(endpoint, target, target.kind === "edit"
       ? { ...common, kind: "edit", page: target.page }
       : { ...common, kind: "new", folder: folder?.value ?? "", title: title?.value ?? "" });
+    // A refused save leaves the last stored draft in place, and this panel still owns it.
+    if (stored) ownSave = savedAt;
+    return stored;
   }
 
   /** Save once the reader pauses. */

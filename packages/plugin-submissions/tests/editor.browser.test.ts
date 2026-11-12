@@ -699,6 +699,22 @@ describe("drafts", () => {
     await expect.element(page.getByLabelText("What changed")).toHaveValue("Kept.");
   });
 
+  it("still forgets its restored draft on Discard after an autosave storage refused", async () => {
+    serve(() => Response.json({}));
+    vi.stubGlobal("confirm", () => true);
+    await writeThenCrash();
+    await page.getByRole("button", { name: "Restore edit" }).click();
+    const full = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Storage is full.", "QuotaExceededError");
+    });
+    await page.getByLabelText("What changed").fill("Greet every reader.");
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    full.mockRestore();
+    await page.getByRole("button", { name: "Close editor" }).click();
+
+    expect(readDraft("/docs/wiki/_svartz/submissions", { kind: "edit", page: "/wiki/guide/" })).toBeUndefined();
+  });
+
   it("forgets the draft the reader discards", async () => {
     serve(() => Response.json({}));
     await writeThenCrash();
@@ -803,9 +819,10 @@ describe("wikilink autocomplete", () => {
     ["a heading", "#Heading]]", "See [[People/Grace#Heading]]"],
     ["the rest of the name", "ace]]", "See [[People/Grace]]"],
     ["text after an unclosed link", " and more.", "See [[People/Grace]] and more."],
+    ["a later link on the line", " and [[[[Guide]]", "See [[People/Grace]] and [[Guide]]"],
   ])("completes a link before %s without breaking it", async (_, after, expected) => {
     const source = await openOn("# Guide\n", 2);
-    await userEvent.keyboard(`See [[[[${after}{ArrowLeft>${after.length}/}Gr`);
+    await userEvent.keyboard(`See [[[[${after}{ArrowLeft>${after.replaceAll("[[", "[").length}/}Gr`);
     await expect.element(page.getByRole("option", { name: /People\/Grace/ })).toBeVisible();
     await new Promise((resolve) => setTimeout(resolve, 100));
     await userEvent.keyboard("{Enter}");
