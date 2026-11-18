@@ -84,7 +84,7 @@ describe("host registry", () => {
     expect(source).toContain('export const assets = "https://cdn.example.test";');
   });
 
-  it("reads the adapter from sveltekit({ adapter }) and from svelte.config.js's kit.adapter", async () => {
+  it("reads the adapter from SvelteKit's plugin options, at the top level or under kit", async () => {
     const setup = (options: unknown) => [{ name: "vite-plugin-sveltekit-setup", api: { options } }];
     // SvelteKit 3's validated options keep an empty `kit` key.
     const plugin = setup({ adapter: { name: "@sveltejs/adapter-cloudflare" }, kit: undefined });

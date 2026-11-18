@@ -79,12 +79,14 @@ function serverRuntimeSource({ kit3, cloudflare }: ServerRuntime): { imports: st
   // SvelteKit 3's `$env/dynamic/private` holds only declared variables, so plugins read the process env. Workers have
   // no `process` without `nodejs_compat`.
   const privateEnv = "globalThis.process?.env ?? {}";
-  if (!cloudflare) return { imports: [`import { building, dev } from "$app/env";`], runtime: `{ privateEnv: ${privateEnv}, building, dev }` };
+  const flags = `import { building, dev } from "$app/env";`;
+  if (!cloudflare) return { imports: [flags], runtime: `{ privateEnv: ${privateEnv}, building, dev }` };
   return {
     imports: [
-      `import { building, dev } from "$app/env";`,
-      // Only a deployed Worker has `cloudflare:workers`; dev reads bindings through Wrangler, and prerendering never serves plugins.
-      `const workers = dev || building ? undefined : await import("cloudflare:workers");`,
+      flags,
+      // Only workerd has `cloudflare:workers`. Dev, prerendering and `svartz preview` run this module in Node, where
+      // dev reads bindings through Wrangler and prerendering never serves plugins.
+      `const workers = globalThis.navigator?.userAgent === "Cloudflare-Workers" ? await import("cloudflare:workers") : undefined;`,
     ],
     runtime: `{ privateEnv: ${privateEnv}, workers, building, dev }`,
   };

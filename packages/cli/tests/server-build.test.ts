@@ -117,6 +117,17 @@ describe("standalone builds with a server plugin", () => {
     expect(failure?.stderr).toContain('Vault "site" targets "static", but plugin "hello" serves requests.');
   }, BUILD_TIMEOUT);
 
+  it("fails a build whose browser code imports the server registry", async () => {
+    const probe = path.join(root, "vault/probe.svx");
+    await writeFile(probe, "<script>\n  import { svartzHandle } from 'virtual:svartz/server';\n</script>\n<button onclick={() => console.log(svartzHandle)}>Probe</button>\n");
+    try {
+      const failure = await build({ type: "node" }).then(() => undefined, (error: { stderr?: string }) => error);
+      expect(failure?.stderr).toContain("Browser code imports virtual:svartz/server");
+    } finally {
+      await rm(probe);
+    }
+  }, BUILD_TIMEOUT);
+
   it.each([true, false])("negotiates prerendered pages in Node (server plugin %s)", async (serverPlugin) => {
     const prefix = serverPlugin ? "" : "/site/docs";
     // Exercise generated host loaders too, under a deployment base and vault mount.

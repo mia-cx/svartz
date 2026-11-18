@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ResolvedConfig } from "@svartz/core";
 import {
@@ -160,6 +160,7 @@ type ResolvedPlugins = readonly { readonly name: string; readonly api?: unknown 
 
 interface KitOptions {
   readonly adapter?: { readonly name?: unknown };
+  readonly env?: { readonly dir?: string };
   readonly kit?: { readonly adapter?: { readonly name?: unknown } };
 }
 
@@ -187,6 +188,11 @@ export function isSvelteKit3(root: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** The directory SvelteKit 3 loads `.env` from, resolved as SvelteKit resolves it: against the working directory. */
+export function readKitEnvDir(plugins: ResolvedPlugins): string {
+  return resolve(kitOptions(plugins)?.env?.dir ?? ".");
 }
 
 /**

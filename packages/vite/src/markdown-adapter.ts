@@ -93,12 +93,16 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
               res.setHeader = function(name, value) {
                 return setHeader.call(this, name, negotiated(name, value));
               };
+              // writeHead takes an object or a flat name, value, name, value array, after an optional status message.
+              const negotiatedHeaders = (headers) => Array.isArray(headers)
+                ? headers.map((value, index) => index % 2 ? negotiated(headers[index - 1], value) : value)
+                : headers && typeof headers === "object"
+                  ? Object.fromEntries(Object.entries(headers).map(([name, value]) => [name, negotiated(name, value)]))
+                  : headers;
               const writeHead = res.writeHead;
               res.writeHead = function(status, ...rest) {
-                const headers = typeof rest[0] === "string" ? rest[1] : rest[0];
-                if (headers && typeof headers === "object" && !Array.isArray(headers)) {
-                  for (const name of Object.keys(headers)) headers[name] = negotiated(name, headers[name]);
-                }
+                const at = typeof rest[0] === "string" ? 1 : 0;
+                rest[at] = negotiatedHeaders(rest[at]);
                 return writeHead.call(this, status, ...rest);
               };
               for (const name of ["vary", "cache-control"]) {
