@@ -1,5 +1,5 @@
 <script lang="ts">
-	import SearchBox from '$lib/SearchBox.svelte';
+	import SearchBox from '../../lib/SearchBox.svelte';
 
 	const searchDocuments = [
 		{

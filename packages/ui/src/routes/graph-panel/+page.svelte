@@ -1,5 +1,5 @@
 <script lang="ts">
-	import GraphPanel from '$lib/GraphPanel.svelte';
+	import GraphPanel from '../../lib/GraphPanel.svelte';
 
 	const entries = [
 		{ slug: 'index', title: 'Home' },

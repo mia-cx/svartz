@@ -671,7 +671,7 @@ const previewVaults = (
       "production",
       "build",
     );
-    // base is set via SVARTZ_BASE_PATH → svelte.config.js kit.paths.base; SvelteKit
+    // base is set via SVARTZ_BASE_PATH → the app's SvelteKit `paths.base`; SvelteKit
     // overrides Vite's base, so merging base here would trigger the override warning.
     const previewConfig = mergeConfig(config, {
       ...(workspace.hostApp ? {} : { build: { outDir: supportedVaults[0]!.outDir } }),

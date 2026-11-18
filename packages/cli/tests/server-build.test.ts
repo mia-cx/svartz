@@ -147,7 +147,8 @@ describe("standalone builds with a server plugin", () => {
     const port = await freePort();
     const server = spawn(process.execPath, [path.join(dist, "index.js")], {
       cwd: root,
-      env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), HELLO_TOKEN: "s3cret" },
+      // adapter-node 6 assumes https without ORIGIN, which a deployment sets.
+      env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), ORIGIN: `http://127.0.0.1:${port}`, HELLO_TOKEN: "s3cret" },
       stdio: "pipe",
     });
     let stderr = "";
@@ -162,8 +163,10 @@ describe("standalone builds with a server plugin", () => {
       expect(ready, stderr).toBe(true);
 
       if (serverPlugin) {
-        const answer = await fetch(`${origin}/_svartz/hello/`, { method: "POST", body: "hi" });
-        expect(answer.status).toBe(200);
+        // A browser's same-origin POST, which SvelteKit's CSRF check lets through.
+        const post = { method: "POST", body: "hi", headers: { origin: new URL(origin).origin } };
+        const answer = await fetch(`${origin}/_svartz/hello/`, post);
+        expect(answer.status, await answer.clone().text()).toBe(200);
         expect(await answer.json()).toEqual({
           marker: HANDLER_MARKER,
           method: "POST",
@@ -174,7 +177,7 @@ describe("standalone builds with a server plugin", () => {
           vault: "site",
           clientAddress: "127.0.0.1",
         });
-        const unslashed = await fetch(`${origin}/_svartz/hello?x=1`, { method: "POST", body: "hi", redirect: "manual" });
+        const unslashed = await fetch(`${origin}/_svartz/hello?x=1`, { ...post, redirect: "manual" });
         expect([unslashed.status, unslashed.headers.get("location")]).toEqual([308, "/_svartz/hello/?x=1"]);
         expect((await fetch(`${origin}/_svartz/hello/elsewhere/`)).status).toBe(404);
         expect((await fetch(`${origin}/_svartz/nope/`)).status).toBe(404);

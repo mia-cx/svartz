@@ -80,7 +80,7 @@ async function createWorkspaceFixture() {
 
 function createResolvedConfig(
   workspaceRoot: string,
-  vaults: readonly Array<{ id: string; themeBase?: string }>,
+  vaults: ReadonlyArray<{ id: string; themeBase?: string }>,
 ): ResolvedConfigSet {
   return {
     version: "1.0.0",

@@ -12,6 +12,8 @@ const execFileAsync = promisify(execFile);
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
 const cli = path.join(workspaceRoot, "packages/cli/dist/index.js");
 const shellModules = path.join(workspaceRoot, "apps/web/node_modules");
+// The host test's app runs SvelteKit 2 with `svelte.config.js`.
+const kit2Toolchain = path.join(import.meta.dirname, "fixtures/sveltekit-2-host/node_modules");
 const DEV_TIMEOUT = 240_000;
 const roots: string[] = [];
 
@@ -161,7 +163,7 @@ describe("svartz dev hands server plugins the project's Wrangler bindings", () =
 
   it("serves a host vault the same D1 the host app's own routes read through adapter-cloudflare", async () => {
     const root = await createProject("svartz-dev-bindings-host-", { main: ".svelte-kit/cloudflare/_worker.js" });
-    await symlink(shellModules, path.join(root, "node_modules"), "dir");
+    await symlink(kit2Toolchain, path.join(root, "node_modules"), "dir");
     await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
     await mkdir(path.join(root, "src/routes/count"), { recursive: true });
     for (const name of ["+page.svelte", "+page.ts", "+page.server.ts"]) {

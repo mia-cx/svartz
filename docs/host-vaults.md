@@ -69,24 +69,29 @@ With [`@svartz/auth`](auth.md#several-vaults) on several host vaults, one sign-i
 
 The app needs a server adapter, such as `@sveltejs/adapter-node` or `@sveltejs/adapter-cloudflare`. With `@sveltejs/adapter-static`, the build fails naming the vault and plugin.
 
-While prerendering, plugin URLs answer 404. When a note links to one, tell SvelteKit's crawler to skip those 404s in `svelte.config.js`, or the build fails:
+While prerendering, plugin URLs answer 404. When a note links to one, tell SvelteKit's crawler to skip those 404s, or the build fails. SvelteKit 3 takes the option in `sveltekit()`; SvelteKit 2 takes the same `prerender` object under `kit` in `svelte.config.js`.
 
 ```js
-// svelte.config.js
+// vite.config.js
 import adapter from '@sveltejs/adapter-node';
+import { sveltekit } from '@sveltejs/kit/vite';
+import { withSvartzHost } from '@svartz/vite/host';
+import { defineConfig } from 'vite';
 
-export default {
-  kit: {
-    adapter: adapter(),
-    prerender: {
-      handleHttpError: ({ status, path, message }) => {
-        // Server plugins answer under /_svartz/ at runtime only.
-        if (status === 404 && path.includes('/_svartz/')) return;
-        throw new Error(message);
+export default withSvartzHost(defineConfig({
+  plugins: [
+    sveltekit({
+      adapter: adapter(),
+      prerender: {
+        handleHttpError: ({ status, path, message }) => {
+          // Server plugins answer under /_svartz/ at runtime only.
+          if (status === 404 && path.includes('/_svartz/')) return;
+          throw new Error(message);
+        }
       }
-    }
-  }
-};
+    })
+  ]
+}));
 ```
 
 ## Render a note inside your own page

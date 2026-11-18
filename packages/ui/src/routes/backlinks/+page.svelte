@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Backlinks from '$lib/Backlinks.svelte';
+	import Backlinks from '../../lib/Backlinks.svelte';
 
 	const entries = [
 		{ slug: 'index', title: 'Home' },

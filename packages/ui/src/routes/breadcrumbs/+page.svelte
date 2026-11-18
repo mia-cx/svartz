@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Breadcrumbs from '$lib/Breadcrumbs.svelte';
+	import Breadcrumbs from '../../lib/Breadcrumbs.svelte';
 
 	const props = [
 		{ name: 'slug', type: 'string?', description: 'The current page slug (e.g. "docs/guides/setup"). Undefined or "index" renders just a Home crumb.' }

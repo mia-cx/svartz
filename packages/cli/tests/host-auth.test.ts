@@ -12,6 +12,8 @@ import { chromium } from "playwright";
 const execFileAsync = promisify(execFile);
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
 const authDist = path.join(workspaceRoot, "packages/auth/dist");
+// These hosts run SvelteKit 2 with `svelte.config.js`.
+const kit2Toolchain = path.join(import.meta.dirname, "fixtures/sveltekit-2-host/node_modules");
 const roots: string[] = [];
 
 const READER = { id: "github:583231", provider: "github", name: "The Octocat", handle: "octocat", avatarUrl: "https://github.com/octocat.png", profileUrl: "https://github.com/octocat" };
@@ -70,7 +72,7 @@ async function createHost(base: string) {
   // SvelteKit writes relative imports from the kit dir; macOS's /var symlink would break them.
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "svartz-host-auth-")));
   roots.push(root);
-  await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "node_modules"), "dir");
+  await symlink(kit2Toolchain, path.join(root, "node_modules"), "dir");
   await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
   for (const name of ["+page.svelte", "+page.ts"]) {
     await writeFile(path.join(root, "src/routes/[...slug]", name),
