@@ -50,7 +50,9 @@ Apps and packages are **git submodules**. Each is a separate repo under the same
 
 **Reusable packages**: published under `@mia-cx` when generalized across projects.
 
-For Cloudflare SvelteKit apps, use the `PRIVATE_` prefix for server-only environment variables (`env.privatePrefix: 'PRIVATE_'` in svelte.config).
+For Cloudflare SvelteKit apps, use the `PRIVATE_` prefix for server-only environment variables (`env.privatePrefix: 'PRIVATE_'` in the SvelteKit config, which SvelteKit 3 takes in `sveltekit()` in `vite.config.ts`).
+
+The README and CONTRIBUTING.md carry the 0rwx AI:W disclosure.
 
 When adding an app: Create a separate repo (`@<org>/new-app`), add as git submodule (`git submodule add <url> apps/<name>`), then scaffold with the official CLI (`pnpm create svelte@latest`, `pnpm dlx wrangler init`)
 

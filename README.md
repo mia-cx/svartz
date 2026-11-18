@@ -1,5 +1,12 @@
 # Svartz
 
+<a href="https://0rwx.com">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://0rwx.com/static/AI-W-dark.svg">
+    <img alt="AI:W" src="https://0rwx.com/static/AI-W-light.svg" height="48">
+  </picture>
+</a>
+
 A SvelteKit publishing toolkit for Obsidian vaults, inspired by [Quartz](https://github.com/jackyzha0/quartz).
 
 Svartz is a set of tools that helps you publish your [digital garden](https://jzhao.xyz/posts/networked-thought) and notes as a website for free.
@@ -23,7 +30,7 @@ npx svartz@latest init
 npm run dev
 ```
 
-The initializer creates a small SvelteKit shell, `svartz.config.ts`, and `vault/index.md`. It uses npm by default and an existing project's package manager when one is declared. `npm run build` creates the static site; `npm run preview` serves the built output.
+The initializer creates a small SvelteKit 3 shell, `svartz.config.ts`, and `vault/index.md`. It uses npm by default and an existing project's package manager when one is declared. `npm run build` creates the static site; `npm run preview` serves the built output.
 
 For build and test automation, copy the [GitHub Actions example](docs/ci.md) into the new project.
 
