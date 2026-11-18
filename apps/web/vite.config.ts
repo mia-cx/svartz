@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import { sveltekit } from '@sveltejs/kit/vite';
-import adapterAuto from '@sveltejs/adapter-auto';
 import adapterCloudflare from '@sveltejs/adapter-cloudflare';
 import adapterNode from '@sveltejs/adapter-node';
 import adapterStatic from '@sveltejs/adapter-static';
@@ -54,10 +53,10 @@ function resolveAdapter(target: string) {
 	switch (target) {
 		case 'node':
 			return adapterNode({ out: outDir, precompress: true });
+		// adapter-cloudflare emits Pages output when the CLI sets `CF_PAGES`, read when it adapts.
 		case 'cloudflare-workers':
-			return adapterCloudflare();
 		case 'cloudflare-pages':
-			return adapterAuto();
+			return adapterCloudflare();
 		case 'static':
 		default:
 			return adapterStatic({ pages: outDir, assets: outDir, fallback: '404.html', strict: true });

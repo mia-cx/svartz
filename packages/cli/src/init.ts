@@ -41,12 +41,24 @@ type Manifest = {
   scripts?: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  engines?: Record<string, string>;
 };
+
+/** The Node versions a new project's SvelteKit 3 toolchain runs on: SvelteKit 3 needs 22.17, vite-plugin-svelte 7 skips 23. */
+const SCAFFOLD_NODE = "^22.17.0 || >=24.0.0";
+
+/** Whether Node `version` (`process.versions.node`) satisfies {@link SCAFFOLD_NODE}. */
+function runsScaffold(version: string): boolean {
+  const [major = 0, minor = 0] = version.split(".").map(Number);
+  return major >= 24 || (major === 22 && minor >= 17);
+}
 
 export type InitOptions = {
   readonly cwd?: string;
   readonly install?: boolean;
   readonly git?: boolean;
+  /** The running Node version; a new project needs {@link SCAFFOLD_NODE}. */
+  readonly nodeVersion?: string;
 };
 
 export type InitResult = {
@@ -62,7 +74,7 @@ export class InitConflictError extends Data.TaggedError("InitConflictError")<{
 
 /** The existing project cannot be integrated without a manual layout change. */
 export class InitLayoutError extends Data.TaggedError("InitLayoutError")<{
-  readonly reason: "missing-kit" | "unsupported-vite" | "unsupported-tailwind";
+  readonly reason: "missing-kit" | "unsupported-vite" | "unsupported-tailwind" | "unsupported-node";
   readonly message: string;
 }> {}
 
@@ -195,6 +207,7 @@ function freshManifest(root: string): Manifest {
       preview: "svartz preview --vault notes",
       prepare: "svelte-kit sync",
     },
+    engines: { node: SCAFFOLD_NODE },
     devDependencies: {
       "@svartz/config": "latest",
       "@svartz/theme-minimal": "latest",
@@ -639,6 +652,13 @@ const initProjectEffect = (
           "Cannot initialize: Svartz config exists, but no SvelteKit app was found. No files changed.",
       });
     }
+
+    const nodeVersion = options.nodeVersion ?? process.versions.node;
+    if (!runsScaffold(nodeVersion))
+      return yield* new InitLayoutError({
+        reason: "unsupported-node",
+        message: `Cannot initialize: a new Svartz project runs SvelteKit 3, which needs Node ${SCAFFOLD_NODE}; this is Node ${nodeVersion}. No files changed.`,
+      });
 
     const files = yield* operation("list scaffold templates", () =>
       templateFiles(),
