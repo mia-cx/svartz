@@ -1,0 +1,18 @@
+{
+  "name": "@svartz/fixture-sveltekit-2-host",
+  "private": true,
+  "type": "module",
+  "description": "The SvelteKit 2 toolchain the host tests link into temporary host apps, so SvelteKit 2 hosts stay covered.",
+  "devDependencies": {
+    "@sveltejs/adapter-cloudflare": "7.2.10",
+    "@sveltejs/adapter-node": "5.5.8",
+    "@sveltejs/adapter-static": "3.0.11",
+    "@sveltejs/kit": "2.70.4",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@svartz/ui": "workspace:*",
+    "svelte": "5.58.0",
+    "tailwindcss": "4.2.1",
+    "vite": "8.3.8",
+    "wrangler": "4.164.0"
+  }
+}

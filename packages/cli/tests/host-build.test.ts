@@ -12,6 +12,8 @@ import { deriveProtectionKey, openProtectedPayload, type ProtectedEnvelope } fro
 
 const execFileAsync = promisify(execFile);
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
+// These hosts run SvelteKit 2 with `svelte.config.js`; host-sveltekit-3.test.ts covers SvelteKit 3.
+const kit2Toolchain = path.join(import.meta.dirname, "fixtures/sveltekit-2-host/node_modules");
 const roots: string[] = [];
 
 async function freePort(): Promise<number> {
@@ -35,7 +37,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   vi.stubEnv("SVARTZ_TEST_PROTECTED_PASSWORD", "host-test-password");
   const root = await mkdtemp(path.join(os.tmpdir(), "svartz-host-build-"));
   roots.push(root);
-  await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "node_modules"), "dir");
+  await symlink(kit2Toolchain, path.join(root, "node_modules"), "dir");
   await mkdir(path.join(root, "src/routes/other"), { recursive: true });
   await mkdir(path.join(root, "src/routes/blog/about"), { recursive: true });
   await mkdir(path.join(root, "src/routes/blog/folders/guides/deep"), { recursive: true });
@@ -429,7 +431,7 @@ it("routes server plugins through svartzHandle for every host vault, and fails a
   // SvelteKit writes relative imports from the kit dir; macOS's /var symlink would break them.
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "svartz-host-server-")));
   roots.push(root);
-  await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "node_modules"), "dir");
+  await symlink(kit2Toolchain, path.join(root, "node_modules"), "dir");
   await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
   for (const name of ["+page.svelte", "+page.ts"]) {
     await writeFile(path.join(root, "src/routes/[...slug]", name),

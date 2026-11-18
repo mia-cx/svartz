@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ResolvedConfig } from "@svartz/core";
 import {
@@ -155,19 +156,55 @@ export function createHostServerSource(vaults: readonly ResolvedConfig[]): strin
   ].join("\n");
 }
 
+type ResolvedPlugins = readonly { readonly name: string; readonly api?: unknown }[];
+
+interface KitOptions {
+  readonly adapter?: { readonly name?: unknown };
+  readonly env?: { readonly dir?: string };
+  readonly kit?: { readonly adapter?: { readonly name?: unknown } };
+}
+
 /**
- * The host app's adapter name. SvelteKit 3 takes the adapter in `sveltekit({ adapter })` and exposes its config on
- * the resolved `vite-plugin-sveltekit-setup` plugin; SvelteKit 2 reads `kit.adapter` from `svelte.config.js` or `.ts`
- * in `root`.
+ * The app's SvelteKit options, which the resolved `vite-plugin-sveltekit-setup` plugin exposes in SvelteKit 3 and
+ * late SvelteKit 2: the adapter sits at the top level when passed to `sveltekit({ … })`, and under `kit` when read
+ * from `svelte.config.js`. Earlier SvelteKit 2 releases expose none.
  */
-export async function readHostAdapterName(
-  root: string,
-  plugins: readonly { readonly name: string; readonly api?: unknown }[],
-): Promise<string | undefined> {
-  const kit3 = plugins.find((plugin) => plugin.name === "vite-plugin-sveltekit-setup")?.api as
-    | { options?: { adapter?: { name?: unknown } } }
+function kitOptions(plugins: ResolvedPlugins): KitOptions | undefined {
+  const api = plugins.find((plugin) => plugin.name === "vite-plugin-sveltekit-setup")?.api as
+    | { options?: KitOptions }
     | undefined;
-  if (kit3?.options) return typeof kit3.options.adapter?.name === "string" ? kit3.options.adapter.name : undefined;
+  return api?.options;
+}
+
+/**
+ * Whether the app in `root` installs SvelteKit 3 or later. Its options can't tell: SvelteKit 2.62 and later also
+ * take them in `sveltekit({ … })`. An app without a resolvable SvelteKit counts as SvelteKit 2, whose behaviour
+ * Svartz assumed before SvelteKit 3.
+ */
+export function isSvelteKit3(root: string): boolean {
+  try {
+    const { version } = createRequire(join(root, "package.json"))("@sveltejs/kit/package.json") as { version: string };
+    return Number.parseInt(version, 10) >= 3;
+  } catch {
+    return false;
+  }
+}
+
+/** The directory SvelteKit 3 loads `.env` from, resolved as SvelteKit resolves it: against the working directory. */
+export function readKitEnvDir(plugins: ResolvedPlugins): string {
+  return resolve(kitOptions(plugins)?.env?.dir ?? ".");
+}
+
+/**
+ * The host app's adapter name, from `sveltekit({ adapter })` or `kit.adapter` in `svelte.config.js` or `.ts` in
+ * `root`.
+ */
+export async function readHostAdapterName(root: string, plugins: ResolvedPlugins): Promise<string | undefined> {
+  const options = kitOptions(plugins);
+  if (options) {
+    const name = (options.adapter ?? options.kit?.adapter)?.name;
+    return typeof name === "string" ? name : undefined;
+  }
   const file = ["js", "ts"].map((extension) => join(root, `svelte.config.${extension}`)).find((path) => existsSync(path));
   if (!file) return undefined;
   // Bust the import cache so a dev restart sees an edited adapter, as SvelteKit does.

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import TableOfContents from '$lib/TableOfContents.svelte';
+	import TableOfContents from '../../lib/TableOfContents.svelte';
 
 	const items = [
 		{ depth: 1, text: 'Introduction', slug: 'introduction' },

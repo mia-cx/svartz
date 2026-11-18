@@ -1,8 +1,7 @@
 import type { EntryGenerator } from './$types';
 import { error, redirect } from '@sveltejs/kit';
-import { assets, base } from '$app/paths';
 import { decodeRoutePath } from '@svartz/ui/runtime';
-import { hostStylesheets, routes, prepareHostVault } from 'virtual:svartz/host';
+import { assets, base, hostStylesheets, routes, prepareHostVault } from 'virtual:svartz/host';
 
 export const load = async ({ url }) => {
   const appPath = decodeRoutePath(base ? url.pathname.slice(base.length) || '/' : url.pathname);

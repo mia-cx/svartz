@@ -1,5 +1,5 @@
 <script lang="ts">
-	import '$lib/styles/base.css';
+	import '../../lib/styles/base.css';
 	import Moon from '@lucide/svelte/icons/moon';
 	import Search from '@lucide/svelte/icons/search';
 	import Sun from '@lucide/svelte/icons/sun';

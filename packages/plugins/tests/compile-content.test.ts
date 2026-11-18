@@ -5,7 +5,6 @@ import { compileContent } from "../src/internal/compile-content";
 import { renderMarkdownTree } from "../src/internal/render-markdown";
 import { transformOfm } from "../src/transform-ofm";
 import type { PluginContext } from "@svartz/core";
-import rehypePrettyCode from "rehype-pretty-code";
 
 const ctx = { compiler: { remarkPlugins: [], rehypePlugins: [], svxSourceTransforms: [], browserResources: new Map() } } as unknown as PluginContext;
 

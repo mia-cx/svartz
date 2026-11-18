@@ -4,6 +4,7 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  readdir,
   rm,
   symlink,
   writeFile,
@@ -692,6 +693,18 @@ it("reports an existing config without a Kit app instead of replacing it", async
   await expect(access(path.join(root, "package.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
+});
+
+it("refuses a new project on a Node that SvelteKit 3 can't run, before writing anything", async () => {
+  for (const nodeVersion of ["20.19.0", "22.16.0", "23.11.0"]) {
+    const root = await fixture();
+    const failure = await initProject({ cwd: root, install: false, git: false, nodeVersion }).catch((cause: unknown) => cause);
+    expect(failure).toMatchObject({ reason: "unsupported-node", message: expect.stringContaining(`Node ${nodeVersion}`) });
+    expect(await readdir(root)).toEqual([]);
+  }
+  const root = await fixture();
+  expect((await initProject({ cwd: root, install: false, git: false, nodeVersion: "22.17.0" })).kind).toBe("created");
+  expect(JSON.parse(await readFile(path.join(root, "package.json"), "utf8")).engines).toEqual({ node: "^22.17.0 || >=24.0.0" });
 });
 
 it("reports every new-project conflict before writing anything", async () => {

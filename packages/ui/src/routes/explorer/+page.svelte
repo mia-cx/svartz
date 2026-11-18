@@ -1,5 +1,5 @@
 <script lang="ts">
-	import FileTrie from '$lib/FileTrie.svelte';
+	import FileTrie from '../../lib/FileTrie.svelte';
 
 	const entries = [
 		{ slug: 'index', path: 'index.md', title: 'Home' },

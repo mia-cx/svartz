@@ -1,5 +1,5 @@
 <script lang="ts">
-	import RecentNotes from '$lib/RecentNotes.svelte';
+	import RecentNotes from '../../lib/RecentNotes.svelte';
 
 	const entries = [
 		{

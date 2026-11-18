@@ -28,21 +28,33 @@ async function importWrangler(appRoot: string): Promise<Wrangler> {
   return await import(pathToFileURL(entry).href) as Wrangler;
 }
 
+interface DevBindingsOptions {
+  /** Read the Wrangler config's bindings: the app deploys to Cloudflare. */
+  readonly wrangler?: boolean;
+  /** `.env` values the platform env lacks, which Wrangler's bindings override. */
+  readonly dotenv?: Readonly<Record<string, string>>;
+}
+
 /**
- * Hand server plugins the bindings, vars and `.dev.vars` of the Wrangler config in `configDir` under `svartz dev`.
- * Wrangler's `getPlatformProxy` starts on the first plugin request and keeps local data in `.wrangler/state` beside
- * that config, where `wrangler d1 execute --local` reads it. Does nothing without a Wrangler config.
+ * Hand server plugins `dotenv`, and the bindings, vars and `.dev.vars` of the Wrangler config in `configDir`, under
+ * `svartz dev`. Wrangler's `getPlatformProxy` starts on the first plugin request and keeps local data in
+ * `.wrangler/state` beside that config, where `wrangler d1 execute --local` reads it. Does nothing without either.
  * Returns a function that stops the proxy.
  */
-export function serveDevBindings(configDir: string, appRoot: string): () => Promise<void> {
-  const configPath = WRANGLER_CONFIG_FILES.map((name) => join(configDir, name)).find(existsSync);
-  if (!configPath) return async () => {};
+export function serveDevBindings(
+  configDir: string,
+  appRoot: string,
+  { wrangler = true, dotenv = {} }: DevBindingsOptions = {},
+): () => Promise<void> {
+  const configPath = wrangler ? WRANGLER_CONFIG_FILES.map((name) => join(configDir, name)).find(existsSync) : undefined;
+  if (!configPath && Object.keys(dotenv).length === 0) return async () => {};
   // getPlatformProxy's default persistence follows the working directory, which the CLI moves to the app root;
   // `wrangler d1 execute --local` reads from beside the config.
   const persistPath = join(configDir, ".wrangler", "state", "v3");
 
   let proxy: Promise<PlatformProxy> | undefined;
   const bindings: DevBindings = async () => {
+    if (!configPath) return dotenv;
     if (!proxy) {
       // CLOUDFLARE_ENV is how Wrangler selects an environment; a host that picks one in its adapter options sets it
       // here too, or plugins read the top-level bindings.
@@ -51,7 +63,7 @@ export function serveDevBindings(configDir: string, appRoot: string): () => Prom
       // A failed start (a bad config, a missing Wrangler) retries on the next request rather than sticking.
       proxy.catch(() => { proxy = undefined; });
     }
-    return (await proxy).env;
+    return { ...dotenv, ...(await proxy).env };
   };
   const slot = globalThis as BindingsSlot;
   slot[DEV_BINDINGS] = bindings;

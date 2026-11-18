@@ -12,6 +12,8 @@ const execFileAsync = promisify(execFile);
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
 const cli = path.join(workspaceRoot, "packages/cli/dist/index.js");
 const shellModules = path.join(workspaceRoot, "apps/web/node_modules");
+// The host test's app runs SvelteKit 2 with `svelte.config.js`.
+const kit2Toolchain = path.join(import.meta.dirname, "fixtures/sveltekit-2-host/node_modules");
 const DEV_TIMEOUT = 240_000;
 const roots: string[] = [];
 
@@ -72,12 +74,16 @@ async function writeConfig(root: string, vault: Record<string, unknown>) {
   }, null, 2)};\n`);
 }
 
-/** Run `svartz dev` in `root` until `ready` answers, and return its origin and a function that stops it. */
-async function startDev(root: string, ready: string): Promise<{ origin: string; stop: () => Promise<void> }> {
+/** Run `svartz dev` in `root` with `env` until `ready` answers, and return its origin and a function that stops it. */
+async function startDev(
+  root: string,
+  ready: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<{ origin: string; stop: () => Promise<void> }> {
   const port = await freePort();
   const dev = spawn(process.execPath, [
     cli, "dev", "--config", path.join(root, "svartz.config.ts"), "--host", "127.0.0.1", "--port", String(port),
-  ], { cwd: root, stdio: "pipe" });
+  ], { cwd: root, env, stdio: "pipe" });
   let output = "";
   dev.stdout.on("data", (chunk: Buffer) => { output += chunk.toString(); });
   dev.stderr.on("data", (chunk: Buffer) => { output += chunk.toString(); });
@@ -115,6 +121,42 @@ async function localEntries(root: string): Promise<string[]> {
 afterAll(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
+
+it("hands a Node vault's plugins the shell's .env and process env under svartz dev", async () => {
+  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "svartz-dev-dotenv-")));
+  roots.push(root);
+  await mkdir(path.join(root, "vault"));
+  await writeFile(path.join(root, "vault/index.md"), "# Env\n");
+  await writeFile(path.join(root, "probe.mjs"), `export default () => async (_request, context) => Response.json({
+    dotenv: context.env.PRIVATE_DOTENV_TOKEN ?? null,
+    process: context.env.PRIVATE_PROCESS_TOKEN ?? null,
+  });\n`);
+  await cp(path.join(workspaceRoot, "apps/web"), path.join(root, "apps/web"), {
+    recursive: true,
+    filter: (source) => !/[\\/](?:node_modules|\.svelte-kit|build|\.wrangler|\.env)$/.test(source),
+  });
+  await symlink(shellModules, path.join(root, "apps/web/node_modules"), "dir");
+  // SvelteKit 3's `$env/dynamic/private` holds only declared variables, so `.env` reaches plugins through svartz dev.
+  await writeFile(path.join(root, "apps/web/.env"), "PRIVATE_DOTENV_TOKEN=from-dotenv\n");
+  await writeFile(path.join(root, "svartz.config.ts"), `export default ${JSON.stringify({
+    version: "1.0.0",
+    vaults: [{
+      id: "site",
+      path: "vault",
+      theme: path.join(workspaceRoot, "themes/minimal"),
+      target: { type: "node" },
+      site: { title: "Env" },
+      plugins: [{ id: "probe", server: { module: path.join(root, "probe.mjs") } }],
+    }],
+  }, null, 2)};\n`);
+
+  const dev = await startDev(root, "/", { ...process.env, PRIVATE_PROCESS_TOKEN: "from-process" });
+  try {
+    expect(await (await fetch(`${dev.origin}/_svartz/probe/`)).json()).toEqual({ dotenv: "from-dotenv", process: "from-process" });
+  } finally {
+    await dev.stop();
+  }
+}, DEV_TIMEOUT);
 
 describe("svartz dev hands server plugins the project's Wrangler bindings", () => {
   const targets = [
@@ -161,7 +203,7 @@ describe("svartz dev hands server plugins the project's Wrangler bindings", () =
 
   it("serves a host vault the same D1 the host app's own routes read through adapter-cloudflare", async () => {
     const root = await createProject("svartz-dev-bindings-host-", { main: ".svelte-kit/cloudflare/_worker.js" });
-    await symlink(shellModules, path.join(root, "node_modules"), "dir");
+    await symlink(kit2Toolchain, path.join(root, "node_modules"), "dir");
     await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
     await mkdir(path.join(root, "src/routes/count"), { recursive: true });
     for (const name of ["+page.svelte", "+page.ts", "+page.server.ts"]) {

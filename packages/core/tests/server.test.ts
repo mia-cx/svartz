@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createServerHandle, DEV_BINDINGS, type DevBindings, type ServerContext, type ServerHandleEvent, type ServerRegistry } from "../src/plugin/server";
+import { createServerHandle, DEV_BINDINGS, type DevBindings, type ServerContext, type ServerHandleEvent, type ServerHandleRuntime, type ServerRegistry } from "../src/plugin/server";
 
 const vault = { id: "wiki", mountPath: "", site: { title: "Wiki" } };
 
@@ -71,7 +71,9 @@ function event(path: string, platform?: unknown, clientAddress: () => string = (
   };
 }
 
-function setup({ basePath = "", building = false, dev = false, privateEnv = { SECRET: "from-process" } } = {}) {
+function setup({
+  basePath = "", building = false, dev = false, privateEnv = { SECRET: "from-process" }, workers,
+}: { basePath?: string; building?: boolean; dev?: boolean; privateEnv?: Record<string, unknown>; workers?: ServerHandleRuntime["workers"] } = {}) {
   const seen: Array<{ id: string; pathname: string; context: ServerContext }> = [];
   const factory = (id: string) => vi.fn((options: unknown, data: unknown) => (request: Request, context: ServerContext) => {
     const { pathname } = new URL(request.url);
@@ -89,7 +91,7 @@ function setup({ basePath = "", building = false, dev = false, privateEnv = { SE
     ],
   };
   const resolve = vi.fn(async () => new Response("page"));
-  const handle = createServerHandle(registry, { privateEnv, building, dev });
+  const handle = createServerHandle(registry, { privateEnv, workers, building, dev });
   return { handle, resolve, seen, hello };
 }
 
@@ -213,6 +215,18 @@ describe("server plugin context", () => {
     seen[0]!.context.waitUntil(task);
 
     expect(seen[0]!.context).toMatchObject({ env: { SECRET: "from-platform" }, clientAddress: "203.0.113.7", vault, base: "/_svartz/hello" });
+    expect(waitUntil).toHaveBeenCalledWith(task);
+  });
+
+  it("uses cloudflare:workers' env and waitUntil when SvelteKit 3's platform carries neither", async () => {
+    const waitUntil = vi.fn();
+    const { handle, resolve, seen } = setup({ workers: { env: { SECRET: "from-workers" }, waitUntil } });
+    const task = Promise.resolve();
+
+    await handle({ event: event("/_svartz/hello/", { cf: {} }), resolve });
+    seen[0]!.context.waitUntil(task);
+
+    expect(seen[0]!.context.env).toEqual({ SECRET: "from-workers" });
     expect(waitUntil).toHaveBeenCalledWith(task);
   });
 

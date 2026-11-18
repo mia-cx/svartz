@@ -1,4 +1,4 @@
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import {
   mkdir,
   writeFile,
@@ -18,7 +18,7 @@ import {
   type StageName,
   type SvartzTheme,
 } from "@svartz/core";
-import { normalizePath, type Plugin, type Rollup, type ViteDevServer } from "vite";
+import { loadEnv, normalizePath, type Plugin, type Rollup, type ViteDevServer } from "vite";
 import {
   RESOLVED_ARTIFACTS_VIRTUAL_ID,
   RESOLVED_SERVER_VIRTUAL_ID,
@@ -72,7 +72,9 @@ import {
   getGeneratedHostRegistryPath,
   getGeneratedHostServerPath,
   getGeneratedHostStylesPath,
+  isSvelteKit3,
   readHostAdapterName,
+  readKitEnvDir,
   svelteKitBasePath,
   svelteKitPaths,
 } from "./host-registry";
@@ -119,6 +121,15 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   let context = createSvartzViteContext(options);
   let kitBasePath: string | undefined;
   let hostAdapter: string | undefined;
+  let kit3 = false;
+  // The SvelteKit and platform the server registry runs under.
+  const serverRuntime = () => {
+    const target = context.config.target.type;
+    return {
+      kit3,
+      cloudflare: target === "cloudflare-workers" || target === "cloudflare-pages" || hostAdapter === CLOUDFLARE_ADAPTER,
+    };
+  };
   // Bare ids until `configResolved` resolves them from the app root.
   const { base } = context.config.theme;
   let themeImport: ThemeImport = typeof base === "string" ? base : { compose: "@svartz/theme-minimal/runtime", themes: base };
@@ -152,6 +163,13 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     const prefix = base === "/" ? "/" : `${base.replace(/\/$/, "")}/`;
     if (!pathname.startsWith(prefix)) return;
     return emittedAssets.get(pathname.slice(prefix.length));
+  }
+
+  /** Whether `id` is this vault's server registry, which holds its server plugins' modules and options. */
+  function isServerRegistry(id: string): boolean {
+    const file = getGeneratedRuntimeServerModulePath(context.config);
+    const target = normalizePath(id.replace(/\?.*$/, ""));
+    return target === normalizePath(file) || (existsSync(file) && target === normalizePath(realpathSync(file)));
   }
 
   /**
@@ -306,6 +324,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
             getGeneratedRuntimeServerModulePath(context.config),
             createServerRegistrySource(
               context.config, plugins, deploymentBasePath(context.config, kitBasePath), markdownRoutes, emittedServerData,
+              serverRuntime(),
             ),
           ),
         ],
@@ -385,6 +404,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       kitBasePath = svelteKitPaths(resolved.define)?.base;
       themeImport = resolveThemeRuntimeImport(context.config, context.root, selectedThemeSources(context.config));
       if (context.config.target.type === "host") hostAdapter = await readHostAdapterName(context.root, resolved.plugins);
+      kit3 = isSvelteKit3(context.root);
     },
     async buildStart() {
       await executePipeline();
@@ -417,11 +437,13 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     },
     configureServer(server) {
       devServer = server;
-      const target = context.config.target.type;
-      // Server plugins on Cloudflare read bindings; in dev those come from the project's Wrangler config.
+      // Server plugins on Cloudflare read bindings; in dev those come from the project's Wrangler config. SvelteKit 3's
+      // `$env/dynamic/private` holds only declared variables, so plugins get the app's `.env` from here too.
       // The close() wrapper below stops them, so middleware mode (no httpServer) releases them too.
-      const stopDevBindings = target === "cloudflare-workers" || target === "cloudflare-pages" || hostAdapter === CLOUDFLARE_ADAPTER
-        ? serveDevBindings(options.projectRoot ?? context.root, context.root)
+      const { cloudflare } = serverRuntime();
+      const dotenv = kit3 ? loadEnv(server.config.mode, readKitEnvDir(server.config.plugins), "") : {};
+      const stopDevBindings = cloudflare || kit3
+        ? serveDevBindings(options.projectRoot ?? context.root, context.root, { wrangler: cloudflare, dotenv })
         : undefined;
       server.watcher.add(context.config.path);
       if (context.config.site.favicon) server.watcher.add(context.config.site.favicon);
@@ -496,6 +518,11 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       return resolveVirtualModuleId(id) ?? null;
     },
     load(id) {
+      // The registry lives outside the app, where SvelteKit's server-only guard doesn't reach; refuse it in the
+      // browser so plugin modules and options never land in client chunks.
+      if (this?.environment?.config.consumer === "client" && isServerRegistry(id)) {
+        this.error(`Browser code imports virtual:svartz/server, which holds vault "${context.config.id}"'s server plugins. Import it only from src/hooks.server.ts.`);
+      }
       if (options.exposeVirtualModules === false) return null;
       if (id === RESOLVED_THEME_VIRTUAL_ID) {
         return createThemeVirtualModuleSource(themeImport, extractThemeConfig(context.config.theme));
@@ -518,6 +545,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       if (id === RESOLVED_SERVER_VIRTUAL_ID) {
         return createServerRegistrySource(
           context.config, plugins, deploymentBasePath(context.config, kitBasePath), markdownRoutes, emittedServerData,
+          serverRuntime(),
         );
       }
 

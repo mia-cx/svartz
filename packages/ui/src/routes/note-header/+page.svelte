@@ -1,5 +1,5 @@
 <script lang="ts">
-	import NoteHeader from '$lib/NoteHeader.svelte';
+	import NoteHeader from '../../lib/NoteHeader.svelte';
 
 	const entry = {
 		title: 'Getting Started with Svartz',

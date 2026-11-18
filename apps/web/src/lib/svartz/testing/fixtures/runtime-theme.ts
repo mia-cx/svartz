@@ -1,6 +1,6 @@
-import StubLayout from '$lib/svartz/testing/StubLayout.svelte';
-import StubPage from '$lib/svartz/testing/StubPage.svelte';
-import StubNotFoundPage from '$lib/svartz/testing/StubNotFoundPage.svelte';
+import StubLayout from '../StubLayout.svelte';
+import StubPage from '../StubPage.svelte';
+import StubNotFoundPage from '../StubNotFoundPage.svelte';
 import { TEST_NOTE_ARTIFACT_KEY, testRoutes } from './shared';
 
 export const theme = {

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { build } from "vite";
@@ -13,6 +14,25 @@ interface Adapter {
   adapt(builder: MarkdownBuilder): void | Promise<void>;
 }
 
+/**
+ * adapter-node 6 bundles its server into `server/`; adapter-node 5 writes it at the top level. Either way the
+ * directory's `handler.js` is the entry for the handler that serves static files, prerendered pages and the app.
+ */
+function nodeServerDirectory(outDir: string): string {
+  const server = join(outDir, "server");
+  return existsSync(join(server, "adapter-index.js")) ? server : outDir;
+}
+
+/**
+ * The module and export that hold adapter-node's handler. adapter-node 6's `handler.js` re-exports it from a shared
+ * chunk under a minified name, and the server entry imports that chunk directly, so the wrapper replaces the chunk.
+ */
+async function nodeHandlerModule(directory: string): Promise<{ file: string; name: string }> {
+  const source = await readFile(join(directory, "handler.js"), "utf8");
+  const reexport = /export\s*\{\s*([\w$]+)\s+as\s+handler\s*\}\s*from\s*["']\.\/([^"']+)["']/.exec(source);
+  return reexport ? { file: reexport[2]!, name: reexport[1]! } : { file: "handler.js", name: "handler" };
+}
+
 /** Run the shared Svartz handle ahead of the standalone adapters' static-file handlers. */
 export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: string, outDir: string): T {
   if (target === "static") return adapter;
@@ -23,9 +43,11 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
       const markdown = getMarkdownRoutes();
       if (Object.keys(markdown).length === 0) return;
       const node = target === "node";
-      const directory = node ? outDir : builder.getBuildDirectory("cloudflare");
-      const entry = node ? "handler.js" : "_worker.js";
-      const original = node ? "svartz-handler.js" : "svartz-worker.js";
+      const directory = node ? nodeServerDirectory(outDir) : builder.getBuildDirectory("cloudflare");
+      const { file: entry, name: handlerExport } = node
+        ? await nodeHandlerModule(directory)
+        : { file: "_worker.js", name: "default" };
+      const original = `svartz-${entry}`;
       const common = `
         import { createServerHandle, decodeRoutePath, markdownCopyFor } from ${JSON.stringify(import.meta.resolve("@svartz/core"))};
         const markdown = ${JSON.stringify(markdown)};
@@ -35,8 +57,11 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
         }, { building: false, dev: false, privateEnv: {} });
       `;
       const source = node ? `${common}
-        import { handler as original } from "./${original}";
-        export async function handler(req, res, next) {
+        import { ${handlerExport} as original } from "./${original}";
+        // Other chunks may import more of the handler's chunk than the handler; this module's own export wins.
+        export * from "./${original}";
+        export { handler as ${handlerExport} };
+        async function handler(req, res, next) {
           try {
             const url = new URL(req.url, "http://svartz.local");
             // Kit rejects malformed escapes before its hooks and loaders can return Svartz's 404.
@@ -57,12 +82,28 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
               resolve: () => { passed = true; return new Response(null); },
             });
             if (passed) {
-              // sirv sets its own Vary and Cache-Control after this middleware.
+              // The static handler sets its own Vary and Cache-Control after this middleware, through setHeader
+              // (adapter-node 5) or writeHead's headers (adapter-node 6).
+              const negotiated = (name, value) => {
+                if (name.toLowerCase() === "vary" && value !== "*") return [value, "Accept", "User-Agent"].join(", ");
+                if (name.toLowerCase() === "cache-control" && !/\\bno-store\\b/i.test(String(value))) return "private, no-cache";
+                return value;
+              };
               const setHeader = res.setHeader;
               res.setHeader = function(name, value) {
-                if (name.toLowerCase() === "vary" && value !== "*") value = [value, "Accept", "User-Agent"].join(", ");
-                if (name.toLowerCase() === "cache-control" && !/\\bno-store\\b/i.test(String(value))) value = "private, no-cache";
-                return setHeader.call(this, name, value);
+                return setHeader.call(this, name, negotiated(name, value));
+              };
+              // writeHead takes an object or a flat name, value, name, value array, after an optional status message.
+              const negotiatedHeaders = (headers) => Array.isArray(headers)
+                ? headers.map((value, index) => index % 2 ? negotiated(headers[index - 1], value) : value)
+                : headers && typeof headers === "object"
+                  ? Object.fromEntries(Object.entries(headers).map(([name, value]) => [name, negotiated(name, value)]))
+                  : headers;
+              const writeHead = res.writeHead;
+              res.writeHead = function(status, ...rest) {
+                const at = typeof rest[0] === "string" ? 1 : 0;
+                rest[at] = negotiatedHeaders(rest[at]);
+                return writeHead.call(this, status, ...rest);
               };
               for (const name of ["vary", "cache-control"]) {
                 if (response.headers.has(name)) res.setHeader(name, response.headers.get(name));
@@ -104,7 +145,7 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
           rollupOptions: {
             input: id,
             external: [`./${original}`],
-            output: { inlineDynamicImports: true, paths: (id) => id.endsWith(`/${original}`) ? `./${original}` : id },
+            output: { inlineDynamicImports: true, paths: (id) => id === original || id.endsWith(`/${original}`) ? `./${original}` : id },
           },
         },
       });

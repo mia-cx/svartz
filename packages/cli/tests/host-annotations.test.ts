@@ -11,7 +11,8 @@ import { chromium, type Page } from "playwright";
 
 const execFileAsync = promisify(execFile);
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
-const shellModules = path.join(workspaceRoot, "apps/web/node_modules");
+// These hosts run SvelteKit 2 with `svelte.config.js`.
+const shellModules = path.join(import.meta.dirname, "fixtures/sveltekit-2-host/node_modules");
 const annotationsDist = path.join(workspaceRoot, "packages/plugin-annotations/dist");
 const authDist = path.join(workspaceRoot, "packages/auth/dist");
 const roots: string[] = [];
