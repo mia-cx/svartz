@@ -95,8 +95,16 @@ export interface ServerHandleEvent {
 
 /** Runtime inputs SvelteKit supplies to the generated registry. */
 export interface ServerHandleRuntime {
-  /** `$env/dynamic/private`, used when the platform has no env of its own. */
+  /**
+   * The server's private env, used when the platform has no env of its own: `$env/dynamic/private` in SvelteKit 2,
+   * `process.env` in SvelteKit 3, whose `$env/dynamic/private` holds only the variables an app declares.
+   */
   readonly privateEnv: Readonly<Record<string, unknown>>;
+  /**
+   * The `cloudflare:workers` module on Cloudflare under SvelteKit 3, which no longer puts `env` and `ctx` on
+   * `platform`: plugins read its `env` and keep work alive with its `waitUntil`.
+   */
+  readonly workers?: { readonly env: Readonly<Record<string, unknown>> } & WaitUntilHost;
   /** `$app/environment`'s `building`: plugin routes answer 404 while prerendering. */
   readonly building: boolean;
   /**
@@ -261,9 +269,11 @@ export function createServerHandle(registry: ServerRegistry, runtime: ServerHand
     if (!route) return notFound(pathname);
 
     const handler = await handlerFor(route);
-    const waitUntilHost = platformWaitUntil(event.platform);
+    const waitUntilHost = platformWaitUntil(event.platform) ?? runtime.workers;
     const response = await handler(request, {
-      env: runtime.dev ? await devEnv(runtime.privateEnv) : platformEnv(event.platform) ?? runtime.privateEnv,
+      env: runtime.dev
+        ? await devEnv(runtime.privateEnv)
+        : platformEnv(event.platform) ?? runtime.workers?.env ?? runtime.privateEnv,
       clientAddress: clientAddress(event),
       vault: registry.vault,
       base: `${root}${id}`,

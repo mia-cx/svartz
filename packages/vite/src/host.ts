@@ -146,6 +146,9 @@ export function withSvartzHost(config: UserConfigExport): UserConfigExport {
       optimizeDeps: {
         exclude: ["@svartz/ui", "@svartz/ui/runtime", "@svartz/theme-minimal"],
       },
+      // SvelteKit 3's adapter-cloudflare prebundles SSR dependencies; a prebundled `@sveltejs/kit/hooks` carries its
+      // own request store, so `sequence(svartzHandle, …)` fails with "Could not get the request store".
+      environments: { ssr: { optimizeDeps: { exclude: ["@sveltejs/kit"] } } },
       // Svelte component libraries @svartz/ui uses. A host that links @svartz/ui
       // from a workspace never lists them, so SSR would try to import raw .svelte.
       ssr: { noExternal: ["@lucide/svelte"] },

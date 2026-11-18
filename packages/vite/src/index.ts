@@ -72,6 +72,7 @@ import {
   getGeneratedHostRegistryPath,
   getGeneratedHostServerPath,
   getGeneratedHostStylesPath,
+  isSvelteKit3,
   readHostAdapterName,
   svelteKitBasePath,
   svelteKitPaths,
@@ -119,6 +120,15 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   let context = createSvartzViteContext(options);
   let kitBasePath: string | undefined;
   let hostAdapter: string | undefined;
+  let kit3 = false;
+  // The SvelteKit and platform the server registry runs under.
+  const serverRuntime = () => {
+    const target = context.config.target.type;
+    return {
+      kit3,
+      cloudflare: target === "cloudflare-workers" || target === "cloudflare-pages" || hostAdapter === CLOUDFLARE_ADAPTER,
+    };
+  };
   // Bare ids until `configResolved` resolves them from the app root.
   const { base } = context.config.theme;
   let themeImport: ThemeImport = typeof base === "string" ? base : { compose: "@svartz/theme-minimal/runtime", themes: base };
@@ -306,6 +316,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
             getGeneratedRuntimeServerModulePath(context.config),
             createServerRegistrySource(
               context.config, plugins, deploymentBasePath(context.config, kitBasePath), markdownRoutes, emittedServerData,
+              serverRuntime(),
             ),
           ),
         ],
@@ -385,6 +396,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       kitBasePath = svelteKitPaths(resolved.define)?.base;
       themeImport = resolveThemeRuntimeImport(context.config, context.root, selectedThemeSources(context.config));
       if (context.config.target.type === "host") hostAdapter = await readHostAdapterName(context.root, resolved.plugins);
+      kit3 = isSvelteKit3(context.root);
     },
     async buildStart() {
       await executePipeline();
@@ -417,10 +429,9 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     },
     configureServer(server) {
       devServer = server;
-      const target = context.config.target.type;
       // Server plugins on Cloudflare read bindings; in dev those come from the project's Wrangler config.
       // The close() wrapper below stops them, so middleware mode (no httpServer) releases them too.
-      const stopDevBindings = target === "cloudflare-workers" || target === "cloudflare-pages" || hostAdapter === CLOUDFLARE_ADAPTER
+      const stopDevBindings = serverRuntime().cloudflare
         ? serveDevBindings(options.projectRoot ?? context.root, context.root)
         : undefined;
       server.watcher.add(context.config.path);
@@ -518,6 +529,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       if (id === RESOLVED_SERVER_VIRTUAL_ID) {
         return createServerRegistrySource(
           context.config, plugins, deploymentBasePath(context.config, kitBasePath), markdownRoutes, emittedServerData,
+          serverRuntime(),
         );
       }
 

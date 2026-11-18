@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { basename } from "node:path";
 import type { ResolvedConfig } from "@svartz/core";
-import { createHostIndexSource, createHostRegistrySource, deploymentBasePath, getGeneratedHostIndexPath, getGeneratedHostRegistryPath, getGeneratedHostStylesPath, svelteKitPaths } from "../src/host-registry";
+import { createHostIndexSource, createHostRegistrySource, deploymentBasePath, getGeneratedHostIndexPath, getGeneratedHostRegistryPath, getGeneratedHostStylesPath, readHostAdapterName, svelteKitPaths } from "../src/host-registry";
 
 const vault = (id: string, mountPath: string): ResolvedConfig => ({
   version: "1.0.0",
@@ -83,4 +83,13 @@ describe("host registry", () => {
     expect(source).toContain('export const base = "/site";');
     expect(source).toContain('export const assets = "https://cdn.example.test";');
   });
-});
+
+  it("reads the adapter from sveltekit({ adapter }) and from svelte.config.js's kit.adapter", async () => {
+    const setup = (options: unknown) => [{ name: "vite-plugin-sveltekit-setup", api: { options } }];
+    // SvelteKit 3's validated options keep an empty `kit` key.
+    const plugin = setup({ adapter: { name: "@sveltejs/adapter-cloudflare" }, kit: undefined });
+    const configFile = setup({ extensions: [".svelte"], kit: { adapter: { name: "@sveltejs/adapter-node" } } });
+
+    expect(await readHostAdapterName("/nowhere", plugin)).toBe("@sveltejs/adapter-cloudflare");
+    expect(await readHostAdapterName("/nowhere", configFile)).toBe("@sveltejs/adapter-node");
+  });});

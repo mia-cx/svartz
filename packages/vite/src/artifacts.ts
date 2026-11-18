@@ -61,10 +61,39 @@ function jsonExpression(value: unknown): string {
   return value === undefined ? "undefined" : `JSON.parse(${JSON.stringify(JSON.stringify(value))})`;
 }
 
+/** The SvelteKit the server registry runs under, which decides where it reads the private env from. */
+interface ServerRuntime {
+  readonly kit3: boolean;
+  /** The app deploys to Cloudflare: under SvelteKit 3, bindings come from `cloudflare:workers`. */
+  readonly cloudflare: boolean;
+}
+
+/** SvelteKit 2's private env module, and the env and flags each runtime hands `createServerHandle`. */
+function serverRuntimeSource({ kit3, cloudflare }: ServerRuntime): { imports: string[]; runtime: string } {
+  if (!kit3) {
+    return {
+      imports: [`import { env } from "$env/dynamic/private";`, `import { building, dev } from "$app/environment";`],
+      runtime: "{ privateEnv: env, building, dev }",
+    };
+  }
+  // SvelteKit 3's `$env/dynamic/private` holds only declared variables, so plugins read the process env. Workers have
+  // no `process` without `nodejs_compat`.
+  const privateEnv = "globalThis.process?.env ?? {}";
+  if (!cloudflare) return { imports: [`import { building, dev } from "$app/env";`], runtime: `{ privateEnv: ${privateEnv}, building, dev }` };
+  return {
+    imports: [
+      `import { building, dev } from "$app/env";`,
+      // Only a deployed Worker has `cloudflare:workers`; dev reads bindings through Wrangler, and prerendering never serves plugins.
+      `const workers = dev || building ? undefined : await import("cloudflare:workers");`,
+    ],
+    runtime: `{ privateEnv: ${privateEnv}, workers, building, dev }`,
+  };
+}
+
 /**
  * The vault's server-only module: its active server plugins as a registry, and `svartzHandle`, the SvelteKit `handle`
  * that routes `/_svartz/<id>/` to them. `virtual:svartz/server` is this module in the standalone shell; host apps get
- * one that chains every vault's. `$env/dynamic/private` keeps it out of client bundles.
+ * one that chains every vault's. Its env imports keep it out of client bundles.
  * `serverData` is what each plugin's hooks recorded for its server module this build, keyed by plugin id.
  */
 function createServerRegistrySource(
@@ -73,6 +102,7 @@ function createServerRegistrySource(
   deploymentBasePath = "",
   markdown: Readonly<Record<string, string>> = {},
   serverData: ReadonlyMap<string, unknown> = new Map(),
+  serverRuntime: ServerRuntime = { kit3: false, cloudflare: false },
 ): string {
   const servers = plugins.flatMap(({ id, server }) => {
     if (!server) return [];
@@ -92,13 +122,13 @@ function createServerRegistrySource(
     `  markdown: ${JSON.stringify(markdown)},`,
     `};`,
   ].join("\n");
+  const { imports, runtime } = serverRuntimeSource(serverRuntime);
   return [
-    `import { env } from "$env/dynamic/private";`,
-    `import { building, dev } from "$app/environment";`,
+    ...imports,
     `import { createServerHandle } from ${JSON.stringify(resolveCoreModuleId())};`,
     "",
     registry,
-    "export const svartzHandle = createServerHandle(registry, { privateEnv: env, building, dev });",
+    `export const svartzHandle = createServerHandle(registry, ${runtime});`,
     "",
   ].join("\n");
 }

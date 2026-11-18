@@ -54,11 +54,11 @@ The handler receives a `context`:
 
 | Field | Value |
 | --- | --- |
-| `env` | The platform's env on Cloudflare (vars, secrets and bindings); the server's environment variables on Node, minus `PUBLIC_` ones. Under `svartz dev`, the dev server's environment variables and `.env`, plus the project's Wrangler bindings on Cloudflare (see [bindings under `svartz dev`](#bindings-under-svartz-dev)). |
+| `env` | The Worker's env on Cloudflare (vars, secrets and bindings); the server's environment variables on Node. Under `svartz dev`, the dev server's environment variables and `.env`, plus the project's Wrangler bindings on Cloudflare (see [bindings under `svartz dev`](#bindings-under-svartz-dev)). |
 | `clientAddress` | The client's IP address, or `undefined` when the adapter can't tell. |
 | `vault` | The vault's `id`, `mountPath` and public `site` settings. |
 | `base` | The path the plugin answers under, without a trailing slash, such as `/_svartz/hello`. |
-| `waitUntil(promise)` | Keeps work running after the response. On Cloudflare it is the platform's `waitUntil`; on Node the promise runs on and a failure is logged. |
+| `waitUntil(promise)` | Keeps work running after the response. On Cloudflare it is the Worker's `waitUntil`; on Node the promise runs on and a failure is logged. |
 
 Errors the handler throws reach SvelteKit's `handleError` and answer 500.
 
@@ -115,6 +115,7 @@ A plugin's [browser script](../vaults/docs/guides/create-plugin.md) gets the dep
 - Every other path renders as usual and never reaches a plugin.
 - An unknown id, or a handler that returns `undefined`, answers 404 with `{ "error": "not_found", "message": "…" }`.
 - Svartz URLs end in a slash, and the handler always sees one. A request without one, such as `/_svartz/hello/ping`, is redirected with a 308 to `/_svartz/hello/ping/`; clients resend the method and body, and the query is kept. When a SvelteKit route in the app matches the path, SvelteKit applies that route's `trailingSlash` first, so a host app's default `'never'` serves `/_svartz/hello/ping` without a redirect and hands the handler `/_svartz/hello/ping/`.
+- SvelteKit's CSRF check runs first: a cross-origin `POST`, `PUT`, `PATCH` or `DELETE` with a form content type (`application/x-www-form-urlencoded`, `multipart/form-data` or `text/plain`) or none answers 403. A browser's same-origin `fetch` passes; on Node, set `ORIGIN` to the site's public origin so SvelteKit can tell.
 - While prerendering, plugin paths answer 404 without running the plugin, so build-time env never reaches a handler. Notes may link to plugin URLs: the crawler skips them instead of failing the build, and writes no static page for them.
 
 A plugin id that serves requests may hold only lowercase letters, digits and hyphens.
