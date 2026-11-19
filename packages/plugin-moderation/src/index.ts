@@ -73,15 +73,16 @@ export function moderation(options: ModerationOptions = {}): NormalizedSvartzPlu
         // Protected notes stay out: reporting one would tell moderators it exists.
         const published = (ctx.index?.entries ?? []).filter((entry) => !entry.locked);
         const pages = Object.fromEntries(published.map((entry) => [entry.slug, { title: entry.title, href: entry.href }]));
-        // History has a page for each published Markdown note, where a reported commit can be reverted.
-        const history = serverOptionsOf(ctx.plugins, "history") && {
+        const submissions = serverOptionsOf(ctx.plugins, "submissions");
+        // History has a page for each published Markdown note, where a reported commit can be reverted: only when
+        // submissions commits through a GitHub App, since a token can't commit as the moderator.
+        const history = serverOptionsOf(ctx.plugins, "history") && submissions?.app !== undefined && {
           paths: Object.fromEntries(published.flatMap((entry) => {
             const path = entry.path.replaceAll("\\", "/");
             return /\.md$/i.test(path) ? [[path, entry.slug] as const] : [];
           })),
         };
         const annotations = serverOptionsOf(ctx.plugins, "annotations")?.database as { env?: unknown } | undefined;
-        const submissions = serverOptionsOf(ctx.plugins, "submissions");
         const configured = serverOptionsOf(ctx.plugins, "auth")?.userPages;
         const userPages = typeof configured === "string" ? configured : DEFAULT_USER_PAGES;
         const compiler = getCompilerContributions(ctx);
