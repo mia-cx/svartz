@@ -3,8 +3,9 @@
  * Server plugins read who is signed in with `readAccount` from `@svartz/auth/server`.
  */
 import { fileURLToPath } from "node:url";
-import { definePlugin, getCompilerContributions, type ResolvedConfig, type NormalizedSvartzPlugin, type SiteVaults, type SvartzPlugin } from "@svartz/core";
+import { definePlugin, getCompilerContributions, type PermissionDeclaration, type ResolvedConfig, type NormalizedSvartzPlugin, type SiteVaults, type SvartzPlugin } from "@svartz/core";
 import type { SignInConfig } from "./browser";
+import { collectPermissions } from "./catalogue";
 import { isProviderId, PROVIDERS, type ProviderId } from "./providers";
 import type { AuthOptions, AuthServerOptions } from "./server";
 
@@ -97,16 +98,33 @@ function callbackVaultFor(options: AuthOptions, providers: readonly ProviderId[]
   return target;
 }
 
-/** The plugin one vault runs; `callbackMountPath` is set when another vault runs its sign-ins. */
-function authPlugin(options: AuthOptions, providers: readonly ProviderId[], callbackMountPath?: string): NormalizedSvartzPlugin {
-  const serverOptions: AuthServerOptions = callbackMountPath === undefined ? options : { ...options, callbackMountPath };
+/**
+ * The permissions every plugin sharing `vault`'s accounts declares: its own, or on a host vault, those of every host
+ * vault with auth, since they share one app, one auth module and one grants table.
+ */
+function permissionsFor({ vault, vaults }: SiteVaults): PermissionDeclaration[] {
+  if (vault.target.type !== "host") return collectPermissions([vault]);
+  return collectPermissions(vaults.filter((candidate) => candidate.target.type === "host" && authOptionsOf(candidate)));
+}
+
+/**
+ * The plugin one vault runs. `callbackMountPath` is set when another vault runs its sign-ins; `permissions` is the
+ * catalogue, collected once every vault is known.
+ */
+function authPlugin(options: AuthOptions, providers: readonly ProviderId[], callbackMountPath?: string, permissions?: readonly PermissionDeclaration[]): NormalizedSvartzPlugin {
+  const serverOptions: AuthServerOptions = {
+    ...options,
+    ...callbackMountPath !== undefined && { callbackMountPath },
+    ...permissions !== undefined && { permissions },
+  };
   return definePlugin(() => ({
     id: AUTH_PLUGIN_ID,
-    // Eager, so every plugin that reads accounts sees this deployment's `admins` from its first request on.
+    // Eager, so every plugin that reads accounts or checks permissions sees this deployment's `admins` and catalogue
+    // from its first request on.
     server: { module: SERVER_MODULE, options: serverOptions, eager: true },
     forVault(site) {
       const target = callbackVaultFor(options, providers, site);
-      return target.id === site.vault.id ? authPlugin(options, providers) : authPlugin(options, providers, target.mountPath);
+      return authPlugin(options, providers, target.id === site.vault.id ? undefined : target.mountPath, permissionsFor(site));
     },
     emitArtifacts: {
       run(ctx) {

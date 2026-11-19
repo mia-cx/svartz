@@ -77,6 +77,28 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       created_at TEXT NOT NULL
     )`,
   ],
+  [
+    // Grants, `(actor, object, permission) → value`, as `permissions.ts` describes them. The key leads with what `can()`
+    // looks up: one permission on the objects of one chain. A stored `unset` overrides a declared default.
+    `CREATE TABLE IF NOT EXISTS auth_grants (
+      actor_type TEXT NOT NULL CHECK (actor_type IN ('account', 'group', 'role', 'static')),
+      actor_id TEXT NOT NULL,
+      object TEXT NOT NULL,
+      permission TEXT NOT NULL,
+      value TEXT NOT NULL CHECK (value IN ('allow', 'deny', 'unset')),
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (permission, object, actor_type, actor_id)
+    )`,
+    // Grants a plugin moved from its config onto an identity's account, so each lands once: a later change to the
+    // grant, its removal included, is never undone by the config still listing the identity.
+    `CREATE TABLE IF NOT EXISTS auth_grant_migrations (
+      identity_id TEXT NOT NULL,
+      object TEXT NOT NULL,
+      permission TEXT NOT NULL,
+      migrated_at TEXT NOT NULL,
+      PRIMARY KEY (identity_id, object, permission)
+    )`,
+  ],
 ];
 
 const migrated = new WeakMap<Database, Promise<void>>();

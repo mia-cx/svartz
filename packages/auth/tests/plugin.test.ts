@@ -123,3 +123,56 @@ describe("one sign-in per host app", () => {
     expect(() => resolve(vaults, "work")).toThrow(/vault "work" sends sign-in to "journal", but "journal" sends its own to "work"/);
   });
 });
+
+describe("the permission catalogue", () => {
+  type Declaration = { slug: string; name: string; description: string; defaults?: Record<string, string> };
+  const comment: Declaration = { slug: "guestbook:entries:write", name: "Sign", description: "Add an entry.", defaults: { "signed-in": "allow" } };
+  const remove: Declaration = { slug: "guestbook:entries:delete", name: "Delete any entry", description: "Remove anyone's entry." };
+  const guestbook = (...permissions: Declaration[]) => ({ id: "guestbook", permissions });
+  type Vault = { id: string; type?: string; plugins: unknown[] };
+  /** The catalogue auth's server module receives on `id`, once config resolution knows every vault. */
+  const catalogueOf = (id: string, ...specs: Vault[]) => {
+    const vaults = specs.map(({ id, type = "host", plugins }) => ({ id, mountPath: `/${id}`, target: { type }, plugins }) as unknown as ResolvedConfig);
+    const vault = vaults.find((candidate) => candidate.id === id)!;
+    const plugin = (vault.plugins as NormalizedSvartzPlugin[]).find((candidate) => candidate.id === "auth")!;
+    return (plugin.forVault!({ vault, vaults }).server?.options as { permissions: unknown }).permissions;
+  };
+
+  it("collects what the vault's enabled plugins declare, at build time", () => {
+    const off = { id: "visitors", disabled: true, permissions: [{ slug: "visitors:counts:read", name: "Count", description: "See counts." }] };
+
+    expect(catalogueOf("notes", { id: "notes", type: "cloudflare-workers", plugins: [auth({ providers: { github } }), guestbook(comment, remove), off] }))
+      .toEqual([comment, remove]);
+  });
+
+  it("gives every host vault one catalogue, since they share accounts and grants", () => {
+    const vaults: Vault[] = [
+      { id: "journal", plugins: [auth({ providers: { github } }), guestbook(comment)] },
+      { id: "work", plugins: [auth({ providers: { github } }), guestbook(comment, remove)] },
+      { id: "blog", type: "cloudflare-workers", plugins: [auth({ providers: { github } })] },
+    ];
+
+    expect(catalogueOf("journal", ...vaults)).toEqual([comment, remove]);
+    expect(catalogueOf("work", ...vaults)).toEqual([comment, remove]);
+    expect(catalogueOf("blog", ...vaults)).toEqual([]);
+  });
+
+  it.each([
+    ["isn't namespace:feature:action", { ...remove, slug: "guestbook:delete" }, /declares permission "guestbook:delete"; use "namespace:feature:action"/],
+    ["has an action other than read, write or delete", { ...remove, slug: "guestbook:entries:purge" }, /declares permission "guestbook:entries:purge"/],
+    ["is in another plugin's namespace", { ...remove, slug: "annotations:comments:delete" }, /a plugin declares only permissions starting "guestbook:"/],
+    ["has no name", { ...remove, name: " " }, /"guestbook:entries:delete" needs a name/],
+    ["has no description", { ...remove, description: "" }, /"guestbook:entries:delete" needs a description/],
+    ["defaults an actor that isn't built in", { ...remove, defaults: { moderators: "allow" } }, /sets a default for "moderators"; defaults go to guest and signed-in/],
+    ["defaults to unset", { ...remove, defaults: { guest: "unset" } }, /defaults guest to "unset"; use "allow" or "deny"/],
+  ])("fails the build for a permission that %s", (_case, declaration, error) => {
+    expect(() => catalogueOf("notes", { id: "notes", plugins: [auth({ providers: { github } }), guestbook(declaration)] })).toThrow(error);
+  });
+
+  it("fails the build when host vaults declare one permission differently", () => {
+    expect(() => catalogueOf("work",
+      { id: "journal", plugins: [auth({ providers: { github } }), guestbook(comment)] },
+      { id: "work", plugins: [auth({ providers: { github } }), guestbook({ ...comment, defaults: { guest: "allow" } })] },
+    )).toThrow(/vault "work" declares "guestbook:entries:write" differently than vault "journal"/);
+  });
+});
