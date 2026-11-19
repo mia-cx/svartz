@@ -52,7 +52,6 @@ describe("the moderation plugin", () => {
 
     expect(compiler.serverData.get("moderation")).toEqual({
       pages: { roses: { title: "Roses", href: "/garden/roses/" } },
-      userPages: "users",
       annotations: { database: "DB" },
       submissions: { repo: "wikiplace/wikiplace.live" },
     });
@@ -63,7 +62,13 @@ describe("the moderation plugin", () => {
   });
 
   it("names no owning plugin the vault lacks", async () => {
-    expect((await build([])).serverData.get("moderation")).toEqual({ pages: {}, userPages: "users" });
+    expect((await build([])).serverData.get("moderation")).toEqual({ pages: {} });
+  });
+
+  it("offers to report the account on user pages in the folder auth keeps them in", async () => {
+    const signedIn = { id: "auth", server: { module: "/auth.js", options: { userPages: "people/members" } } };
+
+    expect((await build([signedIn])).browserResources.get("moderation")?.options).toEqual({ mountPath: "/garden", userPages: "people/members" });
   });
 
   it.each([

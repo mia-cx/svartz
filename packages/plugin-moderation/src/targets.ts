@@ -14,8 +14,6 @@ import type { Target } from "./store";
 export interface BuildData {
   /** Every published page, by slug: its title and its URL below the deployment base. */
   readonly pages: Readonly<Record<string, { readonly title: string; readonly href: string }>>;
-  /** The folder holding user pages: the page at `<userPages>/<handle>` is that account's. */
-  readonly userPages: string;
   /** The annotations plugin, when the vault has it: the D1 binding its comments are in. */
   readonly annotations?: { readonly database: string };
   /** The submissions plugin, when the vault has it: the repository edits go to, as `owner/name`. */

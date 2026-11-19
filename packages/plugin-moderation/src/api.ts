@@ -23,6 +23,6 @@ export interface ReportRequest {
 export interface BrowserOptions {
   /** The vault's mount path below the deployment base: its routes are `<mountPath>/_svartz/<plugin>/`. */
   readonly mountPath: string;
-  /** The folder holding user pages, `users`: a page at `users/<handle>` also offers to report the account. */
+  /** Auth's folder of user pages, `users` by default: a page at `users/<handle>` also offers to report the account. */
   readonly userPages: string;
 }

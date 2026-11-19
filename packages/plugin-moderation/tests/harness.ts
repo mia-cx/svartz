@@ -60,7 +60,6 @@ export interface SiteOptions {
 export function createSite(db: Database, { vault = "notes", database = "SVARTZ_DB", annotations = true, submissions = true, reportsPerHour = DEFAULT_REPORTS_PER_HOUR, accounts = true }: SiteOptions = {}) {
   const data: BuildData = {
     pages: PAGES,
-    userPages: "users",
     ...annotations && { annotations: { database: "DB" } },
     ...submissions && { submissions: { repo: "wikiplace/wikiplace.live" } },
   };

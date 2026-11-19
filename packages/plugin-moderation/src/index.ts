@@ -20,8 +20,8 @@ export { PLUGIN_ID as MODERATION_PLUGIN_ID, REASON_MAX_LENGTH, TARGET_KINDS } fr
 /** Reports each signed-in reader may send per hour unless `limits.reportsPerHour` says otherwise. */
 export const DEFAULT_REPORTS_PER_HOUR = 10;
 
-/** The folder user pages live in, as auth reads it: `users/<handle>`. */
-const USER_PAGES = "users";
+/** The folder user pages live in unless auth's `userPages` names another. */
+const DEFAULT_USER_PAGES = "users";
 
 // Beside this module in dist.
 const SERVER_MODULE = fileURLToPath(new URL("./server.js", import.meta.url));
@@ -76,9 +76,10 @@ export function moderation(options: ModerationOptions): NormalizedSvartzPlugin {
           .map((entry) => [entry.slug, { title: entry.title, href: entry.href }]));
         const annotations = serverOptionsOf(ctx.plugins, "annotations")?.database as { env?: unknown } | undefined;
         const submissions = serverOptionsOf(ctx.plugins, "submissions");
+        const configured = serverOptionsOf(ctx.plugins, "auth")?.userPages;
+        const userPages = typeof configured === "string" ? configured : DEFAULT_USER_PAGES;
         const data: BuildData = {
           pages,
-          userPages: USER_PAGES,
           ...typeof annotations?.env === "string" && { annotations: { database: annotations.env } },
           ...typeof submissions?.repo === "string" && { submissions: { repo: submissions.repo } },
         };
@@ -88,7 +89,7 @@ export function moderation(options: ModerationOptions): NormalizedSvartzPlugin {
           id: PLUGIN_ID,
           kind: "script",
           importId: BROWSER_MODULE,
-          options: { mountPath: ctx.config.mountPath ?? "", userPages: USER_PAGES } satisfies BrowserOptions,
+          options: { mountPath: ctx.config.mountPath ?? "", userPages } satisfies BrowserOptions,
         });
         compiler.browserResources.set(`${PLUGIN_ID}-css`, { id: `${PLUGIN_ID}-css`, kind: "css", importId: STYLESHEET });
       },

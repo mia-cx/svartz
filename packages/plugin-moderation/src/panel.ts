@@ -5,7 +5,7 @@
  * hide a comment, submissions' to close a submission. Each action shows only to a viewer holding the owning plugin's
  * permission, which its route checks again. Reporters are never shown.
  */
-import { can, findProfile, readAccount, type Account } from "@svartz/auth/server";
+import { can, findProfile, readAccount, userPageLocation, type Account } from "@svartz/auth/server";
 import type { DashboardPanel, PageContext, PluginPage } from "@svartz/core";
 import { findComment, type ReportedComment } from "@svartz/plugin-annotations/server";
 import { PLUGIN_ID } from "./api";
@@ -84,7 +84,9 @@ function describer(context: PageContext, data: BuildData, viewer: Account | null
       case "account": {
         const profile = await findProfile(id, context.env);
         if (!profile) return { what: `@${escape(id)} <span class="sv-account-muted">(no account has this handle now)</span>`, actions: [] };
-        const userPage = data.pages[`${data.userPages}/${profile.handle}`];
+        // Auth says where user pages live; a page at that path in another vault is an ordinary page.
+        const userPages = userPageLocation();
+        const userPage = userPages.vault === vault ? data.pages[`${userPages.folder}/${profile.handle}`] : undefined;
         const handle = userPage ? `<a href="${escape(`${site}${userPage.href}`)}">@${escape(profile.handle)}</a>` : `@${escape(profile.handle)}`;
         return { what: `${handle} <span class="sv-account-muted">${escape(profile.name)}</span>`, actions: [] };
       }
