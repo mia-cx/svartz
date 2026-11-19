@@ -174,20 +174,24 @@ function sent(dialog: HTMLDialogElement, prefix: string): void {
 /**
  * Open the dialog for `choices`, or the sign-in dialog when nobody is signed in. Opening a modal hides every auto
  * popover, such as the comment card the opener sits in; they reopen, outermost first, when the dialog closes, and focus
- * goes back to the opener.
+ * goes back to the opener. Opens nothing once `live` says the mount that asked has been cleaned up.
  */
-async function openReport(choices: readonly Choice[], opener: HTMLElement, endpoint: string, me: string): Promise<HTMLDialogElement | undefined> {
+async function openReport(
+  choices: readonly Choice[], opener: HTMLElement, endpoint: string, me: string, live: () => boolean,
+): Promise<HTMLDialogElement | undefined> {
   const showing = () => document.querySelector("dialog.sv-moderation-dialog[open]") !== null;
   if (showing()) return undefined;
   const signedIn = await fetch(me, { headers: { accept: "application/json" } })
     .then(async (response) => !response.ok || await response.json() !== null)
     // Unsure: let the server decide, which asks a signed-out reader to sign in.
     .catch(() => true);
+  // The page may have gone while this asked who's signed in.
+  if (!live()) return undefined;
   if (!signedIn) {
     openSignIn();
     return undefined;
   }
-  // A second click may have opened one while this asked who's signed in.
+  // A second click may have opened one meanwhile.
   if (showing()) return undefined;
   const popovers: HTMLElement[] = [];
   for (let node = opener.closest<HTMLElement>(":popover-open"); node; node = node.parentElement?.closest<HTMLElement>(":popover-open") ?? null) {
@@ -237,8 +241,9 @@ export function mount(_pathname: string, { mountPath, userPages }: BrowserOption
   const endpoint = `${home}/_svartz/${PLUGIN_ID}`;
   const me = `${home}/_svartz/auth/me/`;
   let shown: HTMLDialogElement | undefined;
+  let live = true;
   const open = (choices: readonly Choice[], opener: HTMLElement) =>
-    void openReport(choices, opener, endpoint, me)
+    void openReport(choices, opener, endpoint, me, () => live)
       .then((dialog) => shown = dialog ?? shown)
       .catch((cause: unknown) => console.error("[svartz:moderation] couldn't open the report dialog", cause));
 
@@ -273,6 +278,7 @@ export function mount(_pathname: string, { mountPath, userPages }: BrowserOption
   }
 
   return () => {
+    live = false;
     document.removeEventListener("click", onClick);
     if (mountedFor) scoped.delete(mountedFor);
     action?.remove();

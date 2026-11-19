@@ -145,6 +145,29 @@ describe("the Report action", () => {
     expect(document.querySelector('[data-svartz-region="page-actions"]')?.children).toHaveLength(0);
     expect(document.querySelector("dialog")).toBeNull();
   });
+
+  // Proves a dialog still on its way when the page goes never opens over the next page.
+  it("opens no dialog once the page has gone while it asked who's signed in", async () => {
+    note("garden");
+    const realFetch = window.fetch;
+    let answer!: () => void;
+    const answered = new Promise<void>((resolve) => answer = resolve);
+    window.fetch = async (input, init) => {
+      if (String(input instanceof Request ? input.url : input).endsWith("/_svartz/auth/me/")) await answered;
+      return realFetch(input, init);
+    };
+    try {
+      await page.getByRole("button", { name: "Report" }).click();
+      for (const cleanup of cleanups.splice(0)) cleanup();
+
+      answer();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      expect(document.querySelector("dialog")).toBeNull();
+    } finally {
+      window.fetch = realFetch;
+    }
+  });
 });
 
 describe("the Reports panel", () => {
