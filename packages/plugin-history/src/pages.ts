@@ -68,7 +68,7 @@ export function historyPage(
     const diff = `${links.history}?${new URLSearchParams({ ...(before ? { from: before } : {}), to: change.sha })}`;
     const label = plainWhen(change.at);
     return `<li class="sv-history-row">
-<span class="sv-history-pick"><input type="radio" name="from" value="${change.sha}" aria-label="Compare from ${escape(label)}"${index === 1 ? " checked" : ""}><input type="radio" name="to" value="${change.sha}" aria-label="Compare to ${escape(label)}"${index === 0 ? " checked" : ""}></span>
+<span class="sv-history-pick"><input type="radio" name="from" value="${escape(change.sha)}" aria-label="Compare from ${escape(label)}"${index === 1 ? " checked" : ""}><input type="radio" name="to" value="${escape(change.sha)}" aria-label="Compare to ${escape(label)}"${index === 0 ? " checked" : ""}></span>
 <span class="sv-history-what"><a href="${escape(diff)}">${when(change.at)}</a> ${author(change.author)} ${summary(change.summary)}</span>
 </li>`;
   });
