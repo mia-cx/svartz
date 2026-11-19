@@ -41,7 +41,7 @@ import {
   type Mirror,
   type Statement,
 } from "./mirror";
-import { reconcile } from "./reconcile";
+import { POLL_INTERVAL_MS, reconcile } from "./reconcile";
 import { comment, deployment, integer, list, object, pullRequest, pushedCommit, review, text, workflowRun } from "./records";
 import { readBody } from "./request";
 
@@ -75,10 +75,8 @@ const CLOCK_SKEW_MS = 5 * 60_000;
 const MAX_ANCESTRY_CHECKS = 3;
 const encoder = new TextEncoder();
 
-/** Whether `signature` is `sha256=` and the HMAC-SHA256 of `body` with `secret`, compared in constant time. */
-async function signed(body: Uint8Array, signature: string | null, secret: string): Promise<boolean> {
-  const hex = signature?.match(SIGNATURE)?.[1];
-  if (!hex) return false;
+/** Whether `hex`, the digits of a `sha256=` signature, is the HMAC-SHA256 of `body` with `secret`, compared in constant time. */
+async function signed(body: Uint8Array, hex: string, secret: string): Promise<boolean> {
   const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const expected = new Uint8Array(await crypto.subtle.sign("HMAC", key, body as Uint8Array<ArrayBuffer>));
   let difference = 0;
@@ -152,11 +150,13 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     if (typeof secret !== "string" || !secret) {
       throw new SubmissionError("misconfigured", 503, `This site can't take GitHub's deliveries yet: its server has no ${options.webhookSecret.env} set.`);
     }
+    const badSignature = () => new SubmissionError("bad_signature", 401, "The delivery's signature doesn't match the webhook secret.");
+    // An unsigned request is refused before its body is read.
+    const signature = request.headers.get("x-hub-signature-256")?.match(SIGNATURE)?.[1];
+    if (!signature) throw badSignature();
     const body = await readBody(request, MAX_DELIVERY_BYTES);
     if (!body) throw new SubmissionError("too_large", 413, "The delivery is too large; the next poll reads it from GitHub instead.");
-    if (!await signed(body, request.headers.get("x-hub-signature-256"), secret)) {
-      throw new SubmissionError("bad_signature", 401, "The delivery's signature doesn't match the webhook secret.");
-    }
+    if (!await signed(body, signature, secret)) throw badSignature();
     const event = EVENTS[request.headers.get("x-github-event") ?? ""];
     // `ping` on setup, and events the mirror doesn't keep: accepted, so GitHub shows the hook working.
     if (!event) return new Response(null, { status: 202 });
@@ -220,9 +220,16 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     return { status: reply(latest === "pending" ? "building" : latest === "failure" ? "failed" : "committed"), unchecked };
   }
 
+  /** When this worker last asked GitHub about each `<commit>...<head>`, so a failing answer isn't asked again on every read. */
+  const asked = new Map<string, number>();
+
   /** Ask GitHub whether each of `heads` contains `commit`, and remember what it says. */
   async function checkAncestry(mirror: Mirror, token: string, commit: string, heads: readonly string[]): Promise<void> {
-    for (const head of heads.slice(0, MAX_ANCESTRY_CHECKS)) {
+    const now = Date.now();
+    for (const [pair, at] of asked) if (at <= now - POLL_INTERVAL_MS) asked.delete(pair);
+    const fresh = heads.filter((head) => !asked.has(`${commit}...${head}`)).slice(0, MAX_ANCESTRY_CHECKS);
+    for (const head of fresh) {
+      asked.set(`${commit}...${head}`, now);
       const response = await requestGitHub(token, "GET", `/repos/${setup.repo}/compare/${commit}...${head}?per_page=1`);
       // An unknown commit, as after a force push, contains nothing; any other failure is asked again later.
       if (response.status === 404) await writeAncestry(mirror, commit, head, false);
