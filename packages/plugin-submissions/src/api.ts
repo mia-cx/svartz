@@ -9,9 +9,24 @@ export const MAX_MARKDOWN_BYTES = 512 * 1024;
 /** Longest "what changed" note, in characters. */
 export const MAX_NOTE_LENGTH = 2000;
 
+/**
+ * Where a save goes for the reader asking: `commit` straight to the branch, so it goes live with the next deploy, or
+ * `pull-request`, for review. `null` when they can't save there as they are now, such as a guest who must sign in.
+ */
+export type Destination = "commit" | "pull-request" | null;
+
 /** `GET <endpoint>/source/?page=<href>` answers this. */
 export interface SourceResponse {
   readonly markdown: string;
+  /** The source's git blob SHA, which an edit sends back as {@link EditRequest.sha}. */
+  readonly sha: string;
+  /** Where saving an edit of this page goes for this reader. */
+  readonly destination: Destination;
+}
+
+/** `GET <endpoint>/destination/?folder=<folder>&title=<title>` answers this for a new page. */
+export interface DestinationResponse {
+  readonly destination: Destination;
 }
 
 /**
@@ -51,6 +66,11 @@ export interface EditRequest {
   readonly page: string;
   readonly markdown: string;
   readonly note?: string;
+  /**
+   * The blob SHA of the source the edit was written against, from {@link SourceResponse.sha}. Required for a save that
+   * commits: when the branch's file has another, the save opens a pull request instead.
+   */
+  readonly sha?: string;
   /** The Turnstile widget's token; required when the site configures `guard.turnstile`. */
   readonly turnstileToken?: string;
 }
@@ -72,10 +92,20 @@ export interface NewPageRequest {
 }
 
 /** `POST <endpoint>/edit/` and `POST <endpoint>/new/` answer 201 with this. */
-export interface EditResponse {
-  readonly url: string;
-  readonly number: number;
-}
+/**
+ * Why a save that was to commit opened a pull request instead:
+ * - `changed`: the file changed on the branch since the editor loaded it, or a new page's path was taken meanwhile.
+ * - `protected`: GitHub's rules for the branch refused the commit, such as a rule that it takes only pull requests.
+ * - `route`: the note asks for an address, by its slug or an alias, that the account may not commit to, or that a
+ *   page it may not commit to holds.
+ */
+export type ReviewReason = "changed" | "protected" | "route";
+
+export type EditResponse =
+  /** The save opened pull request `number`; `reason` when it was to commit instead. */
+  | { readonly kind: "pull-request"; readonly url: string; readonly number: number; readonly reason?: ReviewReason }
+  /** The save committed `sha` to the branch; the site shows it once the next deploy finishes. */
+  | { readonly kind: "commit"; readonly url: string; readonly sha: string };
 
 /** Every failure answers with this JSON body; `message` is written for the reader. */
 export interface ErrorResponse {

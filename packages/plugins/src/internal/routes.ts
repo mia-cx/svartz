@@ -36,7 +36,7 @@ export function pathRoute(path: string): string {
 }
 
 /** The route a note asks for before {@link allocateRoutes} settles clashes: its frontmatter `slug`, else its filename's. */
-export function requestedSlug(file: ProcessedFile): string {
+export function requestedSlug(file: Pick<ProcessedFile, "path" | "frontmatter">): string {
   const source = fileToSlug(file.path);
   if (!file.frontmatter || !("slug" in file.frontmatter)) return routeSlug(source);
 
@@ -118,6 +118,21 @@ export function allocateRoutes(
   }
 }
 
+/**
+ * The routes a note's alternate names ask to redirect from, below the vault's mount: `aliases: [Old Name]` asks for
+ * `old-name`. {@link allocateRedirects} grants those still free.
+ */
+export function alternateRoutes(frontmatter: Record<string, unknown> | undefined, aliasesField = "aliases"): string[] {
+  const routes: string[] = [];
+  for (const value of alternateNames(frontmatter, aliasesField)) {
+    const path = value.replace(/^\/+|\/+$/g, "");
+    if (path.split("/").some((segment) => segment === "." || segment === "..") || /^[a-z]+:/i.test(path)) continue;
+    const slug = routeSlug(path.split("/").map(normalizeSlugSegment).join("/"));
+    if (slug) routes.push(slug);
+  }
+  return routes;
+}
+
 /** Quartz alternate names are redirects, and only free routes can redirect. */
 export function allocateRedirects(
   files: readonly ProcessedFile[],
@@ -130,11 +145,7 @@ export function allocateRedirects(
   const redirects: Record<string, string> = {};
 
   for (const file of [...files].filter(isNote).sort((a, b) => a.path.localeCompare(b.path))) {
-    for (const value of alternateNames(file.frontmatter, aliasesField)) {
-      const path = value.replace(/^\/+|\/+$/g, "");
-      if (path.split("/").some((segment) => segment === "." || segment === "..") || /^[a-z]+:/i.test(path)) continue;
-      const slug = routeSlug(path.split("/").map(normalizeSlugSegment).join("/"));
-      if (!slug) continue;
+    for (const slug of alternateRoutes(file.frontmatter, aliasesField)) {
       const href = routeHref(slug, mountPath);
       if (occupied.has(href)) continue;
       redirects[href] = routeHref(file.slug, mountPath);

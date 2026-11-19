@@ -1,6 +1,6 @@
 # @svartz/plugin-submissions
 
-Readers edit a page, or write a new one, from your Svartz site, and the site opens a pull request on your GitHub repository. You review it like any other pull request: merge to accept, close to decline, push to the branch to change it.
+Readers edit a page, or write a new one, from your Svartz site, and the site opens a pull request on your GitHub repository. You review it like any other pull request: merge to accept, close to decline, push to the branch to change it. On a site with [accounts](#modes), trusted editors' saves commit straight to the branch instead.
 
 ## Set up
 
@@ -53,14 +53,15 @@ The server signs a short-lived token with the key, finds the App's installation 
 | `vaultRoot` | read from git | The vault folder's path inside the repository, such as `"content"`. Set it when the build doesn't run in the repository's checkout. |
 | `labels` | none | Labels every pull request gets. |
 | `token` | `{ env: "SVARTZ_GITHUB_TOKEN" }` | The server environment variable that holds the token. |
-| `app` | none | `{ id, privateKey: { env: "NAME" }, installation? }`: open pull requests as a [GitHub App](#github-app) instead of with `token`. Set one or the other. |
+| `app` | none | `{ id, privateKey: { env: "NAME" }, installation? }`: open pull requests as a [GitHub App](#github-app) instead of with `token`. Set one or the other. Commits need an App. |
+| `mode` | `"permission"` | Which saves commit straight to the branch: `"permission"`, `"commit"` or `"pull-request"`. See [Modes](#modes). |
 | `signIn.required` | `false` | Only signed-in readers may submit. See [Sign-in](#sign-in). |
 | `guard.turnstile` | none | `{ siteKey, secret: { env: "NAME" } }`: the editor shows a [Turnstile](#turnstile) challenge and the server verifies it. Skipped when sign-in is required. |
 | `guard.rateLimit` | `{ limit: 10, period: 3600 }` | Submissions allowed per `period` seconds, per signed-in reader or per IP. See [Rate limit](#rate-limit). |
 
 ## What readers see
 
-Every published Markdown note gets an **Edit** action beside Copy page. It opens a panel with the page's Markdown source, frontmatter included, and a **What changed** field. **Open pull request** submits it, and the panel links the new pull request.
+Every published Markdown note gets an **Edit** action beside Copy page. It opens a panel with the page's Markdown source, frontmatter included, and a **What changed** field. **Open pull request** submits it, and the panel links the new pull request. Beside the button, the panel says where the edit goes: "Goes to review before it goes live." When the reader's save will [commit](#modes), the button reads **Publish** and the line "Goes live once the site rebuilds."; once saved, the panel says "Published. It goes live once the site rebuilds." and links the commit.
 
 ### The editor
 
@@ -114,6 +115,67 @@ The server then refuses anonymous edits and new pages with 401 `sign_in_required
 
 Readers can open the editor and write while signed out. When they send, the editor saves their [draft](#drafts) and opens the sign-in dialog. Signing in brings them back to the same page, where the editor reopens at once with their source, note, title and section as they left them, ready to send. If the page changed on the site meanwhile, the editor offers the draft with the warning instead. If the page's source fails to load then, the draft reopens the next time the editor opens on the page. If the browser blocks storage, the editor says so and asks them to copy their changes before signing in.
 
+## Modes
+
+On a site with [accounts](../../docs/auth.md) (a D1 database bound as `SVARTZ_DB`), the server decides for every save, on the page it writes, whether it commits straight to the branch or opens a pull request. Without accounts, every save opens a pull request, under the sign-in and guard options above.
+
+| `mode` | A save commits when | Otherwise |
+| --- | --- | --- |
+| `"permission"` (default) | the account holds `submissions:commits:write` on the page, and `app` is set | it opens a pull request when the reader holds `submissions:pull-requests:write` on the page, and is refused when they don't |
+| `"commit"` | the account holds `submissions:commits:write` on the page | it is refused, so nobody's edit waits in review. A solo site whose owner is an admin needs nothing else. |
+| `"pull-request"` | never | as `"permission"` |
+
+A refused guest gets 401 `sign_in_required`, so the editor offers sign-in; a refused account gets 403 `not_allowed`.
+
+The plugin declares four permissions, which admins grant on the site, a vault, a folder or a page (see [Permissions](../../docs/auth.md#permissions)):
+
+| Permission | Allows | By default |
+| --- | --- | --- |
+| `submissions:pull-requests:write` | Sending an edit or a new page for review | Signed-in readers, and guests when [Turnstile](#turnstile) is on |
+| `submissions:commits:write` | Saving straight to the repository | Admins only |
+| `submissions:reviews:write` | Commenting on, reviewing, merging and closing submissions | Admins only |
+| `submissions:pull-requests:read` | Seeing other people's submissions | Admins only |
+
+Admins hold every permission, and each account holds every one on its own `users/<handle>` page. Vaults that share accounts must configure Turnstile alike, since the guest default comes from it and is shared.
+
+### What commits need
+
+Commits are made by a [GitHub App](#github-app): with `token` alone, every save opens a pull request. `mode: "commit"` without `app`, or on a vault without the `auth` plugin, fails the build. The build can't ask GitHub what the App may do, so give it what commits need before turning them on:
+
+- **Contents** set to *Read and write*, as pull requests already need.
+- If the branch is protected, the App allowed to push to it: under the branch's protection rule or ruleset, add the App to who may bypass required pull requests. A branch that requires a review for every change takes edits as pull requests only; use `mode: "pull-request"`.
+- No rule requiring signed commits on the branch. Commits name the account as their author, and GitHub signs no commit that names its own author, so they are unsigned and such a branch refuses them.
+
+Without Contents write, the first save that commits says GitHub refused the site's access. When GitHub refuses a commit for a rule on the branch, the save opens a pull request instead, answers `reason: "protected"`, and the server logs what GitHub said. The editor says "The repository's rules don't let the site publish your edit directly, so it went to review as pull request #42."
+
+### How a commit lands
+
+The editor sends the blob SHA of the source it loaded. The server reads where the branch points, and commits only when the file there still has that SHA, or, for a new page, when nothing is at its path. Otherwise it opens a pull request from the build commit instead, answers `reason: "changed"`, and the editor says "This page changed since you opened it, so your edit went to review as pull request #42." It never overwrites. The commit's parent is the commit it checked, and the branch only moves forward to it, so a save that lands in between makes GitHub refuse; the server then checks again on the new tip.
+
+A restored draft written against an older source sends no SHA the branch could have, so it opens a pull request.
+
+A note's frontmatter decides addresses too: its `slug` names its own, and its aliases (`alias`, the field `frontmatter.aliasesField` names, and `permalink`) ask for addresses that redirect to it. The server reads the saved Markdown as the build will, and commits only when the account holds `submissions:commits:write` on every address the note asks for that the page doesn't hold already, and on every other page holding one, which the note would move or take a redirect from. Otherwise, or when the build would refuse the slug, the save opens a pull request, answers `reason: "route"`, and the editor says "Your edit gives this page an address you can't publish to, so it went to review as pull request #42." An account that may edit only its own `users/<handle>` page can't take another user's address by giving its page `slug: <their handle>`.
+
+Each commit is authored as the account and committed by the App's bot user:
+
+```
+Edit content/guide.md
+
+Added the time it takes.
+
+Co-authored-by: Ada Lovelace <583231+ada@users.noreply.github.com>
+Svartz-Account: 0b9f6c1e-5d2a-4f8e-9b31-7c4d2e6a8f10
+```
+
+- **Author**: the account's display name and `<handle>@users.noreply.<site host>`, such as `ada@users.noreply.wiki.example`.
+- **Committer**: the App's bot user, `<app slug>[bot]` and `<bot user id>+<app slug>[bot]@users.noreply.github.com`. The server looks both up once per worker, with `GET /app` and `GET /users/<app slug>[bot]`. The commit is unsigned.
+- **`Co-authored-by`**: the account's linked GitHub account, by its noreply address, so GitHub credits it. Left out when the account has no GitHub sign-in linked.
+- **`Svartz-Account`**: the account's id, so history can map the commit back to the account whatever its handle becomes.
+
+The trailers are always the message's last paragraph, and names lose line breaks and angle brackets, so neither a display name nor the reader's note can add a trailer.
+
+The site shows the edit once the deploy that includes the commit finishes.
+
 ## Guard
 
 Every edit and new page passes the guard before the server calls GitHub.
@@ -156,9 +218,10 @@ The plugin answers under `<base><mount>/_svartz/submissions/`. Failures answer `
 
 | Request | Answer |
 | --- | --- |
-| `GET source/?page=/guides/setup/` | `{ "markdown": "…" }`, the note at the build commit. |
+| `GET source/?page=/guides/setup/` | `{ "markdown": "…", "sha": "…", "destination": "commit" }`: the note at the build commit, its blob SHA, and where the reader's edit would go, `"commit"`, `"pull-request"`, or `null` when they may not save it as they are. |
+| `GET destination/?folder=People&title=Ada%20Lovelace` | `{ "destination": … }`, as for `source/`, for a new page. |
 | `GET links/` | `{ "notes": [{ "link", "title", "slug", "path", "href", "aliases"? }], "linkResolution", "mountPath", "tagsRoute", "attachments" }`: the published notes the editor suggests after `[[` and the Split preview links to, from the build's index, with how the vault resolves and routes links. `link` is what goes between the brackets. `attachments` holds the vault paths of the attachments the site publishes, which public notes reference; a file only protected notes use stays out. |
-| `POST edit/` with `{ "submissionId", "page", "markdown", "note"?, "turnstileToken"? }` | 201 `{ "url", "number" }` of the pull request, new or opened by an earlier attempt with the same `submissionId`. 401 `sign_in_required` when the reader is anonymous and sign-in is required or their address isn't visible; 403 when Turnstile is missing or refused; 429 with `retryAfter` past the rate limit; 503 when Cloudflare, the rate limiter or GitHub can't be reached. |
+| `POST edit/` with `{ "submissionId", "page", "markdown", "note"?, "sha"?, "turnstileToken"? }` | 201 `{ "kind": "pull-request", "url", "number", "reason"? }` of the pull request, new or opened by an earlier attempt with the same `submissionId`, or `{ "kind": "commit", "url", "sha" }` of the commit. `sha` is `source/`'s, and a save that would commit without it is refused with 400. 401 `sign_in_required` when the reader is anonymous and sign-in is required, their address isn't visible, or guests may not save; 403 `not_allowed` when their account may not, and when Turnstile is missing or refused; 429 with `retryAfter` past the rate limit; 503 when Cloudflare, the rate limiter or GitHub can't be reached. |
 | `POST new/` with `{ "submissionId", "folder", "title", "markdown", "note"?, "turnstileToken"? }` | As `edit/`. Also 400 `not_a_section` or `invalid_title`, and 409 `exists` when the title is taken, with `existing` set to the clashing page's public URL unless that page is hidden. |
 
 `page` is the note's URL path below the deployment base, as it appears in the site's index. `folder` is a section's path inside the vault, `""` for its top level. `submissionId` is 32 lowercase hex digits the client picks at random and repeats on every retry of the same submission.

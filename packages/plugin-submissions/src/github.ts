@@ -1,9 +1,10 @@
 /**
- * The PR writer: reads a note's source at the build commit and opens a submission as a pull request through
- * GitHub's REST and Git Data APIs. Uses `fetch` only, so it runs on Workers and Node alike.
+ * Every GitHub call: reads a note's source at the build commit, and writes a submission through GitHub's REST and Git
+ * Data APIs, as a pull request or as a commit straight to the branch. Uses `fetch` only, so it runs on Workers and
+ * Node alike.
  */
 import type { Identity, ProviderId } from "@svartz/auth/server";
-import type { EditResponse } from "./api";
+import type { ReviewReason } from "./api";
 import { SubmissionError } from "./errors";
 
 const API = "https://api.github.com";
@@ -120,8 +121,24 @@ function encodePath(path: string): string {
   return path.split("/").map(encodeURIComponent).join("/");
 }
 
-/** A note's source at the build commit, byte for byte: frontmatter, line endings and a byte-order mark included. */
-export async function readSource(target: GitHubTarget, path: string): Promise<string> {
+const encoder = new TextEncoder();
+
+/** The git blob SHA of `content`, as GitHub stores it: the SHA-1 of `blob <bytes>\0` and the bytes. Text is UTF-8. */
+export async function blobSha(content: string | Uint8Array): Promise<string> {
+  const bytes = typeof content === "string" ? encoder.encode(content) : content;
+  const header = encoder.encode(`blob ${bytes.byteLength}\0`);
+  const object = new Uint8Array(header.byteLength + bytes.byteLength);
+  object.set(header);
+  object.set(bytes, header.byteLength);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", object));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * A note's source at the build commit, byte for byte (frontmatter, line endings and a byte-order mark included), and
+ * its blob SHA, which a commit checks the branch's file against.
+ */
+export async function readSource(target: GitHubTarget, path: string): Promise<{ markdown: string; sha: string }> {
   const response = await send(
     target, "GET", `/contents/${encodePath(path)}?ref=${target.commit}`, undefined, "application/vnd.github.raw",
   );
@@ -133,8 +150,9 @@ export async function readSource(target: GitHubTarget, path: string): Promise<st
     );
   }
   if (!response.ok) throw await failure(target, response);
+  const bytes = new Uint8Array(await response.arrayBuffer());
   // `ignoreBOM` keeps a byte-order mark that `response.text()` would strip.
-  return new TextDecoder("utf-8", { ignoreBOM: true }).decode(await response.arrayBuffer());
+  return { markdown: new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes), sha: await blobSha(bytes) };
 }
 
 /** `svartz/submission/edit/guides-setup-<id>`: the kind, the page and the submission's id. */
@@ -164,17 +182,31 @@ function credit(submitter: Identity | null): string {
   return `by ${profile ? `[${name}](<${profile}>)` : name} (signed in with ${PROVIDER_NAMES[submitter.provider]})`;
 }
 
-/**
- * The commit's author for a GitHub sign-in: the account's noreply address, so GitHub links the commit to it. Other
- * sign-ins have no GitHub account to link; their commit keeps the site's credentials as author.
- */
-function commitAuthor(submitter: Identity | null): { name: string; email: string } | undefined {
-  if (submitter?.provider !== "github" || !submitter.handle) return undefined;
-  const id = submitter.id.slice("github:".length);
-  // Git refuses angle brackets and line breaks in a name.
-  const name = submitter.name.replace(/[<>\u0000-\u001f\u007f]/g, "").trim() || submitter.handle;
-  return { name, email: `${id}+${submitter.handle}@users.noreply.github.com` };
+/** Someone as git names them: `Ada Lovelace <ada@example.com>`. */
+export interface Person {
+  readonly name: string;
+  readonly email: string;
 }
+
+/**
+ * A reader-chosen name as git takes it. Angle brackets would end it early, and a line break would start a line of its
+ * own in the commit message, where it could pass for a trailer.
+ */
+const gitName = (name: string) => name.replace(/[<>]/g, "").replace(/[\s\p{Cc}]+/gu, " ").trim();
+
+/** A GitHub identity's noreply address, `583231+ada@users.noreply.github.com`, which GitHub links to the account. */
+function githubNoreply(identity: Identity): Person | undefined {
+  const id = identity.id.slice("github:".length);
+  const login = identity.handle ?? "";
+  if (identity.provider !== "github" || !/^\d+$/.test(id) || !/^[A-Za-z0-9-]+$/.test(login)) return undefined;
+  return { name: gitName(identity.name) || login, email: `${id}+${login}@users.noreply.github.com` };
+}
+
+/**
+ * A pull request commit's author for a GitHub sign-in: the account's noreply address, so GitHub links the commit to
+ * it. Other sign-ins have no GitHub account to link; their commit keeps the site's credentials as author.
+ */
+const commitAuthor = (submitter: Identity | null) => submitter ? githubNoreply(submitter) : undefined;
 
 function pullRequestBody(submission: Submission, commit: string): string {
   const note = submission.note.trim();
@@ -219,7 +251,7 @@ async function writeBranch(target: GitHubTarget, branch: string, sha: string): P
  * attempt at the same submission may be opening one from that branch, and no lookup can rule that out race-free.
  * A refused attempt's branch stays, and a retry reuses it.
  */
-export async function openSubmission(target: GitHubTarget, submission: Submission): Promise<EditResponse> {
+export async function openSubmission(target: GitHubTarget, submission: Submission): Promise<{ url: string; number: number }> {
   const branch = submissionBranch(submission);
   const pull = await openPull(target, branch) ?? await createPull(target, submission, branch);
   // The pull request exists now: a label failure must not read as a failed submission the reader would resend.
@@ -229,6 +261,25 @@ export async function openSubmission(target: GitHubTarget, submission: Submissio
     });
   }
   return { url: pull.html_url, number: pull.number };
+}
+
+const unchanged = () => new SubmissionError("unchanged", 422, "Nothing has changed yet. Edit the page, then send it.");
+
+/** `Edit content/guide.md` or `Add content/People/Ada Lovelace.md`: the commit's and the pull request's title. */
+const commitTitle = ({ kind, path }: Submission) => `${kind === "edit" ? "Edit" : "Add"} ${path}`;
+
+/** The branch submissions target: the configured one, or the repository's default. */
+async function baseBranch(target: GitHubTarget): Promise<string> {
+  return target.branch ?? (await call<{ default_branch: string }>(target, "GET", "")).default_branch;
+}
+
+/** The tree `base` with the submission's note written at its path; answers the new tree's SHA. */
+async function writeTree(target: GitHubTarget, base: string, submission: Submission): Promise<string> {
+  const tree = await call<{ sha: string }>(target, "POST", "/git/trees", {
+    base_tree: base,
+    tree: [{ path: submission.path, mode: "100644", type: "blob", content: submission.markdown }],
+  });
+  return tree.sha;
 }
 
 /** Whether anything is at `path` in the build commit. */
@@ -244,22 +295,17 @@ async function createPull(target: GitHubTarget, submission: Submission, branch: 
   if (submission.kind === "new" && await existsAtBuild(target, submission.path)) {
     throw new SubmissionError("exists", 409, "A page with this title already exists. Choose another title.");
   }
-  const base = target.branch ?? (await call<{ default_branch: string }>(target, "GET", "")).default_branch;
+  const base = await baseBranch(target);
   const parent = await call<{ tree: { sha: string } }>(target, "GET", `/git/commits/${target.commit}`);
-  const tree = await call<{ sha: string }>(target, "POST", "/git/trees", {
-    base_tree: parent.tree.sha,
-    tree: [{ path: submission.path, mode: "100644", type: "blob", content: submission.markdown }],
-  });
-  if (tree.sha === parent.tree.sha) {
-    throw new SubmissionError("unchanged", 422, "Nothing has changed yet. Edit the page, then open the pull request.");
-  }
+  const tree = await writeTree(target, parent.tree.sha, submission);
+  if (tree === parent.tree.sha) throw unchanged();
 
-  const title = `${submission.kind === "edit" ? "Edit" : "Add"} ${submission.path}`;
+  const title = commitTitle(submission);
   const note = submission.note.trim();
   const author = commitAuthor(submission.submitter);
   const commit = await call<{ sha: string }>(target, "POST", "/git/commits", {
     message: note ? `${title}\n\n${note}` : title,
-    tree: tree.sha,
+    tree,
     parents: [target.commit],
     ...(author ? { author } : {}),
   });
@@ -273,4 +319,118 @@ async function createPull(target: GitHubTarget, submission: Submission, branch: 
     if (pull) return pull;
   }
   throw await failure(target, response);
+}
+
+/** Who a direct commit is by: the account behind the save, and its linked GitHub account when it has one. */
+export interface Attribution {
+  /** The account's stable id, recorded in the {@link ACCOUNT_TRAILER} so history maps the commit back to it. */
+  readonly accountId: string;
+  /** The account's display name. */
+  readonly name: string;
+  readonly handle: string;
+  /** The site's host name. The commit's author is `<handle>@users.noreply.<host>`. */
+  readonly host: string;
+  /** The account's linked GitHub identity, credited as co-author so GitHub links the commit to that account. */
+  readonly github?: Identity;
+  /** The App's bot user, named as the commit's committer. */
+  readonly committer: Person;
+}
+
+/** The trailer naming the account behind a direct commit: `Svartz-Account: <account id>`. */
+export const ACCOUNT_TRAILER = "Svartz-Account";
+
+/** Tries at moving the branch before the reader is told to try again, while other saves keep moving it first. */
+const COMMIT_ATTEMPTS = 3;
+
+/** What {@link commitSubmission} did. */
+export type CommitResult =
+  | { readonly kind: "commit"; readonly url: string; readonly sha: string }
+  /**
+   * Nothing, so the save goes to review: `changed` when the branch's file isn't the one the reader loaded, or a new
+   * page's path is taken; `protected` when GitHub's rules for the branch refuse the commit.
+   */
+  | { readonly kind: "review"; readonly reason: Extract<ReviewReason, "changed" | "protected"> };
+
+/**
+ * The commit message: the title, the reader's note, then the trailers. The trailers are the message's last paragraph,
+ * where git and GitHub read them, so lines in the note that look like trailers never count as any.
+ */
+function commitMessage(submission: Submission, attribution: Attribution): string {
+  const coAuthor = attribution.github && githubNoreply(attribution.github);
+  const trailers = [
+    ...(coAuthor ? [`Co-authored-by: ${coAuthor.name} <${coAuthor.email}>`] : []),
+    `${ACCOUNT_TRAILER}: ${attribution.accountId}`,
+  ];
+  return [commitTitle(submission), submission.note.trim(), trailers.join("\n")].filter(Boolean).join("\n\n");
+}
+
+/** The blob SHA of the file at `path` in commit `ref`; `undefined` when there is none, and `""` for anything but a file. */
+async function blobAt(target: GitHubTarget, path: string, ref: string): Promise<string | undefined> {
+  const response = await send(target, "GET", `/contents/${encodePath(path)}?ref=${ref}`);
+  if (response.status === 404) return undefined;
+  if (!response.ok) throw await failure(target, response);
+  const body = await response.json() as { type?: unknown; sha?: unknown } | unknown[];
+  // A folder answers its entries.
+  return !Array.isArray(body) && body.type === "file" && typeof body.sha === "string" ? body.sha : "";
+}
+
+/** The latest commit that touched `path` in the history of commit `head`. */
+async function latestCommit(target: GitHubTarget, head: string, path: string): Promise<CommitResult> {
+  const query = new URLSearchParams({ sha: head, path, per_page: "1" });
+  const [latest] = await call<Array<{ sha: string; html_url: string }>>(target, "GET", `/commits?${query}`);
+  return latest ? { kind: "commit", url: latest.html_url, sha: latest.sha } : { kind: "review", reason: "changed" };
+}
+
+/**
+ * Commit the submission straight to the branch through the Git Data API, authored as `attribution`'s account and
+ * committed as its App's bot user. GitHub signs no commit that names its own author, so the commit is unsigned.
+ * `loaded` is the blob SHA of the file the reader edited, and `undefined` for a new page.
+ *
+ * Never overwrites: the branch's file must still be `loaded`, or for a new page absent, or nothing is written and the
+ * answer is `changed`, for the caller to open a pull request instead. The commit's parent is the head that check read,
+ * and the branch moves only forward to it, so a save landing in between makes GitHub refuse the move; the check then
+ * runs again on the new head. When GitHub refuses the move while the head stays put, a rule for the branch refused it,
+ * such as one requiring pull requests or signed commits, and the answer is `protected`. A retry whose content the
+ * branch already holds, as after a lost answer, answers the latest commit to the file instead of committing again.
+ */
+export async function commitSubmission(
+  target: GitHubTarget,
+  submission: Submission,
+  loaded: string | undefined,
+  attribution: Attribution,
+): Promise<CommitResult> {
+  const wanted = await blobSha(submission.markdown);
+  if (wanted === loaded) throw unchanged();
+  const branch = await baseBranch(target);
+  const ref = `/git/refs/heads/${encodePath(branch)}`;
+  const author = { name: gitName(attribution.name) || attribution.handle, email: `${attribution.handle}@users.noreply.${attribution.host}` };
+  let refused: { head: string; response: Response } | undefined;
+  for (let attempt = 0; attempt < COMMIT_ATTEMPTS; attempt++) {
+    const head = (await call<{ object: { sha: string } }>(target, "GET", `/git/ref/heads/${encodePath(branch)}`)).object.sha;
+    // Refused while the branch stayed put: not a race but a rule, such as branch protection.
+    if (refused?.head === head) {
+      const detail = await refused.response.json().then((body: { message?: unknown }) => body?.message, () => undefined);
+      console.warn(`[submissions] GitHub refused a commit to ${branch}${typeof detail === "string" ? ` (${detail})` : ""}; opening a pull request instead`);
+      return { kind: "review", reason: "protected" };
+    }
+    const current = await blobAt(target, submission.path, head);
+    // From the head checked: the branch may have moved on since, past someone else's change to the file.
+    if (current === wanted) return latestCommit(target, head, submission.path);
+    if (current !== loaded) return { kind: "review", reason: "changed" };
+    const parent = await call<{ tree: { sha: string } }>(target, "GET", `/git/commits/${head}`);
+    const tree = await writeTree(target, parent.tree.sha, submission);
+    // An author of its own means GitHub would record them as committer too, unless the commit names one.
+    const commit = await call<{ sha: string; html_url: string }>(target, "POST", "/git/commits", {
+      message: commitMessage(submission, attribution),
+      tree,
+      parents: [head],
+      author,
+      committer: attribution.committer,
+    });
+    const moved = await send(target, "PATCH", ref, { sha: commit.sha, force: false });
+    if (moved.ok) return { kind: "commit", url: commit.html_url, sha: commit.sha };
+    if (moved.status !== 422) throw await failure(target, moved);
+    refused = { head, response: moved };
+  }
+  throw new SubmissionError("branch_busy", 503, "Other edits are being saved right now. Try again in a moment.");
 }

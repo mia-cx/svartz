@@ -41,7 +41,7 @@ const vaultNotes = () => [
   note("guide.md"),
   note("people/Ada Lovelace.md"),
   note("people/ada lovelace.svx"),
-  note("people/Grace.md", { slug: "hopper" }),
+  note("people/Grace.md", { slug: "hopper", aliases: ["Amazing Grace"], permalink: "/admiral/" }),
   note("people/Diary.md", {}, { group: "family", hidden: true }),
   note("secret.svx", {}, { group: "team", hidden: false }),
   note("tools/Field Guide.svx"),
@@ -111,16 +111,22 @@ describe("submissions build", () => {
       },
       // Every route a note holds or asks for, whatever its type or protection; hidden notes' without a link.
       routes: {
-        guide: "/wiki/guide/",
-        "people/ada-lovelace": "/wiki/people/ada-lovelace/",
-        "people/ada-lovelace-2": "/wiki/people/ada-lovelace-2/",
-        "people/hopper": "/wiki/people/hopper/",
-        "people/grace": "/wiki/people/hopper/",
-        "people/diary": null,
-        secret: "/wiki/secret/",
-        "tools/field-guide": "/wiki/tools/field-guide/",
-        "private/plans": "/wiki/private/plans/",
+        guide: { slug: "guide", href: "/wiki/guide/" },
+        "people/ada-lovelace": { slug: "people/ada-lovelace", href: "/wiki/people/ada-lovelace/" },
+        "people/ada-lovelace-2": { slug: "people/ada-lovelace-2", href: "/wiki/people/ada-lovelace-2/" },
+        "people/hopper": { slug: "people/hopper", href: "/wiki/people/hopper/" },
+        "people/grace": { slug: "people/hopper", href: "/wiki/people/hopper/" },
+        "people/diary": { slug: "people/diary", href: null },
+        secret: { slug: "secret", href: "/wiki/secret/" },
+        "tools/field-guide": { slug: "tools/field-guide", href: "/wiki/tools/field-guide/" },
+        "private/plans": { slug: "private/plans", href: "/wiki/private/plans/" },
       },
+      // Every route an alias redirects from, read from the configured field and `alias` and `permalink`.
+      aliases: {
+        "amazing-grace": { slug: "people/hopper", href: "/wiki/people/hopper/" },
+        admiral: { slug: "people/hopper", href: "/wiki/people/hopper/" },
+      },
+      aliasesField: "aliases",
       // Protected notes' folders stay out: a new page there would be public.
       vaultRoot: "content",
       folders: ["", "people", "tools"],
@@ -354,5 +360,43 @@ describe("submissions credentials config", () => {
     ["an installation that isn't an ID", { app: { id: 1234567, privateKey, installation: "acme" } }, /app\.installation/],
   ])("refuses %s when the config loads", (_case, options, message) => {
     expect(() => submissions({ repo: "acme/wiki", ...options } as Parameters<typeof submissions>[0])).toThrow(message);
+  });
+});
+
+describe("submissions permissions and mode", () => {
+  const app = { id: 1234567, privateKey: { env: "SVARTZ_GITHUB_APP_KEY" } };
+  const signIn = auth({ providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } } });
+  const turnstile = { siteKey: "0x4AAAAAAAtest", secret: { env: "TURNSTILE_SECRET" } };
+  const defaults = (plugin: NormalizedSvartzPlugin) =>
+    Object.fromEntries((plugin.permissions ?? []).map(({ slug, defaults = {} }) => [slug, defaults]));
+
+  it("lets signed-in readers open pull requests, and guests only behind Turnstile, and nobody else anything by default", () => {
+    const others = {
+      "submissions:commits:write": {},
+      "submissions:reviews:write": {},
+      "submissions:pull-requests:read": {},
+    };
+    expect(defaults(submissions({ repo: "acme/wiki" }))).toEqual({ "submissions:pull-requests:write": { "signed-in": "allow" }, ...others });
+    expect(defaults(submissions({ repo: "acme/wiki", guard: { turnstile } })))
+      .toEqual({ "submissions:pull-requests:write": { guest: "allow", "signed-in": "allow" }, ...others });
+    // Required sign-in turns Turnstile off, so guests get nothing.
+    expect(defaults(submissions({ repo: "acme/wiki", signIn: { required: true }, guard: { turnstile } })))
+      .toEqual({ "submissions:pull-requests:write": { "signed-in": "allow" }, ...others });
+  });
+
+  it("decides by permission unless told otherwise", () => {
+    expect(submissions({ repo: "acme/wiki" }).server?.options).toMatchObject({ mode: "permission" });
+  });
+
+  it("refuses commit mode without a GitHub App to commit as, or on a vault without auth", () => {
+    expect(() => submissions({ repo: "acme/wiki", mode: "commit" })).toThrow(/mode "commit" needs a GitHub App/);
+    const plugin = submissions({ repo: "acme/wiki", mode: "commit", app });
+    const vault = (plugins: unknown[]) => ({ id: "wiki", mountPath: "/wiki", target: { type: "node" }, plugins: [...plugins, plugin] }) as unknown as ResolvedConfig;
+    expect(() => plugin.forVault!({ vault: vault([]), vaults: [vault([])] })).toThrow(/vault "wiki" uses submissions mode "commit" without auth/);
+    expect(plugin.forVault!({ vault: vault([signIn]), vaults: [vault([signIn])] })).toBe(plugin);
+  });
+
+  it("refuses a mode it doesn't know", () => {
+    expect(() => submissions({ repo: "acme/wiki", mode: "direct" } as unknown as Parameters<typeof submissions>[0])).toThrow(/mode must be/);
   });
 });

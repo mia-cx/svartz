@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import "../src/browser.css";
-import type { BrowserOptions } from "../src/api";
+import type { BrowserOptions, Destination } from "../src/api";
 import { mount } from "../src/browser";
 import { readDraft, storeDraft } from "../src/draft";
 import { mount as mountAuth } from "@svartz/auth/browser";
@@ -26,10 +26,23 @@ const NOTES = [
 ];
 const LINKS = { notes: NOTES, linkResolution: "shallowest", mountPath: "/wiki", tagsRoute: "tags", attachments: [] };
 
-/** The site's server: `source` for the guide's source, `links/` for the notes, and `edit` for the pull request answer. */
-function serve(edit: () => Response | Promise<Response>, source = () => Response.json({ markdown: SOURCE })) {
+/** {@link SOURCE}'s blob SHA, as the server reports it. */
+const SOURCE_SHA = "2b0f4c6e8a1d3f5b7c9e0a2c4e6f8b0d1f3a5c7e";
+
+/**
+ * The site's server: `source` for the guide's source, `links/` for the notes, `destination` for where a new page goes,
+ * and `edit` for the answer to a save.
+ */
+function serve(
+  edit: () => Response | Promise<Response>,
+  source = () => Response.json({ markdown: SOURCE, sha: SOURCE_SHA, destination: "pull-request" }),
+  destination = () => Response.json({ destination: "pull-request" }),
+) {
   const fetch = vi.fn(async (url: string, init?: RequestInit) =>
-    url.includes("/source/") ? source() : url.includes("/links/") ? Response.json(LINKS) : edit());
+    url.includes("/source/") ? source()
+      : url.includes("/links/") ? Response.json(LINKS)
+        : url.includes("/destination/") ? destination()
+          : edit());
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
@@ -65,10 +78,12 @@ afterEach(() => {
 });
 
 describe("Edit", () => {
-  it("submits the edited source and links the pull request", async () => {
-    const fetch = serve(() => Response.json({ url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
+  it("says the edit goes to review, submits it with the SHA of the source it loaded, and links the pull request", async () => {
+    const fetch = serve(() => Response.json({ kind: "pull-request", url: "https://github.com/acme/wiki/pull/7", number: 7 }, { status: 201 }));
     await openEditor();
     await page.getByLabelText("What changed").fill("Greet readers.");
+    await expect.element(page.getByRole("button", { name: "Open pull request" }))
+      .toHaveAccessibleDescription("Goes to review before it goes live.");
     await page.getByRole("button", { name: "Open pull request" }).click();
 
     await expect.element(page.getByRole("link", { name: "View pull request #7" }))
@@ -82,7 +97,39 @@ describe("Edit", () => {
       page: "/wiki/guide/",
       markdown: `${SOURCE}Welcome.`,
       note: "Greet readers.",
+      sha: SOURCE_SHA,
     });
+  });
+
+  it("says the edit goes live, publishes it, and links the commit", async () => {
+    const commit = "c0ffee5b2dbb2f1c4e7d3e4a5b9f0c1d2e3f4a5b";
+    serve(
+      () => Response.json({ kind: "commit", url: `https://github.com/acme/wiki/commit/${commit}`, sha: commit }, { status: 201 }),
+      () => Response.json({ markdown: SOURCE, sha: SOURCE_SHA, destination: "commit" }),
+    );
+    await openEditor();
+    await expect.element(page.getByRole("button", { name: "Publish" })).toHaveAccessibleDescription("Goes live once the site rebuilds.");
+    await page.getByRole("button", { name: "Publish" }).click();
+
+    await expect.element(page.getByRole("status")).toHaveTextContent("Published. It goes live once the site rebuilds.");
+    await expect.element(page.getByRole("link", { name: "View commit" }))
+      .toHaveAttribute("href", `https://github.com/acme/wiki/commit/${commit}`);
+  });
+
+  it.each([
+    ["changed", "This page changed since you opened it, so your edit went to review as pull request #7."],
+    ["protected", "The repository's rules don't let the site publish your edit directly, so it went to review as pull request #7."],
+    ["route", "Your edit gives this page an address you can't publish to, so it went to review as pull request #7."],
+  ])("says why an edit that was to go live went to review: %s", async (reason, sentence) => {
+    serve(
+      () => Response.json({ kind: "pull-request", url: "https://github.com/acme/wiki/pull/7", number: 7, reason }, { status: 201 }),
+      () => Response.json({ markdown: SOURCE, sha: SOURCE_SHA, destination: "commit" }),
+    );
+    await openEditor();
+    await page.getByRole("button", { name: "Publish" }).click();
+
+    await expect.element(page.getByRole("status")).toHaveTextContent(sentence);
+    await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
   });
 
   it("shows the server's message when the pull request can't be opened", async () => {
@@ -445,7 +492,7 @@ describe("New page", () => {
   }
 
   it("lists the published sections and opens a pull request adding the page", async () => {
-    const fetch = serve(() => Response.json({ url: "https://github.com/acme/wiki/pull/9", number: 9 }, { status: 201 }));
+    const fetch = serve(() => Response.json({ kind: "pull-request", url: "https://github.com/acme/wiki/pull/9", number: 9 }, { status: 201 }));
     await writeNewPage();
     await expect.element(page.getByRole("combobox", { name: "Section" })).toHaveTextContent("Top levelPeople");
     await page.getByLabelText("Why add this page").fill("She deserves one.");
@@ -453,8 +500,8 @@ describe("New page", () => {
 
     await expect.element(page.getByRole("link", { name: "View pull request #9" }))
       .toHaveAttribute("href", "https://github.com/acme/wiki/pull/9");
-    expect(fetch.mock.calls.map(([url]) => url)).toEqual(["/docs/wiki/_svartz/submissions/new/"]);
-    expect(JSON.parse(String(fetch.mock.calls[0]![1]!.body))).toEqual({
+    const [sent] = fetch.mock.calls.filter(([url]) => url.endsWith("/new/"));
+    expect(JSON.parse(String(sent![1]!.body))).toEqual({
       submissionId: expect.stringMatching(/^[0-9a-f]{32}$/),
       folder: "People",
       title: "Ada Lovelace",
@@ -505,8 +552,59 @@ describe("New page", () => {
     await page.getByRole("button", { name: "Open pull request" }).click();
     await expect.element(page.getByRole("link", { name: "View pull request #9" })).toBeVisible();
 
-    const [first, second] = fetch.mock.calls.map(([, init]) => JSON.parse(String(init!.body)).submissionId);
+    const [first, second] = fetch.mock.calls.filter(([url]) => url.endsWith("/new/")).map(([, init]) => JSON.parse(String(init!.body)).submissionId);
     expect(second).not.toBe(first);
+  });
+
+  it("asks where the page goes once the reader names it, and says so", async () => {
+    const fetch = serve(() => Response.json({}), undefined, () => Response.json({ destination: "commit" }));
+    await writeNewPage();
+
+    await expect.element(page.getByRole("button", { name: "Publish" })).toHaveAccessibleDescription("Goes live once the site rebuilds.");
+    expect(fetch.mock.calls.map(([url]) => url).filter((url) => url.includes("/destination/")).at(-1))
+      .toBe("/docs/wiki/_svartz/submissions/destination/?folder=People&title=Ada+Lovelace");
+  });
+
+  it("can't be sent while it asks where a renamed page goes, so the button never promises review for a save that goes live", async () => {
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => { answer = resolve; });
+    // The first title goes to review; the second commits, but the server takes its time saying so.
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/links/")) return Response.json(LINKS);
+      if (!url.includes("/destination/")) return Response.json({});
+      if (!url.includes("Byron")) return Response.json({ destination: "pull-request" });
+      await held;
+      return Response.json({ destination: "commit" });
+    }));
+    await writeNewPage();
+    const review = page.getByRole("button", { name: "Open pull request" });
+    await expect.element(review).toBeEnabled();
+
+    await page.getByRole("textbox", { name: "Title" }).fill("Ada Byron");
+    await expect.element(review).toBeDisabled();
+
+    answer();
+    await expect.element(page.getByRole("button", { name: "Publish" })).toBeEnabled();
+  });
+
+  it("can't be sent while it doesn't know where the page goes, and asks again on request", async () => {
+    const answers = [
+      () => Response.json({ error: "github_unavailable", message: "Couldn't reach GitHub right now. Try again in a moment." }, { status: 503 }),
+      () => Response.json({ destination: "commit" }),
+    ];
+    serve(() => Response.json({}), undefined, () => answers.shift()!());
+    unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+    await page.getByRole("button", { name: "New page" }).click();
+    await page.getByRole("textbox", { name: "Page source" }).click();
+    await userEvent.keyboard("Some text.");
+    await page.getByRole("textbox", { name: "Title" }).fill("Ada Lovelace");
+
+    await expect.element(page.getByText("Couldn't reach GitHub right now. Try again in a moment.")).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Open pull request" })).toBeDisabled();
+
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect.element(page.getByRole("button", { name: "Publish" })).toBeEnabled();
+    await expect.element(page.getByText("Couldn't reach GitHub right now. Try again in a moment.")).not.toBeInTheDocument();
   });
 
   it("waits for a title and some content before it can be sent", async () => {
@@ -798,9 +896,9 @@ describe("drafts", () => {
     const NEWER = `${SOURCE}Newer change.\r\n`;
 
     /** Leave an edit of the guide unsent, then reopen the editor once the site serves a newer source. */
-    async function reopenChanged() {
+    async function reopenChanged(destination: Destination = "pull-request") {
       let markdown = SOURCE;
-      serve(() => Response.json({}), () => Response.json({ markdown }));
+      serve(() => Response.json({}), () => Response.json({ markdown, sha: SOURCE_SHA, destination }));
       await openEditor();
       // Navigation closes the panel and keeps the edit.
       if (unmount) unmount();
@@ -823,6 +921,24 @@ describe("drafts", () => {
       const source = page.getByRole("textbox", { name: "Page source" });
       await expect.element(source).toHaveTextContent("Welcome.");
       await expect.element(source).not.toHaveTextContent("Newer change.");
+    });
+
+    it("sends the restored draft without the newer source's SHA, so it can't commit over the newer change", async () => {
+      await reopenChanged();
+      await page.getByRole("button", { name: "Restore anyway" }).click();
+      await page.getByRole("button", { name: "Open pull request" }).click();
+
+      const [, init] = vi.mocked(globalThis.fetch).mock.calls.find(([url]) => String(url).endsWith("/edit/"))!;
+      expect(JSON.parse(String(init!.body))).toMatchObject({ sha: "0".repeat(40) });
+    });
+
+    it("says the restored draft goes to review, even for a reader whose edits go live", async () => {
+      await reopenChanged("commit");
+      await expect.element(page.getByRole("button", { name: "Publish" })).toBeVisible();
+      await page.getByRole("button", { name: "Restore anyway" }).click();
+
+      await expect.element(page.getByRole("button", { name: "Open pull request" }))
+        .toHaveAccessibleDescription("Goes to review before it goes live.");
     });
 
     it("forgets the draft the reader discards", async () => {

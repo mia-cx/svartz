@@ -4,7 +4,7 @@
  * `crypto.subtle` only, so it runs on Workers and Node alike.
  */
 import { misconfigured } from "./errors";
-import { requestGitHub, unavailable } from "./github";
+import { requestGitHub, unavailable, type Person } from "./github";
 
 /** A GitHub App's credentials, as the server options carry them. */
 export interface AppCredentials {
@@ -74,6 +74,34 @@ async function signJwt(app: AppCredentials, env: Readonly<Record<string, unknown
   return `${unsigned}.${base64url(new Uint8Array(signature))}`;
 }
 
+/** One request made with the App's credentials, `credential` being its JWT or an installation token for `repo`. */
+async function call<T>(repo: string, credential: string, method: string, path: string, body?: unknown): Promise<T> {
+  const response = await requestGitHub(credential, method, path, body);
+  if (response.ok) return await response.json() as T;
+  if (response.status >= 500 || response.status === 429) throw unavailable();
+  if (response.status === 401) throw misconfigured("GitHub rejected its App ID or private key");
+  throw misconfigured(`its GitHub App isn't installed on ${repo}`);
+}
+
+/**
+ * The App's bot user as git names a commit's committer: `<slug>[bot]` and `<id>+<slug>[bot]@users.noreply.github.com`,
+ * which GitHub links to the bot. Looked up once for the life of the worker: the App's slug from `GET /app` with its JWT,
+ * then the bot's user id from `GET /users/<slug>[bot]` with an installation token from `tokens`. A failed lookup is
+ * tried again on the next commit. Fails as {@link appTokens} does.
+ */
+export function appCommitter(repo: string, app: AppCredentials, tokens: (env: Readonly<Record<string, unknown>>) => Promise<string>) {
+  let cached: Person | undefined;
+
+  return async (env: Readonly<Record<string, unknown>>): Promise<Person> => {
+    if (cached) return cached;
+    const { slug } = await call<{ slug: string }>(repo, await signJwt(app, env), "GET", "/app");
+    const login = `${slug}[bot]`;
+    const { id } = await call<{ id: number }>(repo, await tokens(env), "GET", `/users/${encodeURIComponent(login)}`);
+    cached = { name: login, email: `${id}+${login}@users.noreply.github.com` };
+    return cached;
+  };
+}
+
 /**
  * Installation tokens for `repo`, minted with the App's credentials from the server environment. A token is reused
  * until {@link REFRESH_MARGIN_MS} before it expires. Concurrent requests on a cold cache each mint one: sharing an
@@ -85,19 +113,12 @@ async function signJwt(app: AppCredentials, env: Readonly<Record<string, unknown
 export function appTokens(repo: string, app: AppCredentials) {
   let cached: { token: string; refreshAt: number } | undefined;
 
-  async function call<T>(jwt: string, method: string, path: string, body?: unknown): Promise<T> {
-    const response = await requestGitHub(jwt, method, path, body);
-    if (response.ok) return await response.json() as T;
-    if (response.status >= 500 || response.status === 429) throw unavailable();
-    if (response.status === 401) throw misconfigured("GitHub rejected its App ID or private key");
-    throw misconfigured(`its GitHub App isn't installed on ${repo}`);
-  }
-
   return async (env: Readonly<Record<string, unknown>>): Promise<string> => {
     if (cached && Date.now() < cached.refreshAt) return cached.token;
     const jwt = await signJwt(app, env);
-    const installation = app.installation ?? (await call<{ id: number }>(jwt, "GET", `/repos/${repo}/installation`)).id;
+    const installation = app.installation ?? (await call<{ id: number }>(repo, jwt, "GET", `/repos/${repo}/installation`)).id;
     const { token, expires_at } = await call<{ token: string; expires_at: string }>(
+      repo,
       jwt,
       "POST",
       `/app/installations/${installation}/access_tokens`,

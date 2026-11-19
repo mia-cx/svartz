@@ -508,6 +508,17 @@
 	gap: var(--sv-space-2);
 }
 
+/* Where the save goes, beside the button that sends it. */
+.svartz-submissions-destination {
+	margin: 0;
+	color: var(--sv-muted);
+	font-size: var(--sv-step--1);
+}
+
+.svartz-submissions-destination[hidden] {
+	display: none;
+}
+
 .svartz-submissions-opened {
 	flex-basis: 100%;
 	margin: 0;

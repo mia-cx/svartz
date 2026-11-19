@@ -234,6 +234,8 @@ export default guestbook;
 
 `readSignIn(request, env)` answers `{ account }`, or `{ account: null, reason }` saying why there is none: `"signed-out"`, or `"no-database"` when the site binds no `SVARTZ_DB`. A plugin that needs accounts can answer the second with a 503 naming the binding.
 
+`linkedIdentities(account, env)` answers every provider account linked to the account, the first linked first, such as its GitHub account when it signed in with Discord. It answers `[]` without `SVARTZ_DB`.
+
 `readIdentity(request, env)` answers the provider account the reader signed in with, or `null`. It works with or without `SVARTZ_DB`, so plugins written before accounts keep working; new plugins should read the account.
 
 ## Permissions
