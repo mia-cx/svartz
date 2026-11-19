@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { chromium } from "playwright";
+import { writeKit2PluginPageRoute } from "./helpers/plugin-page-route";
 
 const execFileAsync = promisify(execFile);
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
@@ -78,6 +79,7 @@ async function createHost(base: string) {
     await writeFile(path.join(root, "src/routes/[...slug]", name),
       await readFile(path.join(workspaceRoot, "packages/cli/template/src/routes/[...slug]", name)));
   }
+  await writeKit2PluginPageRoute(root);
   await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "svartz-host-auth", private: true, type: "module", devDependencies: { "@sveltejs/kit": "^2.0.0" } }));
   await writeFile(path.join(root, "vite.config.ts"), [
     "import { sveltekit } from '@sveltejs/kit/vite';",

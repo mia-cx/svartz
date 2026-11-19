@@ -30,11 +30,13 @@ import {
 } from "./virtual-modules";
 import {
   createArtifactsVirtualModuleSource,
+  createPluginPagesModuleSource,
   createServerRegistrySource,
   getGeneratedArtifactsRoot,
   getGeneratedIndexModulePath,
   getGeneratedPageModulePath,
   getGeneratedPagesRoot,
+  getGeneratedPluginPagesModulePath,
   getGeneratedRuntimeArtifactsModulePath,
   getGeneratedRuntimeServerModulePath,
   getGeneratedRuntimeThemeModulePath,
@@ -56,9 +58,11 @@ import {
   type ThemeSources,
 } from "./theme-resolver";
 import {
+  assertNoNotesUnderPages,
   assertRequiredStages,
   assertServerPlugins,
   getThemePresetPlugins,
+  hasPluginPages,
   resolveRuntimePlugins,
 } from "./plugins";
 import { createVaultChangeEvent } from "./watch";
@@ -181,9 +185,9 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     const server = plugins.find((plugin) => plugin.server);
     if (!server) return;
     const id = normalizePath(realpathSync(getGeneratedRuntimeServerModulePath(context.config)));
-    const routed = Object.values(bundle).some((item) =>
-      item.type === "chunk" && item.modules[id]?.renderedExports.includes("svartzHandle"));
-    if (routed) return;
+    const renders = (name: string) => Object.values(bundle).some((item) =>
+      item.type === "chunk" && item.modules[id]?.renderedExports.includes(name));
+    if (renders("svartzHandle")) return missingHostPageRoute(renders);
     return [
       `Vault "${context.config.id}" activates plugin "${server.id}", which serves requests, but the host app's server hooks don't run svartzHandle.`,
       "Add it to src/hooks.server.ts (or .js):",
@@ -195,6 +199,16 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       "",
       "  import { sequence } from '@sveltejs/kit/hooks';",
       "  export const handle = sequence(svartzHandle, yourHandle);",
+    ].join("\n");
+  }
+
+  /** A host app renders plugin pages only when a route's server `load` calls `svartzPage`; unused, it is tree-shaken. */
+  function missingHostPageRoute(renders: (name: string) => boolean): string | undefined {
+    if (!hasPluginPages(plugins) || renders("svartzPage")) return;
+    const owner = plugins.find((plugin) => plugin.server?.pages?.length)!;
+    return [
+      `Vault "${context.config.id}" activates plugin "${owner.id}", which renders pages under /-/, but no route in the host app renders them.`,
+      "Run `npx svartz init` to add src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/ and its param matchers, or copy them from the docs (host-vaults.md#plugin-pages).",
     ].join("\n");
   }
 
@@ -230,6 +244,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       getGeneratedRuntimeThemeModulePath(context.config),
       getGeneratedRuntimeArtifactsModulePath(context.config),
       getGeneratedRuntimeServerModulePath(context.config),
+      getGeneratedPluginPagesModulePath(context.config),
       getGeneratedIndexModulePath(context.config),
       getGeneratedSearchModulePath(context.config),
       ...emittedArtifacts.map((artifact) => artifact.path),
@@ -280,6 +295,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     }
 
     await runStages(plugins, runnerContext, PIPELINE_STAGES);
+    assertNoNotesUnderPages(context.config, plugins, runnerContext.index?.routes.all ?? []);
     await emitProtectedGroupArtifacts(runnerContext, context.root);
     protectedBridgeModules = await writeProtectedBridgeModules(runnerContext);
     runnerMeta = runnerContext.meta;
@@ -328,6 +344,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
               serverRuntime(),
             ),
           ),
+          writeGeneratedModule(getGeneratedPluginPagesModulePath(context.config), createPluginPagesModuleSource(plugins)),
         ],
         { concurrency: "unbounded", discard: true },
       ),
@@ -579,6 +596,7 @@ export {
   resolveThemeRuntimeImport,
   loadVirtualModule,
   resolveVirtualModuleId,
+  assertNoNotesUnderPages,
   assertRequiredStages,
   assertServerPlugins,
   getThemePresetPlugins,
@@ -591,6 +609,7 @@ export {
   getGeneratedHostRegistryPath,
   getGeneratedHostServerPath,
   getGeneratedHostStylesPath,
+  isSvelteKit3,
   svelteKitBasePath,
   svelteKitPaths,
   clearPublicAssets,

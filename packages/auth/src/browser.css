@@ -135,3 +135,235 @@
 .sv-auth-privacy a:hover {
 	color: var(--sv-text, CanvasText);
 }
+
+/*
+ * The `/-/account/` page, rendered in the theme's shell. Its provider buttons reuse the dialog's `.sv-auth-provider`.
+ */
+.sv-account {
+	display: grid;
+	gap: var(--sv-space-6, 2rem);
+	max-inline-size: 36rem;
+	color: var(--sv-text, CanvasText);
+	font-family: var(--sv-font-sans, system-ui, sans-serif);
+}
+
+.sv-account :focus-visible {
+	outline: var(--sv-focus-width, 2px) solid var(--sv-accent, Highlight);
+	outline-offset: var(--sv-focus-offset, 2px);
+}
+
+.sv-account h1 {
+	margin: 0;
+	color: var(--sv-ink, CanvasText);
+	font-size: var(--sv-step-5, 2.5rem);
+	font-weight: 700;
+	line-height: 1.05;
+}
+
+.sv-account h2 {
+	margin: 0 0 var(--sv-space-3, 0.75rem);
+	color: var(--sv-ink, CanvasText);
+	font-size: var(--sv-step-1, 1.2rem);
+	font-weight: 700;
+	line-height: var(--sv-leading-tight, 1.15);
+}
+
+.sv-account p {
+	margin: 0;
+}
+
+.sv-account-lead {
+	font-size: var(--sv-step-1, 1.2rem);
+}
+
+.sv-account-who {
+	display: flex;
+	align-items: center;
+	gap: var(--sv-space-3, 0.75rem);
+	margin-block-start: calc(-1 * var(--sv-space-3, 0.75rem));
+}
+
+.sv-account-avatar {
+	flex: none;
+	inline-size: 3rem;
+	block-size: 3rem;
+	border-radius: 50%;
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+}
+
+.sv-account-name {
+	color: var(--sv-ink, CanvasText);
+	font-weight: 600;
+}
+
+.sv-account-muted {
+	color: var(--sv-muted, GrayText);
+	overflow-wrap: anywhere;
+}
+
+.sv-account-form {
+	display: grid;
+	gap: var(--sv-space-4, 1rem);
+}
+
+.sv-account-field {
+	display: grid;
+	gap: var(--sv-space-1, 0.25rem);
+	max-inline-size: 24rem;
+}
+
+.sv-account-field label {
+	color: var(--sv-ink, CanvasText);
+	font-weight: 600;
+}
+
+.sv-account-input {
+	box-sizing: border-box;
+	inline-size: 100%;
+	min-block-size: 2.75rem;
+	padding: var(--sv-space-2, 0.5rem) var(--sv-space-3, 0.75rem);
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
+	border-radius: var(--sv-radius-m, 6px);
+	background: var(--sv-sunken, Field);
+	color: var(--sv-ink, FieldText);
+	font: inherit;
+}
+
+.sv-account-input[aria-invalid="true"],
+.sv-account-handle:has([aria-invalid="true"]) {
+	border-color: light-dark(oklch(0.53 0.15 var(--sv-hue-red, 25)), oklch(0.76 0.12 var(--sv-hue-red, 25)));
+}
+
+/* The handle field shows its `@` inside the box, so the input inside carries no frame of its own. */
+.sv-account-handle {
+	display: flex;
+	align-items: center;
+	gap: var(--sv-space-1, 0.25rem);
+	padding-block: 0;
+}
+
+.sv-account-handle span {
+	color: var(--sv-muted, GrayText);
+}
+
+/* The input fills the frame's height, so the whole field takes a tap. */
+.sv-account-handle input {
+	flex: 1;
+	align-self: stretch;
+	min-inline-size: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	outline: none;
+}
+
+.sv-account-handle:focus-within {
+	outline: var(--sv-focus-width, 2px) solid var(--sv-accent, Highlight);
+	outline-offset: 0;
+}
+
+.sv-account .sv-account-input:focus-visible {
+	outline-offset: 0;
+}
+
+.sv-account-hint {
+	color: var(--sv-muted, GrayText);
+	font-size: var(--sv-step--1, 0.875rem);
+}
+
+.sv-account-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-block-size: 2.75rem;
+	padding-inline: var(--sv-space-4, 1rem);
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
+	border-radius: var(--sv-radius-m, 6px);
+	background: var(--sv-paper, Canvas);
+	color: var(--sv-ink, CanvasText);
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out);
+}
+
+.sv-account-button:hover {
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+}
+
+.sv-account-button[data-primary] {
+	border-color: transparent;
+	background: var(--sv-accent, AccentColor);
+	color: var(--sv-on-accent, AccentColorText);
+}
+
+.sv-account-button[data-primary]:hover {
+	background: color-mix(in oklch, var(--sv-accent, AccentColor) 88%, var(--sv-ink, CanvasText));
+}
+
+.sv-account-list {
+	margin: 0 0 var(--sv-space-4, 1rem);
+	padding: 0;
+	border-block-start: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	list-style: none;
+}
+
+.sv-account-row {
+	display: flex;
+	align-items: center;
+	gap: var(--sv-space-3, 0.75rem);
+	min-block-size: 3.5rem;
+	padding-block: var(--sv-space-2, 0.5rem);
+	border-block-end: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+}
+
+.sv-account-row > svg,
+.sv-account-providers svg {
+	flex: none;
+	inline-size: 1.25rem;
+	block-size: 1.25rem;
+}
+
+.sv-account-what {
+	display: grid;
+	flex: 1;
+	min-inline-size: 0;
+}
+
+.sv-account-tag {
+	flex: none;
+	color: var(--sv-muted, GrayText);
+	font-size: var(--sv-step--1, 0.875rem);
+}
+
+.sv-account-row form {
+	flex: none;
+}
+
+.sv-account-providers {
+	max-inline-size: 22rem;
+}
+
+/* On this page the providers are form buttons, not the dialog's links. */
+.sv-account-providers button.sv-auth-provider {
+	box-sizing: border-box;
+	inline-size: 100%;
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.sv-account .sv-account-status {
+	margin-block-end: var(--sv-space-3, 0.75rem);
+	padding: var(--sv-space-2, 0.5rem) var(--sv-space-3, 0.75rem);
+	border-inline-start: 3px solid var(--sv-accent, AccentColor);
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+	color: var(--sv-ink, CanvasText);
+}
+
+.sv-account .sv-account-status[data-error] {
+	border-inline-start-color: light-dark(oklch(0.53 0.15 var(--sv-hue-red, 25)), oklch(0.76 0.12 var(--sv-hue-red, 25)));
+	color: light-dark(oklch(0.45 0.15 var(--sv-hue-red, 25)), oklch(0.8 0.1 var(--sv-hue-red, 25)));
+}

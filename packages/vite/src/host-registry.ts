@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import type { ResolvedConfig } from "@svartz/core";
 import {
   getGeneratedIndexModulePath,
+  getGeneratedPluginPagesModulePath,
   getGeneratedRuntimeArtifactsModulePath,
   getGeneratedRuntimeServerModulePath,
   getGeneratedRuntimeThemeModulePath,
@@ -62,12 +63,13 @@ export function createHostIndexSource(vaults: readonly ResolvedConfig[], kitBase
  * It also exports SvelteKit's `base` and `assets`, which SvelteKit 3's `$app/paths` no longer does.
  */
 export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitPaths?: SvelteKitPaths): string {
-  const imports = vaults.map((vault, index) =>
-    `import * as index${index} from ${JSON.stringify(getGeneratedIndexModulePath(vault))};`
-  );
+  const imports = vaults.flatMap((vault, index) => [
+    `import * as index${index} from ${JSON.stringify(getGeneratedIndexModulePath(vault))};`,
+    `import { pluginPages as pages${index} } from ${JSON.stringify(getGeneratedPluginPagesModulePath(vault))};`,
+  ]);
   const records = vaults.map((vault, index) => {
     const { favicon: _favicon, ...siteConfig } = vault.site;
-    return `  { id: ${JSON.stringify(vault.id)}, mountPath: ${JSON.stringify(vault.mountPath)}, basePath: ${JSON.stringify(deploymentBasePath(vault, kitPaths?.base))}, artifacts: { index: index${index}.index, siteConfig: ${JSON.stringify(siteConfig)} }, theme: undefined },`;
+    return `  { id: ${JSON.stringify(vault.id)}, mountPath: ${JSON.stringify(vault.mountPath)}, basePath: ${JSON.stringify(deploymentBasePath(vault, kitPaths?.base))}, pluginPages: pages${index}, artifacts: { index: index${index}.index, siteConfig: ${JSON.stringify(siteConfig)} }, theme: undefined },`;
   });
   const loaders = vaults.map((vault) => `  () => Promise.all([import(${JSON.stringify(getGeneratedRuntimeArtifactsModulePath(vault))}), import(${JSON.stringify(getGeneratedRuntimeThemeModulePath(vault))})]),`);
   return [
@@ -83,6 +85,18 @@ export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitP
     "  all: [...new Set(vaults.flatMap((vault) => vault.artifacts.index.routes.all))],",
     "  redirects: Object.assign({}, ...vaults.map((vault) => vault.artifacts.index.routes.redirects)),",
     "};",
+    "// The plugin page route, `[...mount=svartzMount]/-/[...page=svartzPage]`, matches only a page name a plugin of the",
+    "// vault at that mount claims, so any other path, a note in a folder named `-` included, stays a note. Each matcher",
+    "// sees one parameter, but SvelteKit runs a route's matchers in order and synchronously, and the page matcher only",
+    "// after the mount matcher accepted: so it checks the vault the mount matcher just found. The static `-` is what ranks",
+    "// the route above the note catchall; SvelteKit orders two bare rest routes by directory listing, not by matcher.",
+    "const pageVaults = vaults.filter((vault) => vault.pluginPages.length > 0);",
+    "let mountedPageVault;",
+    "export const isPluginPageMount = (param) => {",
+    "  mountedPageVault = pageVaults.find((vault) => vault.mountPath === (param && `/${param}`));",
+    "  return mountedPageVault !== undefined;",
+    "};",
+    "export const isPluginPageName = (param) => mountedPageVault?.pluginPages.includes(param.split('/', 1)[0]) ?? false;",
     "function findHostVault(pathname) {",
     "  return vaults.find(({ mountPath }) => {",
     "    return pathname === mountPath || pathname.startsWith(`${mountPath}/`);",
@@ -143,15 +157,25 @@ export function getGeneratedHostServerPath(configDir: string): string {
   return join(configDir, ".svartz", "host", "server.ts");
 }
 
-/** `virtual:svartz/server` in a host app: `svartzHandle` runs every host vault's generated handle in turn. */
+/**
+ * `virtual:svartz/server` in a host app: `svartzHandle` runs every host vault's generated handle in turn, and
+ * `svartzPage` asks each vault for the plugin page at a URL.
+ */
 export function createHostServerSource(vaults: readonly ResolvedConfig[]): string {
   return [
     ...vaults.map((vault, index) =>
-      `import { svartzHandle as vault${index} } from ${JSON.stringify(getGeneratedRuntimeServerModulePath(vault))};`),
+      `import { svartzHandle as vault${index}, svartzPage as page${index} } from ${JSON.stringify(getGeneratedRuntimeServerModulePath(vault))};`),
     `const handles = [${vaults.map((_vault, index) => `vault${index}`).join(", ")}];`,
+    `const pages = [${vaults.map((_vault, index) => `page${index}`).join(", ")}];`,
     "// Mounts never overlap, so at most one vault answers; the others pass the request on.",
     "export const svartzHandle = ({ event, resolve }) =>",
     "  handles.reduceRight((next, handle) => (request) => handle({ event: request, resolve: next }), resolve)(event);",
+    "export const svartzPage = async (event) => {",
+    "  for (const page of pages) {",
+    "    const result = await page(event);",
+    "    if (result) return result;",
+    "  }",
+    "};",
     "",
   ].join("\n");
 }

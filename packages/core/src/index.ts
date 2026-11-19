@@ -62,9 +62,11 @@ export { STAGE_NAMES } from "./plugin/types";
 export { getCompilerContributions } from "./plugin/compiler";
 export type { BrowserResource, CompilerContributions } from "./plugin/compiler";
 export {
+  createServer,
   createServerHandle,
   DEV_BINDINGS,
   markdownCopyFor,
+  PAGE_ROUTE_SEGMENT,
   SECRET_ENV_NAME_PATTERN,
   SERVER_PLUGIN_ID_PATTERN,
   SERVER_ROUTE_SEGMENT,
@@ -72,12 +74,18 @@ export {
 export type {
   DevBindings,
   EnvReference,
+  PageContext,
+  PageRenderer,
+  PageResult,
+  PluginPage,
   ServerContext,
   ServerHandleEvent,
   ServerHandleRuntime,
   ServerHandler,
+  ServerModule,
   ServerModuleFactory,
   ServerModuleSpec,
+  SvartzServer,
   ServerRegistry,
   ServerRoute,
   ServerVaultSettings,

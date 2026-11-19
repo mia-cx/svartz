@@ -9,6 +9,7 @@ import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { chromium } from "playwright";
 import { deriveProtectionKey, openProtectedPayload, type ProtectedEnvelope } from "@svartz/core";
+import { writeKit2PluginPageRoute } from "./helpers/plugin-page-route";
 
 const execFileAsync = promisify(execFile);
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
@@ -432,11 +433,13 @@ it("routes server plugins through svartzHandle for every host vault, and fails a
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "svartz-host-server-")));
   roots.push(root);
   await symlink(kit2Toolchain, path.join(root, "node_modules"), "dir");
+  // The init catchall, and its plugin page route under /-/.
   await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
   for (const name of ["+page.svelte", "+page.ts"]) {
     await writeFile(path.join(root, "src/routes/[...slug]", name),
       await readFile(path.join(workspaceRoot, "packages/cli/template/src/routes/[...slug]", name)));
   }
+  await writeKit2PluginPageRoute(root);
   await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "svartz-host-server", private: true, type: "module", devDependencies: { "@sveltejs/kit": "^2.0.0" } }));
   await writeFile(path.join(root, "vite.config.ts"), [
     "import { sveltekit } from '@sveltejs/kit/vite';",
@@ -454,15 +457,27 @@ export default { kit: { adapter: adapter(), prerender: { handleHttpError: ({ sta
   await writeFile(path.join(root, "src/app.html"), "<!doctype html><html lang=\"en\"><head>%sveltekit.head%</head><body><div style=\"display: contents\">%sveltekit.body%</div></body></html>\n");
   await writeFile(path.join(root, "src/hooks.server.ts"),
     "import { svartzHandle } from 'virtual:svartz/server';\nexport const handle = svartzHandle;\n");
-  await writeFile(path.join(root, "hello.mjs"), `export default (options) => (request, context) => {
-    if (new URL(request.url).pathname !== context.base + "/") return undefined;
-    return Response.json({ greeting: options.greeting, token: context.env.HELLO_TOKEN ?? null, base: context.base, vault: context.vault.id });
-  };\n`);
+  await writeFile(path.join(root, "hello.mjs"), `export default (options) => ({
+    handle: (request, context) => {
+      if (new URL(request.url).pathname !== context.base + "/") return undefined;
+      return Response.json({ greeting: options.greeting, token: context.env.HELLO_TOKEN ?? null, base: context.base, vault: context.vault.id });
+    },
+    page: (request, context) => context.path === options.page + "/"
+      ? { title: "Hello", html: '<h1 class="hello-page">' + options.greeting + ", " + (context.env.HELLO_TOKEN ?? "nobody") + "</h1>" }
+      : undefined,
+  });\n`);
   const vaults = ["docs", "wiki"];
+  // Each vault's plugin claims a different page name.
+  const pages: Record<string, string> = { docs: "hello", wiki: "history" };
   for (const id of vaults) {
     await mkdir(path.join(root, id));
     await writeFile(path.join(root, id, "index.md"), `# ${id} home\n\nPrerendered ${id}. [Say hello](/${id}/_svartz/hello/).\n`);
+    // A note in a folder named `-`: no plugin claims `guide`, so it stays a note beside the plugin's page.
+    await mkdir(path.join(root, id, "-"));
+    await writeFile(path.join(root, id, "-/guide.md"), `# Dash guide\n\nPrerendered ${id} dash guide.\n`);
   }
+  // Only the wiki claims `history`, so the docs may publish a note there.
+  await writeFile(path.join(root, "docs/-/history.md"), "# Dash history\n\nPrerendered docs dash history.\n");
   await writeFile(path.join(root, "svartz.config.ts"), `export default {
     version: "1.0.0",
     vaults: ${JSON.stringify(vaults.map((id) => ({
@@ -471,7 +486,7 @@ export default { kit: { adapter: adapter(), prerender: { handleHttpError: ({ sta
       mountPath: `/${id}`,
       theme: path.join(workspaceRoot, "themes/minimal"),
       target: { type: "host" },
-      plugins: [{ id: "hello", server: { module: path.join(root, "hello.mjs"), options: { greeting: `hi from ${id}` } } }],
+      plugins: [{ id: "hello", server: { module: path.join(root, "hello.mjs"), options: { greeting: `hi from ${id}`, page: pages[id] }, pages: [pages[id]] } }],
     })))},
   };\n`);
   const build = () => execFileAsync(process.execPath, [
@@ -501,12 +516,33 @@ export default { kit: { adapter: adapter(), prerender: { handleHttpError: ({ sta
       expect(answer.status, stderr).toBe(200);
       expect(await answer.json()).toEqual({ greeting: `hi from ${id}`, token: "s3cret", base: `/${id}/_svartz/hello`, vault: id });
       expect(await (await fetch(`${origin}/${id}/`)).text()).toContain(`Prerendered ${id}.`);
+      // Proves each host vault renders its plugin's page per request, inside that vault's theme shell, uncached.
+      const page = await fetch(`${origin}/${id}/-/${pages[id]}/`);
+      const html = await page.text();
+      expect(page.status, stderr).toBe(200);
+      expect(page.headers.get("cache-control")).toBe("private, no-store");
+      expect(html).toContain(`<h1 class="hello-page">hi from ${id}, s3cret</h1>`);
+      expect(html).toContain('id="explorer-panel"');
+      expect(html).toContain(`href="/${id}/"`);
+      // Proves SvelteKit 2's matchers leave a note in a folder named `-` to the catchall.
+      const note = await fetch(`${origin}/${id}/-/guide/`);
+      expect([note.status, await note.text()]).toEqual([200, expect.stringContaining(`Prerendered ${id} dash guide.`)]);
     }
+    // Proves the matchers pair a mount with its own vault's names: a note under a name only another vault claims is
+    // served as a note, and that name is no page here.
+    const history = await fetch(`${origin}/docs/-/history/`);
+    expect([history.status, await history.text()]).toEqual([200, expect.stringContaining("Prerendered docs dash history.")]);
+    expect((await fetch(`${origin}/wiki/-/hello/`)).status).toBe(404);
     expect((await fetch(`${origin}/_svartz/hello/`)).status).toBe(404);
+    expect((await fetch(`${origin}/docs/-/goodbye/`)).status).toBe(404);
   } finally {
     server.kill("SIGTERM");
     if (server.exitCode === null) await once(server, "exit");
   }
+
+  // Proves a host whose routes never render plugin pages fails the build instead of answering them with 404s.
+  await rm(path.join(root, "src/routes/[...mount=svartzMount]"), { recursive: true });
+  expect(await buildFailure()).toContain(`Vault "docs" activates plugin "hello", which renders pages under /-/, but no route in the host app renders them.`);
 
   await writeFile(path.join(root, "src/hooks.server.ts"), "export const handle = ({ event, resolve }) => resolve(event);\n");
   const unrouted = await buildFailure();
@@ -515,6 +551,6 @@ export default { kit: { adapter: adapter(), prerender: { handleHttpError: ({ sta
 
   await writeFile(path.join(root, "svelte.config.js"), svelteConfig("adapter-static"));
   expect(await buildFailure()).toContain(
-    'Vault "docs" is mounted in a host app that uses @sveltejs/adapter-static, but plugin "hello" serves requests.',
+    'Vault "docs" is mounted in a host app that uses @sveltejs/adapter-static, but plugin "hello" serves pages.',
   );
 }, 300_000);

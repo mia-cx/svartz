@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { basename } from "node:path";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import type { ResolvedConfig } from "@svartz/core";
 import { createHostIndexSource, createHostRegistrySource, deploymentBasePath, getGeneratedHostIndexPath, getGeneratedHostRegistryPath, getGeneratedHostStylesPath, readHostAdapterName, svelteKitPaths } from "../src/host-registry";
 
@@ -47,6 +49,40 @@ describe("host registry", () => {
       .not.toBe(getGeneratedHostStylesPath("/workspace/.svartz/host/runtime.ts", "aaG").toLowerCase());
     expect(Buffer.byteLength(basename(getGeneratedHostStylesPath("/workspace/.svartz/host/runtime.ts", "x".repeat(126)))))
       .toBeLessThanOrEqual(255);
+  });
+
+  // Proves the plugin page route's matchers, which run on the server and in the browser, claim only `<mount>/-/<name>/`
+  // where a plugin of that mount's vault claims the name: any other path, a note in a folder named `-` included, and a
+  // name only another vault claims, is a note.
+  it("matches plugin pages only under a name the mount's own vault claims", async () => {
+    const root = await mkdtemp(join(tmpdir(), "svartz-host-registry-"));
+    try {
+      const vaults = [["docs", "/docs", ["account"]], ["blog", "", []], ["wiki", "/team/wiki", ["history"]]] as const;
+      const configs = await Promise.all(vaults.map(async ([id, mountPath, pages]) => {
+        const config = { ...vault(id, mountPath), outDir: join(root, id, "dist") };
+        await mkdir(join(root, id, "artifacts"), { recursive: true });
+        await writeFile(join(root, id, "artifacts/index.ts"), "export const index = { routes: { all: [], redirects: {} } };\n");
+        await writeFile(join(root, id, "artifacts/plugin-pages.ts"), `export const pluginPages = ${JSON.stringify(pages)};\n`);
+        return config;
+      }));
+      const registry = join(root, "runtime.ts");
+      await writeFile(registry, createHostRegistrySource(configs));
+      const { isPluginPageMount, isPluginPageName } = await import(registry) as Record<string, (param: string) => boolean>;
+      // As SvelteKit runs `[...mount=svartzMount]/-/[...page=svartzPage]`: the page matcher only after the mount matched.
+      const routes = (path: string) => {
+        const [, mount = "", page = ""] = /^(?:(.*)\/)?-\/(.*)$/.exec(path)!;
+        return isPluginPageMount(mount) && isPluginPageName(page);
+      };
+
+      expect(["docs/-/account", "docs/-/account/settings", "team/wiki/-/history/notes/intro"].map(routes)).toEqual([true, true, true]);
+      // A name another vault claims is a note here.
+      expect(["docs/-/history", "team/wiki/-/account"].map(routes)).toEqual([false, false]);
+      // The blog has no plugin pages, so even its root mount routes `/-/…` to notes; nested folders are never mounts.
+      expect(["-/account", "guides/-/account", "docs/guides/-/account", "team/-/history"].map(routes)).toEqual([false, false, false, false]);
+      expect(["docs/-/guide", "docs/-/accounts", "docs/-/", "docs/-/-/account"].map(routes)).toEqual([false, false, false, false]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("publishes each vault's index without importing the page runtime or theme", () => {

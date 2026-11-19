@@ -11,6 +11,9 @@ const FALLBACK_HANDLE = "reader";
 
 export const isHandle = (value: string): boolean => HANDLE.test(value);
 
+/** What a reader sees when the handle they typed breaks the rules. */
+export const HANDLE_PROBLEM = `Use up to ${HANDLE_MAX_LENGTH} lowercase letters, numbers, hyphens and underscores, starting and ending with a letter or number.`;
+
 /** What the reader typed, as the handle it would become: trimmed, lowercase, without a leading `@`. */
 export const typedHandle = (input: string): string => input.trim().replace(/^@/, "").toLowerCase();
 

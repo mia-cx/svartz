@@ -73,6 +73,10 @@ it("initializes the invocation directory with an editable shell and vault", asyn
     .not.toContain("layout.css");
   await access(path.join(root, "src/routes/[...slug]/+page.ts"));
   await access(path.join(root, "src/routes/[...slug]/+page.server.ts"));
+  // A new project runs SvelteKit 3, which reads its matchers from src/params.ts, never SvelteKit 2's src/params/.
+  expect(await readFile(path.join(root, "src/params.ts"), "utf8")).toContain("defineParams");
+  await expect(access(path.join(root, "src/params"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(access(path.join(root, "sveltekit-2"))).rejects.toMatchObject({ code: "ENOENT" });
   await expect(access(path.join(root, ".git"))).rejects.toMatchObject({
     code: "ENOENT",
   });
@@ -128,6 +132,59 @@ it("adds configuration to an existing Kit app without changing its routes or bui
     .toContain("virtual:svartz/tailwind-sources.css");
   expect(await readFile(path.join(root, "src/app.d.ts"), "utf8"))
     .toContain('/// <reference types="@svartz/vite/virtual-modules" />');
+});
+
+const PAGE_ROUTE = "src/routes/[...mount=svartzMount]/-/[...page=svartzPage]";
+
+/**
+ * A Kit app for init to integrate, with SvelteKit `kit` installed (2 when unset). Installed, so pnpm's NODE_PATH
+ * can't hand the app the workspace's SvelteKit.
+ */
+async function pageHost(viteConfig: string, kit: 2 | 3 = 2) {
+  const root = await fixture();
+  await mkdir(path.join(root, "src/routes"), { recursive: true });
+  await writeFile(path.join(root, "vite.config.ts"), viteConfig);
+  await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "host-app", devDependencies: { "@sveltejs/kit": `^${kit}.0.0` } }));
+  await mkdir(path.join(root, "node_modules/@sveltejs/kit"), { recursive: true });
+  await writeFile(path.join(root, "node_modules/@sveltejs/kit/package.json"), JSON.stringify({ name: "@sveltejs/kit", version: `${kit}.0.0` }));
+  return root;
+}
+const NODE_HOST = "import adapter from '@sveltejs/adapter-node';\nexport default { plugins: [] };\n";
+
+// Proves init gives a server host the route plugin pages render through, with the param matchers its SvelteKit reads,
+// keeps a host's own copy, and leaves it out of a static host, whose adapter would refuse a route that isn't prerendered.
+it("adds the plugin page route and its matchers to hosts that can serve it", async () => {
+  const server = await pageHost(NODE_HOST);
+  expect((await initProject({ cwd: server, install: false, git: false })).kind).toBe("integrated");
+  expect(await readFile(path.join(server, PAGE_ROUTE, "+page.server.ts"), "utf8")).toContain("svartzPage(event)");
+  expect(await readFile(path.join(server, "src/params/svartzMount.ts"), "utf8")).toContain("isPluginPageMount as match");
+  expect(await readFile(path.join(server, "src/params/svartzPage.ts"), "utf8")).toContain("isPluginPageName as match");
+  await expect(access(path.join(server, "src/params.ts"))).rejects.toMatchObject({ code: "ENOENT" });
+  await writeFile(path.join(server, PAGE_ROUTE, "+page.svelte"), "<h1>Mine</h1>\n");
+  expect((await initProject({ cwd: server, install: false, git: false })).kind).toBe("already-configured");
+  expect(await readFile(path.join(server, PAGE_ROUTE, "+page.svelte"), "utf8")).toBe("<h1>Mine</h1>\n");
+
+  const kit3 = await pageHost(NODE_HOST, 3);
+  expect((await initProject({ cwd: kit3, install: false, git: false })).kind).toBe("integrated");
+  await access(path.join(kit3, PAGE_ROUTE, "+page.server.ts"));
+  expect(await readFile(path.join(kit3, "src/params.ts"), "utf8")).toContain("svartzMount:");
+  await expect(access(path.join(kit3, "src/params"))).rejects.toMatchObject({ code: "ENOENT" });
+
+  const staticHost = await pageHost("import adapter from '@sveltejs/adapter-static';\nexport default { plugins: [] };\n");
+  expect((await initProject({ cwd: staticHost, install: false, git: false })).kind).toBe("integrated");
+  await expect(access(path.join(staticHost, PAGE_ROUTE))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+// Proves init leaves a SvelteKit 3 host's own params alone, since it can't merge the matchers into them, and so adds no
+// route that would fail without them.
+it("leaves a SvelteKit 3 host's own params alone", async () => {
+  const ownParams = await pageHost(NODE_HOST, 3);
+  const params = "export const params = { locale: { '~standard': { validate: (value) => ({ value }) } } };\n";
+  await mkdir(path.join(ownParams, "src"), { recursive: true });
+  await writeFile(path.join(ownParams, "src/params.ts"), params);
+  await initProject({ cwd: ownParams, install: false, git: false });
+  expect(await readFile(path.join(ownParams, "src/params.ts"), "utf8")).toBe(params);
+  await expect(access(path.join(ownParams, PAGE_ROUTE))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("upgrades only the previous generated CSS entry and root layout", async () => {

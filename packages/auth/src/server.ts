@@ -10,28 +10,50 @@
  * - `GET handle/` asks a first-time reader for a handle; `POST handle/` creates their account and session.
  * - `GET me/` answers the identity, or `null`.
  * - `POST sign-out/` ends the session.
+ * - `POST account/profile/`, `account/unlink/`, `account/sign-out-everywhere/` and `account/link/<provider>/` change the
+ *   signed-in account and redirect back to its `/-/account/` page, which this module also renders.
+ * - `GET users/<handle>/` answers a public profile, redirecting an old handle to the current one.
  *
  * Accounts and sessions live in the D1 database bound as `SVARTZ_DB`; without one, the session cookie holds the
  * identity itself and nobody has an account. On a vault whose `callbackVault` is another vault, `start` forwards to
- * that vault's, and `callback` and `handle` answer 404.
+ * that vault's, and `callback`, `handle` and `account/link` answer 404.
  */
 import { CodeChallengeMethod, generateCodeVerifier, generateState, OAuth2Client } from "arctic";
-import type { EnvReference, PermissionDeclaration, ServerContext, ServerModuleFactory } from "@svartz/core";
+import {
+  decodeRoutePath, type EnvReference, type PageRenderer, type PermissionDeclaration, type ServerContext, type ServerHandler,
+  type ServerModuleFactory,
+} from "@svartz/core";
+import { accountPage, NAME_MAX_LENGTH, signedOutPage, type StatusCode } from "./account";
 import { chooserPage, expiredPage } from "./chooser";
 import { usePermissions } from "./grants";
-import { handleFrom, HANDLE_MAX_LENGTH, isHandle, typedHandle } from "./handle";
+import { handleFrom, HANDLE_PROBLEM, isHandle, typedHandle } from "./handle";
 import { isProviderId, PROVIDERS, type Identity, type ProviderId } from "./providers";
 import { seal, SESSION_SECRET_ENV, SESSION_SECRET_MIN_LENGTH, sessionSecret, unseal } from "./seal";
-import { endSession, isIdentity, readCookie, readIdentity, sealSession, SESSION_COOKIE, useAdmins } from "./session";
-import { ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, hasAccount, SESSION_MAX_AGE_SECONDS, startSession, suggestHandle, type Database } from "./store";
+import { endSession, isIdentity, readCookie, readCurrentSession, readIdentity, sealSession, SESSION_COOKIE, useAdmins } from "./session";
+import {
+  ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, endAccountSessions, hasAccount, linkIdentity, profileByHandle,
+  SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity, updateProfile, type Database,
+  type PublicProfile,
+} from "./store";
 
 export type { Identity, ProviderId } from "./providers";
 export type { Account, SignIn, SignedOutReason } from "./session";
+export type { PublicProfile } from "./store";
 export { ADMIN_ROLE, readAccount, readIdentity, readSignIn } from "./session";
 export { ACCOUNTS_DATABASE_ENV };
 export { can, migrateGrants, type IdentityGrant } from "./grants";
 export type { PermissionTarget } from "./permissions";
 export { linkedIdentities } from "./identities";
+
+/**
+ * The public profile of the account that holds or held `handle`, under its current handle; `undefined` when no account
+ * ever held it or the site binds no `SVARTZ_DB`. A result whose `handle` differs from the one asked for means the
+ * asked one is old: redirect to the current one. Old handles never pass to another account.
+ */
+export async function findProfile(handle: string, env: Readonly<Record<string, unknown>>): Promise<PublicProfile | undefined> {
+  const db = await accountsDatabase(env);
+  return db && profileByHandle(db, handle);
+}
 
 /** One provider's OAuth app. The secret is named by environment variable, never inlined. */
 export interface ProviderOptions {
@@ -77,7 +99,8 @@ const FLOW_MAX_AGE = 10 * 60;
 /** How long a first-time reader has to choose a handle. */
 const PENDING_MAX_AGE = 15 * 60;
 
-type Flow = { provider: ProviderId; state: string; verifier: string; returnTo: string };
+/** An OAuth round trip in progress. `link` is the session that asked to link a provider, when it isn't a sign-in. */
+type Flow = { provider: ProviderId; state: string; verifier: string; returnTo: string; link?: string };
 /** A verified first sign-in, waiting for its handle. */
 type Pending = { identity: Identity; returnTo: string };
 
@@ -88,7 +111,8 @@ function cookie(name: string, value: string, maxAge: number): string {
 function isFlow(value: unknown): value is Flow {
   if (!value || typeof value !== "object") return false;
   const flow = value as Record<string, unknown>;
-  return ["provider", "state", "verifier", "returnTo"].every((key) => typeof flow[key] === "string");
+  return ["provider", "state", "verifier", "returnTo"].every((key) => typeof flow[key] === "string")
+    && (flow.link === undefined || typeof flow.link === "string");
 }
 
 function isPending(value: unknown): value is Pending {
@@ -105,8 +129,8 @@ function failure(status: number, error: string, message: string, headers?: Heade
   return json({ error, message }, status, headers);
 }
 
-/** 302 after a GET; 303 after a form POST, so the browser follows with a GET. */
-function redirect(location: string, cookies: readonly string[], status: 302 | 303 = 302): Response {
+/** 302 after a GET; 303 after a form POST, so the browser follows with a GET; 308 for an address that moved for good. */
+function redirect(location: string, cookies: readonly string[], status: 302 | 303 | 308 = 302): Response {
   const headers = new Headers({ location, "cache-control": "no-store" });
   for (const value of cookies) headers.append("set-cookie", value);
   return new Response(null, { status, headers });
@@ -185,10 +209,19 @@ async function callback({ request, url, context, provider, client, secret }: Ste
     identity = await profile(tokens.accessToken());
   } catch (error) {
     console.error(`[svartz:auth] ${label} sign-in failed`, error);
+    if (flow.link !== undefined) return redirect(withStatus(flow.returnTo, url, "link-failed", provider), [clearFlow]);
     return failure(502, "provider_failed", `${label} didn't confirm the sign-in. Sign in again.`, { "set-cookie": clearFlow });
   }
 
   const db = await accountsDatabase(context.env);
+  if (flow.link !== undefined) {
+    if (!db) return failure(503, "misconfigured", `Bind a D1 database as ${ACCOUNTS_DATABASE_ENV} to give readers accounts.`, { "set-cookie": clearFlow });
+    // Only the session that asked may receive the link: a signed-out, switched or forged browser gets nothing.
+    const current = await readCurrentSession(request, context.env);
+    if (current?.sid !== flow.link) return redirect(withStatus(flow.returnTo, url, "link-expired"), [clearFlow]);
+    const linked = await linkIdentity(db, current.account.id, identity);
+    return redirect(withStatus(flow.returnTo, url, linked === "linked" ? "linked" : "linked-elsewhere", provider), [clearFlow]);
+  }
   // Without accounts, the cookie holds the identity itself.
   if (!db) return redirect(flow.returnTo, [clearFlow, cookie(SESSION_COOKIE, await seal(identity, secret, "session", SESSION_MAX_AGE_SECONDS), SESSION_MAX_AGE_SECONDS)]);
   const sid = await startSession(db, identity);
@@ -220,9 +253,7 @@ async function chooseHandle(request: Request, url: URL, context: ServerContext, 
   if (crossOrigin(request, url)) return failure(403, "cross_origin", "Choose your handle on this site.");
   const form = await request.formData().catch(() => undefined);
   const handle = typedHandle(String(form?.get("handle") ?? ""));
-  if (!isHandle(handle)) {
-    return show(handle, `Use up to ${HANDLE_MAX_LENGTH} lowercase letters, numbers, hyphens and underscores, starting and ending with a letter or number.`);
-  }
+  if (!isHandle(handle)) return show(handle, HANDLE_PROBLEM);
   const sid = await createAccount(db, identity, handle);
   if (sid === "linked") return spent();
   if (sid === "taken") {
@@ -238,18 +269,169 @@ async function signOut(request: Request, url: URL, context: ServerContext): Prom
   return new Response(null, { status: 204, headers: { "set-cookie": cookie(SESSION_COOKIE, "", 0) } });
 }
 
-const ROUTE = /^\/(?:(start|callback)\/([^/]+)|(me)|(sign-out)|(handle))\/$/;
+/** The account page of the vault at `context`: `<base><mount>/-/account/`. */
+const accountPagePath = (context: ServerContext): string => `${siteRoot(context)}-/account/`;
 
-/** The `auth` server module: `server: { module, options }` with {@link AuthOptions}. */
+/** `path` with the account page's `status` query, and the provider or typed values it concerns. */
+function withStatus(path: string, url: URL, status: StatusCode, provider?: ProviderId, typed: Record<string, string> = {}): string {
+  const target = new URL(path, url.origin);
+  target.searchParams.set("status", status);
+  if (provider) target.searchParams.set("provider", provider);
+  for (const [key, value] of Object.entries(typed)) target.searchParams.set(key, value);
+  return `${target.pathname}${target.search}`;
+}
+
+/** A display name: trimmed, at most {@link NAME_MAX_LENGTH} characters, with no control characters. */
+function displayName(input: string): string | undefined {
+  const name = input.trim();
+  return name && [...name].length <= NAME_MAX_LENGTH && !/\p{Cc}/u.test(name) ? name : undefined;
+}
+
+/** What an account form needs: the request, the signed-in session and the database. */
+interface AccountChange {
+  readonly request: Request;
+  readonly url: URL;
+  readonly context: ServerContext;
+  readonly db: Database;
+  readonly session: NonNullable<Awaited<ReturnType<typeof readCurrentSession>>>;
+}
+
+async function changeProfile({ request, url, context, db, session }: AccountChange): Promise<Response> {
+  const form = await request.formData().catch(() => undefined);
+  const typedName = String(form?.get("name") ?? "");
+  const handle = typedHandle(String(form?.get("handle") ?? ""));
+  const back = (status: StatusCode) => redirect(withStatus(accountPagePath(context), url, status, undefined,
+    status === "saved" ? {} : { name: typedName, handle }), [], 303);
+  const name = displayName(typedName);
+  if (!name) return back("name-invalid");
+  if (!isHandle(handle)) return back("handle-invalid");
+  return back(await updateProfile(db, session.account.id, { name, handle }) === "saved" ? "saved" : "handle-taken");
+}
+
+async function unlink({ request, url, context, db, session }: AccountChange): Promise<Response> {
+  const form = await request.formData().catch(() => undefined);
+  const identity = String(form?.get("identity") ?? "");
+  const [provider] = identity.split(":", 1);
+  const back = (status: StatusCode) =>
+    redirect(withStatus(accountPagePath(context), url, status, isProviderId(provider ?? "") ? provider as ProviderId : undefined), [], 303);
+  // Unlinking this browser's own sign-in would sign it out mid-click; sign in another way first.
+  if (identity === session.account.identity.id) return back("unlink-current");
+  return back(await unlinkIdentity(db, session.account.id, identity) ? "unlinked" : "unlink-last");
+}
+
+async function signOutEverywhere({ context, db, session }: AccountChange): Promise<Response> {
+  await endAccountSessions(db, session.account.id);
+  return redirect(accountPagePath(context), [cookie(SESSION_COOKIE, "", 0)], 303);
+}
+
+/** Start linking `provider` to the signed-in account: the provider calls back here, bound to this session. */
+async function startLink(change: AccountChange, provider: ProviderId, client: OAuth2Client, secret: string): Promise<Response> {
+  const { url, context, session } = change;
+  const returnTo = sameOriginPath(url.searchParams.get("returnTo") ?? accountPagePath(context), url);
+  if (!returnTo) return failure(400, "invalid_return_to", "returnTo must be a path on this site.");
+  const { authorizationEndpoint, scopes } = PROVIDERS[provider];
+  const state = generateState();
+  const verifier = generateCodeVerifier();
+  const location = client.createAuthorizationURLWithPKCE(authorizationEndpoint, state, CodeChallengeMethod.S256, verifier, [...scopes]);
+  const flow = await seal({ provider, state, verifier, returnTo, link: session.sid } satisfies Flow, secret, "oauth", FLOW_MAX_AGE);
+  return redirect(location.href, [cookie(FLOW_COOKIE, flow, FLOW_MAX_AGE)], 303);
+}
+
+/** `GET users/<handle>/`: the public profile, with an old handle redirected to the current one. */
+async function userProfile(handle: string, context: ServerContext): Promise<Response | undefined> {
+  const profile = await findProfile(handle, context.env);
+  if (!profile) return undefined;
+  if (profile.handle !== handle) return redirect(`${context.base}/users/${profile.handle}/`, [], 308);
+  return json(profile);
+}
+
+const ROUTE = /^\/(?:(start|callback)\/([^/]+)|(me)|(sign-out)|(handle))\/$/;
+const ACCOUNT_ROUTE = /^\/account\/(?:(profile|unlink|sign-out-everywhere)|link\/([^/]+))\/$/;
+const USER_ROUTE = /^\/users\/([^/]+)\/$/;
+
+/** The `auth` server module: `server: { module, options, pages: ["account"] }` with {@link AuthOptions}. */
 const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefined> = (options, data) => {
   // The plugin is eager, so this runs before the site answers anything: every account read resolves `admin` from
   // this deployment's config, and every `can()` its permission catalogue.
   useAdmins(options.admins ?? []);
   usePermissions([...options.permissions ?? [], ...data?.permissions ?? []]);
+  const providers = Object.keys(options.providers).filter(isProviderId);
+  /** The OAuth client for a configured provider, or the response explaining why there is none. */
+  const clientFor = (provider: ProviderId, url: URL, context: ServerContext): OAuth2Client | Response => {
+    const app = options.providers[provider]!;
+    const clientSecret = context.env[app.clientSecret.env];
+    if (typeof clientSecret !== "string" || !clientSecret) {
+      return failure(503, "misconfigured", `Set ${app.clientSecret.env} to the ${PROVIDERS[provider].label} OAuth app's client secret.`);
+    }
+    return new OAuth2Client(app.clientId, clientSecret, callbackUrl(url, context, provider));
+  };
 
-  return async (request, context) => {
+  const accountRoute = async (request: Request, url: URL, context: ServerContext, action: string | undefined, linkTo: string | undefined): Promise<Response | undefined> => {
+    const provider = linkTo !== undefined && isProviderId(linkTo) && options.providers[linkTo] ? linkTo : undefined;
+    // Providers only call back to the callback vault, so only it starts a link.
+    if (linkTo !== undefined && (!provider || options.callbackMountPath !== undefined)) return undefined;
+    if (request.method !== "POST") return failure(405, "method_not_allowed", "Use POST.", { allow: "POST" });
+    // Browsers name the page's origin on every POST: anything else is forged, or from a client that can't be checked.
+    if (request.headers.get("origin") !== url.origin) return failure(403, "cross_origin", "Change your account on this site.");
+    const secret = sessionSecret(context.env);
+    if (!secret) {
+      return failure(503, "misconfigured", `Set ${SESSION_SECRET_ENV} to a random value of at least ${SESSION_SECRET_MIN_LENGTH} characters.`);
+    }
+    const db = await accountsDatabase(context.env);
+    if (!db) return failure(503, "misconfigured", `Bind a D1 database as ${ACCOUNTS_DATABASE_ENV} to give readers accounts.`);
+    const session = await readCurrentSession(request, context.env);
+    if (!session) return redirect(accountPagePath(context), [], 303);
+    const change: AccountChange = { request, url, context, db, session };
+    if (provider) {
+      const client = clientFor(provider, url, context);
+      return client instanceof Response ? client : startLink(change, provider, client, secret);
+    }
+    if (action === "profile") return changeProfile(change);
+    if (action === "unlink") return unlink(change);
+    return signOutEverywhere(change);
+  };
+
+  const page: PageRenderer = async (request, context) => {
+    if (context.path !== "account/") return undefined;
+    // Without accounts, or without the secret that opens sessions, there is no account to show.
+    const db = await accountsDatabase(context.env);
+    if (!db || !sessionSecret(context.env)) return undefined;
     const url = new URL(request.url);
-    const match = ROUTE.exec(url.pathname.slice(context.base.length));
+    const here = url.pathname;
+    const session = await readCurrentSession(request, context.env);
+    if (!session) {
+      return signedOutPage(providers, (provider) => `${context.base}/start/${provider}/?returnTo=${encodeURIComponent(here)}`);
+    }
+    const linkBase = options.callbackMountPath === undefined ? context.base : baseAt(context, options.callbackMountPath);
+    const { identities, sessions } = await signInsOf(db, session.account.id);
+    return accountPage({
+      account: session.account,
+      identities,
+      sessions,
+      session: session.sid,
+      providers,
+      query: url.searchParams,
+      actions: {
+        profile: `${context.base}/account/profile/`,
+        unlink: `${context.base}/account/unlink/`,
+        signOutEverywhere: `${context.base}/account/sign-out-everywhere/`,
+        link: (provider) => `${linkBase}/account/link/${provider}/?returnTo=${encodeURIComponent(here)}`,
+      },
+    });
+  };
+
+  const handle: ServerHandler = async (request, context) => {
+    const url = new URL(request.url);
+    const path = url.pathname.slice(context.base.length);
+    const account = ACCOUNT_ROUTE.exec(path);
+    if (account) return accountRoute(request, url, context, account[1], account[2]);
+    const user = USER_ROUTE.exec(path);
+    if (user) {
+      if (request.method !== "GET") return failure(405, "method_not_allowed", "Use GET.", { allow: "GET" });
+      const handle = decodeRoutePath(user[1]!);
+      return handle === undefined ? undefined : userProfile(handle, context);
+    }
+    const match = ROUTE.exec(path);
     if (!match) return undefined;
     const [, step, providerName = "", me, , handle] = match;
     const provider = isProviderId(providerName) ? providerName : undefined;
@@ -283,14 +465,13 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
     }
     if (!provider || !app) return signOut(request, url, context);
 
-    const clientSecret = context.env[app.clientSecret.env];
-    if (typeof clientSecret !== "string" || !clientSecret) {
-      return failure(503, "misconfigured", `Set ${app.clientSecret.env} to the ${PROVIDERS[provider].label} OAuth app's client secret.`);
-    }
-    const client = new OAuth2Client(app.clientId, clientSecret, callbackUrl(url, context, provider));
+    const client = clientFor(provider, url, context);
+    if (client instanceof Response) return client;
     const args: Step = { request, url, context, provider, client, secret };
     return step === "start" ? start(args) : callback(args);
   };
+
+  return { handle, page };
 };
 
 export default authServer;

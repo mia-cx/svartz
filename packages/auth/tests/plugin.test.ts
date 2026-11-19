@@ -12,8 +12,8 @@ describe("the auth plugin", () => {
     await plugin.emitArtifacts!.run(ctx);
 
     expect(plugin.id).toBe("auth");
-    // Eager: plugins that read accounts need this deployment's admins before their own first request.
-    expect(plugin.server).toEqual({ module: expect.stringMatching(/server\.js$/), options: { providers: { github }, privacyNotice: "/privacy/" }, eager: true });
+    // Eager: plugins that read accounts need this deployment's admins before their own first request. It renders /-/account/.
+    expect(plugin.server).toEqual({ module: expect.stringMatching(/server\.js$/), options: { providers: { github }, privacyNotice: "/privacy/" }, eager: true, pages: ["account"] });
     expect(ctx.compiler?.browserResources.get("auth")?.options).toEqual({
       // Below the deployment base, which the dialog only learns when it mounts: a host app's comes from SvelteKit.
       endpoint: "/notes/_svartz/auth",

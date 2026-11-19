@@ -11,8 +11,11 @@ import { runBuild } from "./helpers/build-process";
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
 const cli = path.join(workspaceRoot, "packages/cli/dist/index.js");
 const HANDLER_MARKER = "svartz-hello-handler";
+const PAGE_MARKER = "svartz-greeter-page";
 const BUILD_TIMEOUT = 240_000;
 const unicodeNotes = [["café", "Prerendered café note."], ["日本語", "Prerendered Japanese note."]] as const;
+/** Notes in folders named `-`, keyed by route below the mount: no plugin claims them, so they stay notes. */
+const dashNotes = [["-/guide", "Prerendered dash guide."], ["guides/-/example", "Prerendered nested dash note."]] as const;
 
 let root: string;
 
@@ -43,11 +46,14 @@ function filesContaining(tree: Map<string, string>, text: string): string[] {
   return [...tree].filter(([, contents]) => contents.includes(text)).map(([file]) => file);
 }
 
-/** Write a one-vault config for `target` whose `hello` plugin serves requests, then run `svartz build`. */
-async function build(target: Record<string, unknown>, { serverPlugin = true, mountPath = "" } = {}) {
+/**
+ * Write a one-vault config for `target` whose `hello` plugin serves requests and whose `greeter` plugin renders
+ * `/-/greet/`, then run `svartz build`.
+ */
+async function build(target: Record<string, unknown>, { serverPlugin = true, pages = serverPlugin, mountPath = "" } = {}) {
   await rm(path.join(root, ".svartz"), { recursive: true, force: true });
   // Crawler links to runtime plugin URLs must neither fail the build nor become static pages.
-  await writeFile(path.join(root, "vault/index.md"), `# Home\n\nPrerendered welcome. ${serverPlugin ? "[Say hello](/_svartz/hello/) or [ping](/_svartz/hello/ping)." : ""}\n`);
+  await writeFile(path.join(root, "vault/index.md"), `# Home\n\nPrerendered welcome. ${serverPlugin ? "[Say hello](/_svartz/hello/) or [ping](/_svartz/hello/ping)." : ""} ${pages ? "[Be greeted](/-/greet/)." : ""}\n`);
   await writeFile(path.join(root, "svartz.config.ts"), `export default {
     version: "1.0.0",
     vaults: [{
@@ -69,6 +75,10 @@ async function build(target: Record<string, unknown>, { serverPlugin = true, mou
         id: "setup",
         disabled: ${!serverPlugin},
         server: { module: ${JSON.stringify(path.join(root, "plugins/setup.mjs"))}, eager: true },
+      }, {
+        id: "greeter",
+        disabled: ${!pages},
+        server: { module: ${JSON.stringify(path.join(root, "plugins/greeter.mjs"))}, pages: ["greet"] },
       }],
     }],
   };\n`);
@@ -96,6 +106,10 @@ beforeAll(async () => {
   for (const [slug, content] of unicodeNotes) {
     await writeFile(path.join(root, "vault", `${slug}.md`), `# ${slug}\n\n${content}\n`);
   }
+  for (const [route, content] of dashNotes) {
+    await mkdir(path.dirname(path.join(root, "vault", route)), { recursive: true });
+    await writeFile(path.join(root, "vault", `${route}.md`), `# ${path.basename(route)}\n\n${content}\n`);
+  }
   await writeFile(path.join(root, "vault/private.md"), "---\nprivate: true\n---\n# PRIVATE_MARKER\n");
   await writeFile(path.join(root, "plugins/hello.mjs"), `export default (options) => (request, context) => {
     if (new URL(request.url).pathname !== context.base + "/") return undefined;
@@ -111,6 +125,13 @@ beforeAll(async () => {
       setupRan: globalThis.svartzTestSetupRan === true,
     });
   };\n`);
+  await writeFile(path.join(root, "plugins/greeter.mjs"), `export default () => ({
+    page: (request, context) => context.path === "greet/away/"
+      ? { redirect: "/guide/" }
+      : context.path === "greet/"
+        ? { title: "Greetings", html: '<h1 class="${PAGE_MARKER}">Hello, ' + (context.env.HELLO_TOKEN ? "server" : "nobody") + "</h1>" }
+        : undefined,
+  });\n`);
   await writeFile(path.join(root, "plugins/setup.mjs"), `export default () => {
     globalThis.svartzTestSetupRan = true;
     return () => undefined;
@@ -125,6 +146,12 @@ describe("standalone builds with a server plugin", () => {
   it("fails a static vault, naming the vault and plugin", async () => {
     const failure = await build({ type: "static" }).then(() => undefined, (error: { stderr?: string }) => error);
     expect(failure?.stderr).toContain('Vault "site" targets "static", but plugin "hello" serves requests.');
+  }, BUILD_TIMEOUT);
+
+  // Proves plugin pages render per request, so a static vault with one fails the build by name, as server plugins do.
+  it("fails a static vault whose plugin renders pages, naming the vault and plugin", async () => {
+    const failure = await build({ type: "static" }, { serverPlugin: false, pages: true }).then(() => undefined, (error: { stderr?: string }) => error);
+    expect(failure?.stderr).toContain('Vault "site" targets "static", but plugin "greeter" serves pages.');
   }, BUILD_TIMEOUT);
 
   it("fails a build whose browser code imports the server registry", async () => {
@@ -204,6 +231,34 @@ describe("standalone builds with a server plugin", () => {
         expect([unslashed.status, unslashed.headers.get("location")]).toEqual([308, "/_svartz/hello/?x=1"]);
         expect((await fetch(`${origin}/_svartz/hello/elsewhere/`)).status).toBe(404);
         expect((await fetch(`${origin}/_svartz/nope/`)).status).toBe(404);
+
+        // Proves a plugin page renders per request inside the theme's shell, with the server's env, and is never cached.
+        const page = await fetch(`${origin}/-/greet/`);
+        const html = await page.text();
+        expect(page.status, html).toBe(200);
+        expect(page.headers.get("cache-control")).toBe("private, no-store");
+        expect(html).toContain(`<h1 class="${PAGE_MARKER}">Hello, server</h1>`);
+        expect(html).toContain("<title>Greetings | Server site</title>");
+        // Minimal's shell: the explorer, the search trigger and the site's header.
+        expect(html).toContain('id="explorer-panel"');
+        expect(html).toContain("sv-search-trigger");
+        expect(html).toContain("sv-wordmark");
+        // Client-side navigation fetches the same page as data.
+        const data = await fetch(`${origin}/-/greet/__data.json`);
+        expect([data.status, data.headers.get("cache-control")]).toEqual([200, "private, no-store"]);
+        expect(await data.text()).toContain(PAGE_MARKER);
+        const away = await fetch(`${origin}/-/greet/away/`, { redirect: "manual" });
+        expect([away.status, away.headers.get("location")]).toEqual([303, "/guide/"]);
+        expect((await fetch(`${origin}/-/greet/elsewhere/`)).status).toBe(404);
+        expect((await fetch(`${origin}/-/nobody/`)).status).toBe(404);
+        expect([...(await readTree(path.join(dist, "prerendered"))).keys()].filter((file) => file.includes(`${path.sep}greet`))).toEqual([]);
+        expect(filesContaining(client, PAGE_MARKER)).toEqual([]);
+      }
+      // Proves notes in folders named `-` are prerendered and served as notes, whether or not the vault has pages.
+      for (const [route, content] of dashNotes) {
+        expect(await readFile(path.join(dist, "prerendered", prefix, route, "index.html"), "utf8")).toContain(content);
+        const note = await fetch(`${origin}/${route}/`);
+        expect([note.status, await note.text()]).toEqual([200, expect.stringContaining(content)]);
       }
       const home = await fetch(`${origin}/`);
       expect(home.headers.get("vary")).toContain("Accept");
@@ -247,6 +302,9 @@ describe("standalone builds with a server plugin", () => {
     expect(await readFile(path.join(dist, "index.html"), "utf8")).toContain("Prerendered welcome.");
     expect(await readFile(path.join(dist, "guide.md"), "utf8")).toContain("Published guide.");
     await expect(access(path.join(dist, "private.md"))).rejects.toMatchObject({ code: "ENOENT" });
+    for (const [route, content] of dashNotes) {
+      expect(await readFile(path.join(dist, route, "index.html"), "utf8")).toContain(content);
+    }
   }, BUILD_TIMEOUT);
 
   for (const type of ["cloudflare-workers", "cloudflare-pages"]) {
@@ -273,6 +331,6 @@ describe("standalone builds with a server plugin", () => {
     }
     const routes = JSON.parse(await readFile(path.join(root, ".svartz/vaults/site/.svelte-kit/cloudflare/_routes.json"), "utf8"));
     expect(routes.exclude).toContain("/guide.md");
-    expect(routes.exclude.filter((pattern: string) => /^\/(?:guide|other)/.test(pattern) && !pattern.endsWith(".md"))).toEqual([]);
+    expect(routes.exclude.filter((pattern: string) => /^\/(?:guide|other)(?:\/|$)/.test(pattern) && !pattern.endsWith(".md"))).toEqual([]);
   }, BUILD_TIMEOUT);
 });

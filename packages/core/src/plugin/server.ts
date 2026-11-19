@@ -4,7 +4,10 @@ import { decodeRoutePath } from "../route-path";
 /** Path segment under which every server plugin answers: `<base><mount>/_svartz/<plugin-id>/`. */
 export const SERVER_ROUTE_SEGMENT = "_svartz";
 
-/** Plugin ids that serve requests double as one URL path segment. */
+/** Path segment under which plugin pages render in the theme shell: `<base><mount>/-/<page>/`. */
+export const PAGE_ROUTE_SEGMENT = "-";
+
+/** Plugin ids that serve requests, and the page names plugins claim, double as one URL path segment. */
 export const SERVER_PLUGIN_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 /** Server-only environment variable names. Client-public `PUBLIC_` and `VITE_` names are refused. */
@@ -36,6 +39,12 @@ export interface ServerModuleSpec<Options = unknown> {
    * code reads, as `auth`'s does with its admins. A factory that throws fails every request until it starts.
    */
   readonly eager?: boolean;
+  /**
+   * Pages this plugin renders in the theme shell. Each name claims `<base><mount>/-/<name>/` and every path below it,
+   * such as `account` for `/-/account/`, or `history` for `/-/history/notes/intro/`. Names follow the plugin id rules,
+   * and no two plugins on a vault may claim one. The factory's `page` renders them.
+   */
+  readonly pages?: readonly string[];
 }
 
 /** Public settings of the vault a server plugin belongs to. */
@@ -64,11 +73,41 @@ export interface ServerContext {
 /** Answers a request under the plugin's prefix. `undefined` answers 404. */
 export type ServerHandler = (request: Request, context: ServerContext) => MaybePromise<Response | undefined>;
 
+/** Per-request facilities handed to a plugin's page renderer. */
+export interface PageContext extends ServerContext {
+  /** The page's path below `/-/`, decoded and ending in a slash: `account/`, or `history/notes/intro/`. */
+  readonly path: string;
+}
+
+/** A plugin page's content. The theme shell renders `html` as the page body, under its header and beside its explorer. */
+export interface PluginPage {
+  /** The document title, before the site's: `Account | Notes`. */
+  readonly title: string;
+  /** The page body, its heading included. Escape everything a reader or a provider supplied. */
+  readonly html: string;
+}
+
+/** What a page renderer answers: the page, or a same-site path to send the reader to instead. */
+export type PageResult = PluginPage | { readonly redirect: string };
+
+/**
+ * Renders a GET of one of the plugin's pages; `undefined` answers 404. Pages render on every request and are never
+ * prerendered or cached. Forms on them post to the plugin's `/_svartz/<id>/` routes, which redirect back.
+ */
+export type PageRenderer = (request: Request, context: PageContext) => MaybePromise<PageResult | undefined>;
+
+/** What a server factory builds when it renders pages: its request handler, if any, and its page renderer. */
+export interface ServerModule {
+  readonly handle?: ServerHandler;
+  readonly page?: PageRenderer;
+}
+
 /**
  * A server module's default export: builds the handler once from the plugin's options and the build data its hooks
- * set in `getCompilerContributions(ctx).serverData` (`undefined` when they set none).
+ * set in `getCompilerContributions(ctx).serverData` (`undefined` when they set none). A plugin with `pages` answers
+ * `{ handle, page }`.
  */
-export type ServerModuleFactory<Options = unknown, Data = unknown> = (options: Options, data: Data) => ServerHandler;
+export type ServerModuleFactory<Options = unknown, Data = unknown> = (options: Options, data: Data) => ServerHandler | ServerModule;
 
 /** One active server plugin in a generated registry. */
 export interface ServerRoute {
@@ -79,6 +118,8 @@ export interface ServerRoute {
   readonly data?: unknown;
   /** The spec's `eager`: its factory runs before the handle answers its first request. */
   readonly eager?: boolean;
+  /** The spec's `pages`: the names below `/-/` this plugin renders. */
+  readonly pages?: readonly string[];
 }
 
 /** What a build knows about its server plugins; `virtual:svartz/server` exports one per vault. */
@@ -155,16 +196,19 @@ function notFound(pathname: string): Response {
   return Response.json({ error: "not_found", message: `Nothing answers ${pathname}.` }, { status: 404 });
 }
 
-async function loadHandler(route: ServerRoute): Promise<ServerHandler> {
+async function loadServerModule(route: ServerRoute): Promise<ServerModule> {
   const module = await route.load() as { default?: unknown };
   if (typeof module.default !== "function") {
     throw new Error(`[svartz:server] plugin "${route.id}" server module must default-export a factory`);
   }
-  const handler: unknown = module.default(route.options, route.data);
-  if (typeof handler !== "function") {
-    throw new Error(`[svartz:server] plugin "${route.id}" server factory must return a handler`);
+  const built: unknown = module.default(route.options, route.data);
+  if (typeof built === "function") return { handle: built as ServerHandler };
+  const { handle, page } = (built ?? {}) as Partial<Record<keyof ServerModule, unknown>>;
+  if ((typeof handle === "function" || handle === undefined) && (typeof page === "function" || page === undefined)
+    && (handle || page)) {
+    return built as ServerModule;
   }
-  return handler as ServerHandler;
+  throw new Error(`[svartz:server] plugin "${route.id}" server factory must return a handler or { handle, page }`);
 }
 
 /** Explicit media preferences take precedence over the known agent's default representation. */
@@ -221,36 +265,102 @@ function varyRepresentation(response: Response): Response {
   return result;
 }
 
-/**
- * Build a SvelteKit `handle` that sends `<basePath>/_svartz/<id>/…` to plugin `<id>` and every other request to `resolve`.
- * Published page GET/HEAD requests that prefer Markdown get a 303 to the page's emitted copy; others resolve HTML.
- * Unknown ids, and handlers answering `undefined`, return 404. Each factory runs once: on its plugin's first request,
- * or for an `eager` plugin before the handle answers its first request of any kind.
- */
-export function createServerHandle(registry: ServerRegistry, runtime: ServerHandleRuntime) {
-  const root = `${registry.basePath}/${SERVER_ROUTE_SEGMENT}/`;
-  const routes = new Map(registry.servers.map((route) => [route.id, route]));
-  const eager = registry.servers.filter((route) => route.eager);
-  const handlers = new Map<string, Promise<ServerHandler>>();
-
-  const handlerFor = (route: ServerRoute): Promise<ServerHandler> => {
-    const cached = handlers.get(route.id);
-    if (cached) return cached;
-    const pending = loadHandler(route);
-    handlers.set(route.id, pending);
-    pending.catch(() => handlers.delete(route.id));
-    return pending;
-  };
-
-  return async <Event extends ServerHandleEvent>({ event, resolve }: {
+/** Serves a vault's server plugins: SvelteKit's `handle`, and the `load` of the route that renders plugin pages. */
+export interface SvartzServer {
+  /**
+   * The SvelteKit `handle`: sends `<basePath>/_svartz/<id>/…` to plugin `<id>` and every other request to `resolve`.
+   * Published page GET/HEAD requests that prefer Markdown get a 303 to the page's emitted copy; others resolve HTML.
+   * Unknown ids, and handlers answering `undefined`, return 404. Responses for plugin pages are never cached.
+   */
+  readonly handle: <Event extends ServerHandleEvent>(input: {
     event: Event;
     resolve: (event: Event) => MaybePromise<Response>;
-  }): Promise<Response> => {
-    // Before pages and the app's own routes too: they read what eager plugins set up as much as plugins do.
-    // Nothing answers at runtime while prerendering, so nothing starts.
-    if (!runtime.building) await Promise.all(eager.map(handlerFor));
+  }) => Promise<Response>;
+  /**
+   * The plugin page at `event.url`, rendered by the plugin that claims its name, or `undefined` when no plugin
+   * renders one there (or while prerendering). The route's `load` turns a redirect into SvelteKit's and `undefined`
+   * into a 404.
+   */
+  readonly page: (event: ServerHandleEvent) => Promise<PageResult | undefined>;
+}
+
+/**
+ * Build a vault's {@link SvartzServer}. Each factory runs once: on its plugin's first request or page, or for an
+ * `eager` plugin before the handle answers its first request of any kind.
+ */
+export function createServer(registry: ServerRegistry, runtime: ServerHandleRuntime): SvartzServer {
+  const root = `${registry.basePath}/${SERVER_ROUTE_SEGMENT}/`;
+  const pagesRoot = `${registry.basePath}/${PAGE_ROUTE_SEGMENT}/`;
+  const routes = new Map(registry.servers.map((route) => [route.id, route]));
+  const pageOwners = new Map(registry.servers.flatMap((route) => (route.pages ?? []).map((name) => [name, route] as const)));
+  const eager = registry.servers.filter((route) => route.eager);
+  const modules = new Map<string, Promise<ServerModule>>();
+
+  const moduleFor = (route: ServerRoute): Promise<ServerModule> => {
+    const cached = modules.get(route.id);
+    if (cached) return cached;
+    const pending = loadServerModule(route);
+    modules.set(route.id, pending);
+    pending.catch(() => modules.delete(route.id));
+    return pending;
+  };
+  // Before pages and the app's own routes too: they read what eager plugins set up as much as plugins do.
+  // Nothing answers at runtime while prerendering, so nothing starts.
+  const startEager = () => Promise.all(eager.map(moduleFor));
+
+  const contextFor = async (event: ServerHandleEvent, id: string): Promise<ServerContext> => {
+    const waitUntilHost = platformWaitUntil(event.platform) ?? runtime.workers;
+    return {
+      env: runtime.dev
+        ? await devEnv(runtime.privateEnv)
+        : platformEnv(event.platform) ?? runtime.workers?.env ?? runtime.privateEnv,
+      clientAddress: clientAddress(event),
+      vault: registry.vault,
+      base: `${root}${id}`,
+      waitUntil: waitUntilHost
+        ? (promise) => waitUntilHost.waitUntil(promise)
+        : (promise) => {
+            promise.catch((error: unknown) => console.error(`[svartz:server] plugin "${id}" background task failed`, error));
+          },
+    };
+  };
+
+  /** The page's path below `/-/`, decoded and ending in a slash, and the plugin that claims it. */
+  const pageAt = (pathname: string): { path: string; route: ServerRoute } | undefined => {
+    const slashed = pathname.endsWith("/") ? pathname : `${pathname}/`;
+    if (!slashed.startsWith(pagesRoot)) return undefined;
+    const path = decodeRoutePath(slashed.slice(pagesRoot.length));
+    if (path === undefined) return undefined;
+    const route = pageOwners.get(path.split("/", 1)[0]!);
+    return route && { path, route };
+  };
+
+  const page = async (event: ServerHandleEvent): Promise<PageResult | undefined> => {
+    if (runtime.building) return undefined;
+    await startEager();
+    const owned = pageAt(event.url.pathname);
+    if (!owned) return undefined;
+    const { route, path } = owned;
+    const module = await moduleFor(route);
+    if (!module.page) {
+      throw new Error(`[svartz:server] plugin "${route.id}" claims pages, but its server factory returns no page renderer`);
+    }
+    // The page's own URL: a client-side navigation's request names its `__data.json` instead.
+    const request = new Request(event.url, { headers: event.request.headers });
+    return module.page(request, { ...await contextFor(event, route.id), path });
+  };
+
+  const handle: SvartzServer["handle"] = async ({ event, resolve }) => {
+    if (!runtime.building) await startEager();
     // Read nothing but the pathname before the prefix check: SvelteKit forbids `url.search` while prerendering.
     const { pathname } = event.url;
+    if (!runtime.building && pageAt(pathname)) {
+      // Pages show who is signed in, so no shared cache may keep one.
+      const response = await resolve(event);
+      const uncached = new Response(response.body, response);
+      uncached.headers.set("cache-control", "private, no-store");
+      return uncached;
+    }
     const markdownHref = markdownCopyFor(registry.markdown, pathname);
     if (!runtime.building && markdownHref && ["GET", "HEAD"].includes(event.request.method)) {
       // Redirect instead of serving the copy here: without `site.url` its links are relative to the `.md` URL.
@@ -281,21 +391,15 @@ export function createServerHandle(registry: ServerRegistry, runtime: ServerHand
     const route = routes.get(id);
     if (!route) return notFound(pathname);
 
-    const handler = await handlerFor(route);
-    const waitUntilHost = platformWaitUntil(event.platform) ?? runtime.workers;
-    const response = await handler(request, {
-      env: runtime.dev
-        ? await devEnv(runtime.privateEnv)
-        : platformEnv(event.platform) ?? runtime.workers?.env ?? runtime.privateEnv,
-      clientAddress: clientAddress(event),
-      vault: registry.vault,
-      base: `${root}${id}`,
-      waitUntil: waitUntilHost
-        ? (promise) => waitUntilHost.waitUntil(promise)
-        : (promise) => {
-            promise.catch((error: unknown) => console.error(`[svartz:server] plugin "${id}" background task failed`, error));
-          },
-    });
+    const { handle: handler } = await moduleFor(route);
+    const response = await handler?.(request, await contextFor(event, id));
     return response ?? notFound(pathname);
   };
+
+  return { handle, page };
+}
+
+/** The SvelteKit `handle` of {@link createServer}, for apps that render no plugin pages. */
+export function createServerHandle(registry: ServerRegistry, runtime: ServerHandleRuntime): SvartzServer["handle"] {
+  return createServer(registry, runtime).handle;
 }

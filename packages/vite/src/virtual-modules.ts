@@ -6,7 +6,7 @@ const RESOLVED_ARTIFACTS_VIRTUAL_ID = "\0svartz:artifacts" as const;
 const SVARTZ_SERVER_VIRTUAL_ID = "virtual:svartz/server" as const;
 const RESOLVED_SERVER_VIRTUAL_ID = "\0svartz:server" as const;
 
-const SERVER_PLACEHOLDER_SOURCE = "export const svartzHandle = ({ event, resolve }) => resolve(event);";
+const SERVER_PLACEHOLDER_SOURCE = "export const svartzHandle = ({ event, resolve }) => resolve(event);\nexport const svartzPage = async () => undefined;";
 
 const THEME_PLACEHOLDER_SOURCE = [
   'export const theme = {',

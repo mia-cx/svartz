@@ -101,6 +101,16 @@ declare module "virtual:svartz/host" {
   export function prepareHostVault(pathname: string): Promise<PreparedHostVault | undefined>;
   /** Built CSS assets needed by a direct SSR response for the selected vault. */
   export function hostStylesheets(pathname: string): readonly string[];
+  /**
+   * The `svartzMount` param matcher: whether `param` is the mount, without its leading slash, of a vault with plugin
+   * pages. It keeps that vault for {@link isPluginPageName}, which SvelteKit runs next.
+   */
+  export function isPluginPageMount(param: string): boolean;
+  /**
+   * The `svartzPage` param matcher: whether a plugin of the vault {@link isPluginPageMount} just accepted claims the
+   * first segment of `param`, the path below `/-/`.
+   */
+  export function isPluginPageName(param: string): boolean;
 }
 
 /**
@@ -119,7 +129,12 @@ declare module "virtual:svartz/index" {
   export const vaults: readonly PublishedVault[];
 }
 
-/** Server-only. Add `svartzHandle` to `hooks.server` to route `/_svartz/<id>/` to every vault's server plugins. */
+/**
+ * Server-only. Add `svartzHandle` to `hooks.server` to route `/_svartz/<id>/` to every vault's server plugins.
+ * `svartzPage` renders plugin pages under `/-/` from the plugin page route's server `load`.
+ */
 declare module "virtual:svartz/server" {
   export const svartzHandle: import("@sveltejs/kit").Handle;
+  /** The plugin page at `event.url`, or `undefined` when no plugin renders one there. */
+  export function svartzPage(event: import("@sveltejs/kit").RequestEvent): Promise<import("@svartz/core").PageResult | undefined>;
 }

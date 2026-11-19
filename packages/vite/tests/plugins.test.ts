@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runStages, type PluginContext, type ResolvedConfig, type SvartzPlugin, type SvartzTheme } from "@svartz/core";
-import { resolveRuntimePlugins } from "../src/plugins";
+import { assertNoNotesUnderPages, resolveRuntimePlugins } from "../src/plugins";
 
 function config(plugins: SvartzPlugin[] = []): ResolvedConfig {
   return { plugins } as unknown as ResolvedConfig;
@@ -136,6 +136,36 @@ describe("server plugins", () => {
       [{ when: new Date(0) }, "server.options.when"],
     ] as const) {
       expect(() => resolveRuntimePlugins(vault("node", [hello({ options })]))).toThrow(`Plugin "hello": ${path}`);
+    }
+  });
+
+  // Proves plugin pages need a server like requests do, and that the build names the vault and the plugin.
+  it("fails a static vault whose plugin serves pages", () => {
+    expect(() => resolveRuntimePlugins(vault("static", [hello({ pages: ["account"] })]))).toThrow(
+      'Vault "wiki" targets "static", but plugin "hello" serves pages.',
+    );
+  });
+
+  // Proves a page name is a URL path segment, and that two plugins can never both answer one page.
+  it("refuses page names that can't be a path segment, and pages two plugins claim", () => {
+    for (const name of ["Account", "a/b", "", "-"]) {
+      expect(() => resolveRuntimePlugins(vault("node", [hello({ pages: [name] })])))
+        .toThrow(`Plugin "hello" claims page ${JSON.stringify(name)} under /-/`);
+    }
+    const other = { id: "other", server: { module: "/plugins/other/server.js", pages: ["account"] } } as SvartzPlugin;
+    expect(() => resolveRuntimePlugins(vault("node", [hello({ pages: ["account"] }), other])))
+      .toThrow('Vault "wiki": plugins "hello" and "other" both claim the page /-/account/.');
+  });
+
+  // Proves a claimed page name shadows only the notes below it: other notes under `/-/` keep their routes.
+  it("fails a build that publishes a note under a page a plugin claims, naming the note", () => {
+    const docs = { ...vault("node", [hello({ pages: ["account"] })]), mountPath: "/docs" } as ResolvedConfig;
+    const plugins = resolveRuntimePlugins(docs);
+    expect(() => assertNoNotesUnderPages(docs, plugins, ["/docs/-/guide/", "/docs/guides/-/account/", "/docs/-/accounts/"]))
+      .not.toThrow();
+    for (const note of ["/docs/-/account/", "/docs/-/account/settings/"]) {
+      expect(() => assertNoNotesUnderPages(docs, plugins, ["/docs/", note]))
+        .toThrow(`Vault "wiki" publishes ${note}, but a plugin page owns /docs/-/account/.`);
     }
   });
 

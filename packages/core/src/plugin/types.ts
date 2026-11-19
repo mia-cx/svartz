@@ -112,7 +112,10 @@ interface SvartzPlugin {
   readonly id: string;
   readonly contractVersion?: string;
   readonly disabled?: boolean;
-  /** Answers requests under `/_svartz/<id>/` at runtime. Needs a server target; the id must be a URL path segment. */
+  /**
+   * Answers requests under `/_svartz/<id>/` at runtime, and renders its `pages` under `/-/`. Needs a server target;
+   * the id must be a URL path segment.
+   */
   readonly server?: ServerModuleSpec;
   /** The permissions this plugin checks, each in its own namespace (`<id>:feature:action`). `auth` collects them at build time. */
   readonly permissions?: readonly PermissionDeclaration[];

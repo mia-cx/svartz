@@ -1,6 +1,6 @@
 # Server plugins
 
-A plugin can answer requests at runtime. Give it a `server` module, and Svartz routes every request under `/_svartz/<plugin-id>/` to that module's handler. Pages stay prerendered. The platform also negotiates their [Markdown copies](discovery.md#markdown-for-llm-agents) before serving static HTML.
+A plugin can answer requests at runtime. Give it a `server` module, and Svartz routes every request under `/_svartz/<plugin-id>/` to that module's handler. It can also render [plugin pages](#plugin-pages) under `/-/`, inside the theme's shell. Notes stay prerendered. The platform also negotiates their [Markdown copies](discovery.md#markdown-for-llm-agents) before serving static HTML.
 
 ```ts
 import { fileURLToPath } from "node:url";
@@ -64,6 +64,51 @@ The handler receives a `context`:
 
 Errors the handler throws reach SvelteKit's `handleError` and answer 500.
 
+## Plugin pages
+
+A plugin page is a page a server plugin renders on every request, inside the theme's shell: the site's header, explorer and search stay put, and the plugin supplies the body. `@svartz/auth`'s [`/-/account/`](auth.md#the-account-page) is one.
+
+Claim page names with `server.pages`. Each name owns `<base><mount>/-/<name>/` and every path below it, so `history` covers `/-/history/notes/intro/` too. A name follows the plugin id rules, and no two plugins on a vault may claim the same one; the build fails naming both. A vault may not publish a note under a name one of its plugins claims, such as `-/account/settings.md` beside `account`; the build fails naming the note. Every other note under `<mount>/-/`, such as `-/guide.md`, stays a note.
+
+```ts
+plugins: [{
+  id: "greeter",
+  server: { module: "@acme/svartz-greeter/server", pages: ["greet"] },
+}],
+```
+
+The factory then returns `{ handle, page }` instead of a bare handler. `handle` answers `/_svartz/<id>/` as before and may be left out. `page` renders each GET of a claimed path:
+
+```ts
+import type { ServerModuleFactory } from "@svartz/core";
+
+const escape = (text: string) => text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+
+const greeter: ServerModuleFactory = () => ({
+  page: (request, context) => {
+    if (context.path !== "greet/") return undefined;
+    const name = new URL(request.url).searchParams.get("name") ?? "reader";
+    return { title: "Greetings", html: `<h1>Hello, ${escape(name)}</h1>` };
+  },
+});
+
+export default greeter;
+```
+
+`page` receives the request and the handler's [`context`](#the-module), plus `context.path`: the decoded path below `/-/`, ending in a slash, such as `greet/` or `history/notes/intro/`. `context.base` is still the plugin's `/_svartz/<id>` prefix, which is where the page's forms post. It answers one of:
+
+| Answer | The reader gets |
+| --- | --- |
+| `{ title, html }` | The page: `html` as the body of the theme's default layout, and `<title>` reading `<title> \| <site title>`. `html` brings its own heading. Escape everything a reader or a provider supplied. |
+| `{ redirect }` | A 303 to that same-site path, which includes the deployment base. |
+| `undefined` | The theme's 404 page. |
+
+Plugin pages are never prerendered, never cached (`Cache-Control: private, no-store`), and carry `<meta name="robots" content="noindex">`. They work without JavaScript: put plain HTML forms in `html` and point them at the plugin's own routes under `context.base`, which do the work and redirect back with a 303. SvelteKit's [CSRF check](#routing) covers those form posts as it covers every plugin route. Client-side navigation to a plugin page fetches it from the server like any SvelteKit page, so readers move between notes and plugin pages without a full reload.
+
+Style plugin pages with a [browser resource](../vaults/docs/guides/create-plugin.md) of `kind: "css"`, using the theme's `--sv-*` tokens so they follow the site's colours in both modes.
+
+The standalone shell renders plugin pages through its `src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/` route, whose param matchers send it only the names the plugins of the vault at that mount claim. A host app needs the same route and matchers: `npx svartz init` adds it, and [host vaults](host-vaults.md#plugin-pages) shows it. A host build whose vault claims pages fails when no route renders them.
+
 ## Options and secrets
 
 Options must be JSON: strings, finite numbers, booleans, `null`, arrays and plain objects. They are written into the server bundle and never into the browser bundle.
@@ -118,7 +163,7 @@ A plugin's [browser script](../vaults/docs/guides/create-plugin.md) gets the dep
 - An unknown id, or a handler that returns `undefined`, answers 404 with `{ "error": "not_found", "message": "…" }`.
 - Svartz URLs end in a slash, and the handler always sees one. A request without one, such as `/_svartz/hello/ping`, is redirected with a 308 to `/_svartz/hello/ping/`; clients resend the method and body, and the query is kept. When a SvelteKit route in the app matches the path, SvelteKit applies that route's `trailingSlash` first, so a host app's default `'never'` serves `/_svartz/hello/ping` without a redirect and hands the handler `/_svartz/hello/ping/`.
 - SvelteKit's CSRF check runs first: a cross-origin `POST`, `PUT`, `PATCH` or `DELETE` with a form content type (`application/x-www-form-urlencoded`, `multipart/form-data` or `text/plain`) answers 403, as does one without a content type on SvelteKit 3, unless its origin is in the app's `csrf.trustedOrigins`. A browser's same-origin `fetch` passes. On Node, tell SvelteKit the site's public origin with the `ORIGIN` environment variable, or `paths.origin`, which wins over it on SvelteKit 3.
-- While prerendering, plugin paths answer 404 without running the plugin, so build-time env never reaches a handler. Notes may link to plugin URLs: the crawler skips them instead of failing the build, and writes no static page for them.
+- While prerendering, plugin paths answer 404 without running the plugin, so build-time env never reaches a handler. Notes may link to plugin URLs: the crawler skips them instead of failing the build, and writes no static page for them. Links to plugin pages under `/-/` are skipped too.
 
 A plugin id that serves requests may hold only lowercase letters, digits and hyphens.
 
@@ -132,12 +177,12 @@ A vault with an active server plugin needs a server target:
 | `cloudflare-pages` | `@sveltejs/adapter-cloudflare` | `.svartz/vaults/<id>/.svelte-kit/cloudflare/` |
 | `node` | `@sveltejs/adapter-node` | `<outDir>/index.js`; run it with `node` |
 
-Notes, lists and theme pages are still prerendered and served as static files. A `static` vault with a server plugin fails the build, naming the vault and the plugin. A plugin that is `disabled`, or replaced by a same-id plugin without `server`, doesn't count.
+Notes, lists and theme pages are still prerendered and served as static files. A `static` vault with a server plugin, or with a plugin page, fails the build, naming the vault and the plugin. A plugin that is `disabled`, or replaced by a same-id plugin without `server`, doesn't count.
 
 A `host` vault uses the host app's adapter, which must not be `@sveltejs/adapter-static`, and the app adds `svartzHandle` to its hooks. See [server plugins in a host app](host-vaults.md#server-plugins).
 
-`svartzHandle`, from the server-only module `virtual:svartz/server`, is the SvelteKit `handle` that routes plugin requests. The standalone shell's `src/hooks.server.ts` runs it before its own handle. Each vault's version is built with `createServerHandle` from `@svartz/core`; a host app's runs every host vault's in turn.
+`svartzHandle`, from the server-only module `virtual:svartz/server`, is the SvelteKit `handle` that routes plugin requests. The standalone shell's `src/hooks.server.ts` runs it before its own handle. The same module exports `svartzPage`, which the plugin page route's server `load` calls. Each vault's pair is built with `createServer` from `@svartz/core`; a host app's runs every host vault's in turn.
 
 ## Signed-in readers
 
-To know who sent a request, add `@svartz/auth` to the vault and call `readIdentity(request, context.env)` from `@svartz/auth/server`. See [Reader sign-in](auth.md).
+To know who sent a request or opened a page, add `@svartz/auth` to the vault and call `readAccount(request, context.env)` from `@svartz/auth/server`. See [Reader sign-in](auth.md).

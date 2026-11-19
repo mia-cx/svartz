@@ -18,6 +18,8 @@ export interface VaultPageInput {
 	readonly runtimeTheme: ThemeModule;
 	readonly artifacts: ArtifactsModule;
 	readonly contentComponents: ContentComponentOverrides;
+	/** A plugin page under `/-/`: it matches no theme route and renders no note. */
+	readonly pluginPage?: boolean;
 }
 
 export type PageModule = {
@@ -90,6 +92,7 @@ export class VaultPageState {
 	});
 
 	runtimeRoute = $derived.by(() => {
+		if (this.#input().pluginPage) return undefined;
 		const match = this.#input().runtimeTheme.resolveRuntimeRoute({
 			pathname: this.vaultPathname,
 			slug: normalizeSlug(this.vaultPathname)

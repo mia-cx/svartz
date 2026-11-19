@@ -94,6 +94,93 @@ export default withSvartzHost(defineConfig({
 }));
 ```
 
+### Plugin pages
+
+[Plugin pages](server-plugins.md#plugin-pages), such as auth's `/-/account/`, render through their own route beside the catchall, `src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/`. Its two param matchers let it answer only at the mount of a vault with plugin pages, under a page name one of that vault's plugins claims. Every other path, a note in a folder named `-` included, reaches the catchall and stays prerendered, even under a name only another vault claims. `npx svartz init` adds the route and its matchers to an app with a server adapter. An app that has the route keeps it as it is. A build whose vault claims pages fails when no route in the app renders them.
+
+The matchers read `virtual:svartz/host`. SvelteKit 3 reads them from `src/params.ts`. During the build it also imports that file in plain Node, only to check the matchers exist; there `import.meta.env` is undefined, so the file skips the virtual module:
+
+```ts
+// src/params.ts (SvelteKit 3)
+import { defineParams } from '@sveltejs/kit/params';
+
+// SvelteKit also imports this file in plain Node, only to check it defines the matchers below. There, without Vite,
+// `import.meta.env` is undefined and the virtual module can't resolve, so it isn't loaded.
+const host = import.meta.env ? await import('virtual:svartz/host') : undefined;
+
+// Plugin pages answer `<mount>/-/<name>/` only where a plugin of the vault at <mount> claims <name>; every other path stays a note.
+export const params = defineParams({
+  svartzMount: (param) => (host?.isPluginPageMount(param) ? param : undefined),
+  svartzPage: (param) => (host?.isPluginPageName(param) ? param : undefined)
+});
+```
+
+If your app already has its own `src/params.ts`, add the two matchers to its `defineParams`; init leaves that file and the route alone. Keep both matchers as they are: SvelteKit runs `svartzPage` right after `svartzMount` accepts a mount, and it checks the name against that mount's vault. SvelteKit 2 reads one file per matcher:
+
+```ts
+// src/params/svartzMount.ts (SvelteKit 2)
+export { isPluginPageMount as match } from 'virtual:svartz/host';
+```
+
+```ts
+// src/params/svartzPage.ts (SvelteKit 2)
+export { isPluginPageName as match } from 'virtual:svartz/host';
+```
+
+The route's files work in SvelteKit 2 and 3:
+
+```ts
+// src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/+page.server.ts
+import { error, redirect } from '@sveltejs/kit';
+import { decodeRoutePath } from '@svartz/ui/runtime';
+import { assets, base, hostStylesheets, prepareHostVault } from 'virtual:svartz/host';
+import { svartzPage } from 'virtual:svartz/server';
+
+// Plugin pages under /-/ render on every request; notes stay prerendered.
+export const prerender = false;
+
+export const load = async (event) => {
+  const page = await svartzPage(event);
+  if (!page) error(404);
+  if ('redirect' in page) redirect(303, page.redirect);
+  const pathname = decodeRoutePath(event.url.pathname.slice(base.length)) ?? '/';
+  await prepareHostVault(pathname);
+  return { svartzPage: page, svartzStylesheets: hostStylesheets(pathname).map((file) => `${assets}/${file}`) };
+};
+```
+
+```ts
+// src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/+page.ts
+import { decodeRoutePath } from '@svartz/ui/runtime';
+import { base, prepareHostVault } from 'virtual:svartz/host';
+
+// The theme's shell loads lazily; prepare it before rendering here and before hydrating in the browser.
+export const load = async ({ url, data }) => {
+  await prepareHostVault(decodeRoutePath(url.pathname.slice(base.length)) ?? '/');
+  return data;
+};
+```
+
+```svelte
+<!-- src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/+page.svelte -->
+<script lang="ts">
+  import type { PageData } from './$types';
+  import { page } from '$app/state';
+  import { SvartzPluginPage } from '@svartz/ui/runtime';
+  let { data }: { data: PageData } = $props();
+</script>
+
+<svelte:head>
+  {#each data.svartzStylesheets as stylesheet}
+    <link rel="stylesheet" href={stylesheet} />
+  {/each}
+</svelte:head>
+
+<SvartzPluginPage pathname={page.url.pathname} page={data.svartzPage} />
+```
+
+`SvartzPluginPage` draws the page with the vault's theme shell, as `SvartzRuntimePage` does for notes. The route needs `svartzHandle` in the hooks, which marks plugin pages uncacheable. An app on `@sveltejs/adapter-static` can't serve plugin pages, so init leaves the route out there.
+
 ## Render a note inside your own page
 
 `SvartzRuntimePage` draws the whole theme page. To keep your own layout, render only the note body with `SvartzNoteContent` from `@svartz/ui/runtime`. Read the title, properties, dates and backlinks from the [published vault view](vault-view.md).
