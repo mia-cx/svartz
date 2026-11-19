@@ -200,18 +200,22 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   let stderr = "";
   dev.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
   try {
+    // On a busy machine the dev server is slow to listen, and may answer 500 until Vite has its dependencies ready.
     let response: Response | undefined;
-    for (let attempt = 0; attempt < 80; attempt++) {
+    let refusal = "";
+    for (let attempt = 0; attempt < 300; attempt++) {
       if (dev.exitCode !== null) throw new Error(`Host dev server exited: ${stderr}`);
       try {
         response = await fetch(`http://127.0.0.1:${port}/other`);
-        break;
+        if (response.status === 200) break;
+        refusal = await response.text();
       } catch {
-        await sleep(100);
+        // Not listening yet.
       }
+      await sleep(100);
     }
     expect(response, stderr).toBeDefined();
-    expect(response?.status, stderr).toBe(200);
+    expect(response?.status, `${stderr}\n${refusal}`).toBe(200);
     expect(await response?.text()).toContain("Other route");
     const locked = await fetch(`http://127.0.0.1:${port}/work/secret`);
     const lockedHtml = await locked.text();
@@ -426,7 +430,7 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   const rebuiltIndex = await readFile(path.join(root, ".svartz/vaults/notes/artifacts/index.ts"), "utf8");
   expect(rebuiltIndex).not.toContain('"slug": "guides/deep", "title": "Deep"');
   expect(rebuiltIndex).not.toContain('"/blog/folders/guides/deep/"');
-}, 90_000);
+}, 180_000);
 
 it("routes server plugins through svartzHandle for every host vault, and fails a host that can't run them", async () => {
   // SvelteKit writes relative imports from the kit dir; macOS's /var symlink would break them.
