@@ -24,7 +24,7 @@ export const stripMarker = definePlugin(() => ({
 }));
 ```
 
-A plugin that takes options closes over them in its hooks, where nothing outside can read them. Put the values its output depends on in the plugin's `options` too, merged over your defaults: previous versions built from git (`history({ source: "git" })`) reuse compiled pages until a plugin's `options` (or its code) change, so a value only a closure holds would leave them stale. Deleting `.svartz/vaults/<id>/cache` forces every version to compile again.
+A plugin that takes options closes over them in its hooks, where nothing outside can read them. Put the values its output depends on in the plugin's `options` too, merged over your defaults: previous versions built from git (`history({ source: "git" })`) reuse compiled pages until a plugin's `options` (or its code) change, so a value only a closure holds would leave them stale. List the files your hooks read while building, such as a bibliography, in `reads`, as paths from the vault's folder or absolute ones: the cache compares their contents. Deleting `.svartz/vaults/<id>/cache` forces every version to compile again.
 
 ```ts
 export const marker = (userOptions: { text?: string } = {}) => {

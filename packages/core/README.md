@@ -18,7 +18,7 @@ export const upperCase = definePlugin(() => ({
 }));
 ```
 
-A plugin made from options sets `options` to the plain data it was made from, such as its options merged over its defaults. Hooks close over those values, which can't be read from outside, and `@svartz/plugin-history`'s version cache compiles versions again only when a plugin's `options` or code change: a plugin whose output depends on a value it closes over must put it in `options`. Deleting `.svartz/vaults/<id>/cache` forces every version to compile again.
+A plugin made from options sets `options` to the plain data it was made from, such as its options merged over its defaults. Hooks close over those values, which can't be read from outside, and `@svartz/plugin-history`'s version cache compiles versions again only when a plugin's `options` or code change: a plugin whose output depends on a value it closes over must put it in `options`. A plugin that reads files while it builds, such as a bibliography, lists them in `reads`, as paths from the vault's folder or absolute ones: the cache compares their contents, which `options` can only name. Deleting `.svartz/vaults/<id>/cache` forces every version to compile again.
 
 A plugin with `server: { module, options }` answers requests under `/_svartz/<plugin-id>/` at runtime. Its module default-exports a `ServerModuleFactory`; `createServerHandle` builds the SvelteKit `handle` that routes to it. See [server plugins](../../docs/server-plugins.md).
 
