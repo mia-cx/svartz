@@ -45,7 +45,7 @@ import type { Sync } from "./sync";
 /** The panel's id below the plugin's: `/-/dashboard/submissions/mine/`. */
 export const MY_SUBMISSIONS_PANEL = "mine";
 const PAGE_SIZE = 20;
-/** Comments a submission's view reads at most. */
+/** Comments a submission's view shows at most, the newest; GitHub has the rest. */
 const MAX_COMMENTS = 500;
 const MAX_REQUEST_BYTES = MAX_MARKDOWN_BYTES + MAX_NOTE_LENGTH * 4 + 4096;
 const BLOB_SHA = /^[0-9a-f]{40}$/;
@@ -149,22 +149,33 @@ export function createMySubmissions(setup: MySubmissionsSetup) {
     return listPage({ submissions, here, page, more: results.length > PAGE_SIZE });
   }
 
-  /** The conversation from the mirror, in time order, with what the site posted shown as the account that wrote it. */
-  async function entries(mirror: Mirror, number: number): Promise<Entry[]> {
-    const [{ results: reviews }, { results: comments }] = await Promise.all([
+  /**
+   * The conversation from the mirror, in time order, with what the site posted shown as the account that wrote it:
+   * the newest {@link MAX_COMMENTS} comments and the first comment of each thread they're in, and whether there are
+   * earlier ones.
+   */
+  async function conversation(mirror: Mirror, number: number): Promise<{ entries: Entry[]; earlier: boolean }> {
+    const [{ results: reviews }, { results: comments }, { results: [count] }] = await Promise.all([
       mirror.db.prepare(`SELECT state, author_login, body, url, submitted_at FROM submissions_reviews
         WHERE scope = ? AND pull_number = ? AND submitted_at IS NOT NULL AND state <> 'pending' ORDER BY submitted_at, id`)
         .bind(mirror.scope, number).all<{ state: string; author_login: string | null; body: string; url: string; submitted_at: string }>(),
-      mirror.db.prepare(`SELECT c.kind, c.id, c.author_login, c.body, c.path, c.line, c.in_reply_to, c.url, c.created_at, c.deleted,
+      // A thread's first comment says where it is and takes its replies, so it comes along however old it is.
+      mirror.db.prepare(`WITH recent AS (SELECT * FROM submissions_comments WHERE scope = ?1 AND pull_number = ?2 AND deleted = 0
+          ORDER BY created_at DESC, id DESC LIMIT ?3)
+        SELECT c.kind, c.id, c.author_login, c.body, c.path, c.line, c.in_reply_to, c.url, c.created_at,
           r.name, r.role, r.header, r.body AS typed
-        FROM submissions_comments c LEFT JOIN submissions_replies r ON r.scope = c.scope AND r.kind = c.kind AND r.id = c.id
-        WHERE c.scope = ? AND c.pull_number = ? ORDER BY c.created_at, c.id LIMIT ?`)
+        FROM (SELECT * FROM recent UNION SELECT * FROM submissions_comments WHERE scope = ?1 AND pull_number = ?2 AND deleted = 0
+          AND kind = 'review' AND id IN (SELECT in_reply_to FROM recent WHERE kind = 'review')) c
+        LEFT JOIN submissions_replies r ON r.scope = c.scope AND r.kind = c.kind AND r.id = c.id
+        ORDER BY c.created_at, c.id`)
         .bind(mirror.scope, number, MAX_COMMENTS)
         .all<{
           kind: "issue" | "review"; id: number; author_login: string | null; body: string; path: string | null; line: number | null;
-          in_reply_to: number | null; url: string; created_at: string; deleted: number;
+          in_reply_to: number | null; url: string; created_at: string;
           name: string | null; role: string | null; header: string | null; typed: string | null;
         }>(),
+      mirror.db.prepare("SELECT COUNT(*) AS comments FROM submissions_comments WHERE scope = ? AND pull_number = ? AND deleted = 0")
+        .bind(mirror.scope, number).all<{ comments: number }>(),
     ]);
     const timeline: Entry[] = reviews
       // A review that only holds diff comments says nothing of its own; its comments show in their threads.
@@ -178,30 +189,30 @@ export function createMySubmissions(setup: MySubmissionsSetup) {
       const author: Author = ours ? { name: row.name!, role: row.role! } : { login: row.author_login };
       const shown: Comment = { id: row.id, author, body: ours ? row.typed! : row.body, at: row.created_at, url: row.url };
       if (row.kind === "issue") {
-        if (!row.deleted) timeline.push({ kind: "comment", comment: shown });
+        timeline.push({ kind: "comment", comment: shown });
         continue;
       }
       const root = row.in_reply_to ?? row.id;
       const thread = threads.get(root) ?? { path: row.path, line: row.line, comments: [], open: false, at: row.created_at };
       threads.set(root, thread);
       if (row.id === root) {
-        // The first comment says where the thread is, and replies go to it while GitHub has it.
-        Object.assign(thread, { path: row.path, line: row.line, open: !row.deleted, at: row.created_at });
+        // The first comment says where the thread is, and replies go to it: it was read, so it isn't deleted.
+        Object.assign(thread, { path: row.path, line: row.line, open: true, at: row.created_at });
       }
-      if (!row.deleted) thread.comments.push(shown);
+      thread.comments.push(shown);
     }
     for (const [root, { path, line, comments: said, open, at }] of threads) {
-      if (said.length > 0) timeline.push({ kind: "thread", path, line, comments: said, at, ...(open ? { replyTo: root } : {}) });
+      timeline.push({ kind: "thread", path, line, comments: said, at, ...(open ? { replyTo: root } : {}) });
     }
     const time = (entry: Entry) => (entry.kind === "comment" ? entry.comment.at : entry.at);
-    return timeline.sort((a, b) => time(a).localeCompare(time(b)));
+    return { entries: timeline.sort((a, b) => time(a).localeCompare(time(b))), earlier: count!.comments > MAX_COMMENTS };
   }
 
   async function view(request: Request, context: ServerContext, account: Account, mirror: Mirror, number: number) {
     const edit = await readSubmission(mirror, number);
     // Only its owner sees a submission here; anyone else's is no submission at all.
     if (!edit || edit.owner !== `account:${account.id}`) return undefined;
-    const [{ stage }, conversation] = await Promise.all([setup.sync.progress(context, mirror, edit), entries(mirror, number)]);
+    const [{ stage }, { entries, earlier }] = await Promise.all([setup.sync.progress(context, mirror, edit), conversation(mirror, number)]);
     const query = new URL(request.url).searchParams;
     const code = query.get("status");
     const thread = query.get("thread");
@@ -217,7 +228,8 @@ export function createMySubmissions(setup: MySubmissionsSetup) {
       stage,
       url: edit.url,
       ...(page ? { pageUrl: page } : {}),
-      entries: conversation,
+      entries,
+      earlier,
       back: panelPath(context),
       replyAction: `${context.base}/reply/`,
       ...(mayEdit ? { followUp: vaultPath(edit) } : {}),

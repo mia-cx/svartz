@@ -110,6 +110,8 @@ export interface SubmissionView {
   /** The edited page on the site, while it is published. */
   readonly pageUrl?: string;
   readonly entries: readonly Entry[];
+  /** Whether comments older than those in `entries` exist, which only GitHub shows. */
+  readonly earlier?: boolean;
   /** The list it belongs to. */
   readonly back: string;
   /** Where reply forms post; without it, the view takes no replies. */
@@ -219,8 +221,11 @@ export function submissionPage(view: SubmissionView): PluginPage {
   const followUp = view.followUp === undefined
     ? ""
     : `\n<div class="sv-account-page" data-svartz-region="follow-up-actions" data-svartz-follow-up="${view.number}" data-svartz-follow-up-path="${escape(view.followUp)}"></div>`;
+  const earlier = view.earlier
+    ? `<p class="sv-account-muted">${github ? `<a href="${escape(github)}">Read earlier comments on GitHub</a>` : "Earlier comments are on GitHub."}</p>\n`
+    : "";
   const conversation = view.entries.length > 0
-    ? `<ol class="svartz-submissions-timeline">\n${view.entries.map((entry) => entryHtml(entry, view)).join("\n")}\n</ol>`
+    ? `${earlier}<ol class="svartz-submissions-timeline">\n${view.entries.map((entry) => entryHtml(entry, view)).join("\n")}\n</ol>`
     : "<p class=\"sv-account-muted\">No reviews or comments yet.</p>";
   return {
     title: view.title,

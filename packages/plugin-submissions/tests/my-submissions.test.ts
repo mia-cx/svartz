@@ -35,6 +35,8 @@ const BASE = "/wiki/_svartz/submissions";
 const AUTH = "/wiki/_svartz/auth";
 const MINE = "/wiki/-/dashboard/submissions/mine/";
 const SECRET = "whsec-0123456789abcdef";
+/** Delivering 500 signed comments takes a few seconds, more when the whole suite runs at once. */
+const LONG_CONVERSATION_TIMEOUT_MS = 60_000;
 const API = `https://api.github.com/repos/${REPO}`;
 const BRANCH = branchFor("wiki-guide");
 /** The submission branch's head: the commit the site's save made. */
@@ -361,6 +363,36 @@ describe("My submissions", () => {
     // The editor's button goes here while the submission is open.
     expect(view!.html).toContain('data-svartz-follow-up="42" data-svartz-follow-up-path="guide.md"');
   });
+
+  // Proves a long conversation shows its newest 500 comments, deleted ones not counted, with the first comment of
+  // every thread they're in, and links to GitHub for the rest.
+  it("shows the newest comments of a long conversation, with their threads", async () => {
+    const site = await createSite();
+    const grace = await graceSubmits(site);
+    await reviewed(site);
+    const issue = { number: 42, title: "Edit content/guide.md", state: "open", pull_request: { url: `${API}/pulls/42`, html_url: PULL_42.html_url } };
+    const at = (minute: number) => new Date(Date.UTC(2026, 10, 19, 12) + minute * 60_000).toISOString().replace(".000", "");
+    for (let n = 1; n <= 499; n++) {
+      await deliver(site, "issue_comment", { action: "created", issue, comment: issueComment(3_100_000 + n, `Comment ${n}.`, at(n)), repository, sender });
+    }
+    await deliver(site, "pull_request_review_comment", {
+      action: "created", comment: reviewComment(5_000_004, "Still the one this site runs.", at(500), 5_000_001), pull_request: pullRequest(), repository, sender,
+    });
+    const regret = issueComment(3_200_000, "Never mind.", at(501));
+    await deliver(site, "issue_comment", { action: "created", issue, comment: regret, repository, sender });
+    await deliver(site, "issue_comment", { action: "deleted", issue, comment: regret, repository, sender });
+    quietGitHub();
+
+    const shown = text(await site.page(`${MINE}42/`, grace));
+
+    expect(shown).toContain("Conversation Read earlier comments on GitHub octocat requested changes Nov 19, 2026 Please cite a source. "
+      + "On content/guide.md , line 7 octocat Nov 19, 2026 Which wiki? octocat Nov 19, 2026 Still the one this site runs. Reply Your reply Send reply "
+      + "octocat Nov 19, 2026 Comment 1. ");
+    expect(shown).toContain("Comment 499. Reply Send reply");
+    expect(shown).not.toContain("Second line.");
+    expect(shown).not.toContain("The one this site runs.");
+    expect(shown).not.toContain("Never mind.");
+  }, LONG_CONVERSATION_TIMEOUT_MS);
 });
 
 describe("replies", () => {
