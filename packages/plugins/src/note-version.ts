@@ -3,7 +3,7 @@
  * note itself: the vault's own plugins run their frontmatter, link, OFM, embed and compiler steps on it, against the
  * notes and attachments this build publishes, and it renders with the build's Markdown compiler and sanitizer.
  */
-import { getCompilerContributions, runStages, STAGE_NAMES, type PluginContext, type ProcessedFile } from "@svartz/core";
+import { getCompilerContributions, runStages, STAGE_NAMES, type BrowserResource, type PluginContext, type ProcessedFile } from "@svartz/core";
 import type { Element } from "hast";
 import { visit } from "unist-util-visit";
 import { referencedAssets } from "./internal/asset-references";
@@ -39,6 +39,11 @@ export interface CompiledNoteVersion {
   readonly markup: string;
   /** The vault paths of the attachments among `options.attachments` the version references that the build doesn't keep. */
   readonly attachments: readonly string[];
+  /**
+   * The browser resources the version's steps registered, such as the diagram script. They have joined the build's
+   * already; a caller that reuses `markup` in a later build adds those the build lacks.
+   */
+  readonly resources: readonly BrowserResource[];
 }
 
 /**
@@ -166,8 +171,9 @@ export async function compileNoteVersion(
   });
 
   const resources = getCompilerContributions(ctx).browserResources;
-  for (const [id, resource] of getCompilerContributions(compiling).browserResources) {
-    if (!resources.has(id)) resources.set(id, resource);
+  const needed = [...getCompilerContributions(compiling).browserResources.values()];
+  for (const resource of needed) {
+    if (!resources.has(resource.id)) resources.set(resource.id, resource);
   }
-  return { markup: compileContent(tree), attachments: added.map(({ path }) => path) };
+  return { markup: compileContent(tree), attachments: added.map(({ path }) => path), resources: needed };
 }

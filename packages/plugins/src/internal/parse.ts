@@ -41,7 +41,9 @@ export const extractFrontmatter = (
   try {
     const parsed: unknown = frontmatterMatch[1] === "+++"
       ? parseToml(frontmatterSource)
-      : matter(`---\n${sanitizeFrontmatterSource(frontmatterSource)}\n---\n${bodyMarkdown}`).data;
+      // With options, gray-matter parses afresh: without, it hands every caller of the same text one shared object,
+      // so what one build writes into a note's frontmatter would show in the next build in the same process.
+      : matter(`---\n${sanitizeFrontmatterSource(frontmatterSource)}\n---\n${bodyMarkdown}`, {}).data;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid frontmatter object");
     return {
       frontmatter: parsed as Record<string, unknown>,
