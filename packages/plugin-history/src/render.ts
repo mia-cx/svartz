@@ -20,8 +20,10 @@ function serialize(node: Root | RootContent | ElementContent): string {
     case "element": {
       if (isUnsafeElement(node)) return "";
       const attributes = Object.entries(safeAttributes(node))
-        .filter(([name, value]) => value !== false && /^[a-z][a-z0-9:_.-]*$/i.test(name))
-        .map(([name, value]) => (value === true ? ` ${name}` : ` ${name}="${escape(value)}"`))
+        .flatMap(([name, value]) => {
+          if (value === false || !/^[a-z][a-z0-9:_.-]*$/i.test(name)) return [];
+          return [value === true ? ` ${name}` : ` ${name}="${escape(value)}"`];
+        })
         .join("");
       if (VOID_TAGS.has(node.tagName)) return `<${node.tagName}${attributes}>`;
       // A template's content is a fragment of its own, which the build never shows either.
