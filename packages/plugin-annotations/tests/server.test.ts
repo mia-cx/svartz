@@ -608,11 +608,11 @@ describe("permissions on a site with accounts", () => {
 });
 
 describe("POST <id>/hide/", () => {
-  /** Grace's comment on garden, with Ada's +1, on a site whose annotations and accounts share one database; Alan moderates garden. */
+  /** Grace's comment on garden, with Ada's +1, on a site that keeps comments in the accounts database; Alan moderates garden. */
   async function moderated() {
     const { db } = await database();
     await seed(db, [{ id: "c1", page: "garden", author: GRACE, body: "Buy pills here.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z", agreedBy: [ADA] }]);
-    const site = createSite({ DB: db, SVARTZ_DB: db });
+    const site = createSite({ SVARTZ_DB: db }, { database: "SVARTZ_DB" });
     const alan = await signIn(site, ALAN);
     const ada = await signIn(site, ADA);
     const { results: [account] } = await db.prepare("SELECT account_id FROM auth_identities WHERE id = ?").bind(ALAN.id).all<{ account_id: string }>();
@@ -644,7 +644,7 @@ describe("POST <id>/hide/", () => {
   });
 
   // Proves the write decides when two moderators hide at once: the comment is hidden once, on the record once.
-  it.each(["SVARTZ_DB", "DB"])("records one hide when two arrive together, with comments in %s", async (binding) => {
+  it("records one hide when two arrive together", async () => {
     const { db } = await database();
     await seed(db, [{ id: "c1", page: "garden", author: GRACE, body: "Buy pills here.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
     // Holds each read of the comment until both requests have read it, as when two moderators click at once.
@@ -676,7 +676,7 @@ describe("POST <id>/hide/", () => {
         };
       },
     } as Database;
-    const site = createSite({ [binding]: racing, SVARTZ_DB: racing }, { database: binding });
+    const site = createSite({ SVARTZ_DB: racing }, { database: "SVARTZ_DB" });
     const alan = await signIn(site, ALAN);
     const { results: [account] } = await db.prepare("SELECT account_id FROM auth_identities WHERE id = ?").bind(ALAN.id).all<{ account_id: string }>();
     await db.prepare("INSERT INTO auth_grants (actor_type, actor_id, object, permission, value, updated_at) VALUES ('account', ?, 'vault:notes', 'annotations:comments:delete', 'allow', ?)")
@@ -709,19 +709,62 @@ describe("POST <id>/hide/", () => {
   it("goes to the vault's home instead of another site", async () => {
     const { site, alan } = await moderated();
 
-    for (const returnTo of ["https://evil.test/", "//evil.test/", "/\\evil.test/", "reports/"]) {
+    // The last one is a path on this site until the dot segment folds it into `//evil.test/`.
+    for (const returnTo of ["https://evil.test/", "//evil.test/", "/\\evil.test/", "reports/", "/a/..//evil.test/"]) {
       expect((await hide(site, alan, { returnTo })).headers.get("location")).toBe("/notes/");
     }
   });
 
-  it("answers 503 on a site without accounts", async () => {
+  // Proves the log holds only hides that happened: a comment its author deleted while the hide was on its way isn't on it.
+  it("records nothing when the comment is deleted before the hide lands", async () => {
+    const { db } = await database();
+    await seed(db, [{ id: "c1", page: "garden", author: GRACE, body: "Buy pills here.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
+    // Grace deletes c1 right after the hide reads it.
+    const deleting: Database = {
+      batch: (statements) => db.batch(statements),
+      prepare(query) {
+        const statement = db.prepare(query);
+        if (!/AS hidden,/.test(query)) return statement;
+        return {
+          ...statement,
+          bind: (...values) => {
+            const bound = statement.bind(...values);
+            return {
+              ...bound,
+              all: async () => {
+                const read = await bound.all();
+                await db.prepare("DELETE FROM annotations WHERE id = 'c1'").run();
+                return read;
+              },
+            } as typeof bound;
+          },
+        };
+      },
+    } as Database;
+    const site = createSite({ SVARTZ_DB: deleting }, { database: "SVARTZ_DB" });
+    const alan = await signIn(site, ALAN);
+    const { results: [account] } = await db.prepare("SELECT account_id FROM auth_identities WHERE id = ?").bind(ALAN.id).all<{ account_id: string }>();
+    await db.prepare("INSERT INTO auth_grants (actor_type, actor_id, object, permission, value, updated_at) VALUES ('account', ?, 'vault:notes', 'annotations:comments:delete', 'allow', ?)")
+      .bind(account!.account_id, "2026-11-19T00:00:00.000Z").run();
+
+    await hide(site, alan);
+
+    expect(await audited(db)).toEqual([]);
+  });
+
+  // Proves hiding refuses rather than risk a hide without its entry: the two commit together only in the accounts database.
+  it.each([
+    ["with comments kept outside SVARTZ_DB", (db: Database) => ({ DB: db, SVARTZ_DB: db })],
+    ["on a site without accounts", (db: Database) => ({ DB: db })],
+  ])("answers 503 %s", async (_case, env) => {
     const { db } = await database();
     await seed(db, [{ id: "c1", page: "garden", author: GRACE, body: "Hi.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
-    const site = createSite({ DB: db }, { moderators: [ALAN.id] });
+    const site = createSite(env(db), { moderators: [ALAN.id] });
 
     const answer = await hide(site, await signIn(site, ALAN));
 
     expect(answer.status).toBe(503);
+    expect(await answer.json()).toEqual({ error: "misconfigured", message: expect.stringContaining("SVARTZ_DB") });
     expect(await listed(site)).toHaveLength(1);
   });
 });
