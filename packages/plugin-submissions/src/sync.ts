@@ -19,7 +19,7 @@ import type { ServerContext } from "@svartz/core";
 import { SUBMISSION_ID_PATTERN, type StatusResponse } from "./api";
 import { credit } from "./credit";
 import { SubmissionError } from "./errors";
-import { requestGitHub, type Person } from "./github";
+import { requestGitHub } from "./github";
 import {
   deploymentSignals,
   isDatabase,
@@ -69,8 +69,6 @@ export interface SyncSetup {
   readonly root: string;
   /** The token every GitHub call authenticates with. */
   readonly token: (env: ServerContext["env"]) => Promise<string>;
-  /** The App's bot user, who commits the site's direct commits; absent without an App, which makes none. */
-  readonly committer?: (env: ServerContext["env"]) => Promise<Person>;
 }
 
 /** GitHub caps deliveries at 25 MB; a push of many commits stays far below this, and anything past it waits for the poll. */
@@ -200,8 +198,7 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
 
   /** Post reputation for what the mirror now shows landed. A failure waits for the next delivery or poll. */
   async function settleCredit(mirror: Mirror, context: ServerContext): Promise<void> {
-    const bot = setup.committer && (() => setup.committer!(context.env));
-    await credit(mirror, setup.repo, bot, context.env).catch((error: unknown) => {
+    await credit(mirror, setup.repo, context.env).catch((error: unknown) => {
       console.error("[submissions] couldn't post reputation for landed edits", error);
     });
   }

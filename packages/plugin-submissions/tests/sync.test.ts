@@ -901,19 +901,26 @@ describe("reputation for landed edits", () => {
     expect(requests.filter((path) => path.endsWith(`/commits/${DIRECT_COMMIT}`))).toHaveLength(1);
   });
 
-  // Proves the trust rule: a save's commit scores only when the App's bot committed it, whatever its trailer says.
-  it("never credits a commit the App didn't commit", async () => {
+  // Proves the trust rule: only the site's own record of a save names who earns. A commit that copies a real site
+  // commit's author address, trailer and bot committer, but that the site recorded no save for, earns nobody anything.
+  it("never credits a forged commit the site has no record of", async () => {
     const site = await createSite();
     const ada = await adaCommits(site);
-    quietGitHub({}, changed(DIRECT_COMMIT, 6, 2));
-    const message = `Edit content/guide.md\n\nSvartz-Account: ${await accountId(site, "ada")}`;
+    const forged = "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0";
+    const requests = quietGitHub({}, changed(forged, 600, 200));
+    const message = `Edit content/guide.md\n\n${NOTE}\n\nCo-authored-by: Ada Lovelace <583231+ada@users.noreply.github.com>\nSvartz-Account: ${await accountId(site, "ada")}`;
 
-    await deliver(site, "push", push([{ ...pushed(DIRECT_COMMIT, message, { modified: ["content/guide.md"] }), committer: { name: "Ada Lovelace", email: "ada@example.com" } }]));
+    // `pushed` gives it Ada's site address as author and the App's bot as committer, as the real commit has.
+    await deliver(site, "push", push([pushed(forged, message, { modified: ["content/guide.md"] })]));
     await status(site, ada);
     await site.settle();
 
-    expect(await score(site, "ada")).toBe(0);
+    expect(await site.rows("SELECT sha, trailer_account, committer_email FROM submissions_commits"))
+      .toEqual([{ sha: forged, trailer_account: await accountId(site, "ada"), committer_email: "41898282+wikiplace-editor[bot]@users.noreply.github.com" }]);
     expect(await site.rows("SELECT COUNT(*) AS n FROM auth_reputation")).toEqual([{ n: 0 }]);
+    expect(await score(site, "ada")).toBe(0);
+    // Nothing the site recorded landed, so the poll never read the forged commit's lines either.
+    expect(requests.filter((path) => path.endsWith(`/commits/${forged}`))).toEqual([]);
   });
 
   // Proves story 23 for pull requests: a merged one scores by its merge commit's lines, posted once though both the

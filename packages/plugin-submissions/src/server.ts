@@ -243,7 +243,6 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     ...(options.branch ? { branch: options.branch } : {}),
     root: data.vaultRoot,
     token: githubToken,
-    ...(committer ? { committer } : {}),
   });
 
   async function target(context: ServerContext): Promise<GitHubTarget> {
