@@ -261,7 +261,7 @@ Only the reader who saved an edit can ask about it: the account, or without acco
 
 ### My submissions
 
-On a site with [accounts](../../docs/auth.md) and sync, the [dashboard](../../docs/auth.md#the-dashboard) has a **My submissions** panel for every signed-in reader, at `/-/dashboard/submissions/mine/`. It lists the pull requests their saves opened: open ones first, then the rest, newest first, 20 a page. Each shows its page, whether it is in review, approved, waiting on changes, merged or closed, and how many comments it has.
+On a site with [accounts](../../docs/auth.md) and sync, the [dashboard](../../docs/auth.md#the-dashboard) has a **My submissions** panel for every signed-in reader, at `/-/dashboard/submissions/mine/`. It lists the pull requests their saves opened: open ones first, then the rest, newest first, 20 a page. Each shows its page, whether it is in review, approved, waiting on changes, merged or closed, and how many comments it has. As on GitHub, each reviewer's latest approval or request for changes counts: an open submission waits on changes while any reviewer's does, until that reviewer approves or the review is dismissed, and is approved once a reviewer approves and none asks for changes.
 
 Opening one shows where it stands (waiting for review, closed, merged, rebuilding, live or failed, as the editor says), then its conversation in time order: reviews, comments, and the comments on lines of the diff, each line's thread together. Everything is read from the mirror, so the page never waits on GitHub; a mirror older than a minute is read again after the page answers. Comments show as the plain text they were written in, escaped, so nothing GitHub sends runs or renders on the site.
 

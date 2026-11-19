@@ -119,9 +119,14 @@ export function createMySubmissions(setup: MySubmissionsSetup) {
   async function list(request: Request, context: ServerContext, account: Account, mirror: Mirror) {
     const requested = Number(new URL(request.url).searchParams.get("page") ?? "1");
     const page = Number.isSafeInteger(requested) && requested > 0 ? requested : 1;
+    // The verdict counts each reviewer's latest decision, as GitHub does: comments and dismissed reviews decide
+    // nothing, and one reviewer's approval doesn't clear another's request for changes.
     const { results } = await mirror.db.prepare(`SELECT e.page, e.path, e.pull_number, e.saved_at, p.state, p.merged_at,
-        (SELECT r.state FROM submissions_reviews r WHERE r.scope = e.scope AND r.pull_number = e.pull_number
-          AND r.state IN ('approved', 'changes_requested') ORDER BY r.submitted_at DESC LIMIT 1) AS verdict,
+        (SELECT CASE WHEN MAX(r.state = 'changes_requested') THEN 'changes_requested' WHEN COUNT(*) > 0 THEN 'approved' END
+          FROM submissions_reviews r WHERE r.scope = e.scope AND r.pull_number = e.pull_number AND r.state IN ('approved', 'changes_requested')
+            AND NOT EXISTS (SELECT 1 FROM submissions_reviews l WHERE l.scope = r.scope AND l.pull_number = r.pull_number
+              AND l.author_login IS r.author_login AND l.state IN ('approved', 'changes_requested')
+              AND (l.submitted_at > r.submitted_at OR (l.submitted_at = r.submitted_at AND l.id > r.id)))) AS verdict,
         (SELECT COUNT(*) FROM submissions_comments c WHERE c.scope = e.scope AND c.pull_number = e.pull_number AND c.deleted = 0) AS comments
       FROM submissions_edits e LEFT JOIN submissions_pulls p ON p.scope = e.scope AND p.number = e.pull_number
       WHERE e.scope = ?1 AND e.owner = ?2 AND e.kind = 'pull-request'

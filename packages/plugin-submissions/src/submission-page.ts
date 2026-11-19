@@ -19,7 +19,7 @@ const date = (iso: string) => `<time datetime="${escape(iso)}">${escape(dates.fo
 
 /** A pull request's state as the list shows it: in review, or how review ended. */
 export type ListedState = "open" | "merged" | "closed";
-/** The latest review that decided something: GitHub's states, lowercase. */
+/** What the reviewers decided, in GitHub's states, lowercase: changes requested while any reviewer's latest decision asks for them. */
 export type ReviewVerdict = "approved" | "changes_requested";
 
 /** One submission in the list. */

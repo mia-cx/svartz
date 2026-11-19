@@ -309,6 +309,37 @@ describe("My submissions", () => {
     expect(await site.page("/wiki/-/dashboard/")).toBeUndefined();
   });
 
+  // Proves the list keeps a submission at "Changes requested" while any reviewer's latest decision asks for changes,
+  // as GitHub counts it: another reviewer's approval doesn't clear it, the same reviewer's later approval or a
+  // dismissal does.
+  it("keeps changes requested until that reviewer approves or the review is dismissed", async () => {
+    const site = await createSite();
+    const grace = await graceSubmits(site);
+    quietGitHub();
+    await reviewed(site);
+    const hubot = { login: "hubot", id: 4, type: "User" };
+    const decide = (action: string, id: number, user: typeof octocat, state: string, at: string) => deliver(site, "pull_request_review", {
+      action,
+      review: { id, user, body: "", commit_id: PULL_HEAD, submitted_at: at, state, html_url: `${PULL_42.html_url}#pullrequestreview-${id}` },
+      pull_request: pullRequest({ updated: at }),
+      repository,
+      sender,
+    });
+    const state = async () => text(await site.page(MINE, grace)).replace(/.* comments /, "");
+
+    await decide("submitted", 4_000_002, hubot, "approved", "2026-11-19T11:50:00Z");
+    expect(await state()).toBe("Changes requested");
+
+    await decide("submitted", 4_000_003, octocat, "commented", "2026-11-19T12:00:00Z");
+    await decide("dismissed", 4_000_001, octocat, "dismissed", "2026-11-19T11:10:00Z");
+    expect(await state()).toBe("Approved");
+
+    await decide("submitted", 4_000_004, octocat, "changes_requested", "2026-11-19T12:10:00Z");
+    expect(await state()).toBe("Changes requested");
+    await decide("submitted", 4_000_005, octocat, "approved", "2026-11-19T12:20:00Z");
+    expect(await state()).toBe("Approved");
+  });
+
   // Proves story 40: the submission shows where it stands, its review and its comments, threads kept together, and
   // GitHub's text arrives as text, never as markup.
   it("shows a submission's status, reviews and threaded comments, escaped", async () => {
