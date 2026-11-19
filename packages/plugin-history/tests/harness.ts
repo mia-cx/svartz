@@ -197,7 +197,11 @@ export async function disposeSites(): Promise<void> {
   for (const dispose of disposers.splice(0)) await dispose();
 }
 
-export async function createSite() {
+/** A wiki whose content branch is `main`, or with `defaultBranch`, the repository's default branch, unnamed in config. */
+export async function createSite({ defaultBranch = false } = {}) {
+  const unnamed = <T extends { branch?: string }>({ branch: _, ...rest }: T) => rest;
+  const history: HistoryData = defaultBranch ? { ...HISTORY, source: unnamed(HISTORY.source) } : HISTORY;
+  const submissions = defaultBranch ? unnamed(SUBMISSIONS) : SUBMISSIONS;
   const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
   disposers.push(() => miniflare.dispose());
   const db = await miniflare.getD1Database("SVARTZ_DB") as unknown as Database;
@@ -215,8 +219,8 @@ export async function createSite() {
           permissions: permissions(false),
         },
       },
-      { id: "submissions", load: () => import("@svartz/plugin-submissions/server"), options: SUBMISSIONS, data: SUBMISSIONS_BUILD },
-      { id: "history", pages: ["history", "changes"], load: () => import("../src/server"), data: HISTORY },
+      { id: "submissions", load: () => import("@svartz/plugin-submissions/server"), options: submissions, data: SUBMISSIONS_BUILD },
+      { id: "history", pages: ["history", "changes"], load: () => import("../src/server"), data: history },
     ],
   }, {
     privateEnv: {

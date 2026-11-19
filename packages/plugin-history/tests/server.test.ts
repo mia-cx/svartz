@@ -255,6 +255,29 @@ describe("the order of changes", () => {
   });
 });
 
+describe("the requests a page view makes", () => {
+  // Proves one page view can compare two revisions the mirror doesn't hold, on a site that leaves the content branch
+  // to the repository's default: the branch's name, then each revision's branch check, commit and file.
+  it("compares two revisions the mirror doesn't hold", async () => {
+    const site = await createSite({ defaultBranch: true });
+    const ada = { name: "Ada Lovelace", email: "ada@users.noreply.wiki.example" };
+    const older: TestCommit = { sha: "1".repeat(40), message: `Edit ${GUIDE_PATH}\n\nStarted.\n\nSvartz-Account: 0b9f6c1e`, at: 0, author: ada, files: [GUIDE_PATH] };
+    const newer: TestCommit = { sha: "2".repeat(40), message: `Edit ${GUIDE_PATH}\n\nExpanded.\n\nSvartz-Account: 0b9f6c1e`, at: 30, author: ada, files: [GUIDE_PATH] };
+    const github = replayGitHub([
+      firstToken,
+      { request: { method: "GET", url: API }, authorization: `Bearer ${INSTALLATION_TOKEN}`, response: { status: 200, json: { full_name: "wikiplace/wikiplace.live", default_branch: "main" } } },
+      compareExchange(newer.sha), commitExchange(newer),
+      compareExchange(older.sha), commitExchange(older),
+      contentExchange(GUIDE_PATH, newer.sha, "# Guide\n\nExpanded.\n"), contentExchange(GUIDE_PATH, older.sha, "# Guide\n"),
+    ], INSTALLATION_TOKEN);
+
+    const diff = await site.page(`${HISTORY}?from=${older.sha}&to=${newer.sha}`);
+
+    expect(github.pending).toEqual([]);
+    expect(text(diff!.html)).toContain("The page at 19 Nov 2026, 10:30 UTC Guide Expanded.");
+  });
+});
+
 describe("a commit GitHub lists more than a page of files for", () => {
   // Its first page holds the public guide and files outside the vault; the hidden note is on the next.
   const big: TestCommit = {

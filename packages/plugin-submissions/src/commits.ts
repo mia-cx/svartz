@@ -6,9 +6,9 @@
  * At build time, {@link mirrorsCommits} says whether a vault's submissions plugin keeps the mirror (`sync` set), and
  * {@link commitSource} hands over what reading it takes, for the reader's own server data. At runtime,
  * {@link commitReader} reads the mirror and asks GitHub for what it can't answer: a file's history in the branch's
- * order, commits it doesn't hold, and file content at a commit. Every GitHub request goes through the submissions plugin's credentials and honours the pause
- * it shares with the reconcile poll, so reads never spend the requests the poll keeps for saves; each reader makes at
- * most {@link MAX_GITHUB_READS} of them.
+ * order, commits it doesn't hold, and file content at a commit. Every GitHub request goes through the submissions
+ * plugin's credentials and honours the pause it shares with the reconcile poll, so reads never spend the requests the
+ * poll keeps for saves; each reader makes at most {@link MAX_GITHUB_READS} of them.
  *
  * Paths are vault paths, such as `guides/setup.md`; the mirror's repository paths stay inside this module. Text from
  * a commit (messages, names) is as GitHub sent it, for whoever shows it to escape.
@@ -118,8 +118,12 @@ export interface CommitReader {
   refresh(): void;
 }
 
-/** GitHub requests one reader may make. */
-export const MAX_GITHUB_READS = 6;
+/**
+ * GitHub requests one reader may make: what the costliest page, a diff of two revisions the mirror doesn't hold,
+ * needs. That is the default branch's name, when neither config nor the mirror knows it, then for each revision the
+ * check that the branch holds it, the commit, and the page's file at it.
+ */
+export const MAX_GITHUB_READS = 7;
 /** Commits per page of GitHub's list, its most. */
 export const GITHUB_PAGE_SIZE = 100;
 /** Commits per page of {@link CommitReader.recent}. */
@@ -220,6 +224,7 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
   return (context) => {
     let reads = 0;
     let mirror: Promise<Mirror> | undefined;
+    let branchName: Promise<string> | undefined;
 
     function mirrorFor(): Promise<Mirror> {
       mirror ??= (async () => {
@@ -231,10 +236,10 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
       return mirror;
     }
 
-    /** Spend `count` of this reader's requests, unless they're spent or the scope is paused. */
-    async function spend(count = 1): Promise<void> {
-      if (reads + count > MAX_GITHUB_READS || await readPause(await mirrorFor()) > Date.now()) throw new CommitsUnavailable();
-      reads += count;
+    /** Spend one of this reader's requests, unless they're spent or the scope is paused. */
+    async function spend(): Promise<void> {
+      if (reads >= MAX_GITHUB_READS || await readPause(await mirrorFor()) > Date.now()) throw new CommitsUnavailable();
+      reads++;
     }
 
     /** GET `path` below the repository, as the poll does: a request that says to wait pauses the poll too. */
@@ -252,13 +257,17 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
       return response;
     }
 
-    async function branch(): Promise<string> {
-      if (source.branch) return source.branch;
-      const known = await readBranch(await mirrorFor());
-      if (known) return known;
-      const name = text(object(await (await get("")).json().catch(() => undefined))?.default_branch);
-      if (!name) throw new CommitsUnavailable("GitHub named no default branch");
-      return name;
+    /** The content branch: configured, or the default branch's name as the mirror or, once per reader, GitHub says. */
+    function branch(): Promise<string> {
+      branchName ??= (async () => {
+        if (source.branch) return source.branch;
+        const known = await readBranch(await mirrorFor());
+        if (known) return known;
+        const name = text(object(await (await get("")).json().catch(() => undefined))?.default_branch);
+        if (!name) throw new CommitsUnavailable("GitHub named no default branch");
+        return name;
+      })();
+      return branchName;
     }
 
     /** `rows` as commits, each with the account the site's records say made it. */
