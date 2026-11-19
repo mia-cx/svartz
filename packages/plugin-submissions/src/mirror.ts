@@ -5,7 +5,8 @@
  * Rows are keyed by a scope, `<owner/name>:<vault folder>`, so vaults sharing a database never share rows. Within a
  * scope the mirror holds:
  *
- * - `submissions_commits`: commits on the content branch that touch the vault folder, with the files they changed in it.
+ * - `submissions_commits`: commits on the content branch that touch the vault folder, with the files they changed in it;
+ *   `files_complete = 0` when GitHub listed only part of them, as it does past 300 files.
  * - `submissions_pulls`: pull requests into the content branch. `in_vault` says whether one changes a file in the
  *   vault folder, `NULL` until the poll has read its files, `files_read` counting the pages read so far at its
  *   head; readers keep to `in_vault = 1`.
@@ -41,7 +42,8 @@ const MIGRATIONS_TABLE = "submissions_migrations";
 
 /**
  * Each entry is one schema version, applied in order and recorded in {@link MIGRATIONS_TABLE}. Append new versions;
- * never edit an applied one. Two first requests can race to apply a version, so statements must be safe to run twice.
+ * never edit an applied one. Two first requests can race to apply a version: statements should be safe to run twice,
+ * and one that can't be (`ALTER TABLE … ADD COLUMN`) fails the loser's batch, which then finds the version applied.
  */
 const MIGRATIONS: readonly (readonly string[])[] = [
   [
@@ -180,6 +182,12 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       PRIMARY KEY (scope, ancestor, descendant)
     )`,
   ],
+  [
+    // Whether `files` is all of a commit's vault files, or the part GitHub's first page gave.
+    "ALTER TABLE submissions_commits ADD COLUMN files_complete INTEGER NOT NULL DEFAULT 1",
+    // Lists read before were kept without saying which they were: the next polls read them again.
+    "UPDATE submissions_commits SET files = NULL",
+  ],
 ];
 
 const migrated = new WeakMap<Database, Promise<void>>();
@@ -203,10 +211,16 @@ async function applyMigrations(db: Database): Promise<void> {
     const version = index + 1;
     if (applied.has(version)) continue;
     // One batch is one transaction: a version applies whole or not at all.
-    await db.batch([
-      ...statements.map((statement) => db.prepare(statement)),
-      db.prepare(`INSERT OR IGNORE INTO ${MIGRATIONS_TABLE} (version, applied_at) VALUES (?, ?)`).bind(version, new Date().toISOString()),
-    ]);
+    try {
+      await db.batch([
+        ...statements.map((statement) => db.prepare(statement)),
+        db.prepare(`INSERT OR IGNORE INTO ${MIGRATIONS_TABLE} (version, applied_at) VALUES (?, ?)`).bind(version, new Date().toISOString()),
+      ]);
+    } catch (error) {
+      // Another request applied it first.
+      const { results: [done] } = await db.prepare(`SELECT version FROM ${MIGRATIONS_TABLE} WHERE version = ?`).bind(version).all();
+      if (!done) throw error;
+    }
   }
 }
 
@@ -470,6 +484,8 @@ export interface ListedCommit {
   readonly committedAt: string;
   /** Its changed files inside the vault, as repository paths; `null` until the poll reads them. */
   readonly files: readonly string[] | null;
+  /** Whether `files` is all of them: GitHub lists only a part of a commit that changed more than 300. */
+  readonly allFiles: boolean;
   /**
    * The account that made it, by id, only from the site's own record of a save: a direct commit with this SHA, or a
    * submission whose pull request the mirror says merged as this commit. `null` for every other commit, whatever its
@@ -483,7 +499,7 @@ export interface ListedCommit {
  * A `before` the mirror doesn't hold answers none.
  */
 export async function listCommits({ db, scope }: Mirror, { before, limit }: { before?: string; limit: number }): Promise<ListedCommit[]> {
-  const { results } = await db.prepare(`SELECT c.sha, c.message, c.author_name, c.author_login, c.committed_at, c.files,
+  const { results } = await db.prepare(`SELECT c.sha, c.message, c.author_name, c.author_login, c.committed_at, c.files, c.files_complete,
       (SELECT substr(e.owner, 9) FROM submissions_edits e
         LEFT JOIN submissions_pulls p ON e.kind = 'pull-request' AND p.scope = e.scope AND p.number = e.pull_number
         WHERE e.scope = c.scope AND e.owner LIKE 'account:%'
@@ -494,7 +510,7 @@ export async function listCommits({ db, scope }: Mirror, { before, limit }: { be
     ORDER BY c.committed_at DESC, c.sha DESC
     LIMIT ?3`)
     .bind(scope, before ?? null, limit)
-    .all<{ sha: string; message: string; author_name: string; author_login: string | null; committed_at: string; files: string | null; account: string | null }>();
+    .all<{ sha: string; message: string; author_name: string; author_login: string | null; committed_at: string; files: string | null; files_complete: number; account: string | null }>();
   return results.map((row) => ({
     sha: row.sha,
     message: row.message,
@@ -502,6 +518,7 @@ export async function listCommits({ db, scope }: Mirror, { before, limit }: { be
     authorLogin: row.author_login,
     committedAt: row.committed_at,
     files: row.files === null ? null : JSON.parse(row.files) as string[],
+    allFiles: row.files !== null && row.files_complete === 1,
     account: row.account,
   }));
 }

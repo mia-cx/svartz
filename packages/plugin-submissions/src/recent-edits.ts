@@ -72,11 +72,11 @@ interface Entry {
 
 /**
  * The commit's subject line, only when every file it changed is one the site publishes: the subject could name any
- * of them. A commit whose files aren't known yet, or that changed one the site keeps back, shows no summary.
+ * of them. A commit whose files aren't all known, or that changed one the site keeps back, shows no summary.
  */
 function summary({ commit, changes }: Entry): string | undefined {
   const subject = commit.message.split("\n", 1)[0]!.trim();
-  const allPublished = changes !== null && changes.others === 0 && changes.pages.length + changes.attachments.length > 0;
+  const allPublished = commit.allFiles && changes !== null && changes.others === 0 && changes.pages.length + changes.attachments.length > 0;
   return allPublished && subject ? subject : undefined;
 }
 
