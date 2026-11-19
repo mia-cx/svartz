@@ -3,7 +3,7 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { lstat, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Command } from "commander";
@@ -235,6 +235,24 @@ const basePathForVault = (vault: ResolvedConfig): string =>
 
 const kitOutDirForVault = (vault: ResolvedConfig): string =>
   path.join(getVaultBuildRoot(vault), ".svelte-kit");
+
+// Wrangler's own lookup order.
+const WRANGLER_CONFIG_FILES = ["wrangler.json", "wrangler.jsonc", "wrangler.toml"] as const;
+
+/**
+ * Copy the standalone shell's Wrangler config into the vault's build root, and answer the copy's path. adapter-cloudflare
+ * writes the worker at the config's `main` and imports the server by a path relative to it. Read from the shell, `main`
+ * reaches the vault's `.svelte-kit` through the shell's `.svelte-kit` symlink, and the relative import holds only from
+ * the symlink. Read from the copy, `main`, `assets.directory` and SvelteKit's `outDir` share one real directory. The copy
+ * is also the config the vault deploys with.
+ */
+const writeVaultWranglerConfig = async (appRoot: string, vault: ResolvedConfig): Promise<string | undefined> => {
+  const source = WRANGLER_CONFIG_FILES.map((name) => path.join(appRoot, name)).find(existsSync);
+  if (!source) return undefined;
+  const copy = path.join(getVaultBuildRoot(vault), path.basename(source));
+  await copyFile(source, copy);
+  return copy;
+};
 
 const applyPlatformEnvForVault = (vault: ResolvedConfig): void => {
   for (const key of PLATFORM_ENV_KEYS) {
@@ -477,6 +495,11 @@ const createAppConfig = (
     if (!hostApp) yield* ensureVaultKitSymlink(appRoot, vault);
     process.chdir(appRoot);
     if (!hostApp) applyPlatformEnvForVault(vault);
+    const wranglerConfig = hostApp || vault.target.type !== "cloudflare-workers"
+      ? undefined
+      : yield* Effect.tryPromise({ try: () => writeVaultWranglerConfig(appRoot, vault), catch: (cause) => cause as Error });
+    if (wranglerConfig) process.env["SVARTZ_WRANGLER_CONFIG"] = wranglerConfig;
+    else delete process.env["SVARTZ_WRANGLER_CONFIG"];
     process.env["SVARTZ_OUT_DIR"] = vault.outDir;
     if (hostApp) delete process.env["SVARTZ_KIT_OUT_DIR"];
     else process.env["SVARTZ_KIT_OUT_DIR"] = kitOutDirForVault(vault);

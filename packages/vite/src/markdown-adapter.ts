@@ -3,7 +3,7 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { build } from "vite";
 import { markdownCopyFor } from "@svartz/core";
-import { getMarkdownRoutes } from "./public-assets";
+import { getMarkdownRoutes, getPublicFileNames } from "./public-assets";
 
 interface MarkdownBuilder {
   getBuildDirectory(name: string): string;
@@ -41,7 +41,10 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
     async adapt(builder: MarkdownBuilder) {
       await adapter.adapt(builder);
       const markdown = getMarkdownRoutes();
-      if (Object.keys(markdown).length === 0) return;
+      // The shell's Workers config runs the worker ahead of every asset, and adapter-cloudflare's worker serves only
+      // SvelteKit's own, so this one serves Svartz's: the Markdown copies negotiation redirects to, and attachments.
+      const publicFiles = target === "cloudflare-workers" ? getPublicFileNames().map((name) => `/${name}`) : [];
+      if (Object.keys(markdown).length === 0 && publicFiles.length === 0) return;
       const node = target === "node";
       const directory = node ? nodeServerDirectory(outDir) : builder.getBuildDirectory("cloudflare");
       const { file: entry, name: handlerExport } = node
@@ -116,11 +119,15 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
         }
       ` : `${common}
         import original from "./${original}";
+        const publicFiles = new Set(${JSON.stringify(publicFiles)});
         export default {
           ...original,
           fetch(request, env, ctx) {
             const url = new URL(request.url);
-            if (decodeRoutePath(url.pathname) === undefined) return new Response(null, { status: 404 });
+            const pathname = decodeRoutePath(url.pathname);
+            if (pathname === undefined) return new Response(null, { status: 404 });
+            // \`ASSETS\` is the binding the shell's wrangler.jsonc names.
+            if (["GET", "HEAD"].includes(request.method) && publicFiles.has(pathname)) return env.ASSETS.fetch(request);
             if (!["GET", "HEAD"].includes(request.method) || !markdownCopyFor(markdown, url.pathname)) {
               return original.fetch(request, env, ctx);
             }
