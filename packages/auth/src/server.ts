@@ -31,6 +31,7 @@ export { ADMIN_ROLE, readAccount, readIdentity, readSignIn } from "./session";
 export { ACCOUNTS_DATABASE_ENV };
 export { can, migrateGrants, type IdentityGrant } from "./grants";
 export type { PermissionTarget } from "./permissions";
+export { linkedIdentities } from "./identities";
 
 /** One provider's OAuth app. The secret is named by environment variable, never inlined. */
 export interface ProviderOptions {
