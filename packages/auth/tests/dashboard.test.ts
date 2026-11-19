@@ -117,7 +117,7 @@ describe("/-/dashboard/", () => {
     const moderator = await signUp(tour, 3, "mod");
     await grant(tour.post, admin, { actor: "mod", permission: "moderation:reports:read" });
 
-    expect(text(await tour.page(DASHBOARD, admin))).toBe("Dashboard Accounts People & permissions Groups Moderation Reports");
+    expect(text(await tour.page(DASHBOARD, admin))).toBe("Dashboard Accounts People & permissions Groups Reputation Kudos Moderation Reports");
     expect(text(await tour.page(DASHBOARD, moderator))).toBe("Dashboard Moderation Reports");
     expect(await tour.page(`${DASHBOARD}moderation/reports/`, moderator)).toEqual({ title: "Reports", html: expect.stringContaining("<h1>Reports</h1>") });
     expect(await tour.page(PANEL, moderator)).toBeUndefined();

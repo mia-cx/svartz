@@ -12,10 +12,12 @@
  * - `POST sign-out/` ends the session.
  * - `POST account/profile/`, `account/unlink/`, `account/sign-out-everywhere/` and `account/link/<provider>/` change the
  *   signed-in account and redirect back to its `/-/account/` page, which this module also renders.
- * - `GET users/<handle>/` answers a public profile, redirecting an old handle to the current one.
+ * - `GET users/<handle>/` answers a public profile and reputation score, redirecting an old handle to the current one.
+ * - `GET reputation/?page=<path>` answers the reputation of the account whose user page is at `path`, for that page.
  * - `GET viewer/` answers the signed-in handle and whether the dashboard has a panel for them, for the site's links.
  * - `POST people/…` changes grants and roles from the dashboard's People & permissions panel (`people-panel.ts`).
  * - `POST groups/…` creates groups, manages their members and links them to objects (`groups-routes.ts`).
+ * - `POST reputation/…` sets reputation's points and thresholds, and gives kudos (`reputation-panel.ts`).
  *
  * Pages: `/-/account/`, each group's `/-/groups/<name>/`, and `/-/dashboard/`, which lists every plugin's panels the
  * viewer may open (`dashboard.ts`).
@@ -37,6 +39,9 @@ import { DASHBOARD_PAGE, dashboardPage, openableSections } from "./dashboard";
 import { usePermissions } from "./grants";
 import { accountGroups, groupsPage, groupsPanel, groupsRoute } from "./groups-routes";
 import { peoplePanel, peopleRoute } from "./people-panel";
+import { personByHandle } from "./people";
+import { handleScore, standingOf } from "./reputation";
+import { kudosPanel, reputationPanel, reputationRoute } from "./reputation-panel";
 import { handleFrom, HANDLE_PROBLEM, isHandle, typedHandle } from "./handle";
 import { isProviderId, PROVIDERS, type Identity, type ProviderId } from "./providers";
 import { seal, SESSION_SECRET_ENV, SESSION_SECRET_MIN_LENGTH, sessionSecret, unseal } from "./seal";
@@ -58,6 +63,7 @@ export type { PermissionTarget } from "./permissions";
 export { audit, type AuditEntry } from "./audit";
 export { linkedIdentities } from "./identities";
 export { userPageLocation, type UserPageLocation } from "./user-pages";
+export { postReputation, type Recipient, type ReputationEvent } from "./reputation";
 
 /**
  * The public profile of the account that holds or held `handle`, under its current handle; `undefined` when no account
@@ -337,6 +343,20 @@ function userPageView(pages: UserPages | undefined, current: string, handles: re
   return vault === context.vault.id ? { missing: `${folder}/${current}` } : undefined;
 }
 
+/**
+ * `GET reputation/?page=<path>`: for the user page at `path` (below the deployment base), its owner's current handle
+ * and score, and to the owner alone the next threshold too; `null` for any other page.
+ */
+async function userPageStanding(request: Request, url: URL, context: ServerContext, pages: UserPages | undefined): Promise<Response> {
+  const page = url.searchParams.get("page");
+  const handle = pages && page ? Object.keys(pages).find((candidate) => pages[candidate] === page) : undefined;
+  const db = handle === undefined ? undefined : await accountsDatabase(context.env);
+  const owner = db && handle !== undefined ? await personByHandle(db, handle) : undefined;
+  if (!db || !owner) return json(null);
+  const [{ score, next }, viewer] = await Promise.all([standingOf(db, owner.id), readAccount(request, context.env)]);
+  return json({ handle: owner.handle, score, ...viewer?.id === owner.id && next && { next } });
+}
+
 /** `path` with the account page's `status` query, and the provider or typed values it concerns. */
 function withStatus(path: string, url: URL, status: StatusCode, provider?: ProviderId, typed: Record<string, string> = {}): string {
   const target = new URL(path, url.origin);
@@ -403,12 +423,16 @@ async function startLink(change: AccountChange, provider: ProviderId, client: OA
   return redirect(location.href, [cookie(FLOW_COOKIE, flow, FLOW_MAX_AGE)], 303);
 }
 
-/** `GET users/<handle>/`: the public profile, with an old handle redirected to the current one. */
+/**
+ * `GET users/<handle>/`: the public profile and the account's reputation score, with an old handle redirected to the
+ * current one.
+ */
 async function userProfile(handle: string, context: ServerContext): Promise<Response | undefined> {
-  const profile = await findProfile(handle, context.env);
+  const db = await accountsDatabase(context.env);
+  const profile = db && await profileByHandle(db, handle);
   if (!profile) return undefined;
   if (profile.handle !== handle) return redirect(`${context.base}/users/${profile.handle}/`, [], 308);
-  return json(profile);
+  return json({ ...profile, reputation: await handleScore(db, handle) });
 }
 
 /**
@@ -490,11 +514,14 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
       return signedOutPage(providers, (provider) => `${context.base}/start/${provider}/?returnTo=${encodeURIComponent(here)}`);
     }
     const linkBase = options.callbackMountPath === undefined ? context.base : baseAt(context, options.callbackMountPath);
-    const [{ identities, sessions }, handles] = await Promise.all([signInsOf(db, session.account.id), handlesOf(db, session.account.id)]);
+    const [{ identities, sessions }, handles, standing] = await Promise.all([
+      signInsOf(db, session.account.id), handlesOf(db, session.account.id), standingOf(db, session.account.id),
+    ]);
     // Another vault's module registered its user pages as it started: every page request passes each host vault first.
     const userPage = userPageView(runsSignIn ? pages : builtUserPages(), session.account.handle, handles, context);
     return accountPage({
       account: session.account,
+      standing,
       identities,
       sessions,
       session: session.sid,
@@ -519,8 +546,13 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
     if (path === "/viewer/") {
       return request.method === "GET" ? viewer(request, context) : failure(405, "method_not_allowed", "Use GET.", { allow: "GET" });
     }
+    if (path === "/reputation/") {
+      if (request.method !== "GET") return failure(405, "method_not_allowed", "Use GET.", { allow: "GET" });
+      return userPageStanding(request, url, context, runsSignIn ? pages : builtUserPages());
+    }
     const changed = await peopleRoute(request, path, context, vaultsOf(context))
-      ?? await groupsRoute(request, path, context, vaultsOf(context));
+      ?? await groupsRoute(request, path, context, vaultsOf(context))
+      ?? await reputationRoute(request, path, context);
     if (changed) return changed;
     const user = USER_ROUTE.exec(path);
     if (user) {
@@ -573,7 +605,7 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
     page,
     dashboard: {
       title: "Accounts",
-      panels: [peoplePanel({ vaults: vaultsOf, paths: data?.paths ?? [] }), groupsPanel({ vaults: vaultsOf, paths: data?.paths ?? [] })],
+      panels: [peoplePanel({ vaults: vaultsOf, paths: data?.paths ?? [] }), groupsPanel({ vaults: vaultsOf, paths: data?.paths ?? [] }), reputationPanel, kudosPanel],
     },
   };
 };

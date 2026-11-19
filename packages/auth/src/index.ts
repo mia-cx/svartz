@@ -212,6 +212,9 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], reso
           mountPath: ctx.config.mountPath,
           providers: providers.map((id) => ({ id, label: PROVIDERS[id].label })),
           ...options.privacyNotice ? { privacyNotice: options.privacyNotice } : {},
+          ...resolved?.userPageVault === ctx.config.id && {
+            userPages: `${ctx.config.mountPath.replace(/\/$/, "")}/${options.userPages ?? DEFAULT_USER_PAGE_FOLDER}/`,
+          },
         };
         const compiler = getCompilerContributions(ctx);
         compiler.browserResources.set(AUTH_PLUGIN_ID, { id: AUTH_PLUGIN_ID, kind: "script", importId: BROWSER_MODULE, options: browser });

@@ -12,6 +12,9 @@ export const GRANTS_WRITE = "auth:grants:write";
 /** Opens the Groups panel, which links groups to objects. Linking gives a group's owners everything there. */
 export const GROUP_LINKS_WRITE = "auth:group-links:write";
 
+/** Gives other accounts kudos, which add to their reputation. */
+export const KUDOS_WRITE = "auth:kudos:write";
+
 /**
  * None has a default, so only admins hold them until someone is granted them, and each is administrative: owning a
  * page or a group's linked pages gives none of them.
@@ -30,6 +33,11 @@ export const AUTH_PERMISSIONS: readonly PermissionDeclaration[] = [
   {
     slug: GROUP_LINKS_WRITE, name: "Link groups to pages",
     description: "Link a group to a vault, folder or page, or unlink it. A group's owners may edit everything where it is linked.",
+    administrative: true,
+  },
+  {
+    slug: KUDOS_WRITE, name: "Give kudos",
+    description: "Give another account kudos, with a reason, which adds to their reputation. Each account gets at most one a day from each moderator.",
     administrative: true,
   },
 ];

@@ -180,6 +180,53 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       PRIMARY KEY (group_name, object)
     )`,
   ],
+  [
+    // The reputation ledger, as `reputation.ts` describes it: an account's score is the sum of its entries. `(source,
+    // ref)` names the event an entry is for, so the same event never scores twice. The triggers keep it append-only.
+    `CREATE TABLE IF NOT EXISTS auth_reputation (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id TEXT NOT NULL REFERENCES auth_accounts (id),
+      source TEXT NOT NULL,
+      ref TEXT NOT NULL,
+      points REAL NOT NULL,
+      at TEXT NOT NULL,
+      UNIQUE (source, ref)
+    )`,
+    `CREATE INDEX IF NOT EXISTS auth_reputation_by_account ON auth_reputation (account_id, at)`,
+    `CREATE TRIGGER IF NOT EXISTS auth_reputation_no_update BEFORE UPDATE ON auth_reputation
+      BEGIN SELECT RAISE(ABORT, 'auth_reputation is append-only'); END`,
+    `CREATE TRIGGER IF NOT EXISTS auth_reputation_no_delete BEFORE DELETE ON auth_reputation
+      BEGIN SELECT RAISE(ABORT, 'auth_reputation is append-only'); END`,
+    // Weights and the daily limit an admin changed from their defaults, by name.
+    `CREATE TABLE IF NOT EXISTS auth_reputation_settings (
+      name TEXT PRIMARY KEY,
+      value REAL NOT NULL,
+      updated_at TEXT NOT NULL
+    )`,
+    // The score at which an account gains each role. One per role, and never `admin`, which no stored role may be.
+    `CREATE TABLE IF NOT EXISTS auth_reputation_thresholds (
+      role TEXT PRIMARY KEY REFERENCES auth_roles (name),
+      score REAL NOT NULL CHECK (score > 0),
+      updated_at TEXT NOT NULL
+    )`,
+    // Every role reputation gave an account. A row outlives the role: reputation never gives it again, so an admin's
+    // removal sticks.
+    `CREATE TABLE IF NOT EXISTS auth_reputation_promotions (
+      account_id TEXT NOT NULL REFERENCES auth_accounts (id),
+      role TEXT NOT NULL,
+      promoted_at TEXT NOT NULL,
+      PRIMARY KEY (account_id, role)
+    )`,
+    `CREATE TRIGGER IF NOT EXISTS auth_reputation_promotions_no_delete BEFORE DELETE ON auth_reputation_promotions
+      BEGIN SELECT RAISE(ABORT, 'auth_reputation_promotions is append-only'); END`,
+    // Each agreement's newest settled state, by its event's ref: the ledger's entries for it follow `agreed`, and a
+    // post with a lower `version`, read before a later change, never replaces it.
+    `CREATE TABLE IF NOT EXISTS auth_reputation_agreements (
+      ref TEXT PRIMARY KEY,
+      version INTEGER NOT NULL,
+      agreed INTEGER NOT NULL CHECK (agreed IN (0, 1))
+    )`,
+  ],
 ];
 
 const migrated = new WeakMap<Database, Promise<void>>();

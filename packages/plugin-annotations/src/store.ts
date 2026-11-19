@@ -92,6 +92,14 @@ const MIGRATIONS: readonly (readonly string[])[] = [
     )`,
   ],
   [
+    // A comment's agreements' version: it grows with every change to them, in the batch that makes it, so reputation
+    // can tell a +1 read before a later change from one read after it. No row is version 0.
+    `CREATE TABLE IF NOT EXISTS agreement_versions (
+      annotation_id TEXT PRIMARY KEY REFERENCES annotations (id) ON DELETE CASCADE,
+      version INTEGER NOT NULL
+    )`,
+  ],
+  [
     // Comments a moderator hid, and when: they stay stored for the report about them, and no list shows them. A table
     // rather than a column, because SQLite has no ADD COLUMN IF NOT EXISTS for racing isolates to run twice.
     `CREATE TABLE IF NOT EXISTS hidden_annotations (
@@ -272,12 +280,27 @@ export async function setAgreement(db: Database, { vault, annotation, author, ag
     : [db.prepare("DELETE FROM agreements WHERE annotation_id = ? AND author_id = ?").bind(annotation, author.id)];
   const answers = await db.batch([
     ...change,
+    db.prepare(`INSERT INTO agreement_versions (annotation_id, version) SELECT id, 1 FROM annotations WHERE id = ?
+      ON CONFLICT (annotation_id) DO UPDATE SET version = version + 1`).bind(annotation),
     db.prepare(`SELECT g.annotation_id, g.created_at, ${AUTHOR_COLUMNS}
       FROM agreements g JOIN identities i ON i.id = g.author_id
       WHERE g.annotation_id = ?
       ORDER BY g.created_at`).bind(annotation),
   ]);
   return (answers.at(-1)!.results as AgreementRow[]).map(agreementOf);
+}
+
+/**
+ * Who wrote comment `annotation` of `vault` (their identity id), whether any of `identities` agrees with it (one
+ * person's +1, whichever of their sign-ins gave it), and its agreements' version, in one read so the three agree;
+ * `undefined` when the vault has no such annotation.
+ */
+export async function readAgreement(db: Database, vault: string, annotation: string, identities: readonly string[]): Promise<{ author: string; agreed: boolean; version: number } | undefined> {
+  const { results: [row] } = await db.prepare(`SELECT a.author_id, COALESCE(v.version, 0) AS version,
+      EXISTS (SELECT 1 FROM agreements g WHERE g.annotation_id = a.id AND g.author_id IN (SELECT value FROM json_each(?3))) AS agreed
+    FROM annotations a LEFT JOIN agreement_versions v ON v.annotation_id = a.id WHERE a.id = ?1 AND a.vault = ?2`)
+    .bind(annotation, vault, JSON.stringify(identities)).all<{ author_id: string; version: number; agreed: number }>();
+  return row && { author: row.author_id, agreed: row.agreed === 1, version: row.version };
 }
 
 /** Who wrote annotation `annotation` of `vault` (their identity id) and on which page, or `undefined` when it has none. */
