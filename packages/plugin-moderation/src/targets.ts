@@ -22,6 +22,11 @@ export interface BuildData {
    * it records the vault's saves, which say which pull requests are this vault's to close.
    */
   readonly submissions?: { readonly repo: string; readonly records?: { readonly database: string; readonly root: string } };
+  /**
+   * The history plugin, when the vault has it: the slug of each published Markdown page by its vault path, the pages a
+   * reported commit's Revert can reach.
+   */
+  readonly history?: { readonly paths: Readonly<Record<string, string>> };
 }
 
 /** Why a target can't be reported, as the route answers it. */

@@ -71,9 +71,15 @@ export function moderation(options: ModerationOptions = {}): NormalizedSvartzPlu
       options: { fatal: true, enforce: "post" },
       run(ctx) {
         // Protected notes stay out: reporting one would tell moderators it exists.
-        const pages = Object.fromEntries((ctx.index?.entries ?? [])
-          .filter((entry) => !entry.locked)
-          .map((entry) => [entry.slug, { title: entry.title, href: entry.href }]));
+        const published = (ctx.index?.entries ?? []).filter((entry) => !entry.locked);
+        const pages = Object.fromEntries(published.map((entry) => [entry.slug, { title: entry.title, href: entry.href }]));
+        // History has a page for each published Markdown note, where a reported commit can be reverted.
+        const history = serverOptionsOf(ctx.plugins, "history") && {
+          paths: Object.fromEntries(published.flatMap((entry) => {
+            const path = entry.path.replaceAll("\\", "/");
+            return /\.md$/i.test(path) ? [[path, entry.slug] as const] : [];
+          })),
+        };
         const annotations = serverOptionsOf(ctx.plugins, "annotations")?.database as { env?: unknown } | undefined;
         const submissions = serverOptionsOf(ctx.plugins, "submissions");
         const configured = serverOptionsOf(ctx.plugins, "auth")?.userPages;
@@ -88,6 +94,7 @@ export function moderation(options: ModerationOptions = {}): NormalizedSvartzPlu
           ...typeof submissions?.repo === "string" && {
             submissions: { repo: submissions.repo, ...typeof records === "string" && typeof root === "string" && { records: { database: records, root } } },
           },
+          ...history && { history },
         };
         compiler.serverData.set(PLUGIN_ID, data);
         compiler.browserResources.set(PLUGIN_ID, {

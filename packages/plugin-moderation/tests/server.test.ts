@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  ADA, ALAN, createDatabase, createSite, grant, GRACE, ORIGIN, PAGES, seedComment, seedSubmission, signIn, type Database, type Site, type SiteOptions,
+  ADA, ALAN, createDatabase, createSite, grant, GRACE, ORIGIN, PAGES, seedComment, seedCommit, seedSubmission, signIn, type Database, type Site, type SiteOptions,
 } from "./harness";
 
 const ENDPOINT = "/notes/_svartz/moderation";
@@ -339,6 +339,24 @@ describe("the Reports panel", () => {
 
     expect(await panel(site, ada)).toBeUndefined();
     expect((await post(site, ada, `${ENDPOINT}/reports/${id}/resolve/`)).status).toBe(403);
+  });
+
+  // Proves a report about a commit leads a moderator to revert what it changed: a link to that page's diff for the
+  // commit, where history's Revert form is, only for who may revert the page, and only with history on the vault.
+  it("offers Revert on a reported commit to whoever may revert a page it changed", async () => {
+    const { db, site, ada, alan } = await moderated({ history: true });
+    await seedCommit(db, SHA, ["garden.md", "garden.png"]);
+    await report(site, ada, { kind: "commit", id: SHA });
+
+    expect(await panel(site, alan)).not.toContain(">Revert<");
+    await grant(db, "alan", "history:reverts:write", "page:notes/garden");
+    expect(await panel(site, alan)).toContain(`<a class="sv-account-button" href="/notes/-/history/garden/?to=${SHA}#sv-history-revert" aria-describedby="report-`);
+
+    const plain = await moderated();
+    await seedCommit(plain.db, SHA, ["garden.md"]);
+    await report(plain.site, plain.ada, { kind: "commit", id: SHA });
+    await grant(plain.db, "alan", "moderation:accounts:write");
+    expect(await panel(plain.site, plain.alan)).not.toContain(">Revert<");
   });
 
   it("refuses a resolve from another site", async () => {
