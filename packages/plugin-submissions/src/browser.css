@@ -742,3 +742,83 @@
 		gap: var(--sv-space-1);
 	}
 }
+
+/*
+ * The dashboard's Recent edits panel. It is auth's `.sv-account.sv-dashboard`, so headings, muted text and the list's
+ * rules match the other panels; these lay out each commit: its summary and deploy state, the pages it changed, then
+ * who, when, and its diff.
+ */
+.svartz-submissions-edit {
+	display: grid;
+	gap: var(--sv-space-1);
+	padding-block: var(--sv-space-3);
+	border-block-end: var(--sv-rule-width) solid var(--sv-rule);
+}
+
+.svartz-submissions-edit a,
+.svartz-submissions-more summary {
+	color: var(--sv-accent-text);
+	text-underline-offset: 0.2em;
+}
+
+.svartz-submissions-edit-head {
+	display: flex;
+	align-items: baseline;
+	gap: var(--sv-space-3);
+}
+
+.svartz-submissions-edit-head p {
+	flex: 1;
+	min-inline-size: 0;
+	overflow-wrap: anywhere;
+}
+
+.svartz-submissions-stage {
+	flex: none;
+	padding-inline: var(--sv-space-2);
+	border: var(--sv-rule-width) solid var(--sv-rule-strong);
+	border-radius: var(--sv-radius-m);
+	color: var(--sv-muted);
+	font-size: var(--sv-step--1);
+	white-space: nowrap;
+}
+
+/* Not the accent: some themes' accent is red, which would read as a failure. */
+.svartz-submissions-stage[data-stage="building"] {
+	border-color: currentColor;
+	color: var(--sv-ink);
+}
+
+.svartz-submissions-edit time {
+	white-space: nowrap;
+}
+
+.svartz-submissions-stage[data-stage="live"] {
+	border-color: currentColor;
+	color: light-dark(oklch(0.48 0.12 var(--sv-hue-green)), oklch(0.8 0.12 var(--sv-hue-green)));
+}
+
+.svartz-submissions-stage[data-stage="failed"] {
+	border-color: currentColor;
+	color: light-dark(oklch(0.48 0.15 var(--sv-hue-red)), oklch(0.8 0.1 var(--sv-hue-red)));
+}
+
+/* The pages a commit changed, as one comma-separated line that wraps. */
+.svartz-submissions-pages {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 var(--sv-space-2);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	overflow-wrap: anywhere;
+}
+
+.svartz-submissions-pages li:not(:last-child)::after {
+	content: ",";
+}
+
+.svartz-submissions-more summary {
+	inline-size: fit-content;
+	cursor: pointer;
+}

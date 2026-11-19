@@ -40,8 +40,8 @@ import { seal, SESSION_SECRET_ENV, SESSION_SECRET_MIN_LENGTH, sessionSecret, uns
 import { endSession, isIdentity, readAccount, readCookie, readCurrentSession, readIdentity, sealSession, SESSION_COOKIE, useAdmins } from "./session";
 import {
   ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, endAccountSessions, handlesOf, hasAccount, linkIdentity,
-  profileByHandle, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity, updateProfile,
-  type Database, type PublicProfile,
+  profileByHandle, profilesById, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity,
+  updateProfile, type Database, type PublicProfile,
 } from "./store";
 import { builtUserPages, DEFAULT_USER_PAGE_FOLDER, hasUserPage, useUserPages, userPageLocation, type UserPages } from "./user-pages";
 
@@ -64,6 +64,15 @@ export { userPageLocation, type UserPageLocation } from "./user-pages";
 export async function findProfile(handle: string, env: Readonly<Record<string, unknown>>): Promise<PublicProfile | undefined> {
   const db = await accountsDatabase(env);
   return db && profileByHandle(db, handle);
+}
+
+/**
+ * The public profiles of the accounts with ids `ids`, by id, for plugins that stored an account id, such as a commit's
+ * `Svartz-Account` trailer. Ids no account has are absent, and so is every id when the site binds no `SVARTZ_DB`.
+ */
+export async function findProfiles(ids: readonly string[], env: Readonly<Record<string, unknown>>): Promise<Map<string, PublicProfile>> {
+  const db = await accountsDatabase(env);
+  return db ? profilesById(db, ids) : new Map();
 }
 
 /** One provider's OAuth app. The secret is named by environment variable, never inlined. */

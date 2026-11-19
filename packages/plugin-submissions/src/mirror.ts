@@ -24,7 +24,8 @@ import type { CommentRecord, CommitRecord, DeploymentRecord, DeploymentStatus, P
 /** The slice of Cloudflare's `D1Database` the mirror uses. */
 export interface Database {
   prepare(query: string): Statement;
-  batch(statements: Statement[]): Promise<unknown[]>;
+  /** All of `statements` in one transaction and one call, answering each one's rows in order. */
+  batch<Row = Record<string, unknown>>(statements: Statement[]): Promise<{ results: Row[] }[]>;
 }
 
 export interface Statement {
@@ -396,74 +397,113 @@ export interface Signal {
   readonly createdAt: string;
 }
 
-const RUN_SUCCESS = new Set(["success"]);
-const RUN_FAILURE = new Set(["failure", "timed_out", "startup_failure"]);
-const DEPLOYMENT_FAILURE = new Set(["failure", "error"]);
 /** How many recent live signals since an edit landed are weighed, and how many earlier successes besides. */
 const MAX_SIGNALS = 20;
 
 /**
- * Signals from `candidates` (a query of `sha` and `created_at`, with `?1` the scope), newest first: the latest
- * {@link MAX_SIGNALS}, and as many more where `succeeded` holds and GitHub hasn't said `sha` misses the commit bound
- * as `?2`. A success stays evidence however many attempts follow it, and one known to miss makes room for the next.
+ * Signals from `candidates` (a query of `sha`, `outcome` and `created_at`, with `?1` the scope), newest first: the
+ * latest {@link MAX_SIGNALS}, and as many more successes where GitHub hasn't said `sha` misses the commit bound as
+ * `?2`. A success stays evidence however many attempts follow it, and one known to miss makes room for the next.
  */
-const recentAndSucceeded = (candidates: string, succeeded: string) => `WITH candidates AS (${candidates})
+const recentAndSucceeded = (candidates: string) => `WITH candidates AS (${candidates})
   SELECT * FROM (SELECT * FROM candidates ORDER BY created_at DESC LIMIT ?3)
   UNION
-  SELECT * FROM (SELECT * FROM candidates WHERE ${succeeded} AND NOT EXISTS (SELECT 1 FROM submissions_ancestry
+  SELECT * FROM (SELECT * FROM candidates WHERE outcome = 'success' AND NOT EXISTS (SELECT 1 FROM submissions_ancestry
     WHERE scope = ?1 AND ancestor = ?2 AND descendant = candidates.sha AND contains = 0) ORDER BY created_at DESC LIMIT ?3)
   ORDER BY created_at DESC`;
 
+/** The rows a signals query answers. A `null` outcome says nothing about the commit. */
+export type SignalRow = { readonly sha: string; readonly outcome: Signal["outcome"] | null; readonly created_at: string };
+
+/** A signals query's rows, without those that say nothing. */
+export const toSignals = (rows: readonly SignalRow[]): Signal[] =>
+  rows.flatMap(({ sha, outcome, created_at }) => (outcome ? [{ sha, outcome, createdAt: created_at }] : []));
+
 /**
- * The runs of `workflow` on `branch` made since `since`, newest first, weighed for whether they put `commit` live. A
- * completed run that neither succeeded nor failed (cancelled, skipped) says nothing about the edit and is left out.
+ * The runs of `workflow` on `branch` made since `since`, newest first, weighed for whether they put `commit` live, as
+ * a statement answering {@link SignalRow}s. A completed run that neither succeeded nor failed (cancelled, skipped)
+ * says nothing about the edit and is left out.
  */
-export async function workflowSignals({ db, scope }: Mirror, workflow: string, branch: string, since: string, commit: string): Promise<Signal[]> {
-  const { results } = await db.prepare(recentAndSucceeded(
-    `SELECT id, head_sha AS sha, status, conclusion, created_at FROM submissions_runs
-      WHERE scope = ?1 AND workflow_path = ?4 AND head_branch = ?5 AND created_at >= ?6`,
-    "status = 'completed' AND conclusion = 'success'",
-  ))
-    .bind(scope, commit, MAX_SIGNALS, workflow, branch, since)
-    .all<{ sha: string; status: string; conclusion: string | null; created_at: string }>();
-  return results.flatMap(({ sha, status, conclusion, created_at }): Signal[] => {
-    const outcome = status !== "completed" ? "pending"
-      : RUN_SUCCESS.has(conclusion ?? "") ? "success"
-        : RUN_FAILURE.has(conclusion ?? "") ? "failure" : undefined;
-    return outcome ? [{ sha, outcome, createdAt: created_at }] : [];
-  });
+export function workflowSignals({ db, scope }: Mirror, workflow: string, branch: string, since: string, commit: string): Statement {
+  return db.prepare(recentAndSucceeded(`SELECT id, head_sha AS sha, created_at,
+      CASE WHEN status != 'completed' THEN 'pending'
+        WHEN conclusion = 'success' THEN 'success'
+        WHEN conclusion IN ('failure', 'timed_out', 'startup_failure') THEN 'failure' END AS outcome
+    FROM submissions_runs WHERE scope = ?1 AND workflow_path = ?4 AND head_branch = ?5 AND created_at >= ?6`))
+    .bind(scope, commit, MAX_SIGNALS, workflow, branch, since);
 }
 
 /**
- * The deployments to `environment` made since `since`, newest first, weighed for whether they put `commit` live. One
- * that ever succeeded is a success. One made `inactive` without succeeding says nothing: GitHub lets a failed or
- * unfinished deployment be deactivated too.
+ * The deployments to `environment` made since `since`, newest first, weighed for whether they put `commit` live, as
+ * a statement answering {@link SignalRow}s. One that ever succeeded is a success. One made `inactive` without
+ * succeeding says nothing: GitHub lets a failed or unfinished deployment be deactivated too.
  */
-export async function deploymentSignals({ db, scope }: Mirror, environment: string, since: string, commit: string): Promise<Signal[]> {
-  const { results } = await db.prepare(recentAndSucceeded(
-    `SELECT id, sha, state, succeeded, created_at FROM submissions_deployments
-      WHERE scope = ?1 AND environment = ?4 AND created_at >= ?5`,
-    "succeeded = 1",
-  ))
-    .bind(scope, commit, MAX_SIGNALS, environment, since).all<{ sha: string; state: string | null; succeeded: number; created_at: string }>();
-  return results.flatMap(({ sha, state, succeeded, created_at }): Signal[] => {
-    const outcome = succeeded ? "success" : DEPLOYMENT_FAILURE.has(state ?? "") ? "failure" : state === "inactive" ? undefined : "pending";
-    return outcome ? [{ sha, outcome, createdAt: created_at }] : [];
-  });
+export function deploymentSignals({ db, scope }: Mirror, environment: string, since: string, commit: string): Statement {
+  return db.prepare(recentAndSucceeded(`SELECT id, sha, created_at,
+      CASE WHEN succeeded = 1 THEN 'success'
+        WHEN state IN ('failure', 'error') THEN 'failure'
+        WHEN state IS NOT 'inactive' THEN 'pending' END AS outcome
+    FROM submissions_deployments WHERE scope = ?1 AND environment = ?4 AND created_at >= ?5`))
+    .bind(scope, commit, MAX_SIGNALS, environment, since);
 }
 
-/** What GitHub said about whether each of `descendants` contains `ancestor`; pairs never asked are absent. */
-export async function readAncestry({ db, scope }: Mirror, ancestor: string, descendants: readonly string[]): Promise<Map<string, boolean>> {
-  if (descendants.length === 0) return new Map();
-  const { results } = await db.prepare(`SELECT descendant, contains FROM submissions_ancestry
-    WHERE scope = ? AND ancestor = ? AND descendant IN (SELECT value FROM json_each(?))`)
-    .bind(scope, ancestor, JSON.stringify(descendants)).all<{ descendant: string; contains: number }>();
-  return new Map(results.map(({ descendant, contains }) => [descendant, contains === 1]));
+/** The rows an ancestry query answers: whether `descendant` contains `ancestor`, as GitHub said. */
+export type AncestryRow = { readonly ancestor: string; readonly descendant: string; readonly contains: number };
+
+/** What GitHub said about whether any commit contains each of `ancestors`, as a statement answering {@link AncestryRow}s. */
+export function ancestryOf({ db, scope }: Mirror, ancestors: readonly string[]): Statement {
+  return db.prepare("SELECT ancestor, descendant, contains FROM submissions_ancestry WHERE scope = ? AND ancestor IN (SELECT value FROM json_each(?))")
+    .bind(scope, JSON.stringify(ancestors));
 }
 
 export async function writeAncestry({ db, scope }: Mirror, ancestor: string, descendant: string, contains: boolean): Promise<void> {
   await db.prepare("INSERT OR IGNORE INTO submissions_ancestry (scope, ancestor, descendant, contains) VALUES (?, ?, ?, ?)")
     .bind(scope, ancestor, descendant, contains ? 1 : 0).run();
+}
+
+/** A mirrored commit as a list of edits shows it, with the account it may be credited to. */
+export interface ListedCommit {
+  readonly sha: string;
+  readonly message: string;
+  readonly authorName: string;
+  readonly authorLogin: string | null;
+  readonly committedAt: string;
+  /** Its changed files inside the vault, as repository paths; `null` until the poll reads them. */
+  readonly files: readonly string[] | null;
+  /**
+   * The account that made it, by id, only from the site's own record of a save: a direct commit with this SHA, or a
+   * submission whose pull request the mirror says merged as this commit. `null` for every other commit, whatever its
+   * trailer, author or committer say: those are git metadata whoever makes the commit chooses.
+   */
+  readonly account: string | null;
+}
+
+/**
+ * Up to `limit` of the vault's commits, newest first (by commit time, then SHA), after the commit `before` when given.
+ * A `before` the mirror doesn't hold answers none.
+ */
+export async function listCommits({ db, scope }: Mirror, { before, limit }: { before?: string; limit: number }): Promise<ListedCommit[]> {
+  const { results } = await db.prepare(`SELECT c.sha, c.message, c.author_name, c.author_login, c.committed_at, c.files,
+      (SELECT substr(e.owner, 9) FROM submissions_edits e
+        LEFT JOIN submissions_pulls p ON e.kind = 'pull-request' AND p.scope = e.scope AND p.number = e.pull_number
+        WHERE e.scope = c.scope AND e.owner LIKE 'account:%'
+          AND ((e.kind = 'commit' AND e.commit_sha = c.sha) OR (p.merged_at IS NOT NULL AND p.merge_commit = c.sha))
+        ORDER BY e.saved_at LIMIT 1) AS account
+    FROM submissions_commits c
+    WHERE c.scope = ?1 AND (?2 IS NULL OR (c.committed_at, c.sha) < (SELECT committed_at, sha FROM submissions_commits WHERE scope = ?1 AND sha = ?2))
+    ORDER BY c.committed_at DESC, c.sha DESC
+    LIMIT ?3`)
+    .bind(scope, before ?? null, limit)
+    .all<{ sha: string; message: string; author_name: string; author_login: string | null; committed_at: string; files: string | null; account: string | null }>();
+  return results.map((row) => ({
+    sha: row.sha,
+    message: row.message,
+    authorName: row.author_name,
+    authorLogin: row.author_login,
+    committedAt: row.committed_at,
+    files: row.files === null ? null : JSON.parse(row.files) as string[],
+    account: row.account,
+  }));
 }
 
 /** The content branch's name as deliveries or a poll last said, for a vault that leaves it to the default branch. */
