@@ -400,21 +400,26 @@ describe("review actions", () => {
     expect(verdict.headers.get("location")).toBe(`${REVIEW_PANEL}43/?review=approved#svartz-review`);
   });
 
-  // Proves a page's content is reviewed by the routes it claims: a reviewer who may not review `private/plans` can't
-  // see, nor merge, a new page that asks for that address, though its own path is one they may review.
-  it("refuses a page that claims a route the reviewer may not review", async () => {
+  // Proves a page's content is reviewed by the routes it claims, in every format the build publishes as a note: a
+  // reviewer who may not review Setup can't see, nor merge, a new page whose frontmatter takes Setup's address, though
+  // its own path is one they may review.
+  it.each(["md", "mdx", "svx"])("refuses a .%s page that claims a route the reviewer may not review", async (format) => {
     const site = await seeded();
-    const claiming = [{ filename: "content/new.md", status: "added", patch: "@@ -0,0 +1,3 @@\n+---\n+slug: private/plans\n+---" }];
+    await site.request("/wiki/_svartz/auth/people/grant/", {
+      method: "POST", headers: { cookie: site.sessions.ada, origin: ORIGIN },
+      body: new URLSearchParams({ "actor-type": "account", actor: "mod", permission: "submissions:reviews:write", scope: "vault:wiki", path: "setup", value: "deny" }),
+    });
+    const claiming = [{ filename: `content/new.${format}`, status: "added", patch: "@@ -0,0 +1,3 @@\n+---\n+slug: setup\n+---" }];
     const pull = site.github.pulls.get(guide.number)!;
     site.github.pulls.set(guide.number, { ...pull, files: claiming });
-    site.github.files.set(`content/new.md@${guide.head}`, "---\nslug: private/plans\n---\n");
+    site.github.files.set(`content/new.${format}@${guide.head}`, "---\nslug: setup\n---\n");
 
     const view = text(await site.page("mod", `${REVIEW_PANEL}${guide.number}/`));
     const replay = replayGitHub(inspection(guide.number, claiming, guide.head), INSTALLATION_TOKEN);
     const merge = await post(site, "mod", "merge", { pull: "43", head: guide.head });
 
     expect(view).toContain("1 file you can't review");
-    expect(view).not.toContain("new.md");
+    expect(view).not.toContain(`new.${format}`);
     expect(merge.status).toBe(403);
     expect(replay.pending).toEqual([]);
     expect(replay.requests.filter(({ method }) => method !== "GET")).toEqual([]);
