@@ -5,7 +5,8 @@
  *   body with the webhook secret) is checked in constant time before the body is parsed; a delivery without one, with
  *   a wrong one, or for another repository is refused and nothing is stored. Deliveries of the seven mirrored events
  *   are written to the mirror (see `mirror.ts`); `ping`, other events, and deliveries with nothing the mirror keeps
- *   are acknowledged and ignored.
+ *   are acknowledged and ignored. After a stored delivery, and after each poll, reputation for the saves that landed
+ *   is posted (see `credit.ts`).
  * - `GET status/?edit=<submission id>` answers where a saved edit has got to, to the reader who saved it: the account
  *   or identity that saved it, or for a guest's edit whoever holds its random id. It reads the mirror only. When the
  *   mirror is stale, the reconcile poll runs after the answer, as do the ancestry checks the answer still lacks.
@@ -16,8 +17,9 @@
  */
 import type { ServerContext } from "@svartz/core";
 import { SUBMISSION_ID_PATTERN, type StatusResponse } from "./api";
+import { credit } from "./credit";
 import { SubmissionError } from "./errors";
-import { requestGitHub } from "./github";
+import { requestGitHub, type Person } from "./github";
 import {
   deploymentSignals,
   isDatabase,
@@ -67,6 +69,8 @@ export interface SyncSetup {
   readonly root: string;
   /** The token every GitHub call authenticates with. */
   readonly token: (env: ServerContext["env"]) => Promise<string>;
+  /** The App's bot user, who commits the site's direct commits; absent without an App, which makes none. */
+  readonly committer?: (env: ServerContext["env"]) => Promise<Person>;
 }
 
 /** GitHub caps deliveries at 25 MB; a push of many commits stays far below this, and anything past it waits for the poll. */
@@ -190,7 +194,16 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     // A push to another branch, or outside the vault: nothing to keep, and D1 refuses an empty batch.
     if (statements.length === 0) return new Response(null, { status: 202 });
     await mirror.db.batch(statements);
+    context.waitUntil(settleCredit(mirror, context));
     return new Response(null, { status: 204 });
+  }
+
+  /** Post reputation for what the mirror now shows landed. A failure waits for the next delivery or poll. */
+  async function settleCredit(mirror: Mirror, context: ServerContext): Promise<void> {
+    const bot = setup.committer && (() => setup.committer!(context.env));
+    await credit(mirror, setup.repo, bot, context.env).catch((error: unknown) => {
+      console.error("[submissions] couldn't post reputation for landed edits", error);
+    });
   }
 
   /**
@@ -267,14 +280,15 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
 
     const token = () => setup.token(context.env);
     const environment = options.live.environment;
-    context.waitUntil(reconcile({ mirror, repo: setup.repo, root: setup.root, ...(setup.branch ? { branch: setup.branch } : {}), ...(environment ? { environment } : {}) }, token));
+    context.waitUntil(reconcile({ mirror, repo: setup.repo, root: setup.root, ...(setup.branch ? { branch: setup.branch } : {}), ...(environment ? { environment } : {}) }, token)
+      .then(() => settleCredit(mirror, context)));
     const { status: answer, unchecked } = await editStatus(mirror, edit);
     if (unchecked.heads.length > 0) context.waitUntil(checkAncestry(mirror, token, unchecked.commit, unchecked.heads));
     return Response.json(answer satisfies StatusResponse, { headers: { "cache-control": "private, no-store" } });
   }
 
   /** Keep a save, so its saver can follow it to live. */
-  async function record(context: ServerContext, edit: Omit<EditRecord, "liveAt">): Promise<void> {
+  async function record(context: ServerContext, edit: Omit<EditRecord, "liveAt"> & { readonly newPage: boolean }): Promise<void> {
     await recordEdit(await mirrorFor(context), edit);
   }
 

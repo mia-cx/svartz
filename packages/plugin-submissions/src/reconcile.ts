@@ -7,13 +7,15 @@
  * it, the commits touching the vault, and the comments on pull requests. Lists are conditional (`If-None-Match` with
  * the ETag GitHub last sent), so a list that hasn't changed costs a 304. Then, while its budget of
  * {@link MAX_REQUESTS} lasts, it fills in what the lists leave out: deployments' statuses, which pull requests touch
- * the vault, their reviews, and commits' files. What it doesn't reach waits in the mirror for the next poll.
+ * the vault, their reviews, commits' files, and the lines each landed save changed, for reputation. What it doesn't
+ * reach waits in the mirror for the next poll.
  *
  * It keeps {@link RATE_LIMIT_RESERVE} requests of GitHub's hourly allowance for saves: below that it stops and polls
  * again only after the reset, and on a rate limit it waits as GitHub says (`Retry-After`, else the reset when the
  * allowance is spent, else a minute). The pause is kept in D1 and shared with status reads' ancestry checks, which
  * keep the same reserve; each reads it before every request.
  */
+import { vaultLines } from "./credit";
 import { requestGitHub } from "./github";
 import {
   markSucceeded,
@@ -220,6 +222,7 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
     await fillPullScopes();
     await fillReviews();
     await fillCommitFiles();
+    await fillCreditLines();
   } catch (error) {
     if (!(error instanceof Stop)) console.warn(`[submissions] the GitHub mirror's poll stopped: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
@@ -297,17 +300,42 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
     }
   }
 
-  /** The vault files of commits the list gave without them. */
+  /** The vault files of commits the list gave without them, and the lines a save that made one changed. */
   async function fillCommitFiles() {
     const bare = await rows<{ sha: string }>("SELECT sha FROM submissions_commits WHERE scope = ? AND files IS NULL ORDER BY committed_at DESC LIMIT ?");
     for (const { sha } of bare) {
       const answer = await get(`/commits/${sha}`);
-      const files = list(object(answer?.body)?.files).flatMap((file) => {
+      const changed = list(object(answer?.body)?.files);
+      const files = changed.flatMap((file) => {
         const path = text(object(file)?.filename);
         return path && inVault(path, root) ? [path] : [];
       });
-      await mirror.db.prepare("UPDATE submissions_commits SET files = ? WHERE scope = ? AND sha = ? AND files IS NULL")
-        .bind(JSON.stringify(files.sort()), mirror.scope, sha).run();
+      await mirror.db.batch([
+        mirror.db.prepare("UPDATE submissions_commits SET files = ? WHERE scope = ? AND sha = ? AND files IS NULL")
+          .bind(JSON.stringify(files.sort()), mirror.scope, sha),
+        mirror.db.prepare(`UPDATE submissions_credits SET lines = ?1 WHERE scope = ?2 AND lines IS NULL
+          AND edit_id IN (SELECT id FROM submissions_edits WHERE scope = ?2 AND commit_sha = ?3)`).bind(vaultLines(changed, root), mirror.scope, sha),
+      ]);
+    }
+  }
+
+  /**
+   * The lines each landed save that reputation still owes changed in the vault: its direct commit's, or its pull
+   * request's merge commit's, which deliveries don't carry.
+   */
+  async function fillCreditLines() {
+    const owed = await rows<{ edit_id: string; sha: string }>(`SELECT k.edit_id, COALESCE(c.sha, p.merge_commit) AS sha
+      FROM submissions_credits k JOIN submissions_edits e ON e.id = k.edit_id
+        LEFT JOIN submissions_commits c ON e.kind = 'commit' AND c.scope = e.scope AND c.sha = e.commit_sha
+        LEFT JOIN submissions_pulls p ON e.kind = 'pull-request' AND p.scope = e.scope AND p.number = e.pull_number AND p.merged_at IS NOT NULL
+      WHERE k.scope = ?1 AND k.lines IS NULL AND k.new_page = 0 AND (k.state IS NULL OR k.state = 'declined')
+        AND COALESCE(c.sha, p.merge_commit) IS NOT NULL
+      ORDER BY e.saved_at DESC LIMIT ?2`);
+    for (const { edit_id, sha } of owed) {
+      const answer = await get(`/commits/${sha}`);
+      // A commit GitHub no longer has, as after a force push, changed nothing that landed.
+      const lines = answer === null ? 0 : vaultLines(list(object(answer?.body)?.files), root);
+      await mirror.db.prepare("UPDATE submissions_credits SET lines = ? WHERE edit_id = ?").bind(lines, edit_id).run();
     }
   }
 }

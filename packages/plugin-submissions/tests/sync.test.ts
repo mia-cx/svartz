@@ -306,6 +306,8 @@ function quietGitHub(compare: Record<string, string> = {}, answer: (path: string
     const overridden = answer(path, url.searchParams);
     if (overridden) return overridden;
     if (/^\/deployments\/\d+\/statuses$/.test(path)) return Response.json([]);
+    const commit = path.match(/^\/commits\/([0-9a-f]{40})$/)?.[1];
+    if (commit) return Response.json({ sha: commit, files: [] });
     const head = path.match(/^\/compare\/[0-9a-f]{40}\.\.\.([0-9a-f]{40})$/)?.[1];
     if (head) return Response.json({ status: compare[head] ?? "diverged", ahead_by: 1, behind_by: 0, commits: [], files: [] });
     if (path === "") return Response.json({ full_name: REPO, default_branch: "main" });
@@ -864,5 +866,85 @@ describe("the reconcile poll", () => {
     await status(site, ada);
     await site.settle();
     expect(after.pending).toEqual([]);
+  });
+});
+
+describe("reputation for landed edits", () => {
+  const score = async (site: Site, handle: string) => (await (await site.request(`${AUTH}/users/${handle}/`)).json() as { reputation: number }).reputation;
+  /** GitHub's answer to `GET /commits/<sha>`: the guide changed by `lines` (added plus removed), and a file outside the vault. */
+  const changed = (sha: string, additions: number, deletions: number) => (path: string) => path === `/commits/${sha}`
+    ? Response.json({ sha, files: [{ filename: "content/guide.md", additions, deletions }, { filename: "README.md", additions: 90, deletions: 0 }] })
+    : undefined;
+
+  // Proves story 23 from the mirror: a direct commit the site made scores 1 + log2 of the lines it changed in the vault,
+  // once, however often GitHub delivers it and the poll reads it.
+  it("credits a direct commit by the lines it changed in the vault, once", async () => {
+    const site = await createSite();
+    const ada = await adaCommits(site);
+    const requests = quietGitHub({}, changed(DIRECT_COMMIT, 6, 2));
+    const message = `Edit content/guide.md\n\n${NOTE}\n\nSvartz-Account: ${await accountId(site, "ada")}`;
+    const delivery = push([pushed(DIRECT_COMMIT, message, { modified: ["content/guide.md"] })]);
+
+    await deliver(site, "push", delivery);
+    await site.settle();
+    expect(await score(site, "ada")).toBe(0);
+    await status(site, ada);
+    await site.settle();
+    expect(await score(site, "ada")).toBe(4);
+
+    await deliver(site, "push", delivery);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 61_000);
+    await status(site, ada);
+    await site.settle();
+    expect(await score(site, "ada")).toBe(4);
+    expect(requests.filter((path) => path.endsWith(`/commits/${DIRECT_COMMIT}`))).toHaveLength(1);
+  });
+
+  // Proves the trust rule: a save's commit scores only when the App's bot committed it, whatever its trailer says.
+  it("never credits a commit the App didn't commit", async () => {
+    const site = await createSite();
+    const ada = await adaCommits(site);
+    quietGitHub({}, changed(DIRECT_COMMIT, 6, 2));
+    const message = `Edit content/guide.md\n\nSvartz-Account: ${await accountId(site, "ada")}`;
+
+    await deliver(site, "push", push([{ ...pushed(DIRECT_COMMIT, message, { modified: ["content/guide.md"] }), committer: { name: "Ada Lovelace", email: "ada@example.com" } }]));
+    await status(site, ada);
+    await site.settle();
+
+    expect(await score(site, "ada")).toBe(0);
+    expect(await site.rows("SELECT COUNT(*) AS n FROM auth_reputation")).toEqual([{ n: 0 }]);
+  });
+
+  // Proves story 23 for pull requests: a merged one scores by its merge commit's lines, posted once though both the
+  // delivery and the poll report the merge.
+  it("credits a merged pull request by its merge commit's lines", async () => {
+    const site = await createSite();
+    const grace = await graceOpensPullRequest(site);
+    quietGitHub({}, (path) => changed(MERGE_COMMIT, 3, 1)(path)
+      ?? (path === "/pulls/42/files" ? Response.json([{ filename: "content/guide.md", status: "modified" }]) : undefined)
+      ?? (path === "/pulls/42/reviews" ? Response.json([]) : undefined));
+    const merged = { action: "closed", number: 42, pull_request: pull({ state: "closed", updated: at(), merged: at(), mergeCommit: MERGE_COMMIT }), repository, sender };
+
+    await deliver(site, "pull_request", merged);
+    await deliver(site, "pull_request", merged);
+    await status(site, grace);
+    await site.settle();
+
+    expect(await score(site, "grace")).toBe(3);
+    expect(await site.rows("SELECT source, points FROM auth_reputation")).toEqual([{ source: "edit", points: 3 }]);
+  });
+
+  // Proves a declined pull request posts the declined weight, 0 by default, and nothing else.
+  it("posts a declined pull request at its weight", async () => {
+    const site = await createSite();
+    await graceOpensPullRequest(site);
+    quietGitHub();
+
+    await deliver(site, "pull_request", { action: "closed", number: 42, pull_request: pull({ state: "closed", updated: at() }), repository, sender });
+    await site.settle();
+
+    expect(await site.rows("SELECT source, points FROM auth_reputation")).toEqual([{ source: "declined", points: 0 }]);
+    expect(await score(site, "grace")).toBe(0);
   });
 });

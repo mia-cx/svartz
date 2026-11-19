@@ -243,6 +243,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     ...(options.branch ? { branch: options.branch } : {}),
     root: data.vaultRoot,
     token: githubToken,
+    ...(committer ? { committer } : {}),
   });
 
   async function target(context: ServerContext): Promise<GitHubTarget> {
@@ -320,6 +321,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
         kind: answer.kind,
         page: submission.page,
         path: submission.path,
+        newPage: submission.kind === "new",
         commit: answer.kind === "commit" ? answer.sha : null,
         pull: answer.kind === "pull-request" ? answer.number : null,
         url: answer.url,
