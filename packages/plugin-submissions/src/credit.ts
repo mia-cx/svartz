@@ -17,7 +17,9 @@
  *
  * A save whose commit (a pull request's merge commit) a revert undid (`submissions_undone`) earns nothing: it settles
  * as a 0-point reversal, so auth never scores its ref. A revert reads GitHub live, so it can undo a merge before the
- * mirror learns of it, which is why reverting reverses only what the mirror knows and this catches the rest.
+ * mirror learns of it, which is why reverting reverses only what the mirror knows and this catches the rest. Both
+ * sides write first and check second: credit checks for the marker again after posting an earning, and takes it back
+ * if a revert stored one meanwhile; the revert reads the earnings again after storing it. No order leaves points.
  */
 import { postReputation, reverseReputation, type ReputationEvent, type Reversal } from "@svartz/auth/server";
 import type { Mirror } from "./mirror";
@@ -45,9 +47,14 @@ interface Owed {
 
 /**
  * What to post for one owed save, or take back from it, and what it is settled as afterwards; `undefined` while it
- * waits on its lines.
+ * waits on its lines. An earning names the commit it landed as, and how to take it back should a revert undo that.
  */
-type Settlement = { event?: ReputationEvent; reversal?: Reversal; state: "declined" | "done" } | undefined;
+type Settlement = {
+  event?: ReputationEvent;
+  reversal?: Reversal;
+  landed?: { sha: string; reversal: Reversal };
+  state: "declined" | "done";
+} | undefined;
 
 /** The ref a landed save's `edit` or `page` event is posted with: its commit, or its pull request. `repo` in lower case. */
 const landedRef = (repo: string, save: Pick<Owed, "kind" | "commit_sha" | "pull_number">) =>
@@ -55,14 +62,15 @@ const landedRef = (repo: string, save: Pick<Owed, "kind" | "commit_sha" | "pull_
 
 function settle(row: Owed, repo: string): Settlement {
   const to = { account: row.owner.slice("account:".length) };
-  const landed = (ref: string): Settlement => {
-    if (row.undone) return { reversal: { account: to.account, ref }, state: "done" };
-    if (row.new_page) return { event: { kind: "page", to, ref }, state: "done" };
-    return row.lines === null ? undefined : { event: { kind: "edit", to, ref, lines: row.lines }, state: "done" };
+  const landed = (ref: string, sha: string): Settlement => {
+    const reversal = { account: to.account, ref };
+    if (row.undone) return { reversal, state: "done" };
+    if (row.new_page) return { event: { kind: "page", to, ref }, landed: { sha, reversal }, state: "done" };
+    return row.lines === null ? undefined : { event: { kind: "edit", to, ref, lines: row.lines }, landed: { sha, reversal }, state: "done" };
   };
-  if (row.kind === "commit") return row.first ? landed(landedRef(repo, row)) : { state: "done" };
+  if (row.kind === "commit") return row.first ? landed(landedRef(repo, row), row.commit_sha!) : { state: "done" };
   const pull = landedRef(repo, row);
-  if (row.merged_at && row.merge_commit) return landed(pull);
+  if (row.merged_at && row.merge_commit) return landed(pull, row.merge_commit);
   return { event: { kind: "declined", to, ref: `${pull}:declined` }, state: "declined" };
 }
 
@@ -87,6 +95,13 @@ export async function credit(mirror: Mirror, repo: string, env: Readonly<Record<
     if (!settlement) continue;
     if (settlement.event) await postReputation(env, settlement.event);
     if (settlement.reversal) await reverseReputation(env, [settlement.reversal]);
+    // Posted first and checked second: a revert may have stored that it undid the commit since the read above, and
+    // read what it earned before this post. Settled unless so; then taken back here first.
+    const { results: [kept] } = await db.prepare(`UPDATE submissions_credits SET state = ?1 WHERE edit_id = ?2
+        AND NOT EXISTS (SELECT 1 FROM submissions_undone WHERE scope = ?3 AND sha = ?4) RETURNING edit_id`)
+      .bind(settlement.state, row.id, scope, settlement.landed?.sha ?? null).all();
+    if (kept || !settlement.landed) continue;
+    await reverseReputation(env, [settlement.landed.reversal]);
     await db.prepare("UPDATE submissions_credits SET state = ? WHERE edit_id = ?").bind(settlement.state, row.id).run();
   }
 }

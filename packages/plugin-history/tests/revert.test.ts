@@ -5,7 +5,9 @@
  */
 import { postReputation } from "@svartz/auth/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { credit } from "../../plugin-submissions/src/credit";
 import { blobSha } from "../../plugin-submissions/src/github";
+import { recordEdit, scopeOf, type Database as MirrorDatabase, type Statement } from "../../plugin-submissions/src/mirror";
 import {
   blobExchange,
   branchFor,
@@ -374,6 +376,51 @@ describe("reverting a submission the mirror doesn't know merged yet", () => {
     expect(github.pending).toEqual([]);
     expect(await query(site, "SELECT source, points FROM auth_reputation WHERE account_id = ? ORDER BY id", grace.id))
       .toEqual([{ source: "edit", points: 4 }, { source: "reversal", points: -4 }]);
+  });
+
+  /** `db`, running `mark` once its first read has answered, before the reader goes on. */
+  const markingAfterRead = (db: MirrorDatabase, mark: () => Promise<unknown>): MirrorDatabase => {
+    let marked: Promise<unknown> | undefined;
+    const statement = (prepared: Statement): Statement => ({
+      bind: (...values) => statement(prepared.bind(...values)),
+      run: () => prepared.run(),
+      all: async <Row>() => {
+        const read = await prepared.all<Row>();
+        await (marked ??= mark());
+        return read;
+      },
+    });
+    return { prepare: (query) => statement(db.prepare(query)), batch: (statements) => db.batch(statements) };
+  };
+
+  // Proves credit takes back a save it credits after a revert stored that it undid it, by itself: it checks for the
+  // marker after posting. So no point stands when the revert's own reading missed the save or its taking back failed.
+  it("takes back a save credited after a revert stored that it undid it", async () => {
+    const site = await createSite();
+    const [ada, grace] = [await site.signUp(ADA), await site.signUp(GRACE)];
+    const added = git("b", 10);
+    await site.push([added]);
+    await site.settle();
+    const mirror = { db: site.db, scope: scopeOf(REPO, "content") };
+    const saved = { kind: "commit", page: "/wiki/guide/", path: GUIDE_PATH, pull: null, savedAt: "2026-11-19T10:10:00.000Z" } as const;
+    await recordEdit(mirror, { ...saved, id: "b".repeat(32), owner: `account:${grace.id}`, commit: added.sha, url: "", newPage: true });
+    const reverted = () => recordEdit(mirror, {
+      ...saved,
+      id: "d".repeat(32),
+      owner: `account:${ada.id}`,
+      commit: DIRECT_COMMIT,
+      url: "",
+      newPage: false,
+      earns: false,
+      undoes: [added.sha],
+    });
+
+    // Credit reads Grace's new page as owed and unmarked; the revert stores its marker before credit posts the page.
+    await credit({ ...mirror, db: markingAfterRead(site.db, reverted) }, REPO, { SVARTZ_DB: site.db });
+
+    expect(await query(site, "SELECT source, points FROM auth_reputation WHERE account_id = ? ORDER BY id", grace.id))
+      .toEqual([{ source: "page", points: 5 }, { source: "reversal", points: -5 }]);
+    expect(await query(site, "SELECT state FROM submissions_credits WHERE edit_id = ?", "b".repeat(32))).toEqual([{ state: "done" }]);
   });
 });
 
