@@ -2,6 +2,7 @@ import { createServer, type PluginPage } from "@svartz/core";
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readSignIn } from "../src/server";
+import { sealSession } from "../src/session";
 
 const ORIGIN = "https://notes.test";
 const AUTH = "/notes/_svartz/auth";
@@ -258,5 +259,27 @@ describe("/-/account/", () => {
     expect(shown?.html).toContain('value="-mona lisa-"');
     expect(shown?.html).toContain('role="alert"');
     expect(await reader(request, session)).toMatchObject({ handle: "octocat", name: "The Octocat" });
+  });
+
+  // Proves a session reads only while its provider account is still linked to its account. A sign-in with Discord looks
+  // up Discord's account, then inserts a session for it. When the account unlinks Discord and Discord joins another
+  // account in between, that session lands on the first account, which unlinked Discord to keep it out.
+  it("never revives a session whose provider account left its account", async () => {
+    const db = await createDatabase();
+    const { request } = site(db);
+    const github = await signUp(request, OCTOCAT, "octocat");
+    await link(request, github, NELLY);
+    const { id: account } = await reader(request, github);
+    await post(request, "unlink", github, { identity: `discord:${NELLY.id}` });
+    const nelly = await signUp(request, NELLY, "nelly");
+
+    // The session the racing sign-in inserts last: the first account's, signed in with a Discord account now Nelly's.
+    const stale = "stale-session-id";
+    await db.prepare("INSERT INTO auth_sessions (id, account_id, identity_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(stale, account, `discord:${NELLY.id}`, new Date().toISOString(), Date.now() + 60_000).all();
+
+    expect(await reader(request, [`__Host-svartz-session=${await sealSession(stale, SECRET)}`])).toBeNull();
+    expect(await reader(request, github)).toMatchObject({ id: account });
+    expect(await reader(request, nelly)).toMatchObject({ handle: "nelly" });
   });
 });

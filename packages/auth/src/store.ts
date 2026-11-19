@@ -201,13 +201,18 @@ export async function digest(text: string): Promise<string> {
   return toBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))));
 }
 
-/** Session `id` with its account and sign-in, or `undefined` when it was deleted or has expired. */
+/**
+ * Session `id` with its account and sign-in, or `undefined` when it was deleted or has expired, or its provider account
+ * no longer belongs to its account. A sign-in looks the account up before inserting the session, so an unlink and a
+ * link elsewhere in between can leave a session whose sign-in is now another account's; it never reads.
+ */
 export async function readSession(db: Database, id: string): Promise<SessionRecord | undefined> {
   const [sessions, identities] = await db.batch([
     db.prepare(`SELECT a.id AS account_id, a.handle AS account_handle, a.name AS account_name,
         a.avatar_url AS account_avatar_url, a.created_at AS account_created_at,
         i.id AS identity_id, i.provider, i.name, i.handle, i.avatar_url, i.profile_url
-      FROM auth_sessions s JOIN auth_accounts a ON a.id = s.account_id JOIN auth_identities i ON i.id = s.identity_id
+      FROM auth_sessions s JOIN auth_accounts a ON a.id = s.account_id
+        JOIN auth_identities i ON i.id = s.identity_id AND i.account_id = s.account_id
       WHERE s.id = ? AND s.expires_at > ?`).bind(id, Date.now()),
     db.prepare(`SELECT i.id FROM auth_sessions s JOIN auth_identities i ON i.account_id = s.account_id WHERE s.id = ?`).bind(id),
   ]);
@@ -392,7 +397,8 @@ export async function signInsOf(db: Database, account: string): Promise<{ identi
     db.prepare(`SELECT id, provider, name, handle, avatar_url, profile_url, created_at FROM auth_identities
       WHERE account_id = ? ORDER BY created_at, id`).bind(account),
     db.prepare(`SELECT s.id, s.identity_id, i.provider, s.created_at FROM auth_sessions s
-      JOIN auth_identities i ON i.id = s.identity_id WHERE s.account_id = ? AND s.expires_at > ? ORDER BY s.created_at DESC, s.id`)
+      JOIN auth_identities i ON i.id = s.identity_id AND i.account_id = s.account_id
+      WHERE s.account_id = ? AND s.expires_at > ? ORDER BY s.created_at DESC, s.id`)
       .bind(account, Date.now()),
   ]);
   return {
