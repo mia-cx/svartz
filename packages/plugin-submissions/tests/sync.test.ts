@@ -584,6 +584,49 @@ describe("an edit's status", () => {
     expect((await status(site, ada)).body).toMatchObject({ stage: "live" });
   });
 
+  it("asks GitHub nothing about an edit's deployments while GitHub's allowance is paused", async () => {
+    const site = await createSite({ live: { environment: "production" } });
+    const ada = await adaCommits(site);
+    const reset = String(Math.floor(Date.now() / 1000) + 30 * 60);
+    const requests = quietGitHub({}, (path) =>
+      path === "/actions/runs" ? Response.json({ total_count: 0, workflow_runs: [] }, { headers: { "x-ratelimit-remaining": "40", "x-ratelimit-reset": reset } }) : undefined);
+    // The poll learns the allowance is low, and stops.
+    await status(site, ada);
+    await site.settle();
+    requests.length = 0;
+
+    // Deployed from three later commits, which only GitHub can say hold the edit.
+    for (const [index, sha] of ["1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222", "3333333333333333333333333333333333333333"].entries()) {
+      await deliver(site, "deployment_status", deploymentStatus({ id: 7 + index, sha, statusId: 70 + index, state: "in_progress" }));
+    }
+    await status(site, ada);
+    await site.settle();
+
+    expect(requests).toEqual([]);
+  });
+
+  it("stops asking GitHub about an edit's deployments when GitHub says to wait, until it may ask again", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const site = await createSite({ live: { environment: "production" } });
+    const ada = await adaCommits(site);
+    const requests = quietGitHub({}, (path) =>
+      path.startsWith("/compare/") ? Response.json({ message: "You have exceeded a secondary rate limit." }, { status: 403, headers: { "retry-after": "3600" } }) : undefined);
+    for (const [index, sha] of ["1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222", "3333333333333333333333333333333333333333"].entries()) {
+      await deliver(site, "deployment_status", deploymentStatus({ id: 7 + index, sha, statusId: 70 + index, state: "in_progress" }));
+    }
+
+    await status(site, ada);
+    await site.settle();
+    expect(requests.filter((path) => path.includes("/compare/"))).toHaveLength(1);
+
+    // A minute on, the poll and the comparisons both still wait.
+    requests.length = 0;
+    vi.setSystemTime(Date.now() + 61_000);
+    await status(site, ada);
+    await site.settle();
+    expect(requests).toEqual([]);
+  });
+
   it("says a pull request closed without merging is closed", async () => {
     const site = await createSite();
     const grace = await graceOpensPullRequest(site);

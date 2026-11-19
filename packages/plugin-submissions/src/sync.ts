@@ -43,7 +43,7 @@ import {
   type Mirror,
   type Statement,
 } from "./mirror";
-import { POLL_INTERVAL_MS, reconcile } from "./reconcile";
+import { pause, POLL_INTERVAL_MS, readPause, reconcile, resumeAt } from "./reconcile";
 import { comment, deployment, integer, list, object, pullRequest, pushedCommit, review, text, workflowRun } from "./records";
 import { readBody } from "./request";
 
@@ -231,19 +231,24 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
   /** When this worker last asked GitHub about each `<commit>...<head>`, so a failing answer isn't asked again on every read. */
   const asked = new Map<string, number>();
 
-  /** Ask GitHub whether each of `heads` contains `commit`, and remember what it says. */
-  async function checkAncestry(mirror: Mirror, token: string, commit: string, heads: readonly string[]): Promise<void> {
+  /**
+   * Ask GitHub whether each of `heads` contains `commit`, and remember what it says. Like the poll, it waits out a
+   * pause, and an answer saying to wait (or leaving the allowance at the poll's reserve) pauses both.
+   */
+  async function checkAncestry(mirror: Mirror, token: () => Promise<string>, commit: string, heads: readonly string[]): Promise<void> {
     const now = Date.now();
+    if (await readPause(mirror) > now) return;
     for (const [pair, at] of asked) if (at <= now - POLL_INTERVAL_MS) asked.delete(pair);
     const fresh = heads.filter((head) => !asked.has(`${commit}...${head}`)).slice(0, MAX_ANCESTRY_CHECKS);
     for (const head of fresh) {
       asked.set(`${commit}...${head}`, now);
-      const response = await requestGitHub(token, "GET", `/repos/${setup.repo}/compare/${commit}...${head}?per_page=1`);
+      const response = await requestGitHub(await token(), "GET", `/repos/${setup.repo}/compare/${commit}...${head}?per_page=1`);
       // An unknown commit, as after a force push, contains nothing; any other failure is asked again later.
       if (response.status === 404) await writeAncestry(mirror, commit, head, false);
-      if (!response.ok) continue;
-      const status = text(object(await response.json())?.status);
+      const status = response.ok ? text(object(await response.json())?.status) : undefined;
       if (status) await writeAncestry(mirror, commit, head, status === "ahead" || status === "identical");
+      const resume = resumeAt(response, Date.now());
+      if (resume) return pause(mirror, resume);
     }
   }
 
@@ -261,7 +266,7 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     const environment = options.live.environment;
     context.waitUntil(reconcile({ mirror, repo: setup.repo, root: setup.root, ...(setup.branch ? { branch: setup.branch } : {}), ...(environment ? { environment } : {}) }, token));
     const { status: answer, unchecked } = await editStatus(mirror, edit);
-    if (unchecked.heads.length > 0) context.waitUntil(token().then((value) => checkAncestry(mirror, value, unchecked.commit, unchecked.heads)));
+    if (unchecked.heads.length > 0) context.waitUntil(checkAncestry(mirror, token, unchecked.commit, unchecked.heads));
     return Response.json(answer satisfies StatusResponse, { headers: { "cache-control": "private, no-store" } });
   }
 

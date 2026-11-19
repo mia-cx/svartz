@@ -10,7 +10,8 @@
  * the vault, their reviews, and commits' files. What it doesn't reach waits in the mirror for the next poll.
  *
  * It keeps {@link RATE_LIMIT_RESERVE} requests of GitHub's hourly allowance for saves: below that, or when GitHub says
- * to wait (`Retry-After`, a spent `X-RateLimit-Remaining`), it stops and polls again only after the reset.
+ * to wait (`Retry-After`, a spent `X-RateLimit-Remaining`), it stops and polls again only after the reset. The pause
+ * is kept in D1 and shared with status reads' ancestry checks, which keep the same reserve.
  */
 import { requestGitHub } from "./github";
 import {
@@ -88,8 +89,20 @@ async function release({ db, scope }: Mirror, now: number, pausedUntil: number):
     .bind(now, pausedUntil, scope).run();
 }
 
+/** When the scope's reads of GitHub after an answer, the poll's and status reads' alike, may resume; past when they may. */
+export async function readPause({ db, scope }: Mirror): Promise<number> {
+  const { results: [row] } = await db.prepare("SELECT paused_until FROM submissions_sync WHERE scope = ?").bind(scope).all<{ paused_until: number }>();
+  return row?.paused_until ?? 0;
+}
+
+/** Pause the scope's reads of GitHub after an answer until `until`, unless already paused for longer. */
+export async function pause({ db, scope }: Mirror, until: number): Promise<void> {
+  await db.prepare(`INSERT INTO submissions_sync (scope, paused_until) VALUES (?1, ?2)
+    ON CONFLICT (scope) DO UPDATE SET paused_until = MAX(paused_until, excluded.paused_until)`).bind(scope, until).run();
+}
+
 /** When to ask GitHub again, if its answer says to wait: a `Retry-After`, or an hourly allowance at the reserve. */
-function waitUntil(response: Response, now: number): number | undefined {
+export function resumeAt(response: Response, now: number): number | undefined {
   const retryAfter = Number(response.headers.get("retry-after"));
   if (retryAfter > 0) return now + retryAfter * MS_PER_SECOND;
   const remaining = response.headers.get("x-ratelimit-remaining");
@@ -122,7 +135,7 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
       : [];
     const response = await requestGitHub(await token(), "GET", `/repos/${repo}${path}`, undefined, undefined,
       stored ? { "if-none-match": stored.etag } : {});
-    pausedUntil = waitUntil(response, Date.now()) ?? 0;
+    pausedUntil = resumeAt(response, Date.now()) ?? 0;
     if (response.status === 304) return undefined;
     if (response.status === 404) return null;
     if (!response.ok) {
