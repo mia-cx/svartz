@@ -14,6 +14,10 @@
  *   dashboard's My submissions panel too, whose `reply/` and `follow-up/` routes answer a submission's reviews
  *   (see `my-submissions.ts`), and the dashboard gets the Submissions review panel, whose `review/` routes comment,
  *   review and merge (`review.ts`), and the Recent edits panel (`recent-edits.ts`).
+ * - `POST close/`, a form post with `number` and `returnTo`, closes submission `number` without merging it, for an
+ *   account holding `submissions:reviews:write` on the vault, records it in auth's audit log, and redirects to
+ *   `returnTo`. With `sync` only, and only a pull request the site recorded saving for this vault. The moderation
+ *   plugin's Reports panel and the Submissions review panel post to it.
  *
  * The client never names a file path. Edits must target a note in the build's manifest; a new note goes in one of the
  * manifest's folders, or is the reader's own user page, named after its title, and never where a file already is.
@@ -28,7 +32,9 @@
  * Every save passes the guard (required sign-in, rate limit, and Turnstile when configured) before any GitHub call, a
  * GitHub App's token exchange included. Failures answer `{ error, message }`.
  */
-import { can, linkedIdentities, readIdentity, readSignIn, userPageLocation, type Account, type Identity } from "@svartz/auth/server";
+import {
+  ACCOUNTS_DATABASE_ENV, audit, can, linkedIdentities, readIdentity, readSignIn, userPageLocation, type Account, type Identity,
+} from "@svartz/auth/server";
 import type { ServerContext, ServerHandler, ServerModuleFactory } from "@svartz/core";
 import { alternateRoutes, extractFrontmatter, pathRoute, requestedSlug } from "@svartz/plugins/routes";
 import {
@@ -49,7 +55,9 @@ import {
 import { appCommitter, appTokens, type AppCredentials } from "./app";
 import { misconfigured, SubmissionError } from "./errors";
 import {
+  closeSubmission,
   commitSubmission,
+  noSubmission,
   openSubmission,
   readSource,
   type Attribution,
@@ -59,8 +67,9 @@ import {
 } from "./github";
 import { createGuard, type GuardOptions } from "./guard";
 import { commitReader } from "./commits";
+import { isDatabase, migrate, savedPull, scopeOf } from "./mirror";
 import { createMySubmissions } from "./my-submissions";
-import { COMMIT, OPEN_PULL_REQUESTS } from "./permissions";
+import { COMMIT, OPEN_PULL_REQUESTS, REVIEW } from "./permissions";
 import { recentEditsPanel } from "./recent-edits";
 import { createReview } from "./review";
 import { readBody } from "./request";
@@ -86,6 +95,11 @@ export type ServerOptions = Credentials & {
   readonly mode: Mode;
   /** Mirror GitHub and follow saved edits to live. */
   readonly sync?: SyncOptions;
+  /**
+   * The vault's folder in the repository when the config names one, for other vaults' config checks; the server reads
+   * {@link BuildData.vaultRoot}, which the build fills in either way.
+   */
+  readonly vaultRoot?: string;
 };
 
 /** The page holding a route: its slug, which permissions are checked on, and its URL below the deployment base, `null` when hidden. */
@@ -173,6 +187,25 @@ async function readSubmission(request: Request) {
     throw new SubmissionError("note_too_long", 400, `Shorten the note to ${MAX_NOTE_LENGTH.toLocaleString("en")} characters or fewer.`);
   }
   return { body, submission: { id: submissionId, markdown, note }, turnstileToken };
+}
+
+/** Where a vault's sync keeps its records: the D1 binding, the repository, and the vault's folder in it. */
+export interface VaultRecords {
+  readonly database: string;
+  readonly repo: string;
+  /** {@link BuildData.vaultRoot}. */
+  readonly root: string;
+}
+
+/**
+ * Whether pull request `number` is a submission the site saved for the vault `records` describes: what that vault's
+ * `POST close/` accepts. `false` when the binding is missing. The moderation plugin asks before it offers Close.
+ */
+export async function isVaultSubmission(env: ServerContext["env"], { database, repo, root }: VaultRecords, number: number): Promise<boolean> {
+  const db = env[database];
+  if (!isDatabase(db)) return false;
+  await migrate(db);
+  return savedPull({ db, scope: scopeOf(repo, root) }, number);
 }
 
 const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, data) => {
@@ -410,6 +443,44 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
 
   const links = async () => Response.json({ notes: data.links, ...data.preview } satisfies LinksResponse);
 
+  /**
+   * Close submission `number` for a reviewer of the vault, and go back to `returnTo`, a path on this site (the vault's
+   * home otherwise). Only the vault's own submissions close here: pull requests the site recorded saving for this vault,
+   * which takes `sync`. Vaults may share a repository, and a reviewer of one must not close another's; any other number
+   * answers as one GitHub doesn't have. The audit entry lands once GitHub confirms an open submission, before GitHub closes it.
+   */
+  async function close(request: Request, context: ServerContext): Promise<Response> {
+    const url = new URL(request.url);
+    if (request.headers.get("origin") !== url.origin) throw new SubmissionError("cross_origin", 403, "Close submissions from this site.");
+    const signIn = await readSignIn(request, context.env);
+    if (signIn.reason === "no-database") {
+      throw new SubmissionError("misconfigured", 503, `Closing submissions needs accounts: bind a D1 database as ${ACCOUNTS_DATABASE_ENV}.`);
+    }
+    const { account } = signIn;
+    if (!account) throw new SubmissionError("sign_in_required", 401, "Sign in to close a submission.");
+    if (!await can(account, REVIEW, { vault: context.vault.id }, context.env)) {
+      throw new SubmissionError("not_allowed", 403, "Your account can't close submissions here.");
+    }
+    const bytes = await readBody(request, MAX_REQUEST_BYTES);
+    if (!bytes) throw tooLarge();
+    const form = new URLSearchParams(new TextDecoder().decode(bytes));
+    const number = Number(form.get("number"));
+    if (!Number.isSafeInteger(number) || number < 1) throw invalid();
+    if (!sync || !await sync.saved(context, number)) throw noSubmission(options.repo, number);
+    const home = publicPath(`${context.vault.mountPath}/`, context);
+    const returnTo = form.get("returnTo") ?? "";
+    const back = /^\/(?![/\\])/.test(returnTo) && new URL(returnTo, url.origin).origin === url.origin ? returnTo : home;
+    await closeSubmission(await target(context), number, () => audit(context.env, {
+      actor: account, action: "submissions:submission:close", target: `submission:${number}`, detail: { repo: options.repo, vault: context.vault.id },
+    }));
+    return new Response(null, { status: 303, headers: { location: back, "cache-control": "no-store" } });
+  }
+
+  /** `route`, a path below the deployment base, with the deployment base. */
+  function publicPath(route: string, context: ServerContext): string {
+    return `${context.base.slice(0, -`${context.vault.mountPath}/_svartz/${PLUGIN_ID}`.length)}${route}`;
+  }
+
   const mine = sync && createMySubmissions({
     repo: options.repo,
     vaultRoot: data.vaultRoot,
@@ -448,6 +519,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     ["/links/", { method: "GET", run: links }],
     ["/edit/", { method: "POST", run: edit }],
     ["/new/", { method: "POST", run: create }],
+    ["/close/", { method: "POST", run: close }],
     ...sync
       ? [
         ["/github/webhook/", { method: "POST", run: sync.webhook }],

@@ -378,3 +378,18 @@ export function useFakeTimeouts() {
     return controller.signal;
   });
 }
+
+/**
+ * Reading pull request #42: a submission from this site to `main`, unless `ref` or `base` names another branch. GitHub
+ * names its head repository `fullName`.
+ */
+export const pullExchange = ({ state = "open", ref = branchFor("wiki-guide"), base = "main", fullName = REPO } = {}): Exchange => ({
+  request: { method: "GET", url: `${API}/pulls/42` },
+  response: { status: 200, json: { ...PULL_42, state, head: { ref, repo: { full_name: fullName } }, base: { ref: base } } },
+});
+
+/** Closing pull request #42 without merging it. */
+export const closeExchange: Exchange = {
+  request: { method: "PATCH", url: `${API}/pulls/42`, body: { state: "closed" } },
+  response: { status: 200, json: { ...PULL_42, state: "closed" } },
+};

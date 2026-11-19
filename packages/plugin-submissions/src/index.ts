@@ -9,7 +9,8 @@
  * The build records each editable note's repository path and the commit it built from, for the server only.
  * The vault needs a server target (`cloudflare-workers`, `cloudflare-pages` or `node`).
  */
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,11 +22,13 @@ import {
   type NormalizedSvartzPlugin,
   type PluginContext,
   type ProcessedFile,
+  type ResolvedConfig,
   type SvartzPlugin,
 } from "@svartz/core";
 import { publishedAttachments, sharedAttachmentNames, wikilinkResolver } from "@svartz/plugins";
 import { alternateNames, alternateRoutes, isNote, pathRoute, requestedSlug, routeHref } from "@svartz/plugins/routes";
 import { PLUGIN_ID, type BrowserOptions, type LinkTarget } from "./api";
+import { sameRepository } from "./github";
 import type { GuardOptions, RateLimitOptions, TurnstileOptions } from "./guard";
 import { permissions } from "./permissions";
 import type { BuildData, Credentials, Mode, RouteHolder, ServerOptions } from "./server";
@@ -166,6 +169,36 @@ async function readCheckout(vaultPath: string): Promise<{ commit: string; vaultR
   }
 }
 
+/**
+ * `vault`'s folder in its repository, as the build will find it: `vaultRoot` when the config names one, else where git
+ * places the vault's folder. `undefined` outside a git checkout, where the build fails anyway.
+ */
+function folderOf(vault: ResolvedConfig, vaultRoot: string | undefined): string | undefined {
+  if (vaultRoot !== undefined) return vaultRoot;
+  try {
+    const folder = realpathSync(resolve(vault.path));
+    const top = execFileSync("git", ["-C", folder, "rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return relative(realpathSync(top), folder).replaceAll("\\", "/");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Sync keys a vault's saved submissions by repository and folder, so two syncing vaults on the same folder of the same
+ * repository would share them, and a reviewer of one could close the other's. Refuse that, naming both vaults.
+ */
+function refuseSharedSync(vault: ResolvedConfig, vaults: readonly ResolvedConfig[], repo: string, vaultRoot: string | undefined): void {
+  for (const other of vaults) {
+    if (other.id === vault.id) continue;
+    const theirs = (other.plugins as readonly SvartzPlugin[]).find(({ id, disabled }) => id === PLUGIN_ID && !disabled)?.server?.options as ServerOptions | undefined;
+    if (!theirs?.sync || !sameRepository(theirs.repo, repo)) continue;
+    const folder = folderOf(vault, vaultRoot);
+    if (folder === undefined || folder !== folderOf(other, theirs.vaultRoot)) continue;
+    fail(`vaults "${vault.id}" and "${other.id}" both sync submissions for the folder "${folder}" of ${repo.toLowerCase()}, so each would close the other's; give each vault its own folder, or sync only one`);
+  }
+}
+
 /** `"./content/"` → `"content"`; the repository root is `""`. */
 function normalizeVaultRoot(value: string): string {
   const root = value.replaceAll("\\", "/").replace(/^(?:\.\/)+|^\/+|\/+$/g, "");
@@ -271,6 +304,7 @@ export function submissions(options: SubmissionsOptions) {
     guard,
     mode,
     ...(sync ? { sync } : {}),
+    ...(vaultRoot === undefined ? {} : { vaultRoot }),
   };
 
   const plugin: NormalizedSvartzPlugin = definePlugin(() => ({
@@ -278,12 +312,13 @@ export function submissions(options: SubmissionsOptions) {
     server: { module: SERVER_MODULE, options: serverOptions },
     // Guests open pull requests by default only behind Turnstile, which the guard drops when sign-in is required.
     permissions: permissions(guard.turnstile !== undefined, sync !== undefined),
-    forVault({ vault }) {
+    forVault({ vault, vaults }) {
       if (guard.signInRequired) checkVault(vault, "requires sign-in for submissions");
       if (mode === "commit") checkVault(vault, 'uses submissions mode "commit"');
       if (sync && vault.target.type === "node") {
         fail(`vault "${vault.id}" deploys to node, but sync keeps its mirror in Cloudflare D1; deploy it to cloudflare-workers or cloudflare-pages`);
       }
+      if (sync) refuseSharedSync(vault, vaults, options.repo, vaultRoot);
       return plugin;
     },
     emitArtifacts: {

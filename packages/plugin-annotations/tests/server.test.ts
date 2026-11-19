@@ -116,18 +116,21 @@ describe("the annotations database", () => {
 
     expect(later.status).toBe(200);
     expect(await later.json()).toEqual({ annotations: [], viewer: null });
-    expect(await tables()).toEqual(["agreement_versions", "agreements", "annotations", "identities", "svartz_annotations_migrations", "write_counts"]);
+    expect(await tables()).toEqual([
+      "agreement_versions", "agreements", "annotations", "hidden_annotations", "identities", "svartz_annotations_migrations", "write_counts",
+    ]);
     const { results } = await db.prepare("SELECT version FROM svartz_annotations_migrations ORDER BY version").all();
-    expect(results).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
+    expect(results).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
   });
 
   it("brings a version 1 database up to date, keeping its comments", async () => {
     const { db, binding } = await database();
     await seed(db, [{ id: "c1", page: "garden", author: ADA, body: "First.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
-    // What a database migrated before write counts and agreement versions existed looks like.
+    // What a database migrated before write counts, agreement versions and hidden comments existed looks like.
     await db.batch([
       db.prepare("DROP TABLE write_counts"),
       db.prepare("DROP TABLE agreement_versions"),
+      db.prepare("DROP TABLE hidden_annotations"),
       db.prepare("DELETE FROM svartz_annotations_migrations WHERE version > 1"),
     ]);
 
@@ -140,7 +143,8 @@ describe("the annotations database", () => {
     });
 
     expect(posted.status).toBe(201);
-    expect((await db.prepare("SELECT version FROM svartz_annotations_migrations ORDER BY version").all()).results).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
+    expect((await db.prepare("SELECT version FROM svartz_annotations_migrations ORDER BY version").all()).results)
+      .toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
     expect((await db.prepare("SELECT id FROM annotations WHERE id = 'c1'").all()).results).toEqual([{ id: "c1" }]);
   });
 });
@@ -600,6 +604,168 @@ describe("permissions on a site with accounts", () => {
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual({ error: "forbidden", message: "You can't comment on this page." });
     expect((await post("kitchen")).status).toBe(201);
+  });
+});
+
+describe("POST <id>/hide/", () => {
+  /** Grace's comment on garden, with Ada's +1, on a site that keeps comments in the accounts database; Alan moderates garden. */
+  async function moderated() {
+    const { db } = await database();
+    await seed(db, [{ id: "c1", page: "garden", author: GRACE, body: "Buy pills here.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z", agreedBy: [ADA] }]);
+    const site = createSite({ SVARTZ_DB: db }, { database: "SVARTZ_DB" });
+    const alan = await signIn(site, ALAN);
+    const ada = await signIn(site, ADA);
+    const { results: [account] } = await db.prepare("SELECT account_id FROM auth_identities WHERE id = ?").bind(ALAN.id).all<{ account_id: string }>();
+    await db.prepare("INSERT INTO auth_grants (actor_type, actor_id, object, permission, value, updated_at) VALUES ('account', ?, 'page:notes/garden', 'annotations:comments:delete', 'allow', ?)")
+      .bind(account!.account_id, "2026-11-19T00:00:00.000Z").run();
+    return { db, site, alan, ada };
+  }
+  const hide = (site: Site, cookie: string, { id = "c1", origin = ORIGIN, returnTo = "/notes/-/dashboard/moderation/reports/?status=hidden#report-1" } = {}) =>
+    site(`${ENDPOINT}/${id}/hide/`, { method: "POST", headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ returnTo }) });
+  const listed = async (site: Site) => (await (await site(`${ENDPOINT}/?page=garden`)).json() as { annotations: unknown[] }).annotations;
+  const audited = async (db: Database) => (await db.prepare("SELECT actor_handle, action, target, detail FROM auth_audit").all()).results;
+
+  it("hides the comment from every list and +1 for a moderator of its page, records who did, and goes back", async () => {
+    const { db, site, alan, ada } = await moderated();
+
+    const answer = await hide(site, alan);
+
+    expect(answer.status).toBe(303);
+    expect(answer.headers.get("location")).toBe("/notes/-/dashboard/moderation/reports/?status=hidden#report-1");
+    expect(await listed(site)).toEqual([]);
+    const agreed = await site(`${ENDPOINT}/c1/agree/`, { method: "POST", headers: { cookie: ada, origin: ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ agreed: true }) });
+    expect(agreed.status).toBe(404);
+    expect(await audited(db)).toEqual([{ actor_handle: "alan", action: "annotations:comment:hide", target: "annotation:c1", detail: JSON.stringify({ vault: "notes", page: "garden" }) }]);
+    // Still stored, for the report about it.
+    expect((await db.prepare("SELECT id FROM annotations").all()).results).toEqual([{ id: "c1" }]);
+
+    expect((await hide(site, alan)).status).toBe(303);
+    expect(await audited(db)).toHaveLength(1);
+  });
+
+  // Proves the write decides when two moderators hide at once: the comment is hidden once, on the record once.
+  it("records one hide when two arrive together", async () => {
+    const { db } = await database();
+    await seed(db, [{ id: "c1", page: "garden", author: GRACE, body: "Buy pills here.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
+    // Holds each read of the comment until both requests have read it, as when two moderators click at once.
+    let waiting: Array<() => void> | undefined;
+    const racing: Database = {
+      batch: (statements) => db.batch(statements),
+      prepare(query) {
+        const statement = db.prepare(query);
+        if (!/AS hidden,/.test(query)) return statement;
+        return {
+          ...statement,
+          bind: (...values) => {
+            const bound = statement.bind(...values);
+            return {
+              ...bound,
+              all: async () => {
+                if (waiting) {
+                  const arrived = new Promise<void>((release) => waiting!.push(release));
+                  if (waiting.length === 2) {
+                    waiting.forEach((release) => release());
+                    waiting = undefined;
+                  }
+                  await arrived;
+                }
+                return bound.all();
+              },
+            } as typeof bound;
+          },
+        };
+      },
+    } as Database;
+    const site = createSite({ SVARTZ_DB: racing }, { database: "SVARTZ_DB" });
+    const alan = await signIn(site, ALAN);
+    const { results: [account] } = await db.prepare("SELECT account_id FROM auth_identities WHERE id = ?").bind(ALAN.id).all<{ account_id: string }>();
+    await db.prepare("INSERT INTO auth_grants (actor_type, actor_id, object, permission, value, updated_at) VALUES ('account', ?, 'vault:notes', 'annotations:comments:delete', 'allow', ?)")
+      .bind(account!.account_id, "2026-11-19T00:00:00.000Z").run();
+
+    waiting = [];
+    const answers = await Promise.all([hide(site, alan), hide(site, alan)]);
+
+    expect(answers.map(({ status }) => status)).toEqual([303, 303]);
+    expect(await listed(site)).toEqual([]);
+    expect(await audited(db)).toHaveLength(1);
+  });
+
+  it.each([
+    ["from another site", { origin: "https://evil.test" }, 403],
+    ["by a reader who doesn't moderate the page", { as: "ada" }, 403],
+    ["signed out", { as: "nobody" }, 401],
+    ["of a comment this vault doesn't have", { id: "c9" }, 404],
+  ] as const)("changes and records nothing %s", async (_case, { origin, as, id }: { origin?: string; as?: "ada" | "nobody"; id?: string }, status) => {
+    const { db, site, alan, ada } = await moderated();
+    const cookie = as === "ada" ? ada : as === "nobody" ? "" : alan;
+
+    const answer = await hide(site, cookie, { ...origin && { origin }, ...id && { id } });
+
+    expect(answer.status).toBe(status);
+    expect(await listed(site)).toHaveLength(1);
+    expect(await audited(db)).toEqual([]);
+  });
+
+  it("goes to the vault's home instead of another site", async () => {
+    const { site, alan } = await moderated();
+
+    // The last one is a path on this site until the dot segment folds it into `//evil.test/`.
+    for (const returnTo of ["https://evil.test/", "//evil.test/", "/\\evil.test/", "reports/", "/a/..//evil.test/"]) {
+      expect((await hide(site, alan, { returnTo })).headers.get("location")).toBe("/notes/");
+    }
+  });
+
+  // Proves the log holds only hides that happened: a comment its author deleted while the hide was on its way isn't on it.
+  it("records nothing when the comment is deleted before the hide lands", async () => {
+    const { db } = await database();
+    await seed(db, [{ id: "c1", page: "garden", author: GRACE, body: "Buy pills here.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
+    // Grace deletes c1 right after the hide reads it.
+    const deleting: Database = {
+      batch: (statements) => db.batch(statements),
+      prepare(query) {
+        const statement = db.prepare(query);
+        if (!/AS hidden,/.test(query)) return statement;
+        return {
+          ...statement,
+          bind: (...values) => {
+            const bound = statement.bind(...values);
+            return {
+              ...bound,
+              all: async () => {
+                const read = await bound.all();
+                await db.prepare("DELETE FROM annotations WHERE id = 'c1'").run();
+                return read;
+              },
+            } as typeof bound;
+          },
+        };
+      },
+    } as Database;
+    const site = createSite({ SVARTZ_DB: deleting }, { database: "SVARTZ_DB" });
+    const alan = await signIn(site, ALAN);
+    const { results: [account] } = await db.prepare("SELECT account_id FROM auth_identities WHERE id = ?").bind(ALAN.id).all<{ account_id: string }>();
+    await db.prepare("INSERT INTO auth_grants (actor_type, actor_id, object, permission, value, updated_at) VALUES ('account', ?, 'vault:notes', 'annotations:comments:delete', 'allow', ?)")
+      .bind(account!.account_id, "2026-11-19T00:00:00.000Z").run();
+
+    await hide(site, alan);
+
+    expect(await audited(db)).toEqual([]);
+  });
+
+  // Proves hiding refuses rather than risk a hide without its entry: the two commit together only in the accounts database.
+  it.each([
+    ["with comments kept outside SVARTZ_DB", (db: Database) => ({ DB: db, SVARTZ_DB: db })],
+    ["on a site without accounts", (db: Database) => ({ DB: db })],
+  ])("answers 503 %s", async (_case, env) => {
+    const { db } = await database();
+    await seed(db, [{ id: "c1", page: "garden", author: GRACE, body: "Hi.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
+    const site = createSite(env(db), { moderators: [ALAN.id] });
+
+    const answer = await hide(site, await signIn(site, ALAN));
+
+    expect(answer.status).toBe(503);
+    expect(await answer.json()).toEqual({ error: "misconfigured", message: expect.stringContaining("SVARTZ_DB") });
+    expect(await listed(site)).toHaveLength(1);
   });
 });
 

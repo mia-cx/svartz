@@ -11,7 +11,8 @@
  * - `POST review/comment/` (`pull`, `thread`?, `body`) comments on the conversation or in a diff thread;
  *   `POST review/line/` (`pull`, `head`, `file`, `at`, `body`) on a line of the diff; `POST review/verdict/`
  *   (`pull`, `head`, `event`, `body`?) approves or requests changes; `POST review/merge/` (`pull`, `head`) merges.
- *   Each redirects back to the submission with `?status=` (comments) or `?review=` (the rest).
+ *   Each redirects back to the submission with `?status=` (comments) or `?review=` (the rest). A submission the site
+ *   saved also offers Close, which posts to the plugin's `close/` route and comes back to the list.
  *
  * A file is shown only when the reviewer holds `submissions:reviews:write` on the page it publishes as now, or would
  * publish as; a file outside the vault needs the permission on the whole site. Other files are counted, never named,
@@ -38,6 +39,7 @@ import {
   postLineComment,
   readChanges,
   readPullRequest,
+  sameRepository,
   submitReview,
   type ChangedFile,
   type GitHubTarget,
@@ -124,7 +126,6 @@ export function hunksOf(patch: string): DiffLine[][] {
 
 export function createReview(setup: ReviewSetup) {
   const byPath = new Map(setup.links.map((link) => [link.path, link]));
-  const sameRepository = (name: string | null) => name?.toLowerCase() === setup.repo.toLowerCase();
 
   /** The file's path in the vault, or `undefined` for a file outside the vault's folder. */
   const vaultPath = (path: string) => (!inVault(path, setup.vaultRoot) ? undefined : setup.vaultRoot ? path.slice(setup.vaultRoot.length + 1) : path);
@@ -166,7 +167,7 @@ export function createReview(setup: ReviewSetup) {
   async function inspect(number: number, mirror: Mirror, may: (path: string) => Promise<boolean>, context: ServerContext): Promise<Inspected> {
     const github = await setup.github(context);
     const pull = await readPullRequest(github, number);
-    if (!pull || !sameRepository(pull.baseRepo) || pull.baseRef !== await contentBranch(mirror, github)) throw notFound();
+    if (!pull || !sameRepository(pull.baseRepo, setup.repo) || pull.baseRef !== await contentBranch(mirror, github)) throw notFound();
     const { files, complete } = await readChanges(github, pull.baseSha, pull.headSha);
     const judged = await Promise.all(files.map(async (file) => ({
       file,
@@ -342,7 +343,14 @@ export function createReview(setup: ReviewSetup) {
       }),
       actions: reviewSection({
         decisions: acts && open
-          ? { number, head: inspected!.pull.headSha, verdictAction: `${routes}/verdict/`, mergeAction: `${routes}/merge/` }
+          ? {
+            number,
+            head: inspected!.pull.headSha,
+            verdictAction: `${routes}/verdict/`,
+            mergeAction: `${routes}/merge/`,
+            // `close/` closes only what the site saved for this vault; a pull request opened on GitHub closes there.
+            ...(edit ? { close: { action: `${context.base}/close/`, returnTo: here } } : {}),
+          }
           : undefined,
         blocked: open && !acts,
         status,

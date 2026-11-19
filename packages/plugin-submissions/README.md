@@ -204,6 +204,8 @@ submissions({
 
 Sync needs D1, so the vault deploys to `cloudflare-workers` or `cloudflare-pages`; on `node` it fails the build.
 
+The site records each save under its repository and the vault's folder in it, which say which submissions are the vault's own. Vaults may share a repository, each syncing its own folder. Two syncing vaults on the same folder of the same repository would share their saves, and a reviewer of one could close the other's, so the config fails, naming both vaults. Repository names match whatever their case.
+
 ### Set up
 
 1. In the App's settings, under **Webhook**, tick **Active**, set **Webhook URL** to `https://<site><base><mount>/_svartz/submissions/github/webhook/` (with the trailing slash: GitHub doesn't follow the redirect a missing one gets), and set a **Webhook secret**, a long random string.
@@ -359,5 +361,6 @@ The plugin answers under `<base><mount>/_svartz/submissions/`. Failures answer `
 | `GET follow-up/source/?pull=42` | With [sync](#my-submissions): `{ "markdown", "sha", "path" }`, the submission's file on its branch now, its blob SHA, and its path in the vault. |
 | `POST follow-up/` with `{ "pull", "markdown", "note"?, "sha" }` | With [sync](#my-submissions): 201 `{ "kind": "commit", "url", "sha" }` once the follow-up is on the submission's branch. 409 `changed` when the file isn't `sha` anymore, 409 `closed` for a closed or merged pull request, 403 `not_allowed`, 404 `not_found`, 429 past the rate limit. |
 | `POST github/webhook/` | With [sync](#github-sync): GitHub's deliveries. 204 once stored, 202 for a delivery with nothing the mirror keeps, 401 `bad_signature`, 403 `other_repository`, 413 past 5 MB. |
+| `POST close/`, a form with `number` and `returnTo` | Closes submission `number` without merging it, for an account holding `submissions:reviews:write` on the vault, records it in auth's audit log, and redirects with 303 to `returnTo`, a path on this site (the vault's home otherwise). A closed or merged one is left as it is. Needs [sync](#github-sync): a submission is this vault's when the site recorded saving it here and it still targets the branch submissions go to, so a reviewer of one vault never closes another's on a shared repository. 403 `cross_origin` from another site, 401 `sign_in_required` when signed out, 403 `not_allowed` without the permission, 404 `not_found` when the number names no submission of this vault, or the vault doesn't sync, 503 without `SVARTZ_DB`. [Moderation](../../docs/moderation.md)'s Reports panel posts to it. |
 
 `page` is the note's URL path below the deployment base, as it appears in the site's index. `folder` is a section's path inside the vault, `""` for its top level, or the user page folder when `title` is the signed-in reader's handle. `submissionId` is 32 lowercase hex digits the client picks at random and repeats on every retry of the same submission.

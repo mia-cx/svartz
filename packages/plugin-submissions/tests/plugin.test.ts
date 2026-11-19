@@ -419,6 +419,43 @@ describe("submissions sync config", () => {
     expect(plugin.forVault!({ vault: vault("cloudflare-workers", plugin), vaults: [] })).toBe(plugin);
   });
 
+  // Proves each vault's saved submissions stay its own: sync keys them by repository and folder, so two vaults may not share both.
+  describe("across vaults", () => {
+    const at = (id: string, folder: string, plugin: NormalizedSvartzPlugin) =>
+      ({ id, path: folder, mountPath: `/${id}`, target: { type: "cloudflare-workers" }, plugins: [plugin] }) as unknown as ResolvedConfig;
+    const resolveAll = (vaults: readonly ResolvedConfig[]) => {
+      for (const vault of vaults) (vault.plugins[0] as NormalizedSvartzPlugin).forVault!({ vault, vaults });
+    };
+
+    it("refuses two syncing vaults on the same folder of the same repository, however its name is cased", () => {
+      const wiki = at("wiki", "/sites/wiki", submissions({ repo: "acme/wiki", vaultRoot: "content", sync }));
+      const docs = at("docs", "/sites/docs", submissions({ repo: "Acme/Wiki", vaultRoot: "./content/", sync }));
+
+      expect(() => resolveAll([wiki, docs])).toThrow(/vaults "wiki" and "docs" both sync submissions for the folder "content" of acme\/wiki/);
+    });
+
+    it("refuses them when git places both at that folder", async () => {
+      const { vault: folder } = await checkout();
+      const wiki = at("wiki", folder, submissions({ repo: "acme/wiki", sync }));
+      const docs = at("docs", "/sites/docs", submissions({ repo: "acme/wiki", vaultRoot: "content", sync }));
+
+      expect(() => resolveAll([wiki, docs])).toThrow(/vaults "wiki" and "docs" both sync submissions/);
+    });
+
+    it("lets vaults share a repository in different folders, or with only one syncing", () => {
+      const { sync: _, ...unsynced } = { repo: "acme/wiki", vaultRoot: "content", sync };
+
+      expect(() => resolveAll([
+        at("wiki", "/sites/wiki", submissions({ repo: "acme/wiki", vaultRoot: "content", sync })),
+        at("docs", "/sites/docs", submissions({ repo: "acme/wiki", vaultRoot: "docs", sync })),
+      ])).not.toThrow();
+      expect(() => resolveAll([
+        at("wiki", "/sites/wiki", submissions({ repo: "acme/wiki", vaultRoot: "content", sync })),
+        at("docs", "/sites/docs", submissions(unsynced)),
+      ])).not.toThrow();
+    });
+  });
+
   it.each([
     ["no database", { ...sync, database: undefined }, /sync\.database/],
     ["an inlined webhook secret", { ...sync, webhookSecret: "whsec" }, /sync\.webhookSecret/],

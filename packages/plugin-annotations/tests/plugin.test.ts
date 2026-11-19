@@ -47,6 +47,16 @@ describe("the annotations plugin", () => {
     expect(resources.get("annotations-css")).toEqual({ id: "annotations-css", kind: "css", importId: expect.stringMatching(/browser\.css$/) });
   });
 
+  it("tells the browser to offer Report on comments when the vault has moderation", async () => {
+    const plugin = annotations({ database });
+    const moderation = { id: "moderation", server: { module: "/moderation/server.js" } };
+    const ctx = { config: { mountPath: "/garden" }, plugins: [plugin, moderation], files: [], meta: new Map() } as unknown as PluginContext;
+
+    await plugin.emitArtifacts!.run(ctx);
+
+    expect(ctx.compiler!.browserResources.get("annotations")?.options).toEqual({ endpoint: "/garden/_svartz/annotations", report: true });
+  });
+
   it.each([
     ["on a node target", () => resolveFor(annotations({ database }), "node"),
       /\[svartz:annotations\] vault "garden" deploys to node, but annotations are stored in Cloudflare D1/],

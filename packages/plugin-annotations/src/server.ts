@@ -8,6 +8,10 @@
  * - `DELETE <id>/` deletes an annotation and its agreements, for its author or a moderator, and answers 204.
  *   Writes need a session from `@svartz/auth` and an `Origin` header naming this site, and each spends one of the
  *   reader's `limits.writesPerHour`, counted in D1; an exhausted budget answers 429 with `retryAfter`.
+ * - `POST <id>/hide/`, a form post from the dashboard, hides a comment for a moderator of its page, records it in
+ *   auth's audit log in the same transaction, and redirects to the form's `returnTo`. Needs the comments kept in the
+ *   accounts database, `SVARTZ_DB`. A hidden comment stays stored,
+ *   for the report about it, but no list shows it and nobody can +1 it.
  *
  * On a site with accounts (`SVARTZ_DB`), commenting takes `annotations:comments:write` on the page and moderating
  * takes `annotations:comments:delete`, both checked with `can()`; the deprecated `moderators` become grants of the
@@ -17,11 +21,18 @@
  */
 import type { EnvReference, ServerContext, ServerModuleFactory } from "@svartz/core";
 import type { Account, Identity } from "@svartz/auth";
-import { can, linkedIdentities, migrateGrants, postReputation, readIdentity, readSignIn } from "@svartz/auth/server";
+import {
+  ACCOUNTS_DATABASE_ENV, auditIfChanged, can, linkedIdentities, migrateGrants, postReputation, readIdentity, readSignIn,
+} from "@svartz/auth/server";
 import { CONTEXT_LENGTH, type Anchor } from "./anchor";
 import { COMMENT_MAX_LENGTH, QUOTE_MAX_LENGTH } from "./limits";
 import { DELETE_COMMENTS, WRITE_COMMENTS } from "./permissions";
-import { createComment, deleteAnnotation, findAnnotation, listPage, migrate, readAgreement, setAgreement, spendWrite, type Database } from "./store";
+import {
+  createComment, deleteAnnotation, findAnnotation, hideStatement, listPage, migrate, readAgreement, readComment as storedComment, setAgreement,
+  spendWrite, type Database, type ReportedComment,
+} from "./store";
+
+export type { ReportedComment } from "./store";
 
 /** One of the site's drawn reactions. */
 export interface Reaction {
@@ -323,10 +334,68 @@ async function remove(request: Request, url: URL, context: ServerContext, option
   return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
 }
 
+/**
+ * Comment `id` of `vault`, hidden or not, from the annotations stored in the D1 binding named `database`: what the
+ * moderation plugin shows beside a report about it. `undefined` when there's no such comment, or no such binding.
+ */
+export async function findComment(env: ServerContext["env"], database: string, vault: string, id: string): Promise<ReportedComment | undefined> {
+  const db = env[database];
+  if (!isDatabase(db)) return undefined;
+  await migrate(db);
+  return storedComment(db, vault, id);
+}
+
+/**
+ * `returnTo` when it's a path on this site, else the vault's home. Checked after normalizing too: dot segments can fold
+ * a path like `/a/..//evil.test/` into `//evil.test/`, which a browser reads as another site.
+ */
+function sameSitePath(returnTo: string | null, url: URL, context: ServerContext): string {
+  const home = `${context.base.slice(0, -"/_svartz/annotations".length)}/`;
+  if (!returnTo?.startsWith("/") || returnTo.startsWith("//") || returnTo.includes("\\")) return home;
+  const target = new URL(returnTo, url.origin);
+  if (target.origin !== url.origin || target.pathname.startsWith("//")) return home;
+  return `${target.pathname}${target.search}${target.hash}`;
+}
+
+/**
+ * `POST <id>/hide/`: hide comment `id` for a moderator of its page, record who did in auth's audit log, and redirect to
+ * the form's `returnTo`. Needs the comments kept in the accounts database, so the hide and its entry commit together.
+ * Hiding a hidden comment, or one deleted on the way, changes and records nothing.
+ */
+async function hide(request: Request, url: URL, context: ServerContext, options: AnnotationsServerOptions, id: string): Promise<Response> {
+  if (request.headers.get("origin") !== url.origin) return failure(403, "cross_origin", "Post from this site.");
+  if (options.database.env !== ACCOUNTS_DATABASE_ENV) {
+    return failure(503, "misconfigured", `Hiding comments needs annotations to keep its comments in ${ACCOUNTS_DATABASE_ENV}: set database: { env: "${ACCOUNTS_DATABASE_ENV}" }.`);
+  }
+  const signIn = await readSignIn(request, context.env);
+  if (signIn.reason === "no-database") return failure(503, "misconfigured", `Hiding comments needs accounts: bind a D1 database as ${ACCOUNTS_DATABASE_ENV}.`);
+  const account = signIn.account;
+  if (!account) return failure(401, "signed_out", "Sign in to hide a comment.");
+  const db = await databaseFor(context, options);
+  if (db instanceof Response) return db;
+  const comment = await storedComment(db, context.vault.id, id);
+  if (!comment) return failure(404, "not_found", "This comment has been deleted.");
+  if (!await can(account, DELETE_COMMENTS, { vault: context.vault.id, page: comment.page }, context.env)) {
+    return failure(403, "forbidden", "Only a moderator can hide this comment.");
+  }
+  const text = await readText(request);
+  if (text === undefined) return failure(413, "too_large", "Send only returnTo to hide a comment.");
+  const returnTo = sameSitePath(new URLSearchParams(text).get("returnTo"), url, context);
+  const back = new Response(null, { status: 303, headers: { location: returnTo, "cache-control": "no-store" } });
+  if (comment.hidden) return back;
+  const entry = { actor: account, action: "annotations:comment:hide", target: `annotation:${id}`, detail: { vault: context.vault.id, page: comment.page } };
+  // Another moderator may have hidden it since the read above, or its author deleted it: the hide then inserts nothing,
+  // and the entry follows the hide, so the write decides.
+  await db.batch([hideStatement(db, context.vault.id, id, new Date().toISOString()), auditIfChanged(db, entry)]);
+  return back;
+}
+
 /** `/<annotation id>/`, below the plugin's base. */
 const ANNOTATION_PATH = /^\/([^/]+)\/$/;
 /** `/<annotation id>/agree/`, below the plugin's base. */
 const AGREE_PATH = /^\/([^/]+)\/agree\/$/;
+/** `/<annotation id>/hide/`, below the plugin's base. */
+const HIDE_PATH = /^\/([^/]+)\/hide\/$/;
 
 /** The `annotations` server module: `server: { module, options }` with {@link AnnotationsServerOptions}. */
 const annotationsServer: ServerModuleFactory<AnnotationsServerOptions> = (options) => {
@@ -343,6 +412,11 @@ const annotationsServer: ServerModuleFactory<AnnotationsServerOptions> = (option
     if (annotation) {
       if (request.method !== "DELETE") return failure(405, "method_not_allowed", "Use DELETE.", { allow: "DELETE" });
       return remove(request, url, context, options, rights, annotation[1]!);
+    }
+    const hiding = HIDE_PATH.exec(path);
+    if (hiding) {
+      if (request.method !== "POST") return failure(405, "method_not_allowed", "Use POST.", { allow: "POST" });
+      return hide(request, url, context, options, hiding[1]!);
     }
     const agreeing = AGREE_PATH.exec(path);
     if (!agreeing) return undefined;
