@@ -5,7 +5,7 @@
 import { fileURLToPath } from "node:url";
 import { definePlugin, getCompilerContributions, type PermissionDeclaration, type ResolvedConfig, type NormalizedSvartzPlugin, type SiteVaults, type SvartzPlugin } from "@svartz/core";
 import type { SignInConfig } from "./browser";
-import { collectPermissions } from "./catalogue";
+import { assertSharedCatalogue, collectPermissions } from "./catalogue";
 import { isProviderId, PROVIDERS, type ProviderId } from "./providers";
 import type { AuthOptions, AuthServerData, AuthServerOptions } from "./server";
 
@@ -140,6 +140,7 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], call
         // The build's final plugins, which config resolution couldn't see whole: a theme preset's plugins, and what
         // other plugins' `forVault` returned. Checked like the catalogue, and added to it when the server starts.
         const built: AuthServerData = { permissions: collectPermissions([{ id: ctx.config.id, plugins: ctx.plugins ?? ctx.config.plugins }]) };
+        if (ctx.config.target.type === "host") assertSharedCatalogue(ctx.config.id, built.permissions);
         compiler.serverData.set(AUTH_PLUGIN_ID, built);
       },
       options: { fatal: true },

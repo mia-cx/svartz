@@ -148,7 +148,7 @@ describe("the permission catalogue", () => {
   it("also collects from the build's final plugins, so a theme preset's plugin can declare permissions", async () => {
     const plugin = auth({ providers: { github } });
     // What the build runs: the config's plugins plus one only the theme's preset brings.
-    const ctx = { config: { id: "notes", mountPath: "/notes", plugins: [plugin] }, plugins: [plugin, guestbook(comment)], files: [], meta: new Map() } as unknown as PluginContext;
+    const ctx = { config: { id: "notes", mountPath: "/notes", target: { type: "cloudflare-workers" }, plugins: [plugin] }, plugins: [plugin, guestbook(comment)], files: [], meta: new Map() } as unknown as PluginContext;
 
     await plugin.emitArtifacts!.run(ctx);
 
@@ -157,9 +157,23 @@ describe("the permission catalogue", () => {
 
   it("fails the build for a malformed declaration that only the build's final plugins carry", async () => {
     const plugin = auth({ providers: { github } });
-    const ctx = { config: { id: "notes", mountPath: "/notes", plugins: [plugin] }, plugins: [plugin, guestbook({ ...comment, slug: "guestbook:entries:sign" })], files: [], meta: new Map() } as unknown as PluginContext;
+    const ctx = { config: { id: "notes", mountPath: "/notes", target: { type: "cloudflare-workers" }, plugins: [plugin] }, plugins: [plugin, guestbook({ ...comment, slug: "guestbook:entries:sign" })], files: [], meta: new Map() } as unknown as PluginContext;
 
     expect(() => plugin.emitArtifacts!.run(ctx)).toThrow(/use "namespace:feature:action"/);
+  });
+
+  it("fails a host vault's build when its final plugins declare a permission differently than another host vault's did", async () => {
+    const plugin = auth({ providers: { github } });
+    // Each vault's theme preset brings a guestbook; only the builds see them, and they disagree on a default.
+    const build = (id: string, declaration: Declaration) => plugin.emitArtifacts!.run({
+      config: { id, mountPath: `/${id}`, target: { type: "host" }, plugins: [plugin] }, plugins: [plugin, guestbook(declaration)], files: [], meta: new Map(),
+    } as unknown as PluginContext);
+    await build("journal", { ...remove, defaults: { guest: "deny" } });
+
+    expect(() => build("work", { ...remove, defaults: { guest: "allow" } }))
+      .toThrow(/vault "work" declares "guestbook:entries:delete" differently than vault "journal"/);
+    // A rebuild that declares it alike passes: the vault's last build is what counts.
+    expect(() => build("work", { ...remove, defaults: { guest: "deny" } })).not.toThrow();
   });
 
   it("gives every host vault one catalogue, since they share accounts and grants", () => {

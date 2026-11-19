@@ -38,6 +38,25 @@ function checked(declaration: PermissionDeclaration, plugin: string): Permission
   return { slug: id, name, description, ...Object.keys(defaults).length > 0 && { defaults } };
 }
 
+/** What each host vault's build collected from its final plugins, by vault id. Host vaults build in one process. */
+const builtByHostVault = new Map<string, readonly PermissionDeclaration[]>();
+
+/**
+ * Record what host vault `vault`'s build collected, and fail the build when another host vault's build declared one of
+ * its permissions differently. Config resolution compares only what the config lists; a theme preset or a `forVault`
+ * can bring the same permission with other defaults, and host vaults share one catalogue at runtime.
+ */
+export function assertSharedCatalogue(vault: string, built: readonly PermissionDeclaration[]): void {
+  // Replacing the vault's last build, so a rebuild in dev compares what the vault declares now.
+  builtByHostVault.set(vault, built);
+  for (const [other, declarations] of builtByHostVault) {
+    if (other === vault) continue;
+    const theirs = new Map(declarations.map((declaration) => [declaration.slug, declaration]));
+    const differing = built.find((ours) => theirs.has(ours.slug) && JSON.stringify(theirs.get(ours.slug)) !== JSON.stringify(ours));
+    if (differing) fail(`vault "${vault}" declares "${differing.slug}" differently than vault "${other}"; vaults that share accounts must declare it alike`);
+  }
+}
+
 /**
  * Every permission the enabled plugins of `vaults` declare, once each. The same permission declared on two vaults must
  * be declared alike, since vaults that share accounts share grants.
