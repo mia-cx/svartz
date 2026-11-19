@@ -210,14 +210,18 @@ Under `<base><mount>/_svartz/auth/`, where `<base>` is the deployment base path,
 | `POST account/unlink/` | Unlinks the provider account named by `identity` and ends its sessions, then redirects to the account page. |
 | `POST account/sign-out-everywhere/` | Ends every session of the signed-in account, this one included, then redirects to the account page. |
 | `POST account/link/<provider>/?returnTo=<path>` | Starts linking another provider to the signed-in account. Only the callback vault answers it. |
-| `GET users/<handle>/` | The public profile, `{ handle, name, avatarUrl }`, or a 308 from an old handle to the current one's URL. |
+| `GET users/<handle>/` | The public profile and [reputation](#reputation) score, `{ handle, name, avatarUrl, reputation }`, or a 308 from an old handle to the current one's URL. |
 | `GET viewer/` | `{ handle, dashboard }` for a signed-in account, where `dashboard` says whether [the dashboard](#the-dashboard) has a panel for them; `null` otherwise. |
 | `POST people/grant/` | Sets the grant of `permission` for an account (`actor-type=account`, `actor=<handle>`) or a role (`actor-type=role`, `actor=<name>`) to `value` (`allow`, `deny` or `unset`), on the object `scope` (`site` or `vault:<id>`) and `path` (empty, a folder ending in `/`, or a page) name, or `object` names whole. Redirects to People & permissions. |
 | `POST people/role/` | Creates the role `name`, then redirects to People & permissions. |
 | `POST people/member/` | Gives the account `handle` the role `role`, then redirects to People & permissions. |
-| `POST people/member/remove/` | Takes the role `role` from the account `handle`, then redirects to People & permissions. |
+| `POST people/member/remove/` | Takes the role `role` from the account `handle`, then redirects to People & permissions. A role [reputation](#thresholds) gave only an admin can take. |
+| `POST reputation/points/` | Sets every [weight](#weights) and the daily limit: `edit`, `page`, `agreement`, `kudos`, `declined` and `daily-limit`, each a number within its bounds. Redirects to Reputation. |
+| `POST reputation/threshold/` | Sets the `score` at which accounts get the stored role `role`, then redirects to Reputation. |
+| `POST reputation/threshold/remove/` | Removes the threshold of `role`, then redirects to Reputation. Nobody loses the role. |
+| `POST reputation/kudos/` | Gives the account `handle` [kudos](#kudos) with a `reason`, then redirects to Kudos. |
 
-Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` and the `account/` routes answer 503. The `account/` routes answer 403 to a request whose `Origin` is missing or another site's, and send a signed-out reader to the account page. The `people/` routes answer 403 to a request whose `Origin` is missing or another site's, and to anyone without `auth:grants:write` on the vault.
+Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` and the `account/` routes answer 503. The `account/` routes answer 403 to a request whose `Origin` is missing or another site's, and send a signed-out reader to the account page. The `people/` routes answer 403 to a request whose `Origin` is missing or another site's, and to anyone without `auth:grants:write` on the vault. So do the `reputation/` routes, except that `reputation/kudos/` needs `auth:kudos:write` instead.
 
 ## The account page
 
@@ -227,6 +231,7 @@ Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` and
 - **Change their display name and handle.** A new handle follows the [handle rules](#first-sign-in). The old one keeps pointing at the account for good: `users/<old>/` redirects to `users/<new>/`, and no other account can take it, though its owner can switch back to it.
 - **Link another provider.** The provider's sign-in comes back to the account that started it, bound to that browser's session: if the reader signs out or switches accounts meanwhile, nothing is linked. A provider account that already belongs to another account is refused, and stays with that account.
 - **Unlink a provider** while another remains. The one this browser signed in with stays linked; sign in another way to unlink it. Unlinking ends every session that provider signed in. Two browsers unlinking an account's last two providers at once leave one linked.
+- **See their [reputation](#reputation)**: their score, and the score at which they get the next role a threshold gives.
 - **See their sessions**: the provider each signed in with, when, and which is this browser.
 - **Sign out everywhere.** Every session of the account ends, this browser's included, so each reads as signed out on its next request.
 
@@ -387,9 +392,66 @@ Granting either is as powerful as making someone an admin: `auth:grants:read` sh
 
 The panel's forms post to the routes below and work without JavaScript. Each route checks `auth:grants:write` again, whatever the panel showed.
 
+Auth's other panels, **Reputation** and **Kudos**, are described under [reputation](#reputation).
+
+## Reputation
+
+Each account has a reputation score, which grows as its work lands and others value it. With [thresholds](#thresholds), it promotes people automatically: an account whose score reaches one gets its role.
+
+The score is the sum of the account's entries in a ledger, `auth_reputation` in `SVARTZ_DB`. The database refuses to change or delete an entry, so nothing rewrites a score's history: taking points back is a further entry. Each entry is for one event, such as one merged pull request, and an event is recorded once however often it is reported, so a repeated webhook delivery or a poll that reads it again changes nothing.
+
+Readers see their score and their next threshold on [the account page](#the-account-page). Anyone can read an account's score from `GET users/<handle>/`.
+
+### Weights
+
+What each event scores, with the bounds an admin may set it within:
+
+| Event | Default | Bounds | Posted by |
+| --- | --- | --- | --- |
+| A merged edit | 1 × (1 + log2 of the lines it changed) | 0 to 100 times | [submissions](../packages/plugin-submissions/README.md#reputation) |
+| A merged new page | 5 | 0 to 100 | submissions |
+| A **+1** on a comment, for its author | 0.5 | 0 to 100 | [annotations](annotations.md#agreeing) |
+| Kudos from a moderator | 5 | 0 to 100 | [kudos](#kudos) |
+| A pull request closed without merging | 0 | -100 to 0 | submissions |
+
+An account earns at most 100 points a day, in UTC, from edits, new pages and **+1**s; points past the limit are recorded as 0. Kudos and taken-back points don't count toward it. An edit that changed no lines scores as one line.
+
+Admins change the weights and the daily limit on the dashboard's **Reputation** panel. A new weight applies to events from then on; entries already recorded keep their points.
+
+### Thresholds
+
+A threshold gives a [stored role](#roles) to every account whose score reaches it, with an `auth:role:promote` entry in [the audit log](#the-audit-log) naming the account, its score and the threshold. Set one per role on the **Reputation** panel; saving it gives the role to every account already past it. `admin` can't have one.
+
+Nothing ever takes a role away automatically: a lower score, a taken-back **+1** or a removed threshold leaves every role where it is. A role reputation gave shows **By reputation** under Roles on People & permissions, and only an admin can remove it. Once removed, it stays removed: reputation gives each account each role at most once.
+
+The **Reputation** panel opens with `auth:grants:read` and changes with `auth:grants:write`, since a threshold gives roles as a grant does.
+
+### Kudos
+
+Moderators who hold `auth:kudos:write` give kudos on the dashboard's **Kudos** panel: an account's handle and a reason, kept in the audit log. Each moderator gives each account at most one kudos a day, and at most 10 a day in all, and never one to themselves. Auth declares the permission with no default, so only admins hold it until someone is granted it.
+
+### Posting from a plugin
+
+```ts
+import { postReputation } from "@svartz/auth/server";
+
+await postReputation(context.env, { kind: "page", to: { account: account.id }, ref: `guestbook:entry:${entry.id}` });
+```
+
+`postReputation(env, event)` records `event`, weighed with the site's weights, then gives the account any role a threshold now grants. `to` names who earns: an account by `{ account: <id> }`, or the account a provider account is linked to by `{ identity: "github:583231" }`; an event for nobody's account changes nothing. `ref` names the event, unique within its kind and starting with your plugin's id, and an event posted again with the same `ref` changes nothing.
+
+| `kind` | Fields | |
+| --- | --- | --- |
+| `edit` | `lines` | An edit landed, changing `lines` lines (added plus removed). |
+| `page` | | A new page landed. |
+| `declined` | | A pull request closed without merging. |
+| `agreement` | `from`, `agreed` | Account `from` now agrees (`true`) or no longer agrees with what `to` wrote. `ref` names the pair; the agreement scores once while it stands, and when it is taken back, the same points are taken back. Nobody scores from their own. |
+
+Post only what your server knows happened, for the account your own records name: never an account a request or a commit claims. `postReputation` throws when the site binds no `SVARTZ_DB`, or the write fails.
+
 ## The audit log
 
-Every grant and role change is recorded in `auth_audit` in `SVARTZ_DB`: who made it, what it was, and when. The log is append-only: the database refuses to change or delete an entry. A change and its entry are written in one transaction, so neither lands without the other.
+Every grant and role change, every change to reputation's weights and thresholds, every role a threshold gives and every kudos is recorded in `auth_audit` in `SVARTZ_DB`: who made it, what it was, and when. The log is append-only: the database refuses to change or delete an entry. A change and its entry are written in one transaction, so neither lands without the other.
 
 Server plugins record their own changes, such as a suspension or a resolved report, with `audit(env, entry, changes?)` from `@svartz/auth/server`:
 
