@@ -129,7 +129,7 @@ Sign-in asks GitHub for no scopes: it reads only the public profile.
 
 The first time someone signs in, they choose a handle: the name they go by across the site, and later the address of their user page. The chooser is prefilled with the provider's username, or with the closest free variant (`octocat-2`) when someone has it. Google accounts have no username, so theirs starts from the display name. Signing in creates the account, links the provider account to it, and returns the reader to the page they started from. Every later sign-in with that provider account reaches the same account without asking.
 
-A handle is 1 to 39 lowercase letters, numbers, hyphens and underscores, starting and ending with a letter or number and never with two hyphens in a row, and no two accounts share one. The chooser lowercases what the reader types and drops a leading `@`. A reader has 15 minutes to choose; after that they sign in again.
+A handle is 1 to 39 lowercase letters, numbers, hyphens and underscores, starting and ending with a letter or number and never with two hyphens in a row, and no two accounts share one. It is never `index` and never ends in `_index`, so it names its [user page](#user-pages)'s address exactly: page addresses collapse a run of hyphens, turn a trailing `_index` into `index`, and give `index` to the folder's own page. A provider username the rules refuse starts the chooser at its `-2` variant, such as `index-2`. The chooser lowercases what the reader types and drops a leading `@`. A reader has 15 minutes to choose; after that they sign in again.
 
 ## What is kept
 
