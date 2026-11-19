@@ -394,6 +394,9 @@ importers:
       '@svartz/plugin-annotations':
         specifier: workspace:*
         version: link:../plugin-annotations
+      '@svartz/plugin-submissions':
+        specifier: workspace:*
+        version: link:../plugin-submissions
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

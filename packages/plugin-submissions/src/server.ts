@@ -13,7 +13,8 @@
  *   answers where a saved edit has got to (see `sync.ts`). Every save is then recorded for its saver to follow.
  * - `POST close/`, a form post with `number` and `returnTo`, closes submission `number` without merging it, for an
  *   account holding `submissions:reviews:write` on the vault, records it in auth's audit log, and redirects to
- *   `returnTo`. The moderation plugin's Reports panel posts to it.
+ *   `returnTo`. With `sync` only, and only a pull request the site recorded saving for this vault. The moderation
+ *   plugin's Reports panel posts to it.
  *
  * The client never names a file path. Edits must target a note in the build's manifest; a new note goes in one of the
  * manifest's folders, or is the reader's own user page, named after its title, and never where a file already is.
@@ -53,6 +54,7 @@ import { misconfigured, SubmissionError } from "./errors";
 import {
   closeSubmission,
   commitSubmission,
+  noSubmission,
   openSubmission,
   readSource,
   type Attribution,
@@ -61,6 +63,7 @@ import {
   type Submission,
 } from "./github";
 import { createGuard, type GuardOptions } from "./guard";
+import { isDatabase, migrate, savedPull, scopeOf } from "./mirror";
 import { COMMIT, OPEN_PULL_REQUESTS, REVIEW } from "./permissions";
 import { readBody } from "./request";
 import { createSync, type SyncOptions } from "./sync";
@@ -172,6 +175,25 @@ async function readSubmission(request: Request) {
     throw new SubmissionError("note_too_long", 400, `Shorten the note to ${MAX_NOTE_LENGTH.toLocaleString("en")} characters or fewer.`);
   }
   return { body, submission: { id: submissionId, markdown, note }, turnstileToken };
+}
+
+/** Where a vault's sync keeps its records: the D1 binding, the repository, and the vault's folder in it. */
+export interface VaultRecords {
+  readonly database: string;
+  readonly repo: string;
+  /** {@link BuildData.vaultRoot}. */
+  readonly root: string;
+}
+
+/**
+ * Whether pull request `number` is a submission the site saved for the vault `records` describes: what that vault's
+ * `POST close/` accepts. `false` when the binding is missing. The moderation plugin asks before it offers Close.
+ */
+export async function isVaultSubmission(env: ServerContext["env"], { database, repo, root }: VaultRecords, number: number): Promise<boolean> {
+  const db = env[database];
+  if (!isDatabase(db)) return false;
+  await migrate(db);
+  return savedPull({ db, scope: scopeOf(repo, root) }, number);
 }
 
 const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, data) => {
@@ -405,7 +427,9 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
 
   /**
    * Close submission `number` for a reviewer of the vault, and go back to `returnTo`, a path on this site (the vault's
-   * home otherwise). The audit entry lands once GitHub confirms an open submission, before GitHub closes it.
+   * home otherwise). Only the vault's own submissions close here: pull requests the site recorded saving for this vault,
+   * which takes `sync`. Vaults may share a repository, and a reviewer of one must not close another's; any other number
+   * answers as one GitHub doesn't have. The audit entry lands once GitHub confirms an open submission, before GitHub closes it.
    */
   async function close(request: Request, context: ServerContext): Promise<Response> {
     const url = new URL(request.url);
@@ -424,6 +448,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     const form = new URLSearchParams(new TextDecoder().decode(bytes));
     const number = Number(form.get("number"));
     if (!Number.isSafeInteger(number) || number < 1) throw invalid();
+    if (!sync || !await sync.saved(context, number)) throw noSubmission(options.repo, number);
     const home = publicPath(`${context.vault.mountPath}/`, context);
     const returnTo = form.get("returnTo") ?? "";
     const back = /^\/(?![/\\])/.test(returnTo) && new URL(returnTo, url.origin).origin === url.origin ? returnTo : home;

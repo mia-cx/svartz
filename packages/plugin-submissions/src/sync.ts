@@ -30,6 +30,7 @@ import {
   readPull,
   recordEdit,
   rereadReviews,
+  savedPull,
   scopeOf,
   workflowSignals,
   writeAncestry,
@@ -278,5 +279,10 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     await recordEdit(await mirrorFor(context), edit);
   }
 
-  return { webhook, status, record };
+  /** Whether pull request `number` is a save of this vault's, as {@link record} kept it. */
+  async function saved(context: ServerContext, number: number): Promise<boolean> {
+    return savedPull(await mirrorFor(context), number);
+  }
+
+  return { webhook, status, record, saved };
 }

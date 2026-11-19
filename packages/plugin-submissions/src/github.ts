@@ -441,6 +441,9 @@ export async function commitSubmission(
 /** Every submission's branch starts with this, as {@link submissionBranch} names it. */
 const SUBMISSION_BRANCH_PREFIX = "svartz/submission/";
 
+/** The answer for a number that names no submission of the vault: the same whether or not GitHub has the pull request. */
+export const noSubmission = (repo: string, number: number) => new SubmissionError("not_found", 404, `${repo} has no submission #${number}.`);
+
 /**
  * Close submission `number`, a pull request this site opened on `target.repo`, without merging it. `record` runs once
  * the pull request is known to be an open submission and before GitHub closes it, so whatever it records (an audit
@@ -449,7 +452,7 @@ const SUBMISSION_BRANCH_PREFIX = "svartz/submission/";
  */
 export async function closeSubmission(target: GitHubTarget, number: number, record: () => Promise<void>): Promise<{ url: string; closed: boolean }> {
   const response = await send(target, "GET", `/pulls/${number}`);
-  const notFound = new SubmissionError("not_found", 404, `${target.repo} has no submission #${number}.`);
+  const notFound = noSubmission(target.repo, number);
   if (response.status === 404) throw notFound;
   if (!response.ok) throw await failure(target, response);
   const pull = await response.json() as PullRequest & { state: string; head: { ref: string; repo: { full_name: string } | null } };

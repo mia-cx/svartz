@@ -49,7 +49,7 @@ A reader's report of a target stays one report while it's open: sending it again
 
 - **Resolve** closes a report that was right, once something was done about it. **Dismiss** closes one that needs nothing. A report closes once, even when two moderators click at the same moment: the second is told someone was first, and the audit log holds only the first.
 - **Hide comment** hides the reported comment through annotations, for a moderator who holds `annotations:comments:delete` on its page. It stays in the report, marked hidden.
-- **Close submission** closes the reported pull request without merging it, through submissions, for a moderator who holds `submissions:reviews:write`.
+- **Close submission** closes the reported pull request without merging it, through submissions, for a moderator who holds `submissions:reviews:write`. It shows only for a pull request the vault's own submissions saved, which takes submissions' [sync](../packages/plugin-submissions/README.md#github-sync): vaults that share a repository never close each other's.
 
 Hiding and closing leave the report open, to resolve once done. Each shows only to a moderator who holds the owning plugin's permission, and its route checks that again. A report whose target's plugin has left the vault, or whose comment was deleted since, still shows, without those actions.
 

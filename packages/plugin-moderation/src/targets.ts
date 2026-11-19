@@ -16,8 +16,11 @@ export interface BuildData {
   readonly pages: Readonly<Record<string, { readonly title: string; readonly href: string }>>;
   /** The annotations plugin, when the vault has it: the D1 binding its comments are in. */
   readonly annotations?: { readonly database: string };
-  /** The submissions plugin, when the vault has it: the repository edits go to, as `owner/name`. */
-  readonly submissions?: { readonly repo: string };
+  /**
+   * The submissions plugin, when the vault has it: the repository edits go to, as `owner/name`, and with sync on, where
+   * it records the vault's saves, which say which pull requests are this vault's to close.
+   */
+  readonly submissions?: { readonly repo: string; readonly records?: { readonly database: string; readonly root: string } };
 }
 
 /** Why a target can't be reported, as the route answers it. */

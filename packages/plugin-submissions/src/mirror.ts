@@ -377,6 +377,13 @@ export async function readEdit({ db, scope }: Mirror, id: string): Promise<EditR
   };
 }
 
+/** Whether the site saved an edit in this scope as pull request `number`, which makes it this vault's submission. */
+export async function savedPull({ db, scope }: Mirror, number: number): Promise<boolean> {
+  const { results } = await db.prepare("SELECT 1 FROM submissions_edits WHERE scope = ? AND kind = 'pull-request' AND pull_number = ? LIMIT 1")
+    .bind(scope, number).all();
+  return results.length > 0;
+}
+
 /** Record that the edit is live: a live edit stays live. */
 export async function markLive({ db, scope }: Mirror, id: string, at: string): Promise<void> {
   await db.prepare("UPDATE submissions_edits SET live_at = ? WHERE id = ? AND scope = ? AND live_at IS NULL").bind(at, id, scope).run();

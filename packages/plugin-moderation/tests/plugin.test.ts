@@ -1,5 +1,5 @@
 import { auth } from "@svartz/auth";
-import type { NormalizedSvartzPlugin, PluginContext, ResolvedConfig } from "@svartz/core";
+import { getCompilerContributions, type NormalizedSvartzPlugin, type PluginContext, type ResolvedConfig } from "@svartz/core";
 import { describe, expect, it } from "vitest";
 import { moderation, type ModerationOptions } from "../src/index";
 
@@ -12,10 +12,14 @@ function resolveFor(plugin: NormalizedSvartzPlugin, type: string, others: unknow
   return plugin.forVault!({ vault, vaults: [vault] });
 }
 
-/** A build of the garden vault that published `entries`, with `plugins` beside moderation. */
-async function build(plugins: unknown[], entries: unknown[] = []) {
+/**
+ * A build of the garden vault that published `entries`, with `plugins` beside moderation, which runs after the server
+ * data `before` them set.
+ */
+async function build(plugins: unknown[], entries: unknown[] = [], before: Record<string, unknown> = {}) {
   const plugin = moderation({ database });
   const ctx = { config: { mountPath: "/garden" }, plugins: [plugin, ...plugins], index: { entries }, files: [], meta: new Map() } as unknown as PluginContext;
+  for (const [id, data] of Object.entries(before)) getCompilerContributions(ctx).serverData.set(id, data);
   await plugin.emitArtifacts!.run(ctx);
   return ctx.compiler!;
 }
@@ -59,6 +63,19 @@ describe("the moderation plugin", () => {
       id: "moderation", kind: "script", importId: expect.stringMatching(/browser\.js$/), options: { mountPath: "/garden", userPages: "users" },
     });
     expect(compiler.browserResources.get("moderation-css")).toEqual({ id: "moderation-css", kind: "css", importId: expect.stringMatching(/browser\.css$/) });
+  });
+
+  // Proves the panel can tell this vault's submissions from another's: it gets where sync records the vault's saves.
+  it("tells the server where a syncing submissions plugin records the vault's saves", async () => {
+    const submissions = {
+      id: "submissions", server: { module: "/s.js", options: { repo: "wikiplace/wikiplace.live", sync: { database: { env: "SVARTZ_DB" } } } },
+    };
+
+    const compiler = await build([submissions], [], { submissions: { vaultRoot: "content" } });
+
+    expect(compiler.serverData.get("moderation")).toMatchObject({
+      submissions: { repo: "wikiplace/wikiplace.live", records: { database: "SVARTZ_DB", root: "content" } },
+    });
   });
 
   it("names no owning plugin the vault lacks", async () => {

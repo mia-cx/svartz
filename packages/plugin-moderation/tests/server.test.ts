@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ADA, ALAN, createDatabase, createSite, grant, GRACE, ORIGIN, seedComment, signIn, type Database, type Site, type SiteOptions } from "./harness";
+import {
+  ADA, ALAN, createDatabase, createSite, grant, GRACE, ORIGIN, seedComment, seedSubmission, signIn, type Database, type Site, type SiteOptions,
+} from "./harness";
 
 const ENDPOINT = "/notes/_svartz/moderation";
 const PANEL = "/notes/-/dashboard/moderation/reports/";
@@ -366,6 +368,7 @@ describe("the Reports panel", () => {
 
   it("offers to close a submission through submissions only to a moderator who may review them", async () => {
     const { db, site, ada, alan } = await moderated();
+    await seedSubmission(db, 42);
     const { report: { id } } = await (await report(site, ada, { kind: "submission", id: "42" })).json() as { report: { id: string } };
     expect(await panel(site, alan)).not.toContain("Close submission");
     await grant(db, "alan", "submissions:reviews:write");
@@ -374,6 +377,21 @@ describe("the Reports panel", () => {
 
     expect(queue).toContain('<a href="https://github.com/wikiplace/wikiplace.live/pull/42">Pull request #42</a>');
     expect(queue).toContain(`action="/notes/_svartz/submissions/close/"><input type="hidden" name="number" value="42"><input type="hidden" name="returnTo" value="${PANEL}?status=submission-closed#report-${id}">`);
+  });
+
+  // Proves Close shows only where submissions' route would take it: the vault's own saves, not another vault's on the repository.
+  it("offers Close only on a pull request this vault's submissions saved", async () => {
+    const { db, site, ada, alan } = await moderated();
+    await grant(db, "alan", "submissions:reviews:write");
+    await seedSubmission(db, 43, "docs");
+    await report(site, ada, { kind: "submission", id: "43" });
+    await report(site, ada, { kind: "submission", id: "44" });
+
+    const queue = await panel(site, alan);
+
+    expect(queue).toContain("Pull request #43");
+    expect(queue).toContain("Pull request #44");
+    expect(queue).not.toContain("Close submission");
   });
 
   // Proves one stored report the panel can't describe never takes the queue down for every moderator.

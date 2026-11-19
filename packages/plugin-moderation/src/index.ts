@@ -68,7 +68,8 @@ export function moderation(options: ModerationOptions): NormalizedSvartzPlugin {
       return plugin;
     },
     emitArtifacts: {
-      options: { fatal: true },
+      // After submissions', whose build data says where in the repository the vault is.
+      options: { fatal: true, enforce: "post" },
       run(ctx) {
         // Protected notes stay out: reporting one would tell moderators it exists.
         const pages = Object.fromEntries((ctx.index?.entries ?? [])
@@ -78,12 +79,17 @@ export function moderation(options: ModerationOptions): NormalizedSvartzPlugin {
         const submissions = serverOptionsOf(ctx.plugins, "submissions");
         const configured = serverOptionsOf(ctx.plugins, "auth")?.userPages;
         const userPages = typeof configured === "string" ? configured : DEFAULT_USER_PAGES;
+        const compiler = getCompilerContributions(ctx);
+        // Sync records the vault's saves, which say which pull requests are the vault's to close.
+        const records = (submissions?.sync as { database?: { env?: unknown } } | undefined)?.database?.env;
+        const root = (compiler.serverData.get("submissions") as { vaultRoot?: unknown } | undefined)?.vaultRoot;
         const data: BuildData = {
           pages,
           ...typeof annotations?.env === "string" && { annotations: { database: annotations.env } },
-          ...typeof submissions?.repo === "string" && { submissions: { repo: submissions.repo } },
+          ...typeof submissions?.repo === "string" && {
+            submissions: { repo: submissions.repo, ...typeof records === "string" && typeof root === "string" && { records: { database: records, root } } },
+          },
         };
-        const compiler = getCompilerContributions(ctx);
         compiler.serverData.set(PLUGIN_ID, data);
         compiler.browserResources.set(PLUGIN_ID, {
           id: PLUGIN_ID,

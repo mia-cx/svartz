@@ -8,6 +8,7 @@
 import { can, findProfile, readAccount, userPageLocation, type Account } from "@svartz/auth/server";
 import type { DashboardPanel, PageContext, PluginPage } from "@svartz/core";
 import { findComment, type ReportedComment } from "@svartz/plugin-annotations/server";
+import { isVaultSubmission } from "@svartz/plugin-submissions/server";
 import { PLUGIN_ID } from "./api";
 import { escape } from "./html";
 import { READ_REPORTS } from "./permissions";
@@ -99,10 +100,14 @@ function describer(context: PageContext, data: BuildData, viewer: Account | null
         return { what, quote: comment.body, actions };
       }
       case "submission": {
-        const what = data.submissions
-          ? `<a href="${escape(`https://github.com/${data.submissions.repo}/pull/${id}`)}">Pull request #${escape(id)}</a>`
+        const submissions = data.submissions;
+        const what = submissions
+          ? `<a href="${escape(`https://github.com/${submissions.repo}/pull/${id}`)}">Pull request #${escape(id)}</a>`
           : `Pull request #${escape(id)}`;
-        const actions = open && await closesSubmissions() ? [button(`${root}/_svartz/submissions/close/`, { number: id, returnTo: back("submission-closed") }, "Close submission", describedBy)] : [];
+        // Submissions closes only the vault's own pull requests, the saves its records hold, so Close shows only for those.
+        const records = submissions?.records;
+        const closable = open && records !== undefined && await closesSubmissions() && await isVaultSubmission(context.env, { ...records, repo: submissions!.repo }, Number(id));
+        const actions = closable ? [button(`${root}/_svartz/submissions/close/`, { number: id, returnTo: back("submission-closed") }, "Close submission", describedBy)] : [];
         return { what, actions };
       }
       case "commit":

@@ -5,6 +5,7 @@
  */
 import type { Identity } from "@svartz/auth";
 import { createServer, type PageResult, type PermissionDeclaration } from "@svartz/core";
+import { isVaultSubmission } from "@svartz/plugin-submissions/server";
 import { Miniflare } from "miniflare";
 import { DEFAULT_REPORTS_PER_HOUR } from "../src/index";
 import { PERMISSIONS } from "../src/permissions";
@@ -61,7 +62,7 @@ export function createSite(db: Database, { vault = "notes", database = "SVARTZ_D
   const data: BuildData = {
     pages: PAGES,
     ...annotations && { annotations: { database: "DB" } },
-    ...submissions && { submissions: { repo: "wikiplace/wikiplace.live" } },
+    ...submissions && { submissions: { repo: SUBMISSIONS.repo, records: { database: "DB", root: SUBMISSIONS.root } } },
   };
   const options: ModerationServerOptions = { database: { env: database }, limits: { reportsPerHour } };
   const server = createServer({
@@ -128,6 +129,18 @@ export async function signIn(site: Site, person: Identity): Promise<string> {
   } finally {
     globalThis.fetch = realFetch;
   }
+}
+
+/** Where the vault's submissions go, and where sync records its saves: the repository, and the vault's folder in it. */
+export const SUBMISSIONS = { repo: "wikiplace/wikiplace.live", root: "content" } as const;
+
+/** Record that the site saved `number` as a pull request for a vault at `root`, as submissions' sync does on a save. */
+export async function seedSubmission(db: Database, number: number, root: string = SUBMISSIONS.root): Promise<void> {
+  // Asking migrates submissions' schema.
+  await isVaultSubmission({ DB: db }, { database: "DB", repo: SUBMISSIONS.repo, root }, number);
+  await db.prepare(`INSERT INTO submissions_edits (id, scope, owner, kind, page, path, pull_number, url, saved_at)
+    VALUES (?, ?, NULL, 'pull-request', '/notes/garden/', 'content/garden.md', ?, ?, '2026-11-02T00:00:00.000Z')`)
+    .bind(crypto.randomUUID(), `${SUBMISSIONS.repo}:${root}`, number, `https://github.com/${SUBMISSIONS.repo}/pull/${number}`).run();
 }
 
 /** Grant `permission` on the vault to `handle`'s account, as an admin would on the dashboard. */
