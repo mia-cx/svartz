@@ -4,7 +4,8 @@
  * - `POST github/webhook/` takes the App's deliveries. Its signature (`X-Hub-Signature-256`, an HMAC-SHA256 of the raw
  *   body with the webhook secret) is checked in constant time before the body is parsed; a delivery without one, with
  *   a wrong one, or for another repository is refused and nothing is stored. Deliveries of the seven mirrored events
- *   are written to the mirror (see `mirror.ts`); `ping` and other events are acknowledged and ignored.
+ *   are written to the mirror (see `mirror.ts`); `ping`, other events, and deliveries with nothing the mirror keeps
+ *   are acknowledged and ignored.
  * - `GET status/?edit=<submission id>` answers where a saved edit has got to, to the reader who saved it: the account
  *   or identity that saved it, or for a guest's edit whoever holds its random id. It reads the mirror only. When the
  *   mirror is stale, the reconcile poll runs after the answer, as do the ancestry checks the answer still lacks.
@@ -175,10 +176,13 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     const defaultBranch = text(repository.default_branch);
     const branch = setup.branch ?? defaultBranch;
     if (!branch) throw new SubmissionError("invalid_request", 400, "The delivery names no default branch.");
-    await mirror.db.batch([
+    const statements = [
       ...(!setup.branch && defaultBranch ? [writeBranch(mirror, defaultBranch)] : []),
       ...event(payload, mirror, branch, setup.root),
-    ]);
+    ];
+    // A push to another branch, or outside the vault: nothing to keep, and D1 refuses an empty batch.
+    if (statements.length === 0) return new Response(null, { status: 202 });
+    await mirror.db.batch(statements);
     return new Response(null, { status: 204 });
   }
 

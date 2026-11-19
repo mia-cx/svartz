@@ -76,8 +76,11 @@ interface Database {
   prepare(query: string): { bind(...values: unknown[]): { all(): Promise<{ results: Record<string, unknown>[] }> } };
 }
 
-/** A wiki at /wiki with `auth`, and `submissions` as a GitHub App syncing into `SVARTZ_DB`, where `live` decides live. */
-async function createSite({ live = { workflow: "deploy.yml" } as SyncOptions["live"], admins = [ADA.id] } = {}) {
+/**
+ * A wiki at /wiki with `auth`, and `submissions` as a GitHub App syncing into `SVARTZ_DB`, where `live` decides live.
+ * `branch` is the configured content branch; unset, it is the repository's default.
+ */
+async function createSite({ live = { workflow: "deploy.yml" } as SyncOptions["live"], admins = [ADA.id], branch = undefined as string | undefined } = {}) {
   const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
   disposers.push(() => miniflare.dispose());
   const db = await miniflare.getD1Database("SVARTZ_DB") as unknown as Database;
@@ -87,6 +90,7 @@ async function createSite({ live = { workflow: "deploy.yml" } as SyncOptions["li
     app: { id: APP_ID, privateKey: { env: "SVARTZ_GITHUB_APP_KEY" }, installation: INSTALLATION_ID },
     guard: { rateLimit: { limit: 100, period: 60 } },
     mode: "permission",
+    ...(branch ? { branch } : {}),
     sync: { database: { env: "SVARTZ_DB" }, webhookSecret: { env: "SVARTZ_GITHUB_WEBHOOK_SECRET" }, live },
   };
   const handle = createServerHandle({
@@ -221,7 +225,7 @@ const pull = ({ state = "open", updated = at(), merged = null as string | null, 
   base: { label: "wikiplace:main", ref: "main", sha: HEAD_COMMIT },
 });
 
-const run = ({ id = 900, path = ".github/workflows/deploy.yml", head = DIRECT_COMMIT, status = "queued", conclusion = null as string | null, attempt = 1, updated = at() } = {}) => ({
+const run = ({ id = 900, path = ".github/workflows/deploy.yml", head = DIRECT_COMMIT, status = "queued", conclusion = null as string | null, attempt = 1, updated = at(), created = at() } = {}) => ({
   id,
   name: path.endsWith("deploy.yml") ? "Deploy" : "CI",
   path,
@@ -232,16 +236,16 @@ const run = ({ id = 900, path = ".github/workflows/deploy.yml", head = DIRECT_CO
   conclusion,
   run_attempt: attempt,
   html_url: `https://github.com/${REPO}/actions/runs/${id}`,
-  created_at: at(),
+  created_at: created,
   updated_at: updated,
-  run_started_at: at(),
+  run_started_at: created,
 });
 const workflowRun = (action: string, workflowRun: ReturnType<typeof run>) =>
   ({ action, workflow_run: workflowRun, workflow: { id: 161_335, name: workflowRun.name, path: workflowRun.path }, repository, sender });
 
-const deploymentStatus = ({ id = 7, sha = DIRECT_COMMIT, environment = "production", statusId = 70, state = "success" } = {}) => ({
+const deploymentStatus = ({ id = 7, sha = DIRECT_COMMIT, environment = "production", statusId = 70, state = "success", created = at() } = {}) => ({
   action: "created",
-  deployment: { id, sha, ref: "main", task: "deploy", environment, created_at: at(), updated_at: at(), creator: sender },
+  deployment: { id, sha, ref: "main", task: "deploy", environment, created_at: created, updated_at: created, creator: sender },
   deployment_status: {
     id: statusId,
     state,
@@ -290,14 +294,18 @@ const reviewDelivery = (action: string, state: string) => ({
 
 /**
  * A GitHub that answers the reconcile poll with empty lists, and compare requests from `compare`: whether each head
- * is `ahead` of the commit asked about. Answers every request it gets in `requests`.
+ * is `ahead` of the commit asked about. `answer` overrides any request it answers, given the path below the
+ * repository and the query. Answers every request it gets in `requests`.
  */
-function quietGitHub(compare: Record<string, string> = {}) {
+function quietGitHub(compare: Record<string, string> = {}, answer: (path: string, query: URLSearchParams) => Response | undefined = () => undefined) {
   const requests: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
     requests.push(`${url.pathname}${url.search}`);
     const path = url.pathname.slice(`/repos/${REPO}`.length);
+    const overridden = answer(path, url.searchParams);
+    if (overridden) return overridden;
+    if (/^\/deployments\/\d+\/statuses$/.test(path)) return Response.json([]);
     const head = path.match(/^\/compare\/[0-9a-f]{40}\.\.\.([0-9a-f]{40})$/)?.[1];
     if (head) return Response.json({ status: compare[head] ?? "diverged", ahead_by: 1, behind_by: 0, commits: [], files: [] });
     if (path === "") return Response.json({ full_name: REPO, default_branch: "main" });
@@ -425,6 +433,16 @@ describe("GitHub's deliveries", () => {
     const delivered = await deliver(site, "ping", { zen: "Design for failure.", hook_id: 109_948_940, hook: { type: "App", id: 109_948_940, app_id: APP_ID, events: ["push"] } });
 
     expect(delivered.status).toBe(202);
+  });
+
+  it("acknowledges a push that changes nothing the mirror keeps", async () => {
+    const site = await createSite({ branch: "main" });
+
+    const otherBranch = await deliver(site, "push", push([pushed("4444444444444444444444444444444444444444", "Edit", { modified: ["content/guide.md"] })], `refs/heads/${branchFor("wiki-guide")}`));
+    const outsideVault = await deliver(site, "push", push([pushed("2222222222222222222222222222222222222222", "Fix the build", { modified: ["src/app.ts"] })]));
+
+    expect([otherBranch.status, outsideVault.status]).toEqual([202, 202]);
+    expect(await site.rows("SELECT sha FROM submissions_commits")).toEqual([]);
   });
 
   it("keeps each record's latest state whatever order deliveries arrive in, and a repeated delivery changes nothing", async () => {
