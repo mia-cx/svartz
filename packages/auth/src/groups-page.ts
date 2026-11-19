@@ -91,7 +91,7 @@ export interface AccountGroups {
 export function accountGroupsSection({ groups, invitations, page, actions }: AccountGroups, handle: string, query: URLSearchParams): string {
   const status = message(ACCOUNT_STATUSES, "sv-account-groups-status", query, query.get("group") ?? "");
   const typed = (key: string) => status?.field ? query.get(key) ?? "" : "";
-  const invited = invitations.map(({ name, displayName, invitedBy }) => `<li class="sv-account-row"><span class="sv-account-what"><span class="sv-account-name">${escape(displayName)}</span><span class="sv-account-muted">@${escape(invitedBy)} invited you</span></span>${button(actions.accept(name), "Accept", {}, `Accept the invitation to ${displayName}`, true)}${button(actions.decline(name), "Decline", { handle }, `Decline the invitation to ${displayName}`)}</li>`);
+  const invited = invitations.map(({ name, displayName, invitedBy }) => `<li class="sv-account-row"><span class="sv-account-what"><span class="sv-account-name">${escape(displayName)}</span><span class="sv-account-muted">@${escape(invitedBy)} invited you</span></span><span class="sv-account-actions">${button(actions.accept(name), "Accept", {}, `Accept the invitation to ${displayName}`, true)}${button(actions.decline(name), "Decline", { handle }, `Decline the invitation to ${displayName}`)}</span></li>`);
   const held = groups.map(({ name, displayName, owner }) => `<li class="sv-account-row"><span class="sv-account-what"><a class="sv-account-name" href="${escape(page(name))}">${escape(displayName)}</a><span class="sv-account-muted">${escape(name)}</span></span><span class="sv-account-tag">${owner ? "Owner" : "Member"}</span></li>`);
   return `<section class="sv-account-section" aria-labelledby="sv-account-groups">
 <h2 id="sv-account-groups">Groups</h2>
@@ -137,7 +137,7 @@ export function groupPage({ group, handle, owner, account, query, actions }: Gro
       : owner
         ? `${member.owner ? "" : button(actions.promote, "Make owner", { handle: member.handle }, `Make ${who} an owner`)}${button(actions.remove, "Remove", { handle: member.handle }, `Remove ${who}`)}`
         : "";
-    return `<li class="sv-account-row"><span class="sv-account-what"><span class="sv-account-name">${escape(who)}</span><span class="sv-account-muted">${escape(member.name)}</span></span>${member.owner ? `<span class="sv-account-tag">Owner</span>` : ""}${controls}</li>`;
+    return `<li class="sv-account-row"><span class="sv-account-what"><span class="sv-account-name">${escape(who)}</span><span class="sv-account-muted">${escape(member.name)}</span></span>${member.owner ? `<span class="sv-account-tag">Owner</span>` : ""}${controls ? `<span class="sv-account-actions">${controls}</span>` : ""}</li>`;
   });
   const inviteForm = owner ? `<form class="sv-dashboard-inline" method="post" action="${escape(actions.invite)}">
   <div class="sv-account-field">

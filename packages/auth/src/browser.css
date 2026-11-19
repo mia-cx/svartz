@@ -342,6 +342,13 @@
 	flex: none;
 }
 
+/* A row's buttons stay side by side, and wrap below its text together. */
+.sv-account-actions {
+	display: flex;
+	flex: none;
+	gap: var(--sv-space-2, 0.5rem);
+}
+
 .sv-account-providers {
 	max-inline-size: 22rem;
 }
