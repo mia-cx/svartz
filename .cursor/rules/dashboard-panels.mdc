@@ -8,6 +8,8 @@ alwaysApply: false
 
 - `@svartz/core` never imports `@svartz/auth`. Core only collects panels: a server factory returns `dashboard: { title, panels }`, and `context.dashboard()` lists them, each `render` bound to its own plugin's context. It checks no permission.
 - Auth owns `/-/dashboard/` (`pages: ["account", "dashboard"]`, `dashboard.ts`): a panel shows to a viewer who holds its `permission` on the vault (`can(viewer, permission, { vault })`, so a site grant covers it), and the same check runs before every render. No openable panel means 404, not an empty page.
+- A panel's `render` checks its own permission with `can()` before it reads anything, and refuses query parameters it can't validate (a malformed cursor is a 404, never an unbounded query).
+- A panel that shows repository content names only what the last build published (its links and attachments). Everything else is counted, never named, and commit text is withheld when nothing published changed. A commit's `Svartz-Account` trailer names an account only on the site's own record of the save or when the App's bot committed it (`listCommits` in submissions' `mirror.ts`).
 - Hiding a panel is not the gate. Every route a panel's forms post to checks `Origin === url.origin` and its own write permission with `can()` on the server.
 - Record every grant, role and moderation change with the change in one batch: `auditStatement` inside auth, `audit(env, entry, changes)` from `@svartz/auth/server` elsewhere. The actor comes from `readAccount`, never from the form. `auth_audit` is append-only by trigger.
 - `admin` is config-only: no stored role, member or grant may name it, and grants on an admin's account are refused.

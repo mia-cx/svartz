@@ -466,6 +466,56 @@ export async function writeAncestry({ db, scope }: Mirror, ancestor: string, des
     .bind(scope, ancestor, descendant, contains ? 1 : 0).run();
 }
 
+/** A mirrored commit as a list of edits shows it, with the account it may be credited to. */
+export interface ListedCommit {
+  readonly sha: string;
+  readonly message: string;
+  readonly authorName: string;
+  readonly authorLogin: string | null;
+  readonly committedAt: string;
+  /** Its changed files inside the vault, as repository paths; `null` until the poll reads them. */
+  readonly files: readonly string[] | null;
+  /**
+   * The account that made it, by id: the one the site's record of the save names, or else the one its
+   * `Svartz-Account` trailer names when its committer is the App's bot. `null` for everyone else, whatever their
+   * trailer says. The bot is known by the committer of a commit the site recorded making, so no GitHub call is needed.
+   */
+  readonly account: string | null;
+}
+
+/**
+ * Up to `limit` of the vault's commits, newest first (by commit time, then SHA), after the commit `before` when given.
+ * A `before` the mirror doesn't hold answers none.
+ */
+export async function listCommits({ db, scope }: Mirror, { before, limit }: { before?: string; limit: number }): Promise<ListedCommit[]> {
+  const { results } = await db.prepare(`WITH bot AS (
+      SELECT DISTINCT c.committer_email FROM submissions_commits c
+      JOIN submissions_edits e ON e.scope = c.scope AND e.commit_sha = c.sha AND e.kind = 'commit'
+      WHERE c.scope = ?1
+    )
+    SELECT c.sha, c.message, c.author_name, c.author_login, c.committed_at, c.files,
+      COALESCE(
+        (SELECT substr(e.owner, 9) FROM submissions_edits e
+          WHERE e.scope = c.scope AND e.commit_sha = c.sha AND e.kind = 'commit' AND e.owner LIKE 'account:%' LIMIT 1),
+        CASE WHEN c.committer_email IN (SELECT committer_email FROM bot) THEN c.trailer_account END
+      ) AS account
+    FROM submissions_commits c
+    WHERE c.scope = ?1 AND (?2 IS NULL OR (c.committed_at, c.sha) < (SELECT committed_at, sha FROM submissions_commits WHERE scope = ?1 AND sha = ?2))
+    ORDER BY c.committed_at DESC, c.sha DESC
+    LIMIT ?3`)
+    .bind(scope, before ?? null, limit)
+    .all<{ sha: string; message: string; author_name: string; author_login: string | null; committed_at: string; files: string | null; account: string | null }>();
+  return results.map((row) => ({
+    sha: row.sha,
+    message: row.message,
+    authorName: row.author_name,
+    authorLogin: row.author_login,
+    committedAt: row.committed_at,
+    files: row.files === null ? null : JSON.parse(row.files) as string[],
+    account: row.account,
+  }));
+}
+
 /** The content branch's name as deliveries or a poll last said, for a vault that leaves it to the default branch. */
 export async function readBranch({ db, scope }: Mirror): Promise<string | undefined> {
   const { results: [row] } = await db.prepare("SELECT branch FROM submissions_sync WHERE scope = ?").bind(scope).all<{ branch: string | null }>();

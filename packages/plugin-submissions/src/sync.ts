@@ -9,6 +9,8 @@
  * - `GET status/?edit=<submission id>` answers where a saved edit has got to, to the reader who saved it: the account
  *   or identity that saved it, or for a guest's edit whoever holds its random id. It reads the mirror only. When the
  *   mirror is stale, the reconcile poll runs after the answer, as do the ancestry checks the answer still lacks.
+ * - `read` and `stages` serve pages that read the mirror, such as the dashboard's Recent edits panel, the same way:
+ *   the mirror answers, and the poll and ancestry checks run after.
  *
  * An edit is live once a run of the configured workflow on the content branch, or a deployment to the configured
  * environment, succeeded at a commit that contains the edit's commit. "Contains" is never guessed from times: a
@@ -57,6 +59,12 @@ export interface SyncOptions {
   /** What "live" means: a successful run of a workflow file in `.github/workflows/`, or deployment to an environment. */
   readonly live: { readonly workflow: string; readonly environment?: never } | { readonly environment: string; readonly workflow?: never };
 }
+
+/** How far a commit on the content branch has got toward live. */
+export type DeployStage = "committed" | "building" | "live" | "failed";
+
+/** Sync's routes, its record of saves, and what pages reading the mirror need. */
+export type Sync = ReturnType<typeof createSync>;
 
 /** What sync needs from the rest of the plugin. */
 export interface SyncSetup {
@@ -213,22 +221,32 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     const reply = (stage: StatusResponse["stage"]): StatusResponse => ({ stage, ...(pull ? { pull } : {}), commit: commit! });
     if (edit.liveAt) return { status: reply("live"), unchecked: none };
 
-    const since = new Date(Date.parse(landed) - CLOCK_SKEW_MS).toISOString();
-    const branch = setup.branch ?? await readBranch(mirror);
-    const signals = workflow
-      ? branch ? await workflowSignals(mirror, workflow, branch, since, commit.sha) : []
-      : await deploymentSignals(mirror, options.live.environment!, since, commit.sha);
-    const others = [...new Set(signals.map(({ sha }) => sha).filter((sha) => sha !== commit!.sha))];
-    const verdicts = await readAncestry(mirror, commit.sha, others);
-    const holding = signals.filter(({ sha }) => sha === commit!.sha || verdicts.get(sha) === true);
-    const unchecked = { commit: commit.sha, heads: others.filter((sha) => !verdicts.has(sha)) };
-    if (holding.some(({ outcome }) => outcome === "success")) {
+    const { stage, heads } = await deployStage(mirror, commit.sha, landed, setup.branch ?? await readBranch(mirror));
+    if (stage === "live") {
       await markLive(mirror, edit.id, new Date().toISOString());
       return { status: reply("live"), unchecked: none };
     }
-    // The newest signal holding the edit speaks for it: an older run stuck in the queue doesn't outrank a later failure.
+    return { status: reply(stage), unchecked: { commit: commit.sha, heads } };
+  }
+
+  /**
+   * How far commit `sha`, on the branch since `landed`, has got toward live, from the mirror: `committed` until a run
+   * or deployment known to hold it says otherwise. `heads` are the run and deployment heads GitHub hasn't yet said
+   * whether they contain it, newest first. `branch` is the content branch, when known.
+   */
+  async function deployStage(mirror: Mirror, sha: string, landed: string, branch: string | undefined): Promise<{ stage: DeployStage; heads: string[] }> {
+    const since = new Date(Date.parse(landed) - CLOCK_SKEW_MS).toISOString();
+    const signals = workflow
+      ? branch ? await workflowSignals(mirror, workflow, branch, since, sha) : []
+      : await deploymentSignals(mirror, options.live.environment!, since, sha);
+    const others = [...new Set(signals.map((signal) => signal.sha).filter((head) => head !== sha))];
+    const verdicts = await readAncestry(mirror, sha, others);
+    const holding = signals.filter((signal) => signal.sha === sha || verdicts.get(signal.sha) === true);
+    if (holding.some(({ outcome }) => outcome === "success")) return { stage: "live", heads: [] };
+    // The newest signal holding the commit speaks for it: an older run stuck in the queue doesn't outrank a later failure.
     const latest = holding[0]?.outcome;
-    return { status: reply(latest === "pending" ? "building" : latest === "failure" ? "failed" : "committed"), unchecked };
+    const stage = latest === "pending" ? "building" : latest === "failure" ? "failed" : "committed";
+    return { stage, heads: others.filter((head) => !verdicts.has(head)) };
   }
 
   /** When this worker last asked GitHub about each `<commit>...<head>`, so a failing answer isn't asked again on every read. */
@@ -265,12 +283,17 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     if (edit?.owner && !owner) throw new SubmissionError("sign_in_required", 401, "Sign in to see how your edit is doing.");
     if (!edit || (edit.owner && edit.owner !== owner)) throw new SubmissionError("not_found", 404, "This site has no record of that edit.");
 
-    const token = () => setup.token(context.env);
-    const environment = options.live.environment;
-    context.waitUntil(reconcile({ mirror, repo: setup.repo, root: setup.root, ...(setup.branch ? { branch: setup.branch } : {}), ...(environment ? { environment } : {}) }, token));
+    refresh(context, mirror);
     const { status: answer, unchecked } = await editStatus(mirror, edit);
-    if (unchecked.heads.length > 0) context.waitUntil(checkAncestry(mirror, token, unchecked.commit, unchecked.heads));
+    if (unchecked.heads.length > 0) context.waitUntil(checkAncestry(mirror, () => setup.token(context.env), unchecked.commit, unchecked.heads));
     return Response.json(answer satisfies StatusResponse, { headers: { "cache-control": "private, no-store" } });
+  }
+
+  /** Run the reconcile poll after the answer, when the mirror is stale. */
+  function refresh(context: ServerContext, mirror: Mirror): void {
+    const environment = options.live.environment;
+    const target = { mirror, repo: setup.repo, root: setup.root, ...(setup.branch ? { branch: setup.branch } : {}), ...(environment ? { environment } : {}) };
+    context.waitUntil(reconcile(target, () => setup.token(context.env)));
   }
 
   /** Keep a save, so its saver can follow it to live. */
@@ -278,5 +301,29 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     await recordEdit(await mirrorFor(context), edit);
   }
 
-  return { webhook, status, record };
+  /** The mirror, for a page that reads it: the reconcile poll runs after the answer when it is stale. */
+  async function read(context: ServerContext): Promise<Mirror> {
+    const mirror = await mirrorFor(context);
+    refresh(context, mirror);
+    return mirror;
+  }
+
+  /**
+   * Each of `commits`' deploy stage, by SHA, from the mirror. After the answer, GitHub is asked whether the newest
+   * run or deployment head not yet compared contains each commit, so a later read can say live.
+   */
+  async function stages(context: ServerContext, mirror: Mirror, commits: readonly { sha: string; committedAt: string }[]): Promise<Map<string, DeployStage>> {
+    const branch = setup.branch ?? await readBranch(mirror);
+    const found = await Promise.all(commits.map(async ({ sha, committedAt }) => ({ sha, ...await deployStage(mirror, sha, committedAt, branch) })));
+    const unchecked = found.filter(({ heads }) => heads.length > 0);
+    if (unchecked.length > 0) {
+      const token = () => setup.token(context.env);
+      context.waitUntil((async () => {
+        for (const { sha, heads } of unchecked) await checkAncestry(mirror, token, sha, heads.slice(0, 1));
+      })());
+    }
+    return new Map(found.map(({ sha, stage }) => [sha, stage]));
+  }
+
+  return { webhook, status, record, read, stages };
 }
