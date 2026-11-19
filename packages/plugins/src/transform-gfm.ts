@@ -13,6 +13,7 @@ export const transformGfm = (options: (GfmOptions & { disabled?: boolean }) = {}
   const { disabled, ...gfmOptions } = options;
   return definePlugin(() => ({
     id: "core:transform-gfm",
+    options: gfmOptions,
 
     transformGfm: {
       run(ctx) {

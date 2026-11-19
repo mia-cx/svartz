@@ -260,12 +260,17 @@ describe("svartz CLI", () => {
         env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
       });
     };
+    /** What each build said about its versions: how many it compiled, and how many it reused from the cache. */
+    const reports: (string | undefined)[] = [];
     /** Builds the vault with `plugins`, then reads every file it emitted, without SvelteKit's per-build version stamp. */
     const build = async (plugins: string) => {
       await writeFile(configPath, `import { history } from ${JSON.stringify(resolve(ROOT, "packages/plugin-history/dist/index.js"))};
         export default { version: "1.0.0", vaults: [{ id: "versions-e2e", path: ${JSON.stringify(vault)},
           target: { type: "static" }, site: { title: "Versions" }, exclude: ["private/**"], plugins: ${plugins} }] };\n`);
-      await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
+      const { stdout } = await execFileAsync(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath], {
+        cwd: ROOT, env: process.env, maxBuffer: 20 * 1024 * 1024,
+      });
+      reports.push(stdout.split("\n").find((line) => line.startsWith("[history]")));
       const stamp = (JSON.parse(await readFile(resolve(dist, "_app/version.json"), "utf8")) as { version: string }).version;
       const files = await readdir(dist, { recursive: true, withFileTypes: true });
       return new Map(await Promise.all(files.filter((file) => file.isFile()).map(async (file) => {
@@ -335,6 +340,17 @@ describe("svartz CLI", () => {
       expect(emitted.has("/private/secret.svg")).toBe(false);
       expect(emitted.has("/media/draft-only.svg")).toBe(false);
       for (const [path, contents] of emitted) expect(contents, path).not.toMatch(/SECRET|ada@example\.com/);
+
+      // A second build compiles no version, reusing each from the cache, and emits the same files. The cache holds
+      // nothing of the hidden draft.
+      expect(reports.at(-1)).toMatch(/compiled 5 versions, reused 0 from the cache/);
+      const again = await build('[history({ source: "git" })]');
+      expect(reports.at(-1)).toMatch(/compiled 0 versions, reused 5 from the cache/);
+      expect(again).toEqual(emitted);
+      const cached = resolve(ROOT, ".svartz/vaults/versions-e2e/cache/versions");
+      const entries = await readdir(cached);
+      expect(entries).toHaveLength(5);
+      for (const entry of entries) expect(await readFile(resolve(cached, entry), "utf8"), entry).not.toMatch(/SECRET|ada@example\.com/);
     } finally {
       await rm(configPath, { force: true });
       await rm(repo, { recursive: true, force: true });

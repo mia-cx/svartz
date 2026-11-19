@@ -23,16 +23,18 @@ function usesCode(content: string): boolean {
 
 /** Add syntax highlighting for public notes with code. */
 export const transformSyntax = (options: SyntaxOptions & { disabled?: boolean } = {}) => {
-  const { disabled, ...syntaxOptions } = options;
+  const { disabled, ...custom } = options;
+  const syntaxOptions = { theme: "github-dark-default", keepBackground: false, ...custom };
   return definePlugin(() => ({
     id: "core:transform-syntax",
+    options: syntaxOptions,
 
     transformSyntax: {
       run(ctx) {
         if (!ctx.files.some((file) => usesCode(file.content))) return;
         getCompilerContributions(ctx).rehypePlugins.push([
           rehypePrettyCode,
-          { theme: "github-dark-default", keepBackground: false, ...syntaxOptions },
+          syntaxOptions,
         ]);
       },
       options: { fatal: true },

@@ -17,6 +17,8 @@ alwaysApply: false
 - A version shows only when `publishesNote` (from `@svartz/plugins`, the build's own rule) holds at the path it had then and it has no `password_group`. Diff consecutive *shown* versions; never read past a hidden one into a page. A summary follows the live rule below, plus the note's own shown paths so a rename's summary shows.
 - When no note has two versions to show, add no artifact, route or browser resource: the build must stay byte-identical (the CLI e2e compares it).
 - Git calls go through `git.ts` with `-z`/NUL parsing; `%aN` only, never an email format.
+- Compiled versions are cached (`cache.ts`) in `<outDir>/../cache/versions/`. Anything a version's compile reads goes in its key; a stale page is worse than a slow build. Leave out only the note's own current file, which the version replaces in its compile, so a commit to the note recompiles just its new version. Decide visibility before `cache.get`, and write only versions that compiled cleanly. `emitVersions` prunes in its `finally` after a walk that saw every note, so the cache holds only versions that show; a failed build prunes nothing, since it never reached what it would have reused, and a hidden version's entry is never served. Plugin `options` and the contents of plugin `reads` files are in the key: a value a hook only closes over isn't.
+- A version reused from the cache must give the build what compiling it would have: its markup, its attachments (snapshots by key and blob), and its browser resources. Anything else `compileNoteVersion` does to the build has to be cached too, or a warm build differs from a cold one (the plugin-history and CLI tests compare them).
 
 ## Live history from the mirror
 

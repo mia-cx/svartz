@@ -180,7 +180,25 @@ The vault's rules still decide: an attachment `exclude` keeps out, or one only p
 
 Each note lists its latest 50 versions. `history({ source: "git", maxVersions: 100 })` lists more; it takes a whole number of at least 2. Past it, older versions aren't listed, and the list says so.
 
-Building a note's versions takes a few git calls (its log, the files its commits changed, and its text at each version, read in batches), then for each listed version one more (the attachments its commit held), a diff, and one build of the note, so each listed version costs about what the note itself costs to build. Build time grows with `maxVersions` and the note's length, not with the length of its history. A diff of more than 1,000 changed lines, or of sources over 40,000 lines together, isn't shown line by line; its page says so and still shows the note as it read then.
+Building a note's versions takes a few git calls (its log, the files its commits changed, and its text at each version, read in batches), then for each listed version a diff and, the first time, one more git call (the attachments its commit held) and one build of the note, so each new version costs about what the note itself costs to build. A diff of more than 1,000 changed lines, or of sources over 40,000 lines together, isn't shown line by line; its page says so and still shows the note as it read then.
+
+### The version cache
+
+A version's content never changes once committed, so the build keeps each compiled version in `.svartz/vaults/<id>/cache/versions/`, beside the vault's other build files, and later builds reuse it. The build reports how many versions it compiled and how many it reused: `[history] vault "blog": compiled 1 version, reused 49 from the cache`.
+
+A cached version is reused only while everything its compile reads is unchanged:
+
+- the commit and the note's path at that commit, and the note's own path, slug and address now;
+- the vault's resolved configuration, its plugins and their options, and the build's Markdown steps;
+- every other published note's path, address, frontmatter and protection, and, for a version that embeds or may embed one (`![[…]]` or `{{…}}`), their sources;
+- the attachments in the vault, by path, and every page and file the site publishes;
+- Svartz's own code, by content, and the project's lockfile.
+
+Changing any of these compiles the versions it affects again. Adding, moving or retitling a note, or changing its frontmatter, compiles every version again; editing the body of the note whose versions they are compiles only its new version. Which versions show is decided before the cache is read, on every build, so a version hidden or excluded since is never served from it. The cache holds only versions that showed, and a build that finishes removes every entry it didn't use. A build that fails part way leaves the cache as it was, since it never reached the versions it would have reused. A version a plugin couldn't read isn't cached, so the next build tries it again.
+
+A plugin's options count through the plugin's `options` field, which every option-taking plugin in `@svartz/plugins` sets. A plugin that keeps the values its output depends on only inside its hooks' closures is invisible to the cache, so changing them reuses stale versions: such a plugin must put them in `options` (see [Create a plugin](../vaults/docs/guides/create-plugin.md)). Files a plugin reads while compiling, such as the bibliography `citations()` reads, count by content through its `reads` field, so a changed bibliography compiles the versions that cite it again.
+
+Deleting `.svartz/vaults/<id>/cache` is always safe, and forces a full recompile: the next build compiles every version again.
 
 ### Building in CI
 
@@ -191,3 +209,17 @@ The build needs the repository's full history. A shallow clone fails the build o
   with:
     fetch-depth: 0
 ```
+
+Keep the [version cache](#the-version-cache) between runs, or every CI build compiles every version. Restore it before the build and save it after; the cache checks every entry itself, so restoring any earlier run's is safe. Key it by the commit, so each run saves what it compiled, and fall back to the latest run's:
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: .svartz/vaults/*/cache
+    key: svartz-versions-${{ github.ref_name }}-${{ github.sha }}
+    restore-keys: |
+      svartz-versions-${{ github.ref_name }}-
+      svartz-versions-
+```
+
+Put it after `actions/checkout` and before the build step. `.svartz/` is the build folder beside the config; a host app keeps its vaults' caches beside its other build files, wherever its `outDir` puts them.

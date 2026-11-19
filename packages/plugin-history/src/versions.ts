@@ -6,14 +6,16 @@
  * The pages are page artifacts and routes the build adds after indexing, never files in the pipeline, so search, the
  * explorer, the graph, tags, backlinks, feeds and sitemaps never see them, and the theme renders each in its shell as
  * it renders a listing: the body as the page, without a note around it. A version's body compiles as the note does,
- * through the vault's own steps (`compileNoteVersion`), and the attachments it references are published with it.
+ * through the vault's own steps (`compileNoteVersion`), and the attachments it references are published with it. A
+ * compiled version is cached (`cache.ts`), so a later build compiles only versions that are new or whose inputs changed.
  *
  * A version shows only when the build would have published it unprotected at the path it had then. Diffs run between
  * consecutive shown versions, so nothing of a hidden one shows, not even as the "before" of the next.
  */
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { matchThemeRoute, PluginAggregateError, type IndexEntry, type PluginContext, type ProcessedFile, type SvartzTheme } from "@svartz/core";
+import { getCompilerContributions, matchThemeRoute, PluginAggregateError, type IndexEntry, type PluginContext, type ProcessedFile, type SvartzTheme } from "@svartz/core";
+import { buildFingerprint, fileFingerprints, mayEmbed, VersionCache, versionKey } from "./cache";
 import { compileNoteVersion, keepsAttachment, publishedAttachments, publishesNote } from "@svartz/plugins";
 import { extractFrontmatter } from "@svartz/plugins/routes";
 import { diffLines } from "./diff";
@@ -120,8 +122,26 @@ function component(page: VersionsPage, site: string, body = ""): string {
  * show, as page artifacts and routes, and the attachments those versions reference that the build doesn't publish
  * already. Answers the routes of those notes, which link their versions. Fails the build when the vault isn't in a
  * git repository with its whole history, or a version page's address is taken.
+ *
+ * Every exit of a build that walked every note prunes the cache to the versions it used, so it holds only versions
+ * that show. A build that fails part way leaves it as it is: it never reached the versions it would have reused, and
+ * removing them would only make the next build compile them again. What it keeps of a version hidden since is never
+ * served, since visibility is decided before the cache is read, and was published once from the history the build
+ * reads anyway.
  */
 export async function emitVersions(ctx: PluginContext, maxVersions: number): Promise<string[]> {
+  const cache = VersionCache.for(ctx);
+  let walked = false;
+  try {
+    const linked = await buildVersions(ctx, maxVersions, cache);
+    walked = true;
+    return linked;
+  } finally {
+    if (walked) await cache.prune();
+  }
+}
+
+async function buildVersions(ctx: PluginContext, maxVersions: number, cache: VersionCache): Promise<string[]> {
   const index = ctx.index;
   if (!index) return [];
   const vault = ctx.config.id;
@@ -150,6 +170,13 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
     ...[...published].filter((path) => !NOTE_FILE.test(path)).map((path) => `${mountPath}/${path}`),
     ...[...ctx.artifacts.keys()].filter((key) => key.startsWith("assets/")).map((key) => `${mountPath}/${key.slice("assets/".length)}`),
   ]);
+  // What every version's compile reads besides the published files, which each key adds per note: everything here
+  // goes in the key, so a version compiles again when any of it changes.
+  const build = await buildFingerprint(ctx, { urls: [...urls].sort(), attachments: [...inTreePaths].sort(), prefix: TO_NOTE, blobId: BLOB_ID });
+  const files = fileFingerprints(ctx);
+  const resources = getCompilerContributions(ctx).browserResources;
+  /** Versions compiled now, and versions reused from the cache. */
+  const counts = { compiled: 0, reused: 0 };
   /** Attachments still in the vault that version pages reference, by vault path, and where to read each. */
   const fromTree = new Map<string, string>();
   /** Attachments gone from the vault that version pages reference, by the artifact key each publishes at, and the blob to read. */
@@ -231,27 +258,47 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
       const before = shown[position + 1];
       const newer = listed[position - 1];
       const older = listed[position + 1];
-      const candidates = await candidatesAt(version, list);
-      let compiled: Awaited<ReturnType<typeof compileNoteVersion>> | undefined;
-      try {
-        compiled = await compileNoteVersion(ctx, note, version, {
-          attachments: candidates.files,
-          prefix: TO_NOTE,
-          published: (path) => urls.has(path),
-          moved: new Map([...candidates.snapshots].map(([path, { url }]) => [path, url])),
-        });
-      } catch (error) {
-        const where = `the version of "${note.path}" in vault "${vault}" at ${version.commit.sha}`;
-        // An old version can't be edited to fix what a plugin couldn't read in it: its page shows its changes without
-        // the rendered page, and the build goes on. A fatal error still stops the build, as it does for a note.
-        if (!(error instanceof PluginAggregateError) || error.errors.some(({ fatal }) => fatal)) {
-          throw new Error(`[history] couldn't build ${where}`, { cause: error });
+      const key = versionKey(build, files, { slug: note.slug, path: note.path, href: note.href }, {
+        sha: version.commit.sha,
+        path: version.path,
+        embeds: mayEmbed(version.markdown),
+      });
+      let compiled = await cache.get(key);
+      if (compiled) {
+        counts.reused++;
+        for (const resource of compiled.resources) if (!resources.has(resource.id)) resources.set(resource.id, resource);
+      } else {
+        counts.compiled++;
+        const candidates = await candidatesAt(version, list);
+        try {
+          const fresh = await compileNoteVersion(ctx, note, version, {
+            attachments: candidates.files,
+            prefix: TO_NOTE,
+            published: (path) => urls.has(path),
+            moved: new Map([...candidates.snapshots].map(([path, { url }]) => [path, url])),
+          });
+          compiled = {
+            markup: fresh.markup,
+            attachments: fresh.attachments.map((path) => {
+              const snapshot = candidates.snapshots.get(path);
+              return snapshot ? { path, snapshot: { key: snapshot.key, blob: snapshot.blob } } : { path };
+            }),
+            resources: fresh.resources,
+          };
+          await cache.set(key, compiled);
+        } catch (error) {
+          const where = `the version of "${note.path}" in vault "${vault}" at ${version.commit.sha}`;
+          // An old version can't be edited to fix what a plugin couldn't read in it: its page shows its changes without
+          // the rendered page, and the build goes on. A fatal error still stops the build, as it does for a note. It
+          // isn't cached, so the next build tries again.
+          if (!(error instanceof PluginAggregateError) || error.errors.some(({ fatal }) => fatal)) {
+            throw new Error(`[history] couldn't build ${where}`, { cause: error });
+          }
+          console.warn(`[history] showing ${where} without its rendered page: ${error.errors.map(({ message }) => message).join("; ")}`);
         }
-        console.warn(`[history] showing ${where} without its rendered page: ${error.errors.map(({ message }) => message).join("; ")}`);
       }
-      for (const path of compiled?.attachments ?? []) {
-        const snapshot = candidates.snapshots.get(path);
-        const sourcePath = candidates.files.find((file) => file.path === path)?.sourcePath;
+      for (const { path, snapshot } of compiled?.attachments ?? []) {
+        const sourcePath = inTree.find((file) => file.path === path)?.sourcePath;
         if (snapshot) fromGit.set(snapshot.key, snapshot.blob);
         else if (sourcePath) fromTree.set(path, sourcePath);
       }
@@ -278,6 +325,7 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
   const bytes = await readFiles(repository.root, snapshots.map(([, blob]) => blob));
   snapshots.forEach(([key], index) => asset(key, bytes[index]));
 
+  console.info(`[history] vault "${vault}": compiled ${counts.compiled} ${counts.compiled === 1 ? "version" : "versions"}, reused ${counts.reused} from the cache`);
   ctx.index = { ...index, routes: { ...index.routes, all: [...new Set([...index.routes.all, ...routes])].sort() } };
   return linked;
 }

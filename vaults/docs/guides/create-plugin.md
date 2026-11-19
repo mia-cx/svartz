@@ -24,6 +24,23 @@ export const stripMarker = definePlugin(() => ({
 }));
 ```
 
+A plugin that takes options closes over them in its hooks, where nothing outside can read them. Put the values its output depends on in the plugin's `options` too, merged over your defaults: previous versions built from git (`history({ source: "git" })`) reuse compiled pages until a plugin's `options` (or its code) change, so a value only a closure holds would leave them stale. List the files your hooks read while building, such as a bibliography, in `reads`, as paths from the vault's folder or absolute ones: the cache compares their contents. Deleting `.svartz/vaults/<id>/cache` forces every version to compile again.
+
+```ts
+export const marker = (userOptions: { text?: string } = {}) => {
+  const options = { text: "%%marker%%", ...userOptions };
+  return definePlugin(() => ({
+    id: "mine:marker",
+    options,
+    transformOfm: {
+      run(ctx) {
+        for (const file of ctx.files) file.content = file.content.replaceAll(options.text, "");
+      },
+    },
+  }))();
+};
+```
+
 Add `stripMarker()` to `defaults.plugins` for every vault or to one vault's `plugins` array. Use a unique ID. A more specific config entry with the same ID replaces it without changing its position. To remove an optional built-in, add `{ id: "core:transform-syntax", disabled: true }`.
 
 If your feature changes Markdown parsing, use `getCompilerContributions(ctx)` instead of rewriting source text. Add remark or rehype plugins to its arrays. Put browser imports into `browserResources` with stable IDs and a `kind` of `css`, `script`, or `asset`. The Vite artifact module imports active resources and exports URLs for assets. This state belongs to one build; never keep it in a module-level variable.

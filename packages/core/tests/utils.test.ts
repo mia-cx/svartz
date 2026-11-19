@@ -96,6 +96,18 @@ describe("normalizePlugin", () => {
     spy.mockRestore();
   });
 
+  // Proves the data a plugin was made from, and the files it reads, survive normalization, where the version cache
+  // reads them, as known keys.
+  it("keeps a plugin's options and the files it reads, without a warning", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const options = { TODOComponent: false };
+    const plugin = normalizePlugin({ id: "test", options, reads: ["refs.bib"] });
+    expect(plugin.options).toBe(options);
+    expect(plugin.reads).toEqual(["refs.bib"]);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
   it("warns when disabled plugin has hooks", () => {
     const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
     normalizePlugin({

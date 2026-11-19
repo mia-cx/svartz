@@ -22,6 +22,16 @@ Body content here.`;
     expect(bodyMarkdown.trim()).toBe("Body content here.");
   });
 
+  // Proves each parse of the same note answers its own frontmatter: the pipeline writes derived values into it, and a
+  // second build in the same process (a dev rebuild, a version identical to its note) must not read them as authored.
+  it("answers fresh frontmatter on every parse of the same text", () => {
+    const content = "---\ntitle: Hello\n---\nBody.";
+    const first = extractFrontmatter(content).frontmatter!;
+    first.description = "written by the build";
+
+    expect(extractFrontmatter(content).frontmatter).toEqual({ title: "Hello" });
+  });
+
   it("returns undefined frontmatter when none present", () => {
     const { frontmatter, bodyMarkdown } = extractFrontmatter("Just text.");
     expect(frontmatter).toBeUndefined();

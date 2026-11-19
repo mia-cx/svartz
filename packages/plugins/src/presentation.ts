@@ -26,6 +26,7 @@ function markSlideBreaks() {
  */
 export const presentation = (options: PresentationOptions = {}) => definePlugin(() => ({
   id: "core:presentation",
+  options: { key: options.key ?? "p" },
   transformGfm: {
     run(ctx) {
       const compiler = getCompilerContributions(ctx);
