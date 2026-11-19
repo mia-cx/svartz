@@ -29,6 +29,7 @@ import {
   postComment,
   readPullRequest,
   readSource,
+  sameRepository,
   submissionBranch,
   type Attribution,
   type GitHubTarget,
@@ -359,7 +360,7 @@ export function createMySubmissions(setup: MySubmissionsSetup) {
     const pull = await readPullRequest(github, number);
     if (!pull?.open) throw new SubmissionError("closed", 409, "This submission is closed, so it takes no more edits.");
     const branches = (["edit", "new"] as const).map((kind) => submissionBranch({ kind, page: edit.page, id: edit.id }));
-    if (!branches.includes(pull.headRef) || pull.headRepo?.toLowerCase() !== setup.repo.toLowerCase()) {
+    if (!branches.includes(pull.headRef) || !sameRepository(pull.headRepo, setup.repo)) {
       throw new SubmissionError("not_found", 404, "This site has no submission of yours with that number.");
     }
     return { edit, github, branch: pull.headRef, head: pull.headSha };

@@ -716,6 +716,25 @@ describe("closing a submission", () => {
     }]);
   });
 
+  // Proves GitHub's case-insensitive names: the repository spelled in another case is still the one submissions target.
+  it("closes a submission whose repository GitHub names in another case", async () => {
+    const { site, grace } = await submitted();
+    await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
+    const replay = replayGitHub([pullExchange({ fullName: "WikiPlace/WikiPlace.live" }), repositoryExchange, closeExchange], INSTALLATION_TOKEN);
+
+    expect((await close(site, grace)).status).toBe(303);
+    expect(replay.pending).toEqual([]);
+  });
+
+  it("refuses a pull request from another repository", async () => {
+    const { site, grace } = await submitted();
+    await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
+    replayGitHub([pullExchange({ fullName: "someone/wikiplace.live" })], INSTALLATION_TOKEN);
+
+    expect((await close(site, grace)).status).toBe(404);
+    expect(await audited(site)).toEqual([]);
+  });
+
   // Proves review rights stay with their vault: another vault on the same repository can't close this vault's submission.
   it("refuses a submission another vault on the same repository saved, as it refuses one that doesn't exist", async () => {
     const { site, grace } = await submitted();

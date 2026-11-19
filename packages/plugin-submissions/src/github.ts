@@ -442,6 +442,9 @@ export async function commitSubmission(
   throw new SubmissionError("branch_busy", 503, "Other edits are being saved right now. Try again in a moment.");
 }
 
+/** Whether `name`, an `owner/name` GitHub answered, is `repo`: GitHub's owner and repository names ignore case. */
+export const sameRepository = (name: string | null | undefined, repo: string) => name?.toLowerCase() === repo.toLowerCase();
+
 /** Every submission's branch starts with this, as {@link submissionBranch} names it. */
 const SUBMISSION_BRANCH_PREFIX = "svartz/submission/";
 
@@ -461,7 +464,7 @@ export async function closeSubmission(target: GitHubTarget, number: number, reco
   if (response.status === 404) throw notFound;
   if (!response.ok) throw await failure(target, response);
   const pull = await response.json() as PullRequest & { state: string; head: { ref: string; repo: { full_name: string } | null }; base: { ref: string } };
-  if (!pull.head.ref.startsWith(SUBMISSION_BRANCH_PREFIX) || pull.head.repo?.full_name !== target.repo) throw notFound;
+  if (!pull.head.ref.startsWith(SUBMISSION_BRANCH_PREFIX) || !sameRepository(pull.head.repo?.full_name, target.repo)) throw notFound;
   // Retargeted to another branch, it no longer submits to this vault's content.
   if (pull.base.ref !== await baseBranch(target)) throw notFound;
   if (pull.state !== "open") return { url: pull.html_url, closed: false };

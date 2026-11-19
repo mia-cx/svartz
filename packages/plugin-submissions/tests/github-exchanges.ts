@@ -379,10 +379,13 @@ export function useFakeTimeouts() {
   });
 }
 
-/** Reading pull request #42: a submission from this site to `main`, unless `ref` or `base` names another branch. */
-export const pullExchange = ({ state = "open", ref = branchFor("wiki-guide"), base = "main" } = {}): Exchange => ({
+/**
+ * Reading pull request #42: a submission from this site to `main`, unless `ref` or `base` names another branch. GitHub
+ * names its head repository `fullName`.
+ */
+export const pullExchange = ({ state = "open", ref = branchFor("wiki-guide"), base = "main", fullName = REPO } = {}): Exchange => ({
   request: { method: "GET", url: `${API}/pulls/42` },
-  response: { status: 200, json: { ...PULL_42, state, head: { ref, repo: { full_name: REPO } }, base: { ref: base } } },
+  response: { status: 200, json: { ...PULL_42, state, head: { ref, repo: { full_name: fullName } }, base: { ref: base } } },
 });
 
 /** Closing pull request #42 without merging it. */
