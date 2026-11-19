@@ -421,7 +421,7 @@ Admins change the weights and the daily limit on the dashboard's **Reputation** 
 
 ### Thresholds
 
-A threshold gives a [stored role](#roles) to every account whose score reaches it, with an `auth:role:promote` entry in [the audit log](#the-audit-log) naming the account, its score and the threshold. Set one per role on the **Reputation** panel; saving it gives the role to every account already past it. `admin` can't have one.
+A threshold gives a [stored role](#roles) to every account whose score, to two decimals as the account sees it, reaches it, with an `auth:role:promote` entry in [the audit log](#the-audit-log) naming the account, its score and the threshold. Set one per role on the **Reputation** panel; saving it gives the role to every account already past it. `admin` can't have one.
 
 Nothing ever takes a role away automatically: a lower score, a taken-back **+1** or a removed threshold leaves every role where it is. A role reputation gave shows **By reputation** under Roles on People & permissions, and only an admin can remove it. Once removed, it stays removed: reputation gives each account each role at most once.
 
@@ -439,14 +439,14 @@ import { postReputation } from "@svartz/auth/server";
 await postReputation(context.env, { kind: "page", to: { account: account.id }, ref: `guestbook:entry:${entry.id}` });
 ```
 
-`postReputation(env, event)` records `event`, weighed with the site's weights, then gives the account any role a threshold now grants. `to` names who earns: an account by `{ account: <id> }`, or the account a provider account is linked to by `{ identity: "github:583231" }`; an event for nobody's account changes nothing. `ref` names the event, unique within its kind and starting with your plugin's id, and an event posted again with the same `ref` changes nothing.
+`postReputation(env, event)` records `event`, weighed with the site's weights, then gives the account any role a threshold now grants. `to` names who earns: an account by `{ account: <id> }`, or the account a provider account is linked to by `{ identity: "github:583231" }`; an event for nobody's account changes nothing. `ref` names the event, unique within its kind and starting with your plugin's id. An event posted again with the same `ref` scores nothing more, but gives any role the first post failed to give, so retry a post that threw.
 
 | `kind` | Fields | |
 | --- | --- | --- |
 | `edit` | `lines` | An edit landed, changing `lines` lines (added plus removed). |
 | `page` | | A new page landed. |
 | `declined` | | A pull request closed without merging. |
-| `agreement` | `from`, `agreed` | Account `from` now agrees (`true`) or no longer agrees with what `to` wrote. `ref` names the pair; the agreement scores once while it stands, and when it is taken back, the same points are taken back. Nobody scores from their own. |
+| `agreement` | `from`, `agreed` | Account `from` now agrees (`true`) or no longer agrees with what `to` wrote. `ref` names the pair; the agreement scores once while it stands, and when it is taken back, the same points are taken back. Nobody scores from their own. Read `agreed` from your store, and read it again after posting: when it changed meanwhile, post again, so the ledger ends as the agreement is stored. |
 
 Post only what your server knows happened, for the account your own records name: never an account a request or a commit claims. `postReputation` throws when the site binds no `SVARTZ_DB`, or the write fails.
 

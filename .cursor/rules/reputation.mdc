@@ -10,4 +10,8 @@ alwaysApply: false
 - `ref` names the event and starts with the plugin id. Make it stable across webhook redeliveries and polls (a commit SHA, a pull request number), never a timestamp, so the same event never scores twice.
 - Credit only the account the site's own records name: `submissions_edits` for saves (the commit it made, the pull request it opened), the server's session for a +1. A commit's `Svartz-Account` trailer, author and committer are git metadata anyone can forge, the bot's noreply address included: never evidence of who earns.
 - Taking points back is a further entry (`agreement` with `agreed: false` settles the pair). The ledger and `auth_reputation_promotions` are append-only by trigger.
+- Settle an `agreement` from stored state, never a request's snapshot: read it, post, read it again, and post again until the two match, so a racing request can't leave stale points.
+- Mark a credit settled only after `postReputation` resolves. A replay scores nothing more but finishes a promotion that failed, so a thrown post must be retried, not skipped.
+- Compare scores with thresholds at the ledger's two decimals (`SCORES` in `reputation.ts`); a raw `SUM` drifts below what the account sees.
+- D1 has no interactive transactions: a limit that must hold under races (kudos per day, the daily limit) lives in the inserting statement's own `WHERE`, not in a read before it.
 - Thresholds only add roles. Never remove a role automatically, and never re-give one recorded in `auth_reputation_promotions`: that is how an admin's removal sticks.
