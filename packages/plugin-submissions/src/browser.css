@@ -783,9 +783,14 @@
 	white-space: nowrap;
 }
 
+/* Not the accent: some themes' accent is red, which would read as a failure. */
 .svartz-submissions-stage[data-stage="building"] {
-	border-color: var(--sv-accent);
+	border-color: currentColor;
 	color: var(--sv-ink);
+}
+
+.svartz-submissions-edit time {
+	white-space: nowrap;
 }
 
 .svartz-submissions-stage[data-stage="live"] {
