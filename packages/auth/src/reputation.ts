@@ -3,6 +3,7 @@
  * account's score is the sum of its entries. Plugins post events with {@link postReputation}; auth weighs each with
  * the site's weights, records it once however often it is posted, and gives every role whose threshold the score
  * reaches. Nothing ever takes a role away, and reputation never gives a role twice, so an admin's removal sticks.
+ * A plugin whose content was undone takes back what it earned with {@link reverseReputation}.
  */
 import { auditStatement, type AuditEntry } from "./audit";
 import { accountsDatabase, ACCOUNTS_DATABASE_ENV, type Database } from "./store";
@@ -221,16 +222,21 @@ const limitedPoints = (account: string, points: string, limit: string, day: stri
   `MAX(0, MIN(${points}, ${limit} - COALESCE((SELECT SUM(points) FROM auth_reputation WHERE account_id = ${account} AND points > 0
     AND at >= ${day} AND source IN (SELECT value FROM json_each(${sources}))), 0)))`;
 
+/** The source of the entries {@link reverseReputation} writes, each under the ref of the event it takes back. */
+const REVERSAL = "reversal";
+
 /**
- * Append an entry unless one for `(source, ref)` exists. A positive entry from a {@link LIMITED} source is cut to what is
- * left of the account's daily limit, so it may land as 0.
+ * Append an entry unless one for `(source, ref)` exists, or `ref` was reversed: an event taken back before it was
+ * posted scores nothing. A positive entry from a {@link LIMITED} source is cut to what is left of the account's daily
+ * limit, so it may land as 0.
  */
 async function append(db: Database, entry: { account: string; source: string; ref: string; points: number }, dailyLimit?: number): Promise<void> {
   const values = [entry.account, entry.source, entry.ref, rounded(entry.points), new Date().toISOString()];
   const limited = dailyLimit !== undefined && entry.points > 0;
   const points = limited ? limitedPoints("?1", "?4", "?6", "?7", "?8") : "?4";
   await db.prepare(`INSERT INTO auth_reputation (account_id, source, ref, points, at)
-      SELECT ?1, ?2, ?3, ${points}, ?5 WHERE true ON CONFLICT (source, ref) DO NOTHING`)
+      SELECT ?1, ?2, ?3, ${points}, ?5 WHERE NOT EXISTS (SELECT 1 FROM auth_reputation WHERE source = '${REVERSAL}' AND ref = ?3)
+      ON CONFLICT (source, ref) DO NOTHING`)
     .bind(...values, ...limited ? [dailyLimit, today(), JSON.stringify(LIMITED)] : [])
     .run();
 }
@@ -264,11 +270,15 @@ async function settleAgreement(db: Database, event: Extract<ReputationEvent, { k
   ]);
 }
 
-/** Throw unless `event` is one auth can weigh: a plugin bug, never a reader's input. */
-function check(event: ReputationEvent): void {
-  if (typeof event.ref !== "string" || event.ref === "" || event.ref.length > REF_MAX_LENGTH) {
+function checkRef(ref: string): void {
+  if (typeof ref !== "string" || ref === "" || ref.length > REF_MAX_LENGTH) {
     throw new Error(`[svartz:auth] a reputation event's ref must be 1 to ${REF_MAX_LENGTH} characters`);
   }
+}
+
+/** Throw unless `event` is one auth can weigh: a plugin bug, never a reader's input. */
+function check(event: ReputationEvent): void {
+  checkRef(event.ref);
   if (event.kind === "edit" && !(Number.isFinite(event.lines) && event.lines >= 0)) {
     throw new Error("[svartz:auth] an edit's lines must be a finite number of at least 0");
   }
@@ -305,6 +315,39 @@ export async function postReputation(env: Env, event: ReputationEvent): Promise<
   // Decided from the ledger as just written, and also when the event was recorded before: posting it again finishes a
   // promotion that failed after its entry landed.
   if (account) await promote(db, account);
+}
+
+/** Taking back what an `edit` or `page` event earned, when the content it scored for is undone. */
+export interface Reversal {
+  /** The account the event credited, as the plugin's own records name it. */
+  readonly account: string;
+  /** The ref the event was posted with. */
+  readonly ref: string;
+}
+
+/**
+ * Take back what each `edit` or `page` event `ref` earned its `account`, as one `reversal` entry per event under the
+ * same ref, all in one transaction however many there are, then give any role a threshold grants. An event is taken
+ * back once: reversing it again changes nothing. An event not posted yet still gets its entry, at 0 points, and scores
+ * nothing when it is posted; one that was posted and earned `account` nothing (it scored 0, or credited someone else)
+ * gets none. A reversal lowers a score but never takes away a role the account holds.
+ *
+ * Throws when the site binds no `SVARTZ_DB`, or the write fails.
+ */
+export async function reverseReputation(env: Env, reversals: readonly Reversal[]): Promise<void> {
+  for (const { ref } of reversals) checkRef(ref);
+  if (reversals.length === 0) return;
+  const db = await accountsDatabase(env);
+  if (!db) throw new Error(`[svartz:auth] bind a D1 database as ${ACCOUNTS_DATABASE_ENV} to keep reputation`);
+  const at = new Date().toISOString();
+  await db.batch(reversals.map(({ account, ref }) => db.prepare(`INSERT INTO auth_reputation (account_id, source, ref, points, at)
+      SELECT ?1, '${REVERSAL}', ?2, ROUND(-e.earned, 2), ?3 FROM (
+        SELECT COALESCE(SUM(CASE WHEN account_id = ?1 THEN points END), 0) AS earned, COUNT(*) AS entries
+        FROM auth_reputation WHERE source IN ('edit', 'page') AND ref = ?2
+      ) e
+      WHERE (e.earned <> 0 OR e.entries = 0) AND EXISTS (SELECT 1 FROM auth_accounts WHERE id = ?1)
+      ON CONFLICT (source, ref) DO NOTHING`).bind(account, ref, at)));
+  await promote(db);
 }
 
 /** What giving kudos came to. */

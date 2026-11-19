@@ -70,7 +70,7 @@ export {
 } from "./suspensions";
 export { linkedIdentities } from "./identities";
 export { userPageLocation, type UserPageLocation } from "./user-pages";
-export { postReputation, type Recipient, type ReputationEvent, type Standing, type Threshold } from "./reputation";
+export { postReputation, reverseReputation, type Recipient, type ReputationEvent, type Reversal, type Standing, type Threshold } from "./reputation";
 
 /**
  * The public profile of the account that holds or held `handle`, under its current handle; `undefined` when no account

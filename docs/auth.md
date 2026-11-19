@@ -517,6 +517,16 @@ await postReputation(context.env, { kind: "page", to: { account: account.id }, r
 
 Post only what your server knows happened, for the account your own records name: never an account a request or a commit claims. `postReputation` throws when the site binds no `SVARTZ_DB`, or the write fails.
 
+### Taking points back
+
+```ts
+import { reverseReputation } from "@svartz/auth/server";
+
+await reverseReputation(context.env, [{ account: account.id, ref: `guestbook:entry:${entry.id}` }]);
+```
+
+When content an `edit` or `page` event scored for is undone, as when a moderator [reverts a page](history.md#reverting-a-page), `reverseReputation(env, reversals)` takes back what each event earned `account`: one `reversal` entry per event, under the event's `ref`, all in one transaction. An event is taken back once, however often it is reversed. An event that hasn't been posted yet, such as an edit whose lines aren't counted yet, gets its entry at 0 points and scores nothing when it is posted; an event that earned `account` nothing gets no entry. A lower score never takes away a role the account already holds. It throws as `postReputation` does.
+
 ## The audit log
 
 Every grant, role and group change, every change to reputation's weights and thresholds, every role a threshold gives, every kudos and every [suspension](#suspensions) and lift is recorded in `auth_audit` in `SVARTZ_DB`: who made it, what it was, and when. The log is append-only: the database refuses to change or delete an entry. A change and its entry are written in one transaction, so neither lands without the other.
