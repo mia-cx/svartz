@@ -32,6 +32,8 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
   const buttons: HTMLButtonElement[] = [];
   let close: (() => void) | undefined;
   let unmounted = false;
+  /** The editor is on its way for a button already pressed. */
+  let loading = false;
   /** Opens the panel the reader left to sign in from this page. */
   let resume: (() => Promise<void>) | undefined;
 
@@ -43,7 +45,10 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
     button.type = "button";
     button.innerHTML = `${icon}${label}`;
     const open = async () => {
-      const { openEditor } = await import("./editor");
+      // The open panel covers its button, so only the wait for the editor can take a second press.
+      if (loading) return;
+      loading = true;
+      const { openEditor } = await import("./editor").finally(() => (loading = false));
       // The page may have gone while the editor loaded; its panel would outlive the cleanup below.
       if (unmounted) return;
       close = openEditor({

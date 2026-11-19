@@ -398,6 +398,8 @@ describe("sign-in", () => {
     serve(() => Response.json(SIGNED_OUT, { status: 401 }));
     unmount = mount(HERE, SIGN_IN_OPTIONS, { base: "" });
     await page.getByRole("button", { name: "New page" }).click();
+    // Typed before the panel opens, the title's space would press the button again.
+    await expect.element(page.getByRole("textbox", { name: "Title" })).toHaveFocus();
     await userEvent.keyboard("Ada Lovelace");
     await page.getByRole("combobox", { name: "Section" }).selectOptions("People");
     await page.getByRole("textbox", { name: "Page source" }).click();
@@ -490,6 +492,17 @@ describe("New page", () => {
     await page.getByRole("textbox", { name: "Page source" }).click();
     await userEvent.keyboard("# Ada Lovelace");
   }
+
+  it("opens one panel when its button is pressed again before the editor arrives", async () => {
+    serve(() => Response.json({}));
+    unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+    const button = page.getByRole("button", { name: "New page" }).element() as HTMLButtonElement;
+    button.click();
+    button.click();
+
+    await expect.element(page.getByRole("heading", { name: "New page" })).toBeVisible();
+    expect(document.querySelectorAll("dialog")).toHaveLength(1);
+  });
 
   it("lists the published sections and opens a pull request adding the page", async () => {
     const fetch = serve(() => Response.json({ kind: "pull-request", url: "https://github.com/acme/wiki/pull/9", number: 9 }, { status: 201 }));
@@ -848,6 +861,7 @@ describe("drafts", () => {
     serve(() => Response.json({}));
     unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
     await page.getByRole("button", { name: "New page" }).click();
+    await expect.element(page.getByRole("textbox", { name: "Title" })).toHaveFocus();
     await userEvent.keyboard("Ada Lovelace");
     await page.getByRole("combobox", { name: "Section" }).selectOptions("People");
     await page.getByRole("textbox", { name: "Page source" }).click();

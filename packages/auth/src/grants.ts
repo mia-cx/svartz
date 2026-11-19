@@ -1,11 +1,12 @@
 /**
- * Checking permissions at runtime: {@link can} loads the grants that could apply in one query and hands them, with the
- * declared defaults, to the pure resolver. {@link migrateGrants} moves a plugin's config list onto grants, once.
+ * Checking permissions at runtime: {@link can} loads the grants that could apply and who is asking in one D1 call, and
+ * hands them, with the declared defaults, to the pure resolver. {@link migrateGrants} moves a plugin's config list onto grants, once.
  */
 import type { PermissionDeclaration, PermissionSlug } from "@svartz/core";
 import {
   objectChain, resolve, SITE, userPageHandle, type Decision, type Grant, type GrantValue, type PermissionTarget, type Principals,
 } from "./permissions";
+import { memberships, membershipsQuery, type MembershipRow } from "./groups";
 import type { Account } from "./session";
 import { accountsDatabase, handlesOf, type Database } from "./store";
 import { userPageLocation } from "./user-pages";
@@ -41,12 +42,26 @@ interface GrantRow {
   value: GrantValue;
 }
 
-/** Every stored grant of `permission` on `chain`'s objects, in one query whatever the chain's length. */
-async function loadGrants(db: Database, permission: string, chain: readonly string[]): Promise<Grant[]> {
-  const { results } = await db.prepare(`SELECT actor_type, actor_id, object, value FROM auth_grants
-      WHERE permission = ?1 AND object IN (SELECT value FROM json_each(?2))`)
-    .bind(permission, JSON.stringify(chain)).all<GrantRow>();
-  return results.map((row) => ({ actorType: row.actor_type, actorId: row.actor_id, object: row.object, permission, value: row.value }));
+/**
+ * What a check reads, in one D1 call however long the chain: every stored grant of `permission` on `chain`'s objects,
+ * and who `account` is to the resolver. That is itself, its roles (config's `admin` and stored ones) and its groups,
+ * read on every check, so a removed member loses the group's grants on their next request. Its former handles cost a
+ * second call, made only when `chain` checks a user page under another handle than its current one, the one case they
+ * can decide.
+ */
+async function load(
+  db: Database, account: Pick<Account, "id" | "handle" | "roles"> | null, permission: string, chain: readonly string[],
+): Promise<[stored: Grant[], who: Principals]> {
+  const grants = db.prepare(`SELECT actor_type, actor_id, object, value FROM auth_grants
+      WHERE permission = ?1 AND object IN (SELECT value FROM json_each(?2))`).bind(permission, JSON.stringify(chain));
+  const [granted, joined] = await db.batch(account ? [grants, membershipsQuery(db, account.id)] : [grants]);
+  const stored = (granted!.results as GrantRow[])
+    .map((row): Grant => ({ actorType: row.actor_type, actorId: row.actor_id, object: row.object, permission, value: row.value }));
+  if (!account) return [stored, { roles: [], groups: [] }];
+  const owner = userPageHandle(chain[0], userPageLocation());
+  const formerHandles = owner !== undefined && owner !== account.handle ? await handlesOf(db, account.id) : [];
+  const groups = memberships(joined!.results as MembershipRow[]);
+  return [stored, { account: { id: account.id, handle: account.handle, formerHandles }, roles: account.roles, groups }];
 }
 
 /** `stored`, plus each declared default no stored grant to the same actor on the site replaces. */
@@ -55,18 +70,6 @@ function withDefaults(stored: readonly Grant[], { slug, defaults = {} }: Permiss
   const declaredGrants = Object.entries(defaults).filter(([actor]) => !replaced(actor))
     .map(([actor, value]): Grant => ({ actorType: "static", actorId: actor, object: SITE, permission: slug, value }));
   return [...stored, ...declaredGrants];
-}
-
-/**
- * Who `account` is to the resolver: itself, its roles (config's `admin` and stored ones), and its former handles, loaded
- * only when `chain` checks a user page under another handle than its current one, the one case they can decide. Groups
- * arrive with their table.
- */
-async function principalsOf(db: Database, account: Pick<Account, "id" | "handle" | "roles"> | null, chain: readonly string[]): Promise<Principals> {
-  if (!account) return { roles: [], groups: [] };
-  const owner = userPageHandle(chain[0], userPageLocation());
-  const formerHandles = owner !== undefined && owner !== account.handle ? await handlesOf(db, account.id) : [];
-  return { account: { id: account.id, handle: account.handle, formerHandles }, roles: account.roles, groups: [] };
 }
 
 /** Every permission the site's plugins declare, in the order they registered. */
@@ -86,10 +89,19 @@ export interface Explanation extends Decision {
  */
 export async function explain(db: Database, account: Pick<Account, "id" | "handle" | "roles">, permission: PermissionSlug, chain: readonly string[]): Promise<Explanation> {
   const declaration = declared(permission);
-  const [stored, who] = await Promise.all([loadGrants(db, permission, chain), principalsOf(db, account, chain)]);
-  const decision = resolve(withDefaults(stored, declaration), who, chain, permission, userPageLocation());
+  const [stored, who] = await load(db, account, permission, chain);
+  const decision = resolve(withDefaults(stored, declaration), who, chain, permission, userPageLocation(), declaration.administrative);
   const { decidedBy } = decision;
   return { ...decision, byDefault: decidedBy.kind === "grant" && !stored.includes(decidedBy.grant) };
+}
+
+/**
+ * Whether `account` may do `permission` on the grant object `object` itself (`site`, `vault:<id>`, a folder or a
+ * page), given as the objects a check on it consults. For changes that land on an object the form names: the right to
+ * make them is checked where they land, not on the vault the form was sent from.
+ */
+export async function mayOn(db: Database, account: Pick<Account, "id" | "handle" | "roles">, permission: PermissionSlug, chain: readonly string[]): Promise<boolean> {
+  return (await explain(db, account, permission, chain)).value === "allow";
 }
 
 /**
@@ -105,8 +117,8 @@ export async function can(account: Account | null, permission: PermissionSlug, t
   const db = await accountsDatabase(env);
   if (!db) return false;
   const chain = objectChain(target);
-  const [stored, who] = await Promise.all([loadGrants(db, permission, chain), principalsOf(db, account, chain)]);
-  return resolve(withDefaults(stored, declaration), who, chain, permission, userPageLocation()).value === "allow";
+  const [stored, who] = await load(db, account, permission, chain);
+  return resolve(withDefaults(stored, declaration), who, chain, permission, userPageLocation(), declaration.administrative).value === "allow";
 }
 
 /** A grant a plugin's config gives an identity, such as a moderator it lists, to move onto that identity's account. */
