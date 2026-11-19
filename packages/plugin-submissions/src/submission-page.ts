@@ -137,6 +137,8 @@ const REPLY_STATUSES: Readonly<Record<string, { error: boolean; text: (retry?: n
   "thread-gone": { error: true, text: () => "That comment is gone on GitHub, so your reply wasn't sent." },
   github: { error: true, text: () => "GitHub didn't take your reply. Try again in a moment." },
 };
+/** The reply status `code` names, if it is one: never a name every object inherits, such as `constructor`. */
+const replyStatusOf = (code: string) => (Object.hasOwn(REPLY_STATUSES, code) ? REPLY_STATUSES[code] : undefined);
 
 /** What the page says of where the submission stands. */
 const STAGE_TEXT: Readonly<Record<EditStage, string>> = {
@@ -176,7 +178,7 @@ function commentHtml({ id, author, body, at, url }: Comment): string {
 
 /** The status line for the form a reply came back to, if it came back to `thread` (`undefined`: the conversation). */
 function replyStatus(view: SubmissionView, thread: number | undefined): string {
-  const status = view.status && REPLY_STATUSES[view.status.code];
+  const status = view.status && replyStatusOf(view.status.code);
   if (!status || view.status!.thread !== thread) return "";
   return `<p class="sv-account-status" role="${status.error ? "alert" : "status"}"${status.error ? " data-error" : ""}>${escape(status.text(view.status!.retry))}</p>`;
 }
@@ -184,7 +186,7 @@ function replyStatus(view: SubmissionView, thread: number | undefined): string {
 /** A reply form: on the conversation, or in the thread `thread` starts. */
 function replyForm(view: SubmissionView, thread?: number): string {
   const id = `svartz-reply-${thread ?? "conversation"}`;
-  const failed = view.status !== undefined && view.status.thread === thread && REPLY_STATUSES[view.status.code]?.error;
+  const failed = view.status !== undefined && view.status.thread === thread && replyStatusOf(view.status.code)?.error;
   const fields = `<form class="sv-account-form" method="post" action="${escape(view.replyAction!)}" data-svartz-reply="${thread ?? "conversation"}">
   <input type="hidden" name="pull" value="${view.number}">${thread === undefined ? "" : `\n  <input type="hidden" name="thread" value="${thread}">`}
   <div class="sv-account-field svartz-submissions-reply">
