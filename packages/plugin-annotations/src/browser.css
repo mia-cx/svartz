@@ -437,6 +437,7 @@ a.sv-annotations-name:hover {
 }
 
 /* Quiet and small, at the far end of the +1 row, so who agrees keeps the room. */
+.sv-annotations-report,
 .sv-annotations-delete {
 	flex: none;
 	margin-inline-start: auto;
@@ -446,6 +447,12 @@ a.sv-annotations-name:hover {
 	font-weight: 500;
 }
 
+/* Delete sits right after Report when a moderator sees both. */
+.sv-annotations-report:not([hidden]) + .sv-annotations-delete {
+	margin-inline-start: 0;
+}
+
+.sv-annotations-report:hover,
 .sv-annotations-delete:hover {
 	color: var(--sv-ink, CanvasText);
 }

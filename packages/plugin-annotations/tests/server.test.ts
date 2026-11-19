@@ -115,16 +115,19 @@ describe("the annotations database", () => {
 
     expect(later.status).toBe(200);
     expect(await later.json()).toEqual({ annotations: [], viewer: null });
-    expect(await tables()).toEqual(["agreements", "annotations", "identities", "svartz_annotations_migrations", "write_counts"]);
+    expect(await tables()).toEqual(["agreements", "annotations", "hidden_annotations", "identities", "svartz_annotations_migrations", "write_counts"]);
     const { results } = await db.prepare("SELECT version FROM svartz_annotations_migrations ORDER BY version").all();
-    expect(results).toEqual([{ version: 1 }, { version: 2 }]);
+    expect(results).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
   });
 
   it("brings a version 1 database up to date, keeping its comments", async () => {
     const { db, binding } = await database();
     await seed(db, [{ id: "c1", page: "garden", author: ADA, body: "First.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
     // What a database migrated before write counts existed looks like.
-    await db.batch([db.prepare("DROP TABLE write_counts"), db.prepare("DELETE FROM svartz_annotations_migrations WHERE version = 2")]);
+    await db.batch([
+      db.prepare("DROP TABLE write_counts"), db.prepare("DROP TABLE hidden_annotations"),
+      db.prepare("DELETE FROM svartz_annotations_migrations WHERE version >= 2"),
+    ]);
 
     const site = createSite({ DB: await binding() }, { writesPerHour: 1 });
     const cookie = await signIn(site, ADA);
@@ -135,7 +138,7 @@ describe("the annotations database", () => {
     });
 
     expect(posted.status).toBe(201);
-    expect((await db.prepare("SELECT version FROM svartz_annotations_migrations ORDER BY version").all()).results).toEqual([{ version: 1 }, { version: 2 }]);
+    expect((await db.prepare("SELECT version FROM svartz_annotations_migrations ORDER BY version").all()).results).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
     expect((await db.prepare("SELECT id FROM annotations WHERE id = 'c1'").all()).results).toEqual([{ id: "c1" }]);
   });
 });
@@ -595,5 +598,77 @@ describe("permissions on a site with accounts", () => {
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual({ error: "forbidden", message: "You can't comment on this page." });
     expect((await post("kitchen")).status).toBe(201);
+  });
+});
+
+describe("POST <id>/hide/", () => {
+  /** Grace's comment on garden, with Ada's +1, on a site whose annotations and accounts share one database; Alan moderates garden. */
+  async function moderated() {
+    const { db } = await database();
+    await seed(db, [{ id: "c1", page: "garden", author: GRACE, body: "Buy pills here.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z", agreedBy: [ADA] }]);
+    const site = createSite({ DB: db, SVARTZ_DB: db });
+    const alan = await signIn(site, ALAN);
+    const ada = await signIn(site, ADA);
+    const { results: [account] } = await db.prepare("SELECT account_id FROM auth_identities WHERE id = ?").bind(ALAN.id).all<{ account_id: string }>();
+    await db.prepare("INSERT INTO auth_grants (actor_type, actor_id, object, permission, value, updated_at) VALUES ('account', ?, 'page:notes/garden', 'annotations:comments:delete', 'allow', ?)")
+      .bind(account!.account_id, "2026-11-19T00:00:00.000Z").run();
+    return { db, site, alan, ada };
+  }
+  const hide = (site: Site, cookie: string, { id = "c1", origin = ORIGIN, returnTo = "/notes/-/dashboard/moderation/reports/?status=hidden#report-1" } = {}) =>
+    site(`${ENDPOINT}/${id}/hide/`, { method: "POST", headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ returnTo }) });
+  const listed = async (site: Site) => (await (await site(`${ENDPOINT}/?page=garden`)).json() as { annotations: unknown[] }).annotations;
+  const audited = async (db: Database) => (await db.prepare("SELECT actor_handle, action, target, detail FROM auth_audit").all()).results;
+
+  it("hides the comment from every list and +1 for a moderator of its page, records who did, and goes back", async () => {
+    const { db, site, alan, ada } = await moderated();
+
+    const answer = await hide(site, alan);
+
+    expect(answer.status).toBe(303);
+    expect(answer.headers.get("location")).toBe("/notes/-/dashboard/moderation/reports/?status=hidden#report-1");
+    expect(await listed(site)).toEqual([]);
+    const agreed = await site(`${ENDPOINT}/c1/agree/`, { method: "POST", headers: { cookie: ada, origin: ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ agreed: true }) });
+    expect(agreed.status).toBe(404);
+    expect(await audited(db)).toEqual([{ actor_handle: "alan", action: "annotations:comment:hide", target: "annotation:c1", detail: JSON.stringify({ vault: "notes", page: "garden" }) }]);
+    // Still stored, for the report about it.
+    expect((await db.prepare("SELECT id FROM annotations").all()).results).toEqual([{ id: "c1" }]);
+
+    expect((await hide(site, alan)).status).toBe(303);
+    expect(await audited(db)).toHaveLength(1);
+  });
+
+  it.each([
+    ["from another site", { origin: "https://evil.test" }, 403],
+    ["by a reader who doesn't moderate the page", { as: "ada" }, 403],
+    ["signed out", { as: "nobody" }, 401],
+    ["of a comment this vault doesn't have", { id: "c9" }, 404],
+  ] as const)("changes and records nothing %s", async (_case, { origin, as, id }: { origin?: string; as?: "ada" | "nobody"; id?: string }, status) => {
+    const { db, site, alan, ada } = await moderated();
+    const cookie = as === "ada" ? ada : as === "nobody" ? "" : alan;
+
+    const answer = await hide(site, cookie, { ...origin && { origin }, ...id && { id } });
+
+    expect(answer.status).toBe(status);
+    expect(await listed(site)).toHaveLength(1);
+    expect(await audited(db)).toEqual([]);
+  });
+
+  it("goes to the vault's home instead of another site", async () => {
+    const { site, alan } = await moderated();
+
+    for (const returnTo of ["https://evil.test/", "//evil.test/", "/\\evil.test/", "reports/"]) {
+      expect((await hide(site, alan, { returnTo })).headers.get("location")).toBe("/notes/");
+    }
+  });
+
+  it("answers 503 on a site without accounts", async () => {
+    const { db } = await database();
+    await seed(db, [{ id: "c1", page: "garden", author: GRACE, body: "Hi.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
+    const site = createSite({ DB: db }, { moderators: [ALAN.id] });
+
+    const answer = await hide(site, await signIn(site, ALAN));
+
+    expect(answer.status).toBe(503);
+    expect(await listed(site)).toHaveLength(1);
   });
 });

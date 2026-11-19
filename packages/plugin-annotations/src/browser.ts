@@ -3,8 +3,9 @@
  * highlights each passage with the CSS Custom Highlight API, so `element`'s DOM is never rewritten, and puts a marker
  * in the margin on the passage's first line. Each marker opens a card with the comment, its author, and **+1**, which
  * toggles the reader's agreement and shows who agrees. The card offers **Delete**, behind a confirmation, on the
- * reader's own comments, and on every comment for a moderator. Comments whose passage the author has since removed
- * are listed after the note, each with the quote it responded to and the same **+1** and **Delete**.
+ * reader's own comments, and on every comment for a moderator; on a vault with `@svartz/plugin-moderation`, it offers
+ * **Report** on other people's. Comments whose passage the author has since removed are listed after the note, each
+ * with the quote it responded to and the same actions.
  *
  * Selecting text inside `element` shows a toolbar beside it; **Comment** opens a composer that posts to the plugin's
  * route. A signed-out reader gets `@svartz/auth`'s sign-in dialog, and the draft or +1 waits in `sessionStorage` until
@@ -26,6 +27,11 @@ export interface AttachOptions {
   readonly endpoint: string;
   /** The note's path in its vault, the key its annotations are stored under. */
   readonly page: string;
+  /**
+   * Offer **Report** on other people's comments, for `@svartz/plugin-moderation`'s script to open its dialog: each is a
+   * button marked `data-svartz-report="annotation:<id>"`. The plugin sets it when the vault has moderation.
+   */
+  readonly report?: boolean;
 }
 
 /** A note in a host app's vault, which locates its annotations without spelling out the route or key. */
@@ -306,6 +312,7 @@ function popover<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, className: s
  */
 export function attach(content: HTMLElement, options: AttachOptions | HostNoteOptions): () => void {
   const { endpoint, page } = "vault" in options ? hostNote(options) : options;
+  const reportable = !("vault" in options) && options.report === true;
   const controller = new AbortController();
   const { signal } = controller;
   const base = endpoint.replace(/\/+$/, "");
@@ -330,6 +337,8 @@ export function attach(content: HTMLElement, options: AttachOptions | HostNoteOp
     readonly faces: HTMLElement;
     readonly names: HTMLElement;
     readonly problem: HTMLElement;
+    /** **Report**, which moderation's script answers, on other people's comments. */
+    readonly report: HTMLButtonElement;
     /** **Delete**, and the confirmation that takes its place. */
     readonly remove: HTMLButtonElement;
     readonly confirm: HTMLElement;
@@ -675,6 +684,12 @@ export function attach(content: HTMLElement, options: AttachOptions | HostNoteOp
     toggle.setAttribute("aria-describedby", agreedLine.id);
     const problem = create("p", "sv-annotations-problem");
     problem.setAttribute("role", "alert");
+    // Moderation's script opens its dialog for any button marked this way; the label names what is reported.
+    const report = create("button", "sv-annotations-button sv-annotations-report", "Report");
+    report.type = "button";
+    report.setAttribute("aria-label", "Report comment");
+    report.dataset.svartzReport = `annotation:${comment.id}`;
+    report.dataset.svartzReportLabel = `Comment by ${comment.author.name}`;
     // Visible as "Delete" beside +1; named in full for a screen reader landing on it.
     const remove = create("button", "sv-annotations-button sv-annotations-delete", "Delete");
     remove.type = "button";
@@ -690,8 +705,8 @@ export function attach(content: HTMLElement, options: AttachOptions | HostNoteOp
     confirm.setAttribute("aria-labelledby", question.id);
     confirm.hidden = true;
     const entry: Controls = {
-      id: comment.id, author: comment.author.id, nodes: [create("div", "sv-annotations-agreement", toggle, agreedLine, remove), confirm, problem],
-      toggle, count, faces, names, problem, remove, confirm, question, keep,
+      id: comment.id, author: comment.author.id, nodes: [create("div", "sv-annotations-agreement", toggle, agreedLine, report, remove), confirm, problem],
+      toggle, count, faces, names, problem, report, remove, confirm, question, keep,
       agreements: comment.agreements, agreed: comment.agreements.some(({ author }) => author.id === viewer), pending: false, deleting: false,
       gone,
     };
@@ -759,9 +774,13 @@ export function attach(content: HTMLElement, options: AttachOptions | HostNoteOp
     }
   }
 
-  /** Offer **Delete** on `entry` when it's the reader's own comment, or the reader moderates, and they aren't confirming. */
+  /**
+   * Offer **Delete** on `entry` when it's the reader's own comment, or the reader moderates, and **Report** when it's
+   * someone else's, while they aren't confirming a delete.
+   */
   function offerDelete(entry: Controls): void {
     entry.remove.hidden = viewer === undefined || !(moderator || entry.author === viewer) || !entry.confirm.hidden;
+    entry.report.hidden = !reportable || entry.author === viewer || !entry.confirm.hidden;
   }
 
   /** Name the signed-in reader, and offer **Delete** on what they may now delete. */
@@ -776,7 +795,7 @@ export function attach(content: HTMLElement, options: AttachOptions | HostNoteOp
     entry.problem.textContent = "";
     entry.question.textContent = entry.author === viewer ? "Delete your comment?" : `Delete ${name}'s comment?`;
     entry.confirm.hidden = false;
-    entry.remove.hidden = true;
+    offerDelete(entry);
     entry.keep.focus();
   }
 
@@ -922,6 +941,8 @@ export function attach(content: HTMLElement, options: AttachOptions | HostNoteOp
 export interface MountOptions {
   /** The annotations routes under the vault's mount path, without the deployment base: `/notes/_svartz/annotations`. */
   readonly endpoint: string;
+  /** Whether the vault has `@svartz/plugin-moderation`, so comments offer **Report**. */
+  readonly report?: boolean;
 }
 
 /**
@@ -929,9 +950,9 @@ export interface MountOptions {
  * `data-svartz-note="<slug>"`, keyed by that slug. On a host page that is the `SvartzNoteContent` body the mount is
  * for, so each of several notes gets its own; on a theme page, the document's. A page without one gets nothing.
  */
-export function mount(_pathname: string, { endpoint }: MountOptions, { base, note }: BrowserScriptContext = { base: "" }) {
+export function mount(_pathname: string, { endpoint, report }: MountOptions, { base, note }: BrowserScriptContext = { base: "" }) {
   const content = note ?? document.querySelector<HTMLElement>("[data-svartz-note]");
   const page = content?.dataset.svartzNote;
   if (!content || !page) return undefined;
-  return attach(content, { endpoint: `${base}${endpoint}`, page });
+  return attach(content, { endpoint: `${base}${endpoint}`, page, ...report && { report } });
 }

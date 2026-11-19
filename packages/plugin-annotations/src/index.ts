@@ -83,11 +83,13 @@ export function annotations(options: AnnotationsOptions): NormalizedSvartzPlugin
       options: { fatal: true },
       run(ctx) {
         const compiler = getCompilerContributions(ctx);
+        // `@svartz/plugin-moderation` on the vault answers each comment's Report button.
+        const report = ctx.plugins?.some((plugin) => plugin.id === "moderation" && plugin.server !== undefined) === true;
         compiler.browserResources.set(ANNOTATIONS_PLUGIN_ID, {
           id: ANNOTATIONS_PLUGIN_ID,
           kind: "script",
           importId: BROWSER_MODULE,
-          options: { endpoint: `${ctx.config.mountPath}/_svartz/${ANNOTATIONS_PLUGIN_ID}` } satisfies MountOptions,
+          options: { endpoint: `${ctx.config.mountPath}/_svartz/${ANNOTATIONS_PLUGIN_ID}`, ...report && { report } } satisfies MountOptions,
         });
         compiler.browserResources.set(`${ANNOTATIONS_PLUGIN_ID}-css`, { id: `${ANNOTATIONS_PLUGIN_ID}-css`, kind: "css", importId: STYLESHEET });
       },
