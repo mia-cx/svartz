@@ -140,6 +140,13 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], call
         // The build's final plugins, which config resolution couldn't see whole: a theme preset's plugins, and what
         // other plugins' `forVault` returned. Checked like the catalogue, and added to it when the server starts.
         const built: AuthServerData = { permissions: collectPermissions([{ id: ctx.config.id, plugins: ctx.plugins ?? ctx.config.plugins }]) };
+        // The catalogue config resolution collected reaches every vault's server as well, so the build may add to it
+        // but not contradict it, or which of the two a server read last would decide a default.
+        const configured = new Map((permissions ?? []).map((declaration) => [declaration.slug, declaration]));
+        const changed = built.permissions.find((ours) => configured.has(ours.slug) && JSON.stringify(configured.get(ours.slug)) !== JSON.stringify(ours));
+        if (changed) {
+          fail(`vault "${ctx.config.id}" builds with "${changed.slug}" declared differently than the config's plugins declare it; a theme preset or a forVault can add permissions, not change them`);
+        }
         if (ctx.config.target.type === "host") assertSharedCatalogue(ctx.config.id, built.permissions);
         compiler.serverData.set(AUTH_PLUGIN_ID, built);
       },

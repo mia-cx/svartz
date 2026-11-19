@@ -176,6 +176,20 @@ describe("the permission catalogue", () => {
     expect(() => build("work", { ...remove, defaults: { guest: "deny" } })).not.toThrow();
   });
 
+  it("fails a build whose final plugins declare a permission differently than the config's plugins did", () => {
+    // journal's config declares the default; work's theme preset brings the same permission with another.
+    const vaults = [
+      { id: "journal", mountPath: "/journal", target: { type: "host" }, plugins: [auth({ providers: { github } }), guestbook({ ...remove, defaults: { guest: "deny" } })] },
+      { id: "work", mountPath: "/work", target: { type: "host" }, plugins: [auth({ providers: { github } })] },
+    ] as unknown as ResolvedConfig[];
+    const work = vaults[1]!;
+    const resolved = (work.plugins[0] as NormalizedSvartzPlugin).forVault!({ vault: work, vaults }) as NormalizedSvartzPlugin;
+
+    expect(() => resolved.emitArtifacts!.run({
+      config: work, plugins: [resolved, guestbook({ ...remove, defaults: { guest: "allow" } })], files: [], meta: new Map(),
+    } as unknown as PluginContext)).toThrow(/vault "work" builds with "guestbook:entries:delete" declared differently than the config's plugins declare it/);
+  });
+
   it("gives every host vault one catalogue, since they share accounts and grants", () => {
     const vaults: Vault[] = [
       { id: "journal", plugins: [auth({ providers: { github } }), guestbook(comment)] },
