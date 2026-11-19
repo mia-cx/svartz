@@ -1,0 +1,16 @@
+---
+description: Submissions review panel — what a reviewer may see of a pull request, and how its actions reach GitHub
+globs: packages/plugin-submissions/src/review*.ts, packages/plugin-submissions/tests/review*.ts
+alwaysApply: false
+---
+
+# Reviewing submissions from the dashboard
+
+- A file is reviewable when the viewer holds `submissions:reviews:write` on the page it publishes as now (`links` by path), else on `pathRoute(vaultPath)`; a file outside the vault folder needs the permission on the site (`{}`). Renames check both paths. Anything else is counted, never named: not its path, not a diff thread on it, not the pull request's GitHub title (it can name the file). The list shows a published page's title or `Pull request #N`, never GitHub's title.
+- Ask permissions through `reviewer()`: one `can()` per page per request, capped at `MAX_CHECKED_PAGES`, past which files count as not reviewable. A free Worker gets 50 D1 queries; `tests/review.test.ts` holds the detail view to 20 and the list to 14.
+- Every action re-reads the pull request from GitHub (`inspect`): same base repository (`sameRepository`), base ref = content branch, files listed in full, all reviewable. Line comments, verdicts and merges also need the form's `head` to equal GitHub's head now: compare, then refuse with `head-moved`. Never act on the head the mirror holds.
+- Audit (`audit(env, …)`, action `submissions:submission:<verb>`, target `submission:<n>`) after those checks and immediately before the GitHub write. Rate limit before any GitHub call. Anything refused earlier writes no entry.
+- Bodies are `header(sender, host)` then `attributed()` with `postedText()`. GitHub refuses APPROVE/REQUEST_CHANGES on a pull request the site's own credentials opened (`own_pull_request`): post the verdict as a COMMENT review instead, under the header.
+- The diff is GitHub's own patch (`readChanges` on `compare/<base>...<head>`), so line comments name lines GitHub can place; previews read the head through `CommitReader.headFile`, within its request allowance, and render with `renderRevision`.
+- Comment forms reuse `submissionPage`'s reply forms and `?status=` codes; review actions answer `?review=` codes so the two never collide.
+- Close stays the plugin's `POST close/` route; offer it only on submissions the site saved (`readSubmission`), the only ones it closes.
