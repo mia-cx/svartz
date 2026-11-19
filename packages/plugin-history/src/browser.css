@@ -1,0 +1,240 @@
+/*
+ * The history pages: page history, the diff between two revisions, and Recent changes, on the theme's tokens so they
+ * match every Svartz theme in both colour modes.
+ */
+.sv-history {
+	display: grid;
+	gap: var(--sv-space-5, 1.5rem);
+	min-inline-size: 0;
+	color: var(--sv-text, CanvasText);
+	font-family: var(--sv-font-sans, system-ui, sans-serif);
+}
+
+.sv-history :focus-visible {
+	outline: var(--sv-focus-width, 2px) solid var(--sv-accent, Highlight);
+	outline-offset: var(--sv-focus-offset, 2px);
+}
+
+.sv-history h1 {
+	margin: 0;
+	color: var(--sv-ink, CanvasText);
+	font-size: var(--sv-step-4, 2rem);
+	font-weight: 700;
+	line-height: var(--sv-leading-tight, 1.15);
+	overflow-wrap: anywhere;
+}
+
+.sv-history h2 {
+	margin: 0 0 var(--sv-space-2, 0.5rem);
+	color: var(--sv-ink, CanvasText);
+	font-size: var(--sv-step-1, 1.2rem);
+	font-weight: 700;
+	line-height: var(--sv-leading-tight, 1.15);
+}
+
+.sv-history p {
+	margin: 0;
+}
+
+.sv-history a {
+	color: var(--sv-accent-text, LinkText);
+	text-underline-offset: 0.15em;
+}
+
+.sv-history h1 a {
+	color: inherit;
+}
+
+.sv-history-list {
+	display: grid;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	border-block-start: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+}
+
+.sv-history-row {
+	display: flex;
+	align-items: baseline;
+	gap: var(--sv-space-3, 0.75rem);
+	padding-block: var(--sv-space-2, 0.5rem);
+	border-block-end: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+}
+
+/* The two radios a row offers: compare from it, and compare to it. */
+.sv-history-pick {
+	display: inline-flex;
+	flex: none;
+	gap: var(--sv-space-1, 0.25rem);
+}
+
+.sv-history-pick input {
+	inline-size: 1.25rem;
+	block-size: 1.25rem;
+	margin: 0;
+	accent-color: var(--sv-accent, AccentColor);
+}
+
+.sv-history-what {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: var(--sv-space-1, 0.25rem) var(--sv-space-3, 0.75rem);
+	min-inline-size: 0;
+}
+
+.sv-history-time {
+	color: var(--sv-muted, GrayText);
+	font-variant-numeric: tabular-nums;
+}
+
+.sv-history-name {
+	color: var(--sv-ink, CanvasText);
+	font-weight: 600;
+}
+
+.sv-history-muted,
+.sv-history a.sv-history-muted {
+	color: var(--sv-muted, GrayText);
+	overflow-wrap: anywhere;
+}
+
+.sv-history-summary {
+	flex-basis: 100%;
+	color: var(--sv-text, CanvasText);
+	overflow-wrap: anywhere;
+}
+
+.sv-history-form {
+	display: grid;
+	gap: var(--sv-space-4, 1rem);
+}
+
+.sv-history-button {
+	min-block-size: 2.75rem;
+	padding-inline: var(--sv-space-4, 1rem);
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
+	border-radius: var(--sv-radius-m, 6px);
+	background: var(--sv-paper, Canvas);
+	color: var(--sv-ink, CanvasText);
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.sv-history-button:hover {
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+}
+
+.sv-history-pager {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sv-space-4, 1rem);
+}
+
+.sv-history-revisions {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+	gap: var(--sv-space-3, 0.75rem);
+	margin: 0;
+}
+
+.sv-history-revision {
+	display: grid;
+	gap: var(--sv-space-1, 0.25rem);
+	padding: var(--sv-space-3, 0.75rem);
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	border-radius: var(--sv-radius-m, 6px);
+}
+
+.sv-history-revision dt {
+	color: var(--sv-muted, GrayText);
+	font-size: var(--sv-label-size, 0.75rem);
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.sv-history-revision dd {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sv-space-1, 0.25rem) var(--sv-space-3, 0.75rem);
+	margin: 0;
+}
+
+.sv-history-section {
+	display: grid;
+	gap: var(--sv-space-2, 0.5rem);
+	min-inline-size: 0;
+}
+
+/* Long lines wrap rather than scroll; a phone shows the whole change. */
+.sv-history-diff {
+	inline-size: 100%;
+	border-collapse: collapse;
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	font-family: var(--sv-font-mono, ui-monospace, monospace);
+	font-size: var(--sv-step--1, 0.875rem);
+	line-height: 1.5;
+}
+
+.sv-history-diff tbody + tbody {
+	border-block-start: var(--sv-rule-width, 1px) dashed var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
+}
+
+.sv-history-diff td {
+	padding: 0 var(--sv-space-2, 0.5rem);
+	vertical-align: top;
+}
+
+.sv-history-num {
+	inline-size: 1%;
+	color: var(--sv-muted, GrayText);
+	text-align: end;
+	white-space: nowrap;
+	user-select: none;
+}
+
+.sv-history-sign {
+	inline-size: 1%;
+	padding-inline: 0;
+	font-weight: 700;
+	user-select: none;
+}
+
+.sv-history-line {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.sv-history-line :is(ins, del) {
+	text-decoration: none;
+}
+
+.sv-history-diff tr[data-kind="add"] {
+	background: light-dark(oklch(0.95 0.05 var(--sv-hue-green, 145)), oklch(0.32 0.06 var(--sv-hue-green, 145)));
+}
+
+.sv-history-diff tr[data-kind="del"] {
+	background: light-dark(oklch(0.95 0.04 var(--sv-hue-red, 25)), oklch(0.32 0.06 var(--sv-hue-red, 25)));
+}
+
+.sv-history-rendered {
+	padding: var(--sv-space-4, 1rem);
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	border-radius: var(--sv-radius-m, 6px);
+}
+
+.sv-history-hidden {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+@media (max-width: 30rem) {
+	.sv-history-num {
+		display: none;
+	}
+}
