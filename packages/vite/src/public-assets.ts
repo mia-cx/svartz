@@ -37,6 +37,11 @@ export function getMarkdownRoutes(): Record<string, string> {
   return Object.fromEntries(Object.values(vaults).flatMap((routes) => Object.entries(routes)));
 }
 
+/** Every recorded file's output path under the client root, for the platform adapter. */
+export function getPublicFileNames(): string[] {
+  return Object.values(recorded()).flat().map((asset) => asset.fileName);
+}
+
 /** Forget every recorded file. The CLI calls this before each build, so one vault's files never ship in the next's. */
 export function clearPublicAssets(): void {
   delete process.env[ENV];

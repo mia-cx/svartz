@@ -183,6 +183,20 @@ A `host` vault uses the host app's adapter, which must not be `@sveltejs/adapter
 
 `svartzHandle`, from the server-only module `virtual:svartz/server`, is the SvelteKit `handle` that routes plugin requests. The standalone shell's `src/hooks.server.ts` runs it before its own handle. The same module exports `svartzPage`, which the plugin page route's server `load` calls. Each vault's pair is built with `createServer` from `@svartz/core`; a host app's runs every host vault's in turn.
 
+### Deploying to Cloudflare
+
+A Cloudflare build writes its worker and static files to `.svartz/vaults/<id>/.svelte-kit/cloudflare/`. A `cloudflare-workers` build also copies the standalone shell's `apps/web/wrangler.jsonc` to `.svartz/vaults/<id>/wrangler.jsonc`, and its `main` and `assets.directory` point at that output. Set the Worker's `name`, bindings and `vars` in `apps/web/wrangler.jsonc`; the next build copies them. Relative paths in it resolve from the vault's directory.
+
+Deploy from the vault's directory, where `npx` finds the shell's Wrangler:
+
+```sh
+cd .svartz/vaults/<id>
+npx wrangler deploy                                                    # cloudflare-workers
+npx wrangler pages deploy .svelte-kit/cloudflare --project-name <name> # cloudflare-pages
+```
+
+Set secrets the same way, such as `npx wrangler secret put PRIVATE_HELLO_TOKEN`.
+
 ## Signed-in readers
 
 To know who sent a request or opened a page, add `@svartz/auth` to the vault and call `readAccount(request, context.env)` from `@svartz/auth/server`. See [Reader sign-in](auth.md).

@@ -53,10 +53,11 @@ function resolveAdapter(target: string) {
 	switch (target) {
 		case 'node':
 			return adapterNode({ out: outDir, precompress: true });
-		// adapter-cloudflare emits Pages output when the CLI sets `CF_PAGES`, read when it adapts.
+		// adapter-cloudflare emits Pages output when the CLI sets `CF_PAGES`, read when it adapts. For Workers, the CLI
+		// copies wrangler.jsonc beside the vault's `.svelte-kit`, so the worker's `main` lies in SvelteKit's real `outDir`.
 		case 'cloudflare-workers':
 		case 'cloudflare-pages':
-			return adapterCloudflare();
+			return adapterCloudflare({ config: process.env.SVARTZ_WRANGLER_CONFIG });
 		case 'static':
 		default:
 			return adapterStatic({ pages: outDir, assets: outDir, fallback: '404.html', strict: true });
