@@ -37,6 +37,7 @@ const STATUSES: Readonly<Record<string, { section: Section; error: boolean; fiel
   "member-added": { section: "roles", error: false, text: (who, role) => `@${who} now holds ${role}.` },
   "member-held": { section: "roles", error: false, text: (who, role) => `@${who} already holds ${role}.` },
   "member-removed": { section: "roles", error: false, text: (who, role) => `@${who} no longer holds ${role}.` },
+  "member-promoted": { section: "roles", error: true, text: (who, role) => `@${who} earned ${role} through reputation. Only an admin can remove it.` },
   "member-unknown": { section: "roles", error: true, field: "handle", text: (who) => `No account has the handle @${who}.` },
 };
 
@@ -52,6 +53,8 @@ export type Check =
 export interface PeopleView {
   /** Whether the viewer may change grants and roles; without it the panel only lists them. */
   readonly canWrite: boolean;
+  /** Whether the viewer is an admin, who alone may take a role reputation gave. */
+  readonly isAdmin: boolean;
   readonly catalogue: readonly PermissionDeclaration[];
   readonly grants: readonly ListedGrant[];
   readonly roles: readonly Role[];
@@ -166,7 +169,7 @@ ${rows.length ? `<ul class="sv-account-list sv-dashboard-list">${rows.join("")}<
 </section>`;
 }
 
-function rolesSection({ canWrite, roles, query, actions }: PeopleView): string {
+function rolesSection({ canWrite, isAdmin, roles, query, actions }: PeopleView): string {
   const status = message("roles", query);
   const create = canWrite ? `<form class="sv-account-form" method="post" action="${escape(actions.createRole)}">
   <div class="sv-account-field">
@@ -180,10 +183,11 @@ function rolesSection({ canWrite, roles, query, actions }: PeopleView): string {
     const id = `sv-dashboard-role-${index}`;
     const refusedHere = status?.field === "handle" && query.get("role") === name;
     const rows = members.map((member) => {
-      const remove = canWrite
+      const remove = canWrite && (isAdmin || !member.promoted)
         ? `<form method="post" action="${escape(actions.removeMember)}"><input type="hidden" name="role" value="${escape(name)}"><input type="hidden" name="handle" value="${escape(member.handle)}"><button class="sv-account-button" type="submit" aria-label="Remove @${escape(member.handle)} from ${escape(name)}">Remove</button></form>`
         : "";
-      return `<li class="sv-account-row"><span class="sv-account-what"><span class="sv-account-name">@${escape(member.handle)}</span><span class="sv-account-muted">${escape(member.name)}</span></span>${remove}</li>`;
+      const earned = member.promoted ? `<span class="sv-account-tag">By reputation</span>` : "";
+      return `<li class="sv-account-row"><span class="sv-account-what"><span class="sv-account-name">@${escape(member.handle)}</span><span class="sv-account-muted">${escape(member.name)}</span></span>${earned}${remove}</li>`;
     });
     const add = canWrite ? `<form class="sv-dashboard-inline" method="post" action="${escape(actions.addMember)}">
   <input type="hidden" name="role" value="${escape(name)}">

@@ -60,22 +60,24 @@ export async function searchPeople(db: Database, query: string): Promise<Person[
   return withRoles(db, results);
 }
 
-/** A stored role and the accounts that hold it. */
+/** A stored role and the accounts that hold it, each with whether reputation gave it to them. */
 export interface Role {
   readonly name: string;
-  readonly members: readonly { readonly handle: string; readonly name: string }[];
+  readonly members: readonly { readonly handle: string; readonly name: string; readonly promoted: boolean }[];
 }
 
 /** Every stored role, by name, with its members by handle. */
 export async function listRoles(db: Database): Promise<Role[]> {
   const [roles, members] = await db.batch([
     db.prepare("SELECT name FROM auth_roles ORDER BY name"),
-    db.prepare(`SELECT m.role, a.handle, a.name FROM auth_role_members m JOIN auth_accounts a ON a.id = m.account_id
-      ORDER BY a.handle`),
+    db.prepare(`SELECT m.role, a.handle, a.name, EXISTS (SELECT 1 FROM auth_reputation_promotions p
+        WHERE p.account_id = m.account_id AND p.role = m.role) AS promoted
+      FROM auth_role_members m JOIN auth_accounts a ON a.id = m.account_id ORDER BY a.handle`),
   ]);
-  const rows = members!.results as Array<{ role: string; handle: string; name: string }>;
+  const rows = members!.results as Array<{ role: string; handle: string; name: string; promoted: number }>;
   return (roles!.results as Array<{ name: string }>).map(({ name }) => ({
-    name, members: rows.filter((row) => row.role === name).map(({ handle, name: display }) => ({ handle, name: display })),
+    name,
+    members: rows.filter((row) => row.role === name).map(({ handle, name: display, promoted }) => ({ handle, name: display, promoted: promoted === 1 })),
   }));
 }
 
