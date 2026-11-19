@@ -8,8 +8,8 @@
  *
  * Only the site's own record of a save names who earns: a commit's trailer, author and committer are whatever its
  * maker wrote, so they are never evidence, and a commit or pull request the site recorded no save for earns nobody
- * anything. A save that found its content already on the branch is recorded with the commit that put it there, so
- * a commit scores only for the first save recorded with it.
+ * anything. A save that found its content already on the branch made no commit, so it is not recorded and earns
+ * nothing; a commit scores only for the first save recorded with it.
  *
  * A landed new page scores as a page. A landed edit scores by the lines its commit (a pull request's merge commit)
  * added and removed in the vault, as GitHub's commit API counts them, which the poll reads (`fillCreditLines`): until
