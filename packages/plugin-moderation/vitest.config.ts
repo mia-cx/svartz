@@ -9,8 +9,9 @@ import { ADA, ALAN, createDatabase, createSite, grant, GRACE, seedComment, signI
 /**
  * Browser tests report through the real plugins on a real D1, same-origin as the test page: the middleware serves the
  * vault's `/notes/_svartz/` routes from the Vite dev server, `resetSite` starts a fresh site (Ada reads, Alan handles
- * reports and may hide comments, Grace wrote comment c1 on garden), `signInAs` gives the test browser a session, and
- * `storedReports` and `reportsPanel` read what landed.
+ * reports, may hide comments, suspend accounts and read the audit log, Grace wrote comment c1 on garden), `signInAs`
+ * gives the test browser a session, `storedReports`, `reportsPanel` and `pageAs` read what landed, and `postAs` sends a
+ * form from the site as someone.
  */
 interface Running {
   readonly site: Site;
@@ -25,8 +26,9 @@ async function start(): Promise<Running> {
   const site = createSite(db);
   const sessions: Record<string, string> = {};
   for (const person of [ADA, ALAN, GRACE]) sessions[person.handle!] = await signIn(site, person);
-  await grant(db, "alan", "moderation:reports:read");
-  await grant(db, "alan", "annotations:comments:delete");
+  for (const permission of ["moderation:reports:read", "moderation:accounts:write", "moderation:audit:read", "annotations:comments:delete"]) {
+    await grant(db, "alan", permission);
+  }
   await seedComment(site, db, GRACE);
   return { site, db, sessions, dispose };
 }
@@ -60,6 +62,24 @@ const reportsPanel: BrowserCommand<[person: Identity]> = async (_context, person
   const { site, sessions } = await current();
   const result = await site.page("/notes/-/dashboard/moderation/reports/", sessions[person.handle!]);
   return result && !("redirect" in result) ? result.html : null;
+};
+
+/** Any plugin page at `path` as `person` sees it, or `null` for the 404. */
+const pageAs: BrowserCommand<[person: Identity, path: string]> = async (_context, person, path) => {
+  const { site, sessions } = await current();
+  const result = await site.page(path, sessions[person.handle!]);
+  return result && !("redirect" in result) ? result.html : null;
+};
+
+/** Post `form` to the vault route at `path` as `person`, from the site, as a browser's form would; answers the status. */
+const postAs: BrowserCommand<[person: Identity, path: string, form: Record<string, string>]> = async (_context, person, path, form) => {
+  const { site, sessions } = await current();
+  const answer = await site.fetch(path, {
+    method: "POST",
+    headers: { cookie: sessions[person.handle!]!, origin: "https://notes.test", "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(form),
+  });
+  return answer.status;
 };
 
 async function bodyOf(request: IncomingMessage): Promise<Buffer | undefined> {
@@ -115,7 +135,7 @@ export default defineConfig({
             headless: true,
             instances: [{ browser: "chromium" }],
             viewport: { width: 1280, height: 800 },
-            commands: { resetSite, signInAs, storedReports, reportsPanel },
+            commands: { resetSite, signInAs, storedReports, reportsPanel, pageAs, postAs },
           },
         },
       },
