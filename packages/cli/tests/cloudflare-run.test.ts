@@ -59,6 +59,13 @@ async function writeConfig(root: string, vault: Record<string, unknown>): Promis
   })};\n`);
 }
 
+/** Bundle the worker `config` names as `wrangler deploy` does, short of the upload. */
+async function bundle(config: string, outdir: string): Promise<void> {
+  await execFileAsync(wranglerBin, ["deploy", "--dry-run", "--config", config, "--outdir", outdir], {
+    env: { ...process.env, WRANGLER_SEND_METRICS: "false" },
+  });
+}
+
 /**
  * Serve the worker in `directory` with that directory as its assets, and answer each request's status, content type
  * and body. `runWorkerFirst` routes requests as the deploy does: which go to the worker before a matching asset.
@@ -77,6 +84,8 @@ async function serve(
     main: path.join(directory, "_worker.js"),
     assets: { binding: "ASSETS", directory, run_worker_first: runWorkerFirst },
   }));
+  // `unstable_dev` waits forever on a worker that fails to bundle; a dry-run deploy reports it.
+  await bundle(config, path.join(path.dirname(directory), "run-bundle"));
   const worker = await unstable_dev(path.join(directory, "_worker.js"), {
     config,
     ip: "127.0.0.1",
@@ -123,12 +132,8 @@ describe("standalone Cloudflare builds", () => {
       [200, "application/json", JSON.stringify({ marker: HANDLER_MARKER })],
       [200, "text/markdown", expect.stringContaining("Linked page.")],
     ]);
-    if (type === "cloudflare-workers") {
-      // The deploy docs/cloudflare.md describes, short of the upload.
-      await execFileAsync(wranglerBin, [
-        "deploy", "--dry-run", "--config", path.join(vaultRoot, "wrangler.jsonc"), "--outdir", path.join(root, "deploy"),
-      ], { cwd: root, env: { ...process.env, WRANGLER_SEND_METRICS: "false" } });
-    }
+    // The deploy docs/server-plugins.md describes.
+    if (type === "cloudflare-workers") await bundle(path.join(vaultRoot, "wrangler.jsonc"), path.join(root, "deploy"));
   }, BUILD_TIMEOUT);
 });
 
