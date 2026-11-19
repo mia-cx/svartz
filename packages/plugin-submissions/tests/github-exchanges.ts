@@ -170,7 +170,8 @@ export function commitExchanges({ path, markdown, message, author, head = HEAD_C
   message: string;
   author: { name: string; email: string };
   head?: string;
-  moved?: "ok" | "not-fast-forward";
+  /** GitHub's answer to moving `main`: refused when `main` moved meanwhile, or when a rule for `main` forbids it. */
+  moved?: "ok" | "not-fast-forward" | "protected";
 }): Exchange[] {
   return [
     {
@@ -182,18 +183,36 @@ export function commitExchanges({ path, markdown, message, author, head = HEAD_C
       response: { status: 201, json: { sha: DIRECT_TREE, truncated: false } },
     },
     {
-      // No committer: GitHub records the App.
-      request: { method: "POST", url: `${API}/git/commits`, body: { message, tree: DIRECT_TREE, parents: [head], author } },
-      response: { status: 201, json: { sha: DIRECT_COMMIT, html_url: `https://github.com/${REPO}/commit/${DIRECT_COMMIT}`, tree: { sha: DIRECT_TREE } } },
+      request: { method: "POST", url: `${API}/git/commits`, body: { message, tree: DIRECT_TREE, parents: [head], author, committer: APP_BOT } },
+      response: {
+        status: 201,
+        json: {
+          sha: DIRECT_COMMIT,
+          html_url: `https://github.com/${REPO}/commit/${DIRECT_COMMIT}`,
+          tree: { sha: DIRECT_TREE },
+          author: { ...author, date: "2026-11-19T12:00:00Z" },
+          committer: { ...APP_BOT, date: "2026-11-19T12:00:00Z" },
+          verification: { verified: false, reason: "unsigned", signature: null, payload: null },
+        },
+      },
     },
     {
       request: { method: "PATCH", url: `${API}/git/refs/heads/main`, body: { sha: DIRECT_COMMIT, force: false } },
-      response: moved === "ok"
-        ? { status: 200, json: { ref: "refs/heads/main", object: { sha: DIRECT_COMMIT, type: "commit" } } }
-        : { status: 422, json: { message: "Update is not a fast forward", status: "422" } },
+      response: {
+        ok: { status: 200, json: { ref: "refs/heads/main", object: { sha: DIRECT_COMMIT, type: "commit" } } },
+        "not-fast-forward": { status: 422, json: { message: "Update is not a fast forward", status: "422" } },
+        protected: { status: 422, json: { message: "Repository rule violations found\n\nChanges must be made through a pull request.\n\n", status: "422" } },
+      }[moved],
     },
   ];
 }
+
+/** The App's slug, as `GET /app` answers it. */
+export const APP_SLUG = "wikiplace-editor";
+/** The id of the App's bot user, `wikiplace-editor[bot]`. */
+export const APP_BOT_ID = 41_898_282;
+/** The App's bot user as a commit's committer. */
+export const APP_BOT = { name: `${APP_SLUG}[bot]`, email: `${APP_BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com` };
 
 /** A throwaway App private key, made per test run: `pkcs1` as GitHub's `.pem` download, `pkcs8` as OpenSSL's default. */
 export const APP_KEY = (() => {
@@ -230,6 +249,20 @@ export const tokenExchange = (expiresAt: string, token = INSTALLATION_TOKEN): Ex
     json: { token, expires_at: expiresAt, permissions: { contents: "write", pull_requests: "write", metadata: "read" }, repository_selection: "selected" },
   },
 });
+
+/** Looking up the App's bot user, which a worker's first commit does: the App's slug with its JWT, then the bot's id. */
+export const committerExchanges: Exchange[] = [
+  {
+    request: { method: "GET", url: "https://api.github.com/app" },
+    authorization: APP_JWT,
+    response: { status: 200, json: { id: APP_ID, slug: APP_SLUG, name: "Wikiplace editor", owner: { login: "wikiplace" } } },
+  },
+  {
+    request: { method: "GET", url: `https://api.github.com/users/${encodeURIComponent(APP_BOT.name)}` },
+    authorization: `Bearer ${INSTALLATION_TOKEN}`,
+    response: { status: 200, json: { login: APP_BOT.name, id: APP_BOT_ID, type: "Bot" } },
+  },
+];
 
 /**
  * Stub `fetch` with GitHub answering `exchanges` in order; each request must match the next one, and carry `token`

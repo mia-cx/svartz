@@ -4,6 +4,7 @@
  * Node alike.
  */
 import type { Identity, ProviderId } from "@svartz/auth/server";
+import type { ReviewReason } from "./api";
 import { SubmissionError } from "./errors";
 
 const API = "https://api.github.com";
@@ -182,7 +183,7 @@ function credit(submitter: Identity | null): string {
 }
 
 /** Someone as git names them: `Ada Lovelace <ada@example.com>`. */
-interface Person {
+export interface Person {
   readonly name: string;
   readonly email: string;
 }
@@ -331,6 +332,8 @@ export interface Attribution {
   readonly host: string;
   /** The account's linked GitHub identity, credited as co-author so GitHub links the commit to that account. */
   readonly github?: Identity;
+  /** The App's bot user, named as the commit's committer. */
+  readonly committer: Person;
 }
 
 /** The trailer naming the account behind a direct commit: `Svartz-Account: <account id>`. */
@@ -342,8 +345,11 @@ const COMMIT_ATTEMPTS = 3;
 /** What {@link commitSubmission} did. */
 export type CommitResult =
   | { readonly kind: "commit"; readonly url: string; readonly sha: string }
-  /** Nothing: the branch's file isn't the one the reader loaded, or a new page's path is taken. */
-  | { readonly kind: "changed" };
+  /**
+   * Nothing, so the save goes to review: `changed` when the branch's file isn't the one the reader loaded, or a new
+   * page's path is taken; `protected` when GitHub's rules for the branch refuse the commit.
+   */
+  | { readonly kind: "review"; readonly reason: Extract<ReviewReason, "changed" | "protected"> };
 
 /**
  * The commit message: the title, the reader's note, then the trailers. The trailers are the message's last paragraph,
@@ -372,19 +378,20 @@ async function blobAt(target: GitHubTarget, path: string, ref: string): Promise<
 async function latestCommit(target: GitHubTarget, branch: string, path: string): Promise<CommitResult> {
   const query = new URLSearchParams({ sha: branch, path, per_page: "1" });
   const [latest] = await call<Array<{ sha: string; html_url: string }>>(target, "GET", `/commits?${query}`);
-  return latest ? { kind: "commit", url: latest.html_url, sha: latest.sha } : { kind: "changed" };
+  return latest ? { kind: "commit", url: latest.html_url, sha: latest.sha } : { kind: "review", reason: "changed" };
 }
 
 /**
  * Commit the submission straight to the branch through the Git Data API, authored as `attribution`'s account and
- * committed by whoever the credentials are, the App. `loaded` is the blob SHA of the file the reader edited, and
- * `undefined` for a new page.
+ * committed as its App's bot user. GitHub signs no commit that names its own author, so the commit is unsigned.
+ * `loaded` is the blob SHA of the file the reader edited, and `undefined` for a new page.
  *
  * Never overwrites: the branch's file must still be `loaded`, or for a new page absent, or nothing is written and the
  * answer is `changed`, for the caller to open a pull request instead. The commit's parent is the head that check read,
  * and the branch moves only forward to it, so a save landing in between makes GitHub refuse the move; the check then
- * runs again on the new head. A retry whose content the branch already holds, as after a lost answer, answers the
- * latest commit to the file instead of committing again.
+ * runs again on the new head. When GitHub refuses the move while the head stays put, a rule for the branch refused it,
+ * such as one requiring pull requests or signed commits, and the answer is `protected`. A retry whose content the
+ * branch already holds, as after a lost answer, answers the latest commit to the file instead of committing again.
  */
 export async function commitSubmission(
   target: GitHubTarget,
@@ -401,18 +408,23 @@ export async function commitSubmission(
   for (let attempt = 0; attempt < COMMIT_ATTEMPTS; attempt++) {
     const head = (await call<{ object: { sha: string } }>(target, "GET", `/git/ref/heads/${encodePath(branch)}`)).object.sha;
     // Refused while the branch stayed put: not a race but a rule, such as branch protection.
-    if (refused?.head === head) throw await commitRefused(branch, refused.response);
+    if (refused?.head === head) {
+      const detail = await refused.response.json().then((body: { message?: unknown }) => body?.message, () => undefined);
+      console.warn(`[submissions] GitHub refused a commit to ${branch}${typeof detail === "string" ? ` (${detail})` : ""}; opening a pull request instead`);
+      return { kind: "review", reason: "protected" };
+    }
     const current = await blobAt(target, submission.path, head);
     if (current === wanted) return latestCommit(target, branch, submission.path);
-    if (current !== loaded) return { kind: "changed" };
+    if (current !== loaded) return { kind: "review", reason: "changed" };
     const parent = await call<{ tree: { sha: string } }>(target, "GET", `/git/commits/${head}`);
     const tree = await writeTree(target, parent.tree.sha, submission);
-    // No committer: GitHub records the credentials' owner, the App, and signs the commit as it.
+    // An author of its own means GitHub would record them as committer too, unless the commit names one.
     const commit = await call<{ sha: string; html_url: string }>(target, "POST", "/git/commits", {
       message: commitMessage(submission, attribution),
       tree,
       parents: [head],
       author,
+      committer: attribution.committer,
     });
     const moved = await send(target, "PATCH", ref, { sha: commit.sha, force: false });
     if (moved.ok) return { kind: "commit", url: commit.html_url, sha: commit.sha };
@@ -420,13 +432,4 @@ export async function commitSubmission(
     refused = { head, response: moved };
   }
   throw new SubmissionError("branch_busy", 503, "Other edits are being saved right now. Try again in a moment.");
-}
-
-async function commitRefused(branch: string, response: Response): Promise<SubmissionError> {
-  const detail = await response.json().then((body: { message?: unknown }) => body?.message, () => undefined);
-  return new SubmissionError(
-    "commit_refused",
-    502,
-    `GitHub refused the commit to ${branch}${typeof detail === "string" ? ` (${detail})` : ""}. Ask the site owner to let the site's GitHub App push to it.`,
-  );
 }

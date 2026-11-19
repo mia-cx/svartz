@@ -95,10 +95,11 @@ export interface NewPageRequest {
 /**
  * Why a save that was to commit opened a pull request instead:
  * - `changed`: the file changed on the branch since the editor loaded it, or a new page's path was taken meanwhile.
+ * - `protected`: GitHub's rules for the branch refused the commit, such as a rule that it takes only pull requests.
  * - `route`: the note asks for an address, by its slug or an alias, that the account may not commit to, or that a
  *   page it may not commit to holds.
  */
-export type ReviewReason = "changed" | "route";
+export type ReviewReason = "changed" | "protected" | "route";
 
 export type EditResponse =
   /** The save opened pull request `number`; `reason` when it was to commit instead. */

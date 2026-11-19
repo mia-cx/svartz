@@ -118,6 +118,7 @@ describe("Edit", () => {
 
   it.each([
     ["changed", "This page changed since you opened it, so your edit went to review as pull request #7."],
+    ["protected", "The repository's rules don't let the site publish your edit directly, so it went to review as pull request #7."],
     ["route", "Your edit gives this page an address you can't publish to, so it went to review as pull request #7."],
   ])("says why an edit that was to go live went to review: %s", async (reason, sentence) => {
     serve(

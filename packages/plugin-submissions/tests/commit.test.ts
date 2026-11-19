@@ -10,12 +10,14 @@ import { permissions } from "../src/permissions";
 import type { BuildData, Mode, ServerOptions } from "../src/server";
 import {
   API,
+  APP_BOT,
   APP_ID,
   APP_KEY,
   blobExchange,
   branchFor,
   BUILD_COMMIT,
   commitExchanges,
+  committerExchanges,
   DIRECT_COMMIT,
   editExchanges,
   GUIDE_SHA,
@@ -189,8 +191,8 @@ const adaPullRequest = () => editExchanges({
 }).filter(({ request }) => request.url !== `${API}/issues/42/labels`);
 const adaMessage = (account: string) =>
   `Edit content/guide.md\n\n${NOTE}\n\nCo-authored-by: Ada Lovelace <583231+ada@users.noreply.github.com>\nSvartz-Account: ${account}`;
-/** What a commit's first look at GitHub is: the branch, and its head. */
-const commitStart = [repositoryExchange, headExchange()];
+/** What a commit's first look at GitHub is, on a fresh worker: the App's bot user, the branch, and its head. */
+const commitStart = [...committerExchanges, repositoryExchange, headExchange()];
 
 describe("where a save goes", () => {
   it.each([
@@ -231,7 +233,39 @@ describe("where a save goes", () => {
 });
 
 describe("a direct commit", () => {
-  it("commits the edit to the branch, authored as the account and co-authored by its GitHub account", async () => {
+  it("commits the edit to the branch, authored as the account, co-authored by its GitHub account and committed by the App", async () => {
+    const site = await createSite({ admins: [ADA.id] });
+    const ada = await signIn(site, ADA);
+    const commit = commitExchanges({
+      path: "content/guide.md",
+      markdown: MARKDOWN,
+      message: adaMessage(await accountId(site, "ada")),
+      author: { name: "Ada Lovelace", email: "ada@users.noreply.wiki.example" },
+    });
+    const replay = github([
+      ...commitStart,
+      blobExchange("content/guide.md", "3a1f9c0e5b7d2468ace013579bdf2468ace01357", GUIDE_SHA),
+      ...commit,
+      // The worker's second commit names the same bot without looking it up again.
+      repositoryExchange,
+      headExchange(),
+      blobExchange("content/guide.md", "3a1f9c0e5b7d2468ace013579bdf2468ace01357", GUIDE_SHA),
+      ...commit,
+    ]);
+
+    expect(await save(site, { page: "/wiki/guide/", sha: GUIDE_SHA }, ada)).toEqual({ status: 201, body: commitAnswer });
+    expect(await save(site, { page: "/wiki/guide/", sha: GUIDE_SHA }, ada)).toEqual({ status: 201, body: commitAnswer });
+    expect(replay.pending).toEqual([]);
+    const commits = replay.requests.filter(({ method, url }) => method === "POST" && url === `${API}/git/commits`);
+    expect(commits.map(({ body }) => body)).toEqual(Array(2).fill(expect.objectContaining({
+      author: { name: "Ada Lovelace", email: "ada@users.noreply.wiki.example" },
+      committer: { name: "wikiplace-editor[bot]", email: "41898282+wikiplace-editor[bot]@users.noreply.github.com" },
+      message: expect.stringMatching(/\n\nCo-authored-by: Ada Lovelace <583231\+ada@users\.noreply\.github\.com>\nSvartz-Account: \S+$/),
+    })));
+  });
+
+  it("opens a pull request instead, and says why, when a rule for the branch refuses the commit", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const site = await createSite({ admins: [ADA.id] });
     const ada = await signIn(site, ADA);
     const replay = github([
@@ -242,11 +276,19 @@ describe("a direct commit", () => {
         markdown: MARKDOWN,
         message: adaMessage(await accountId(site, "ada")),
         author: { name: "Ada Lovelace", email: "ada@users.noreply.wiki.example" },
+        moved: "protected",
       }),
+      // The branch stayed put, so no other save got there first: a rule refused it.
+      headExchange(),
+      ...adaPullRequest(),
     ]);
 
-    expect(await save(site, { page: "/wiki/guide/", sha: GUIDE_SHA }, ada)).toEqual({ status: 201, body: commitAnswer });
+    expect(await save(site, { page: "/wiki/guide/", sha: GUIDE_SHA }, ada)).toEqual({
+      status: 201,
+      body: { kind: "pull-request", url: PULL_42.html_url, number: 42, reason: "protected" },
+    });
     expect(replay.pending).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("Repository rule violations found"));
   });
 
   it("keeps a line break in a display name from forging a trailer", async () => {

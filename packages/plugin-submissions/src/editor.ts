@@ -656,6 +656,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
       changed: edit
         ? "This page changed since you opened it, so your edit went to review"
         : "A page with this title was saved meanwhile, so yours went to review",
+      protected: `The repository's rules don't let the site publish your ${edit ? "edit" : "page"} directly, so it went to review`,
       route: `Your ${edit ? "edit gives this page" : "page asks for"} an address you can't publish to, so it went to review`,
     };
     const status = Object.assign(document.createElement("p"), {

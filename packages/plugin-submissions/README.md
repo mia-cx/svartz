@@ -140,10 +140,13 @@ Admins hold every permission, and each account holds every one on its own `users
 
 ### What commits need
 
-Commits are made by a [GitHub App](#github-app): with `token` alone, every save opens a pull request. `mode: "commit"` without `app`, or on a vault without the `auth` plugin, fails the build. The build can't ask GitHub what the App may do, so give it what commits need before turning them on, or the first save that commits says what GitHub refused:
+Commits are made by a [GitHub App](#github-app): with `token` alone, every save opens a pull request. `mode: "commit"` without `app`, or on a vault without the `auth` plugin, fails the build. The build can't ask GitHub what the App may do, so give it what commits need before turning them on:
 
 - **Contents** set to *Read and write*, as pull requests already need.
 - If the branch is protected, the App allowed to push to it: under the branch's protection rule or ruleset, add the App to who may bypass required pull requests. A branch that requires a review for every change takes edits as pull requests only; use `mode: "pull-request"`.
+- No rule requiring signed commits on the branch. Commits name the account as their author, and GitHub signs no commit that names its own author, so they are unsigned and such a branch refuses them.
+
+Without Contents write, the first save that commits says GitHub refused the site's access. When GitHub refuses a commit for a rule on the branch, the save opens a pull request instead, answers `reason: "protected"`, and the server logs what GitHub said. The editor says "The repository's rules don't let the site publish your edit directly, so it went to review as pull request #42."
 
 ### How a commit lands
 
@@ -153,7 +156,7 @@ A restored draft written against an older source sends no SHA the branch could h
 
 A note's frontmatter decides addresses too: its `slug` names its own, and its aliases (`alias`, the field `frontmatter.aliasesField` names, and `permalink`) ask for addresses that redirect to it. The server reads the saved Markdown as the build will, and commits only when the account holds `submissions:commits:write` on every address the note asks for that the page doesn't hold already, and on every other page holding one, which the note would move or take a redirect from. Otherwise, or when the build would refuse the slug, the save opens a pull request, answers `reason: "route"`, and the editor says "Your edit gives this page an address you can't publish to, so it went to review as pull request #42." An account that may edit only its own `users/<handle>` page can't take another user's address by giving its page `slug: <their handle>`.
 
-Each commit is authored as the account and committed by the App:
+Each commit is authored as the account and committed by the App's bot user:
 
 ```
 Edit content/guide.md
@@ -165,7 +168,7 @@ Svartz-Account: 0b9f6c1e-5d2a-4f8e-9b31-7c4d2e6a8f10
 ```
 
 - **Author**: the account's display name and `<handle>@users.noreply.<site host>`, such as `ada@users.noreply.wiki.example`.
-- **Committer**: the App, which GitHub signs the commit as.
+- **Committer**: the App's bot user, `<app slug>[bot]` and `<bot user id>+<app slug>[bot]@users.noreply.github.com`. The server looks both up once per worker, with `GET /app` and `GET /users/<app slug>[bot]`. The commit is unsigned.
 - **`Co-authored-by`**: the account's linked GitHub account, by its noreply address, so GitHub credits it. Left out when the account has no GitHub sign-in linked.
 - **`Svartz-Account`**: the account's id, so history can map the commit back to the account whatever its handle becomes.
 

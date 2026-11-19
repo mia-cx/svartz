@@ -17,8 +17,8 @@
  * opens a pull request, as before accounts. With them, it commits when the mode allows commits, a GitHub App is
  * configured and the account holds `submissions:commits:write` on the page; otherwise it opens a pull request when
  * the mode allows those and the reader holds `submissions:pull-requests:write`; otherwise it is refused. A commit
- * opens a pull request instead when its frontmatter claims a route the account may not commit to, or when its file
- * changed on the branch since the reader loaded it.
+ * opens a pull request instead when its frontmatter claims a route the account may not commit to, when its file
+ * changed on the branch since the reader loaded it, or when a rule for the branch refuses it.
  *
  * Every save passes the guard (required sign-in, rate limit, and Turnstile when configured) before any GitHub call, a
  * GitHub App's token exchange included. Failures answer `{ error, message }`.
@@ -41,9 +41,17 @@ import {
   type ReviewReason,
   type SourceResponse,
 } from "./api";
-import { appTokens, type AppCredentials } from "./app";
+import { appCommitter, appTokens, type AppCredentials } from "./app";
 import { misconfigured, SubmissionError } from "./errors";
-import { commitSubmission, openSubmission, readSource, type Attribution, type GitHubTarget, type Submission } from "./github";
+import {
+  commitSubmission,
+  openSubmission,
+  readSource,
+  type Attribution,
+  type GitHubTarget,
+  type Person,
+  type Submission,
+} from "./github";
 import { createGuard, type GuardOptions } from "./guard";
 import { COMMIT, OPEN_PULL_REQUESTS } from "./permissions";
 
@@ -232,6 +240,8 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     if (typeof token !== "string" || !token) throw misconfigured(`its server has no ${options.token.env} set`);
     return token;
   };
+  /** The App's bot user, which a commit names as its committer. Only an App commits. */
+  const committer = options.app ? appCommitter(options.repo, options.app, githubToken) : undefined;
 
   async function target(context: ServerContext): Promise<GitHubTarget> {
     const token = await githubToken(context.env);
@@ -257,21 +267,28 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     }
     const { account } = reader;
     const target = { vault: context.vault.id, page };
-    if (options.mode !== "pull-request" && options.app && account && await can(account, COMMIT, target, context.env)) return "commit";
+    if (options.mode !== "pull-request" && committer && account && await can(account, COMMIT, target, context.env)) return "commit";
     if (options.mode !== "commit" && await can(account, OPEN_PULL_REQUESTS, target, context.env)) return "pull-request";
     return null;
   }
 
-  /** The account a commit is authored as, with its linked GitHub account as co-author. */
-  async function attribution(account: Account, request: Request, context: ServerContext): Promise<Attribution> {
+  /** The account a commit is authored as, with its linked GitHub account as co-author, and the App that commits it. */
+  async function attribution(account: Account, committedBy: Person, request: Request, context: ServerContext): Promise<Attribution> {
     const github = (await linkedIdentities(account, context.env)).find(({ provider }) => provider === "github");
-    return { accountId: account.id, name: account.name, handle: account.handle, host: new URL(request.url).hostname, ...(github ? { github } : {}) };
+    return {
+      accountId: account.id,
+      name: account.name,
+      handle: account.handle,
+      host: new URL(request.url).hostname,
+      committer: committedBy,
+      ...(github ? { github } : {}),
+    };
   }
 
   /**
    * Decide where the save goes, on `slug`, the page it writes at `vaultPath`; pass the guard; then commit or open the
    * pull request. `loaded` is the blob SHA the editor loaded, for an edit. A commit that would claim a route the
-   * account may not commit to, or that finds the file changed, opens a pull request instead.
+   * account may not commit to, finds the file changed, or that GitHub refuses opens a pull request instead.
    */
   async function save(
     request: Request,
@@ -293,12 +310,13 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     const github = await target(context);
     const full: Submission = { ...submission, submitter: reader.identity };
     let review: ReviewReason | undefined;
-    if (destination === "commit" && reader.account) {
+    if (destination === "commit" && reader.account && committer) {
       const self = submission.kind === "edit" ? slug : undefined;
       if (await mayClaim(reader.account, vaultPath, submission.markdown, self, context)) {
-        const committed = await commitSubmission(github, full, loaded, await attribution(reader.account, request, context));
+        const by = await attribution(reader.account, await committer(context.env), request, context);
+        const committed = await commitSubmission(github, full, loaded, by);
         if (committed.kind === "commit") return Response.json(committed satisfies EditResponse, { status: 201 });
-        review = "changed";
+        review = committed.reason;
       } else {
         review = "route";
       }
