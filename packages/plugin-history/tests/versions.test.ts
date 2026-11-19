@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { resolveConfig } from "@svartz/config";
 import { getCompilerContributions, runStages, type PluginContext } from "@svartz/core";
-import { createCorePlugins } from "@svartz/plugins";
+import { createCorePlugins, roamFlavoredMarkdown } from "@svartz/plugins";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { history } from "../src/index";
 
@@ -465,6 +465,30 @@ describe("the version cache", () => {
   });
 
   // Proves a version a plugin couldn't read isn't cached as broken: the next build compiles it again.
+  // Proves a plugin's options are in the key though its hooks only close over them: turning Roam's to-do boxes off
+  // builds the versions exactly as a build with no cache does.
+  it("compiles the versions again when a plugin's options change", async () => {
+    const repo = await repository();
+    for (const wording of ["{{[[TODO]]}} Write it.", "{{[[TODO]]}} Write it well."]) {
+      await repo.write("posts/hello.md", post(wording));
+      await repo.commit(`Say ${wording}`);
+    }
+    /** The version pages a build hands SvelteKit, by key. */
+    const versionPages = ({ ctx }: Awaited<ReturnType<typeof build>>) =>
+      new Map([...ctx.artifacts].filter(([key]) => key.startsWith("pages/posts/hello/versions/")).map(([key, { contents }]) => [key, String(contents)]));
+
+    const boxes = await build(repo.vault, [history({ source: "git" }), roamFlavoredMarkdown()]);
+    expect([...versionPages(boxes).values()].join("")).toContain('type="checkbox"');
+
+    const warm = await build(repo.vault, [history({ source: "git" }), roamFlavoredMarkdown({ TODOComponent: false })]);
+    await rm(join(repo.root, ".svartz/vaults/blog/cache"), { recursive: true });
+    const cold = await build(repo.vault, [history({ source: "git" }), roamFlavoredMarkdown({ TODOComponent: false })]);
+
+    expect(warm.cache).toEqual({ compiled: 2, reused: 0 });
+    expect(versionPages(warm)).toEqual(versionPages(cold));
+    expect([...versionPages(warm).values()].join("")).not.toContain('type="checkbox"');
+  });
+
   it("compiles a version that failed again on the next build", async () => {
     const repo = await threeVersions();
     await repo.write("posts/hello.md", post("BREAKS-THE-PLUGIN now."));

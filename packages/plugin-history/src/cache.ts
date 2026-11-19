@@ -69,6 +69,9 @@ export async function buildFingerprint(ctx: PluginContext, extra: unknown): Prom
     software: await softwareFingerprint(),
     lockfile: await lockfileHash(ctx.config.path),
     config: ctx.config,
+    // The plugins the build runs, Svartz's defaults and the theme's presets included, which `config` lacks: their
+    // hooks by source, and the `options` each was made from, since values a hook closes over don't show in its source.
+    plugins: (ctx.plugins ?? []).map((plugin) => ({ ...plugin })),
     compiler: { remark: compiler.remarkPlugins, rehype: compiler.rehypePlugins, svx: compiler.svxSourceTransforms },
     roamMedia: ctx.meta.get("svartz:roamMedia") === true,
     extra,
