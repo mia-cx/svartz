@@ -1,0 +1,19 @@
+---
+description: Submissions review panel — what a reviewer may see of a pull request, and how its actions reach GitHub
+globs: packages/plugin-submissions/src/review*.ts, packages/plugin-submissions/tests/review*.ts
+alwaysApply: false
+---
+
+# Reviewing submissions from the dashboard
+
+- A file is reviewable when the viewer holds `submissions:reviews:write` on the page it publishes as now (`links` by path), else on `pathRoute(vaultPath)`; a file outside the vault folder needs the permission on the site (`{}`). Renames check both paths, and a diff thread on either side of a current move takes the file's verdict. While the pull request is open, a page also needs the permission on every page `claims()` (server.ts, the commit path's reader) finds in its head content, read through `CommitReader.headFile`; a head that can't be read makes the file not reviewable. Never read a closed pull request's head.
+- Anything not reviewable is counted, never named: not its path, not a diff thread on it, not the pull request's GitHub title (it can name the file), not the saved page's title or link (`edit.path`) unless that path is reviewable. The list shows a published page's title or `Pull request #N`, never GitHub's title.
+- Ask permissions through one `reviewer()` per request (`posted()` holds it for actions): one `can()` per page, capped at `MAX_CHECKED_PAGES`, past which files count as not reviewable. A free Worker gets 50 D1 queries; `tests/review.test.ts` holds the detail view to 20 and the list to 15.
+- The detail view reads GitHub through `paced()`: no request while `submissions_sync.paused_until` holds (read with the mirror row in `mirrored()`), and `resumeAt` answers start the pause. Actions aren't paced: they are the writes the reserve is kept for.
+- Every action re-reads the pull request from GitHub (`checked` → `inspect`): same base repository (`sameRepository`), base ref = content branch, files listed in full, all reviewable. `close/` (server.ts) goes through `authorize`, the same check. Line comments, verdicts and merges also need the form's `head` to equal GitHub's head now: compare, then refuse with `head-moved`. Never act on the head the mirror holds.
+- Audit (`audit(env, …)`, action `submissions:submission:<verb>`, target `submission:<n>`) after those checks and immediately before the GitHub write. Rate limit before any GitHub call, `close/` included. Anything refused earlier writes no entry.
+- Bodies are `header(sender, host)` then `attributed()` with `postedText()`. GitHub refuses APPROVE/REQUEST_CHANGES on a pull request the site's own credentials opened (`own_pull_request`): post the verdict as a COMMENT review instead, under the header. Record every review posted in `submissions_posted_reviews` with its verdict; `submissions_decisions` makes it the account's decision.
+- Once GitHub takes a post, record it with `keep()`: a failed mirror write is logged and the action still answers as sent, so nobody posts twice.
+- The diff is GitHub's own patch (`readChanges` on `compare/<base>...<head>`), so line comments name lines GitHub can place; previews render the head content `inspect` read for the claims with `renderRevision`.
+- Comment forms reuse `submissionPage`'s reply forms and `?status=` codes; review actions answer `?review=` codes so the two never collide. Look codes up with `Object.hasOwn`. A line comment's answer shows at its file's form, or atop Changes once that form is gone.
+- Close stays the plugin's `POST close/` route; offer it only on submissions the site saved (`readSubmission`), the only ones it closes.

@@ -41,11 +41,9 @@
     "@svartz/auth": "workspace:*",
     "@svartz/core": "workspace:*",
     "@svartz/plugin-submissions": "workspace:*",
-    "@svartz/plugins": "workspace:*",
-    "hast-util-from-html": "^2.0.3"
+    "@svartz/plugins": "workspace:*"
   },
   "devDependencies": {
-    "@types/hast": "^3.0.4",
     "@types/node": "^22.0.0",
     "@vitest/browser-playwright": "^4.1.12",
     "miniflare": "^4.20260305.0",

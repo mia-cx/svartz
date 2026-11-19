@@ -12,11 +12,13 @@
  * - With `sync` set, `POST github/webhook/` takes GitHub's deliveries into the mirror, and `GET status/?edit=<id>`
  *   answers where a saved edit has got to (see `sync.ts`). Every save is then recorded for its saver to follow, on the
  *   dashboard's My submissions panel too, whose `reply/` and `follow-up/` routes answer a submission's reviews
- *   (see `my-submissions.ts`), and the dashboard gets the Recent edits panel (`recent-edits.ts`).
+ *   (see `my-submissions.ts`), and the dashboard gets the Submissions review panel, whose `review/` routes comment,
+ *   review and merge (`review.ts`), and the Recent edits panel (`recent-edits.ts`).
  * - `POST close/`, a form post with `number` and `returnTo`, closes submission `number` without merging it, for an
- *   account holding `submissions:reviews:write` on the vault, records it in auth's audit log, and redirects to
- *   `returnTo`. With `sync` only, and only a pull request the site recorded saving for this vault. The moderation
- *   plugin's Reports panel posts to it.
+ *   account holding `submissions:reviews:write` on every file it changes (as the review panel decides it), records it
+ *   in auth's audit log, and redirects to `returnTo`. With `sync` only, and only a pull request the site recorded
+ *   saving for this vault. It counts against the account's limit for reviews. The moderation
+ *   plugin's Reports panel and the Submissions review panel post to it.
  *
  * The client never names a file path. Edits must target a note in the build's manifest; a new note goes in one of the
  * manifest's folders, or is the reader's own user page, named after its title, and never where a file already is.
@@ -65,10 +67,12 @@ import {
   type Submission,
 } from "./github";
 import { createGuard, type GuardOptions } from "./guard";
+import { commitReader } from "./commits";
 import { isDatabase, migrate, savedPull, scopeOf } from "./mirror";
 import { createMySubmissions } from "./my-submissions";
 import { COMMIT, OPEN_PULL_REQUESTS, REVIEW } from "./permissions";
 import { recentEditsPanel } from "./recent-edits";
+import { createReview } from "./review";
 import { readBody } from "./request";
 import { createSync, type SyncOptions } from "./sync";
 
@@ -225,19 +229,19 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
   }
 
   /**
-   * Whether `account` may commit `markdown` at `vaultPath` without taking a route it may not commit to. Every route
-   * the note would claim, read as the build reads it (its slug, from frontmatter or its file name, and each route its
-   * aliases ask to redirect from), needs `submissions:commits:write`, and so does any other page holding one of them,
-   * which the note would move or take a redirect from. A route `self`, the page being edited, already holds is no new
-   * claim. Frontmatter the build would refuse claims nothing that can be checked, so it may not commit either.
+   * The pages `markdown` at `vaultPath` claims, as permissions name them: every route the note would hold, read as the
+   * build reads it (its slug, from frontmatter or its file name, and each route its aliases ask to redirect from), and
+   * any other page holding one of them, which the note would move or take a redirect from. A route `self`, the page
+   * the file publishes as now, already holds is no new claim. `undefined` for frontmatter the build would refuse,
+   * which claims nothing that can be checked.
    */
-  async function mayClaim(account: Account, vaultPath: string, markdown: string, self: string | undefined, context: ServerContext): Promise<boolean> {
+  function claims(vaultPath: string, markdown: string, self: string | undefined): Set<string> | undefined {
     let claimed: string[];
     try {
       const { frontmatter } = extractFrontmatter(markdown);
       claimed = [requestedSlug({ path: vaultPath, frontmatter }), ...alternateRoutes(frontmatter, data.aliasesField)];
     } catch {
-      return false;
+      return undefined;
     }
     const objects = new Set<string>();
     for (const route of claimed) {
@@ -245,7 +249,18 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
       if (!holders.some(({ slug }) => slug === self)) objects.add(route);
       for (const { slug } of holders) if (slug !== self) objects.add(slug);
     }
-    for (const page of objects) {
+    return objects;
+  }
+
+  /**
+   * Whether `account` may commit `markdown` at `vaultPath` without taking a route it may not commit to: it needs
+   * `submissions:commits:write` on every page the note {@link claims}, and frontmatter the build would refuse may not
+   * commit at all. `self` is the page being edited.
+   */
+  async function mayClaim(account: Account, vaultPath: string, markdown: string, self: string | undefined, context: ServerContext): Promise<boolean> {
+    const pages = claims(vaultPath, markdown, self);
+    if (!pages) return false;
+    for (const page of pages) {
       if (!await can(account, COMMIT, { vault: context.vault.id, page }, context.env)) return false;
     }
     return true;
@@ -446,7 +461,9 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
    * Close submission `number` for a reviewer of the vault, and go back to `returnTo`, a path on this site (the vault's
    * home otherwise). Only the vault's own submissions close here: pull requests the site recorded saving for this vault,
    * which takes `sync`. Vaults may share a repository, and a reviewer of one must not close another's; any other number
-   * answers as one GitHub doesn't have. The audit entry lands once GitHub confirms an open submission, before GitHub closes it.
+   * answers as one GitHub doesn't have. The reviewer must be able to review every file it changes now, as for any review
+   * action, checked after the rate limit. The audit entry lands once GitHub confirms an open submission, before GitHub
+   * closes it.
    */
   async function close(request: Request, context: ServerContext): Promise<Response> {
     const url = new URL(request.url);
@@ -465,10 +482,15 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     const form = new URLSearchParams(new TextDecoder().decode(bytes));
     const number = Number(form.get("number"));
     if (!Number.isSafeInteger(number) || number < 1) throw invalid();
-    if (!sync || !await sync.saved(context, number)) throw noSubmission(options.repo, number);
+    if (!sync || !review || !await sync.saved(context, number)) throw noSubmission(options.repo, number);
     const home = publicPath(`${context.vault.mountPath}/`, context);
     const returnTo = form.get("returnTo") ?? "";
     const back = /^\/(?![/\\])/.test(returnTo) && new URL(returnTo, url.origin).origin === url.origin ? returnTo : home;
+    await guard.limit(`review:account:${account.id}`, context.env, "reviews");
+    await review.authorize(account, number, context).catch((error: unknown) => {
+      // Retargeted or gone, it answers as any number that names no submission of the vault.
+      throw error instanceof SubmissionError && error.code === "not_found" ? noSubmission(options.repo, number) : error;
+    });
     await closeSubmission(await target(context), number, () => audit(context.env, {
       actor: account, action: "submissions:submission:close", target: `submission:${number}`, detail: { repo: options.repo, vault: context.vault.id },
     }));
@@ -492,6 +514,27 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     publicUrl,
   });
 
+  const review = sync && options.sync && createReview({
+    repo: options.repo,
+    ...(options.branch ? { branch: options.branch } : {}),
+    vaultRoot: data.vaultRoot,
+    links: data.links,
+    preview: data.preview,
+    claims,
+    sync,
+    guard,
+    github: target,
+    reader: commitReader({
+      repo: options.repo,
+      ...(options.branch ? { branch: options.branch } : {}),
+      root: data.vaultRoot,
+      credentials: options.app ? { app: options.app } : { token: options.token },
+      database: options.sync.database,
+      ...(options.sync.live.environment ? { environment: options.sync.live.environment } : {}),
+    }),
+    publicUrl,
+  });
+
   const handlers = new Map<string, { method: string; run: (request: Request, context: ServerContext) => Promise<Response> }>([
     ["/source/", { method: "GET", run: source }],
     ["/destination/", { method: "GET", run: destination }],
@@ -506,6 +549,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
       ] as const
       : [],
     ...mine ? mine.routes : [],
+    ...review ? review.routes : [],
   ]);
 
   const handle: ServerHandler = async (request, context) => {
@@ -526,9 +570,9 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
   };
 
   // The panels read the mirror, so they come with sync; auth's dashboard shows My submissions to accounts only.
-  if (!sync || !mine) return handle;
+  if (!sync || !mine || !review) return handle;
   const recentEdits = recentEditsPanel({ repo: options.repo, vaultRoot: data.vaultRoot, links: data.links, attachments: data.preview.attachments, sync });
-  return { handle, dashboard: { title: "Submissions", panels: [mine.panel, recentEdits] } };
+  return { handle, dashboard: { title: "Submissions", panels: [mine.panel, review.panel, recentEdits] } };
 };
 
 export default submissions;

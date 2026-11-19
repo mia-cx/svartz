@@ -1,7 +1,7 @@
 /**
- * A wiki at /wiki with `auth` and `submissions` syncing into a real D1 from Miniflare, for the Recent edits panel's
- * tests: `ada` is the admin, `mod` holds `submissions:pull-requests:read` on the site, and `grace` and `reader` hold
- * nothing. The mirror fills only through the routes GitHub and readers use: signed webhook deliveries, and saves
+ * A wiki at /wiki with `auth` and `submissions` syncing into a real D1 from Miniflare, for the Recent edits and
+ * Submissions panels' tests: `ada` is the admin, `mod` holds `submissions:pull-requests:read` and
+ * `submissions:reviews:write` on the site, and `grace` and `reader` hold nothing. The mirror fills only through the routes GitHub and readers use: signed webhook deliveries, and saves
  * through the edit route. A fake GitHub answers the App's requests, the reconcile poll with empty lists, and compare
  * requests from `github.compare`. The browser tests' vitest config runs it in Node and hands the browser what it renders.
  */
@@ -104,7 +104,8 @@ export function counting(db: D1) {
   return { database, calls };
 }
 
-export async function createEditsSite() {
+/** A wiki as above; `env` adds to or replaces what its server's environment holds. */
+export async function createEditsSite(env: Readonly<Record<string, unknown>> = {}) {
   const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
   const db = await miniflare.getD1Database("SVARTZ_DB");
   const { database, calls: d1 } = counting(db);
@@ -138,6 +139,7 @@ export async function createEditsSite() {
       SVARTZ_GITHUB_APP_KEY: generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs1", format: "pem" }),
       SVARTZ_GITHUB_WEBHOOK_SECRET: SECRET,
       SVARTZ_DB: database,
+      ...env,
     },
     building: false,
     dev: false,
@@ -145,9 +147,12 @@ export async function createEditsSite() {
 
   /**
    * What the fake GitHub answers and has been asked. `down` makes every request fail, as when GitHub is unreachable;
-   * `user` is who signs in next; `committed` is the SHA the next commit gets.
+   * `user` is who signs in next; `committed` is the SHA the next commit gets; `opened` the number of the next pull
+   * request a save opens. `pulls` are pull requests GitHub has, and `files` file contents by `<path>@<ref>`.
    */
-  const github = { compare: new Map<string, string>(), requests: [] as string[], down: false, user: "ada" as Viewer, committed: "" };
+  const github: FakeGitHub = {
+    compare: new Map(), requests: [], down: false, user: "ada", committed: "", opened: 42, pulls: new Map(), files: new Map(),
+  };
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
@@ -185,10 +190,12 @@ export async function createEditsSite() {
   }
 
   const sessions = { ada: await signUp("ada"), grace: await signUp("grace"), mod: await signUp("mod"), reader: await signUp("reader") };
-  await fetchAt(`${AUTH}/people/grant/`, {
-    method: "POST", headers: { cookie: sessions.ada, origin: ORIGIN },
-    body: new URLSearchParams({ "actor-type": "account", actor: "mod", permission: "submissions:pull-requests:read", scope: "site", path: "", value: "allow" }),
-  });
+  for (const permission of ["submissions:pull-requests:read", "submissions:reviews:write"]) {
+    await fetchAt(`${AUTH}/people/grant/`, {
+      method: "POST", headers: { cookie: sessions.ada, origin: ORIGIN },
+      body: new URLSearchParams({ "actor-type": "account", actor: "mod", permission, scope: "site", path: "", value: "allow" }),
+    });
+  }
 
   const accountId = async (handle: Viewer) =>
     (await db.prepare("SELECT id FROM auth_accounts WHERE handle = ?").bind(handle).first<{ id: string }>())!.id;
@@ -249,6 +256,10 @@ export async function createEditsSite() {
     saveGuide,
     accountId,
     settle,
+    /** A request to the site, as from a browser on it. */
+    request: fetchAt,
+    /** The rows `sql` answers on the site's D1, uncounted. */
+    rows: async (sql: string, ...values: unknown[]) => (await db.prepare(sql).bind(...values).all()).results,
     /** The page at `path` as `viewer` sees it, signed out for `null`, or `null` for the 404. */
     page: async (viewer: Viewer | null, path: string): Promise<PageResult | null> => {
       const headers: Record<string, string> = viewer ? { cookie: sessions[viewer] } : {};
@@ -336,8 +347,97 @@ export async function seedEdits(site: EditsSite): Promise<void> {
   await site.settle();
 }
 
+/** The submissions {@link seedReviews} opens, and the commits they head. */
+export const REVIEWS = {
+  /** Grace's save of the guide, which the site opened: the mod may review all of it. */
+  guide: { number: 43, head: sha(43), branch: "svartz/submission/edit/wiki-guide-cccccccccccccccccccccccccccccccc" },
+  /** Opened on GitHub by octocat: it edits Paris and adds a note the mod may not review. */
+  paris: { number: 44, head: sha(44), branch: "octocat-patch-1" },
+};
+/** The guide as submission 43 leaves it, and GitHub's diff of it. */
+export const REVIEWED_GUIDE = GUIDE_SOURCE.replace("Set up", "Plant");
+const GUIDE_PATCH = "@@ -3,5 +3,5 @@ title: Guide\n ---\n \n # Guide\n \n-Set up the wiki.\n+Plant the wiki.";
+
+/** A pull request into `main` as GitHub's API and webhooks show it. */
+export function pullJson(number: number, head: string, branch: string, { title, user, at, state = "open" }: { title: string; user: string; at: string; state?: string }) {
+  return {
+    number, state, title, user: { login: user }, html_url: `https://github.com/${REPO}/pull/${number}`,
+    head: { ref: branch, sha: head, repo: { full_name: REPO } }, base: { ref: "main", sha: HEAD_COMMIT, repo: { full_name: REPO } },
+    created_at: at, updated_at: at, closed_at: null, merged_at: null, merge_commit_sha: null, merged: false,
+  };
+}
+
+/**
+ * Open {@link REVIEWS} as the site and GitHub would, with a comment thread on each file, deny the mod review of
+ * `private/plans`, and let the poll find which pull requests change the vault.
+ */
+export async function seedReviews(site: EditsSite): Promise<void> {
+  const { guide, paris } = REVIEWS;
+  site.github.opened = guide.number;
+  const saved = await site.saveGuide("grace", "", "c".repeat(32));
+  if (saved.status !== 201) throw new Error(`The site didn't save Grace's edit: ${saved.status} ${await saved.text()}`);
+  site.github.pulls.set(guide.number, {
+    json: pullJson(guide.number, guide.head, guide.branch, { title: "Edit content/guide.md", user: APP_BOT.name, at: ago(30) }),
+    files: [{ filename: "content/guide.md", status: "modified", patch: GUIDE_PATCH }],
+  });
+  site.github.pulls.set(paris.number, {
+    json: pullJson(paris.number, paris.head, paris.branch, { title: "Add the secret plans and Paris's history", user: "octocat", at: ago(20) }),
+    files: [
+      { filename: "content/Places/Paris.md", status: "modified", patch: "@@ -1,2 +1,3 @@\n # Paris\n+Founded in the 3rd century BC.\n \\ No newline at end of file" },
+      { filename: "content/private/plans.md", status: "added", patch: "@@ -0,0 +1 @@\n+The secret plans." },
+    ],
+  });
+  site.github.files.set(`content/guide.md@${guide.head}`, REVIEWED_GUIDE);
+  site.github.files.set(`content/Places/Paris.md@${paris.head}`, "# Paris\nFounded in the 3rd century BC.\n");
+  for (const { number } of [guide, paris]) {
+    const opened = await site.deliver("pull_request", { action: "opened", number, pull_request: site.github.pulls.get(number)!.json });
+    if (opened.status !== 204) throw new Error(`The mirror refused pull request #${number}: ${opened.status}`);
+  }
+  const threads = [
+    { number: guide.number, id: 7_000_001, path: "content/guide.md", line: 7, body: "Plant, or set up?", at: ago(15) },
+    { number: paris.number, id: 7_000_002, path: "content/private/plans.md", line: 1, body: "Does private/plans belong here?", at: ago(10) },
+  ];
+  for (const { number, id, path, line, body, at } of threads) {
+    await site.deliver("pull_request_review_comment", {
+      action: "created",
+      comment: { id, path, line, body, user: { login: "octocat" }, html_url: `https://github.com/${REPO}/pull/${number}#discussion_r${id}`, created_at: at, updated_at: at },
+      pull_request: { ...site.github.pulls.get(number)!.json, updated_at: at },
+    });
+  }
+  await site.request("/wiki/_svartz/auth/people/grant/", {
+    method: "POST", headers: { cookie: site.sessions.ada, origin: ORIGIN },
+    body: new URLSearchParams({ "actor-type": "account", actor: "mod", permission: "submissions:reviews:write", scope: "vault:wiki", path: "private/plans", value: "deny" }),
+  });
+  // The first view of a page that reads the mirror polls GitHub, which reads which files each pull request changes.
+  await site.page("mod", REVIEW_PANEL);
+  await site.settle();
+  // Opening each submission reads its pages at the head, as a reviewer's first look would: actions then find them read.
+  for (const { number } of [guide, paris]) await site.page("mod", `${REVIEW_PANEL}${number}/`);
+  await site.settle();
+}
+
+export const REVIEW_PANEL = "/wiki/-/dashboard/submissions/review/";
+
+/** A pull request the fake GitHub has: as its API answers it, and the files it changes, as its files list them. */
+export interface FakePull {
+  readonly json: { readonly head: { readonly sha: string }; readonly base: { readonly sha: string } } & Record<string, unknown>;
+  readonly files: ReadonlyArray<{ readonly filename: string; readonly status: string; readonly patch?: string; readonly previous_filename?: string }>;
+}
+
+/** What the fake GitHub answers, and what it was asked. */
+export interface FakeGitHub {
+  readonly compare: Map<string, string>;
+  readonly requests: string[];
+  down: boolean;
+  user: Viewer;
+  committed: string;
+  opened: number;
+  readonly pulls: Map<number, FakePull>;
+  readonly files: Map<string, string>;
+}
+
 /** GitHub, as far as these tests reach it. */
-function fakeGitHub(method: string, url: URL, github: { compare: Map<string, string>; user: Viewer; committed: string }): Response {
+function fakeGitHub(method: string, url: URL, github: FakeGitHub): Response {
   const path = url.pathname;
   const repo = `/repos/${REPO}`;
   if (url.hostname === "github.com" && path === "/login/oauth/access_token") return Response.json({ access_token: "fake-access-token", token_type: "Bearer" });
@@ -351,12 +451,22 @@ function fakeGitHub(method: string, url: URL, github: { compare: Map<string, str
   const below = path.slice(repo.length);
   if (below === "") return Response.json({ full_name: REPO, default_branch: "main" });
   if (below === "/git/ref/heads/main") return Response.json({ object: { sha: HEAD_COMMIT, type: "commit" } });
+  const file = github.files.get(`${decodeURIComponent(below.slice("/contents/".length))}@${url.searchParams.get("ref")}`);
+  if (below.startsWith("/contents/") && file !== undefined) return new Response(file);
   if (below.startsWith("/contents/")) return Response.json({ type: "file", sha: GUIDE_SHA, content: "" });
+  const pull = below.match(/^\/pulls\/(\d+)(\/files)?$/);
+  const known = pull && github.pulls.get(Number(pull[1]));
+  if (method === "GET" && known) return Response.json(pull![2] ? known.files : known.json);
+  const changes = below.match(/^\/compare\/([0-9a-f]{40})\.\.\.([0-9a-f]{40})$/);
+  const between = changes && [...github.pulls.values()].find(({ json }) => json.base.sha === changes[1] && json.head.sha === changes[2]);
+  if (between) return Response.json({ status: "ahead", files: between.files });
   if (method === "GET" && below.startsWith("/git/commits/")) return Response.json({ sha: below.slice("/git/commits/".length), tree: { sha: "9e8d7c6b5a49382716051f2e3d4c5b6a79881726" } });
   if (method === "POST" && below === "/git/trees") return Response.json({ sha: "1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e" }, { status: 201 });
   // A save that opens a pull request: its branch, then pull request #42.
   if (method === "POST" && below === "/git/refs") return Response.json({ ref: "refs/heads/submission" }, { status: 201 });
-  if (method === "POST" && below === "/pulls") return Response.json({ number: 42, html_url: `https://github.com/${REPO}/pull/42` }, { status: 201 });
+  if (method === "POST" && below === "/pulls") {
+    return Response.json({ number: github.opened, html_url: `https://github.com/${REPO}/pull/${github.opened}` }, { status: 201 });
+  }
   if (method === "POST" && below === "/git/commits") {
     return Response.json({ sha: github.committed, html_url: `https://github.com/${REPO}/commit/${github.committed}` }, { status: 201 });
   }

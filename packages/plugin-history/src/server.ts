@@ -30,7 +30,7 @@ import {
   changesPage, contributionsPage, contributionsSection, diffPage, historyPage, type Author, type Change, type Comparison,
   type Contributions, type WikiChange,
 } from "./pages";
-import { renderRevision, wasPublic } from "./render";
+import { renderRevision, wasPublic } from "@svartz/plugin-submissions/render";
 
 /** Pages of a file's history readers may page back through; older ones are on GitHub. */
 export const MAX_HISTORY_PAGE = 10;

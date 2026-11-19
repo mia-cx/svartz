@@ -22,6 +22,14 @@ export interface GitHubTarget {
   readonly labels: readonly string[];
   /** The commit the site was built from. Edits branch from it, so a page changed since conflicts. */
   readonly commit: string;
+  /**
+   * Runs around each request, for reads that keep to the pause the reconcile poll shares: `before` may refuse the
+   * request by throwing, and `after` sees GitHub's answer first.
+   */
+  readonly pace?: {
+    readonly before: () => Promise<void>;
+    readonly after: (response: Response) => Promise<void>;
+  };
 }
 
 /** One reader's edit of a published note, or a new note. */
@@ -87,8 +95,11 @@ export async function requestGitHub(
   }
 }
 
-function send(target: GitHubTarget, method: string, path: string, body?: unknown, accept?: string) {
-  return requestGitHub(target.token, method, `/repos/${target.repo}${path}`, body, accept);
+async function send(target: GitHubTarget, method: string, path: string, body?: unknown, accept?: string) {
+  await target.pace?.before();
+  const response = await requestGitHub(target.token, method, `/repos/${target.repo}${path}`, body, accept);
+  await target.pace?.after(response);
+  return response;
 }
 
 /** The reader-facing error for a GitHub response that failed. */
@@ -272,7 +283,7 @@ const unchanged = () => new SubmissionError("unchanged", 422, "Nothing has chang
 const commitTitle = ({ kind, path }: Submission) => `${kind === "edit" ? "Edit" : "Add"} ${path}`;
 
 /** The branch submissions target: the configured one, or the repository's default. */
-async function baseBranch(target: GitHubTarget): Promise<string> {
+export async function baseBranch(target: GitHubTarget): Promise<string> {
   return target.branch ?? (await call<{ default_branch: string }>(target, "GET", "")).default_branch;
 }
 
@@ -476,10 +487,16 @@ export async function closeSubmission(target: GitHubTarget, number: number, reco
 /** What a follow-up edit needs to know of a pull request, as GitHub says now. */
 export interface PullState {
   readonly open: boolean;
+  readonly merged: boolean;
   /** The branch it merges from, and the repository that branch is in (`owner/name`). */
   readonly headRef: string;
   readonly headRepo: string | null;
   readonly headSha: string;
+  /** The branch it merges into, the repository that is in (`owner/name`), and that branch's commit it compares with. */
+  readonly baseRef: string;
+  readonly baseRepo: string | null;
+  readonly baseSha: string;
+  readonly title: string;
 }
 
 /** Pull request `number` as GitHub holds it now; `undefined` when GitHub has none. */
@@ -487,12 +504,19 @@ export async function readPullRequest(target: GitHubTarget, number: number): Pro
   const response = await send(target, "GET", `/pulls/${number}`);
   if (response.status === 404) return undefined;
   if (!response.ok) throw await failure(target, response);
-  const pull = await response.json() as { state?: unknown; merged?: unknown; head?: { ref?: unknown; sha?: unknown; repo?: { full_name?: unknown } | null } };
+  type Side = { ref?: unknown; sha?: unknown; repo?: { full_name?: unknown } | null };
+  const pull = await response.json() as { state?: unknown; merged?: unknown; title?: unknown; head?: Side; base?: Side };
+  const repoOf = (side: Side | undefined) => (typeof side?.repo?.full_name === "string" ? side.repo.full_name : null);
   return {
     open: pull.state === "open" && pull.merged !== true,
+    merged: pull.merged === true,
     headRef: String(pull.head?.ref ?? ""),
-    headRepo: typeof pull.head?.repo?.full_name === "string" ? pull.head.repo.full_name : null,
+    headRepo: repoOf(pull.head),
     headSha: String(pull.head?.sha ?? ""),
+    baseRef: String(pull.base?.ref ?? ""),
+    baseRepo: repoOf(pull.base),
+    baseSha: String(pull.base?.sha ?? ""),
+    title: String(pull.title ?? ""),
   };
 }
 
@@ -509,4 +533,128 @@ export async function postComment(target: GitHubTarget, number: number, body: st
   }
   if (!response.ok) throw await failure(target, response);
   return response.json();
+}
+
+/** One file a pull request changes, as its diff on GitHub shows it. */
+export interface ChangedFile {
+  /** Its repository path at the head. */
+  readonly path: string;
+  /** Its path at the base, when the pull request moves it. */
+  readonly previousPath?: string;
+  /** GitHub's word for the change: `added`, `removed`, `modified`, `renamed`… */
+  readonly status: string;
+  /** The unified diff's hunks, as GitHub shows them; absent for a binary file or a diff too large for GitHub to show. */
+  readonly patch?: string;
+}
+
+/** Files GitHub's compare lists at most; it lists no more of a change to more files. */
+export const MAX_COMPARED_FILES = 300;
+
+/**
+ * The files a pull request at commit `head` changes, as its diff on GitHub shows them: against its merge base with
+ * `base`, the base branch's commit. `complete` is false when GitHub may have listed only part of them.
+ */
+export async function readChanges(target: GitHubTarget, base: string, head: string): Promise<{ files: ChangedFile[]; complete: boolean }> {
+  // Files come whole on the first page, whatever the page size; the size only limits the commits listed beside them.
+  const answer = await call<{ files?: Array<{ filename?: unknown; previous_filename?: unknown; status?: unknown; patch?: unknown }> }>(
+    target, "GET", `/compare/${base}...${head}?per_page=1`,
+  );
+  const files = (answer.files ?? []).flatMap(({ filename, previous_filename, status, patch }): ChangedFile[] => typeof filename === "string"
+    ? [{
+      path: filename,
+      ...(typeof previous_filename === "string" ? { previousPath: previous_filename } : {}),
+      status: String(status ?? "modified"),
+      ...(typeof patch === "string" ? { patch } : {}),
+    }]
+    : []);
+  return { files, complete: files.length < MAX_COMPARED_FILES };
+}
+
+/** GitHub's answer to a write it refused as unprocessable, as text to match on. */
+const refusal = async (response: Response) => (response.status === 422 ? response.clone().text().catch(() => "") : "");
+
+/**
+ * Comment on line `line` of `path` (a repository path) in pull request `number`'s diff at commit `head`: `side` is
+ * `RIGHT` for a line the head holds, `LEFT` for one it removes. Answers the comment as GitHub made it. A line GitHub
+ * can't place in the diff answers 422 `line_gone`; a pull request it no longer has, 404 `thread_gone`.
+ */
+export async function postLineComment(
+  target: GitHubTarget,
+  number: number,
+  { body, head, path, line, side }: { body: string; head: string; path: string; line: number; side: "LEFT" | "RIGHT" },
+): Promise<unknown> {
+  const response = await send(target, "POST", `/pulls/${number}/comments`, { body, commit_id: head, path, line, side });
+  if (response.status === 404) throw new SubmissionError("thread_gone", 404, "This pull request is gone on GitHub.");
+  if (response.status === 422) {
+    console.warn(`[submissions] GitHub couldn't place a comment on ${path}:${line} of #${number}: ${await refusal(response)}`);
+    throw new SubmissionError("line_gone", 422, "GitHub couldn't find that line in the changes. Reload the page and try again.");
+  }
+  if (!response.ok) throw await failure(target, response);
+  return response.json();
+}
+
+/** A review's verdict, as GitHub names it. */
+export type ReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
+
+/**
+ * Review pull request `number` at commit `head` with `event` and `body`. Answers the review as GitHub made it. GitHub
+ * lets nobody approve or request changes on their own pull request, the site's credentials included on the pull
+ * requests they opened: that refusal answers 422 `own_pull_request`.
+ */
+export async function submitReview(target: GitHubTarget, number: number, { event, body, head }: { event: ReviewEvent; body: string; head: string }): Promise<unknown> {
+  const response = await send(target, "POST", `/pulls/${number}/reviews`, { commit_id: head, event, body });
+  if (/your own pull request/i.test(await refusal(response))) {
+    throw new SubmissionError("own_pull_request", 422, "GitHub doesn't let the site approve or request changes on a pull request it opened.");
+  }
+  if (!response.ok) throw await failure(target, response);
+  return response.json();
+}
+
+/** How a pull request merges: a merge commit, or one squashed commit. */
+export type MergeMethod = "merge" | "squash";
+
+/**
+ * How the repository lets pull requests merge: with a merge commit, else squashed; `undefined` when it allows
+ * neither. GitHub says only to credentials that may write to the repository; unsaid counts as allowed.
+ */
+export async function mergeMethod(target: GitHubTarget): Promise<MergeMethod | undefined> {
+  const repository = await call<{ allow_merge_commit?: unknown; allow_squash_merge?: unknown }>(target, "GET", "");
+  if (repository.allow_merge_commit !== false) return "merge";
+  return repository.allow_squash_merge !== false ? "squash" : undefined;
+}
+
+/** Who merges a pull request from the site: the account, and the site's host. */
+export interface Merger {
+  readonly accountId: string;
+  readonly name: string;
+  readonly handle: string;
+  readonly host: string;
+}
+
+/**
+ * Merge pull request `number` by `method`, only while its head is still `head`, the commit the reviewer looked at.
+ * The commit's message names who merged it and ends with their {@link ACCOUNT_TRAILER}, as the site's commits do.
+ * Answers the commit GitHub made. A head that moved answers 409 `head_moved`; a pull request GitHub won't merge, such
+ * as one with conflicts or failing required checks, 409 `not_mergeable` with GitHub's reason.
+ */
+export async function mergePull(
+  target: GitHubTarget,
+  number: number,
+  { head, method, title, by }: { head: string; method: MergeMethod; title: string; by: Merger },
+): Promise<{ sha: string }> {
+  const name = gitName(by.name) || by.handle;
+  const response = await send(target, "PUT", `/pulls/${number}/merge`, {
+    sha: head,
+    merge_method: method,
+    commit_title: method === "merge" ? `Merge pull request #${number}` : `${title.replace(/\s+/g, " ").trim() || "Merge pull request"} (#${number})`,
+    commit_message: `Merged on ${by.host} by ${name} (${by.handle}).\n\n${ACCOUNT_TRAILER}: ${by.accountId}`,
+  });
+  if (response.status === 409) throw new SubmissionError("head_moved", 409, "This submission changed since you opened it. Review it again before merging.");
+  if (response.status === 405) {
+    const reason = await response.json().then((body: { message?: unknown }) => body?.message, () => undefined);
+    throw new SubmissionError("not_mergeable", 409, `GitHub won't merge it${typeof reason === "string" ? `: ${reason}` : "."}`);
+  }
+  if (!response.ok) throw await failure(target, response);
+  const merged = await response.json() as { sha?: unknown };
+  return { sha: String(merged.sha ?? "") };
 }

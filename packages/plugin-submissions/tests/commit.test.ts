@@ -689,6 +689,41 @@ describe("closing a submission", () => {
   const close = (site: Site, cookie: string | undefined, number = "42") =>
     site.request(`${BASE}/close/`, { method: "POST", cookie, body: new URLSearchParams({ number, returnTo: PANEL }) });
   const audited = async ({ db }: Site) => (await db.prepare("SELECT actor_handle, action, target, detail FROM auth_audit").all()).results;
+  const HEAD = "4d6e8f0a2b4c6d8e0f2a4b6c8d0e2f4a6b8c0d2e";
+
+  /**
+   * What Close reads first, as every review action does: pull request #42 as GitHub holds it now, into `base`, named
+   * in `fullName`; the default branch; and, into `main`, what it changes and, while open, the guide at its head,
+   * which the commit reader reads on a token of its own.
+   */
+  const inspected = ({ state = "open", base = "main", fullName = REPO } = {}): Exchange[] => [
+    {
+      request: { method: "GET", url: `${API}/pulls/42` },
+      response: {
+        status: 200,
+        json: {
+          ...PULL_42, state, title: "Edit content/guide.md",
+          head: { ref: branchFor("wiki-guide"), sha: HEAD, repo: { full_name: fullName } },
+          base: { ref: base, sha: BUILD_COMMIT, repo: { full_name: fullName } },
+        },
+      },
+    },
+    repositoryExchange,
+    ...base === "main"
+      ? [
+        {
+          request: { method: "GET", url: `${API}/compare/${BUILD_COMMIT}...${HEAD}?per_page=1` },
+          response: { status: 200, json: { status: "ahead", files: [{ filename: "content/guide.md", status: "modified", patch: "@@ -7 +7 @@\n-Set up the wiki.\n+Set up the wiki in five minutes." }] } },
+        },
+        ...state === "open"
+          ? [
+            tokenExchange(new Date(Date.now() + 60 * 60_000).toISOString()),
+            { request: { method: "GET", url: `${API}/contents/content/guide.md?ref=${HEAD}` }, response: { status: 200, raw: MARKDOWN } },
+          ]
+          : [],
+      ]
+      : [],
+  ];
 
   /** A syncing wiki where Ada, a reader, saved an edit of the guide as pull request #42, and Grace is signed in. */
   async function submitted(options: Parameters<typeof createSite>[0] = {}) {
@@ -704,7 +739,7 @@ describe("closing a submission", () => {
     const { site, grace } = await submitted();
     await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
     // The App's token from the save is still good. No branch is configured, so submissions target the default.
-    const replay = replayGitHub([pullExchange(), repositoryExchange, closeExchange], INSTALLATION_TOKEN);
+    const replay = replayGitHub([...inspected(), pullExchange(), repositoryExchange, closeExchange], INSTALLATION_TOKEN);
 
     const answer = await close(site, grace);
 
@@ -720,7 +755,9 @@ describe("closing a submission", () => {
   it("closes a submission whose repository GitHub names in another case", async () => {
     const { site, grace } = await submitted();
     await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
-    const replay = replayGitHub([pullExchange({ fullName: "WikiPlace/WikiPlace.live" }), repositoryExchange, closeExchange], INSTALLATION_TOKEN);
+    const replay = replayGitHub([
+      ...inspected({ fullName: "WikiPlace/WikiPlace.live" }), pullExchange({ fullName: "WikiPlace/WikiPlace.live" }), repositoryExchange, closeExchange,
+    ], INSTALLATION_TOKEN);
 
     expect((await close(site, grace)).status).toBe(303);
     expect(replay.pending).toEqual([]);
@@ -764,7 +801,7 @@ describe("closing a submission", () => {
   it("leaves a closed submission as it is, recording nothing", async () => {
     const { site, grace } = await submitted();
     await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
-    const replay = replayGitHub([pullExchange({ state: "closed" }), repositoryExchange], INSTALLATION_TOKEN);
+    const replay = replayGitHub([...inspected({ state: "closed" }), pullExchange({ state: "closed" }), repositoryExchange], INSTALLATION_TOKEN);
 
     expect((await close(site, grace)).status).toBe(303);
     expect(replay.pending).toEqual([]);
@@ -786,7 +823,7 @@ describe("closing a submission", () => {
   it("refuses a saved submission retargeted at another branch, as it refuses one that doesn't exist", async () => {
     const { site, grace } = await submitted();
     await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
-    const replay = replayGitHub([pullExchange({ base: "release" }), repositoryExchange], INSTALLATION_TOKEN);
+    const replay = replayGitHub(inspected({ base: "release" }), INSTALLATION_TOKEN);
 
     const answer = await close(site, grace);
 

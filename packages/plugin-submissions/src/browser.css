@@ -918,3 +918,145 @@
 	inline-size: fit-content;
 	cursor: pointer;
 }
+
+/*
+ * The Submissions review panel: a submission's changes, file by file, as GitHub's diff with a radio on each line to
+ * pick it for a comment, and the page rendered at the submission's head; then the forms that decide it.
+ */
+/* Titles and paths from GitHub can be one long word, such as `content/guide.md`. */
+.svartz-submissions-dashboard :is(h1, h3) {
+	overflow-wrap: anywhere;
+}
+
+.svartz-submissions-changes,
+.svartz-submissions-review,
+.svartz-submissions-file {
+	display: grid;
+	gap: var(--sv-space-3);
+	min-inline-size: 0;
+}
+
+.svartz-submissions-file h3 {
+	margin: 0;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+/* Long lines wrap rather than scroll: a phone shows the whole change. */
+.svartz-submissions-diff {
+	inline-size: 100%;
+	border-collapse: collapse;
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	font-family: var(--sv-font-mono, ui-monospace, monospace);
+	font-size: var(--sv-step--1);
+	line-height: 1.5;
+}
+
+.svartz-submissions-diff tbody + tbody {
+	border-block-start: var(--sv-rule-width) dashed var(--sv-rule-strong);
+}
+
+/* A blank line keeps its height; the header row, read only by screen readers, takes none. */
+.svartz-submissions-diff tbody tr {
+	block-size: 1.5em;
+}
+
+.svartz-submissions-diff td {
+	padding: 0 var(--sv-space-2);
+	vertical-align: top;
+}
+
+.svartz-submissions-num {
+	inline-size: 1%;
+	color: var(--sv-muted);
+	text-align: end;
+	white-space: nowrap;
+	user-select: none;
+}
+
+.svartz-submissions-sign {
+	inline-size: 1%;
+	padding-inline: 0;
+	font-weight: 700;
+	user-select: none;
+}
+
+.svartz-submissions-line {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.svartz-submissions-line :is(ins, del) {
+	text-decoration: none;
+}
+
+.svartz-submissions-diff tr[data-kind="add"] {
+	background: light-dark(oklch(0.95 0.05 var(--sv-hue-green)), oklch(0.32 0.06 var(--sv-hue-green)));
+}
+
+.svartz-submissions-diff tr[data-kind="del"] {
+	background: light-dark(oklch(0.95 0.04 var(--sv-hue-red)), oklch(0.32 0.06 var(--sv-hue-red)));
+}
+
+.svartz-submissions-pick {
+	inline-size: 1%;
+	padding-inline: var(--sv-space-1);
+}
+
+.svartz-submissions-pick input {
+	margin: 0;
+	inline-size: 1rem;
+	block-size: 1rem;
+	vertical-align: middle;
+	accent-color: var(--sv-accent);
+	cursor: pointer;
+}
+
+/* The line picked for a comment stands out against the rest. */
+.svartz-submissions-diff tr:has(input:checked) {
+	outline: 2px solid var(--sv-accent);
+	outline-offset: -2px;
+}
+
+.svartz-submissions-line-form,
+.svartz-submissions-review .sv-account-form {
+	max-inline-size: none;
+}
+
+.svartz-submissions-preview summary {
+	inline-size: fit-content;
+	min-block-size: 2rem;
+	color: var(--sv-accent-text);
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.svartz-submissions-rendered {
+	min-inline-size: 0;
+	margin-block-start: var(--sv-space-2);
+	padding: var(--sv-space-4);
+	overflow-wrap: anywhere;
+	border: var(--sv-rule-width) solid var(--sv-rule);
+	border-radius: var(--sv-radius-m);
+}
+
+.svartz-submissions-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sv-space-2);
+}
+
+.svartz-submissions-hidden {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+@media (max-width: 30rem) {
+	.svartz-submissions-num {
+		display: none;
+	}
+}

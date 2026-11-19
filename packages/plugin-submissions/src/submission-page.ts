@@ -103,7 +103,8 @@ export type Entry =
 export interface SubmissionView {
   readonly number: number;
   readonly title: string;
-  readonly kind: "edit" | "new";
+  /** What the site's save made it; absent for a pull request opened on GitHub. */
+  readonly kind?: "edit" | "new";
   readonly stage: EditStage;
   /** The pull request on GitHub. */
   readonly url: string;
@@ -112,8 +113,13 @@ export interface SubmissionView {
   readonly entries: readonly Entry[];
   /** Whether comments older than those in `entries` exist, which only GitHub shows. */
   readonly earlier?: boolean;
-  /** The list it belongs to. */
+  /** The list it belongs to, and that list's name: My submissions unless said. */
   readonly back: string;
+  readonly backLabel?: string;
+  /** HTML shown before the conversation, such as the changes a reviewer looks at; escaped by whoever made it. */
+  readonly changes?: string;
+  /** HTML shown after the conversation, such as a reviewer's verdict and merge forms; escaped by whoever made it. */
+  readonly actions?: string;
   /** Where reply forms post; without it, the view takes no replies. */
   readonly replyAction?: string;
   /** The file a follow-up edit changes, inside the vault; the browser script offers the editor on it. */
@@ -131,6 +137,8 @@ const REPLY_STATUSES: Readonly<Record<string, { error: boolean; text: (retry?: n
   "thread-gone": { error: true, text: () => "That comment is gone on GitHub, so your reply wasn't sent." },
   github: { error: true, text: () => "GitHub didn't take your reply. Try again in a moment." },
 };
+/** The reply status `code` names, if it is one: never a name every object inherits, such as `constructor`. */
+const replyStatusOf = (code: string) => (Object.hasOwn(REPLY_STATUSES, code) ? REPLY_STATUSES[code] : undefined);
 
 /** What the page says of where the submission stands. */
 const STAGE_TEXT: Readonly<Record<EditStage, string>> = {
@@ -170,7 +178,7 @@ function commentHtml({ id, author, body, at, url }: Comment): string {
 
 /** The status line for the form a reply came back to, if it came back to `thread` (`undefined`: the conversation). */
 function replyStatus(view: SubmissionView, thread: number | undefined): string {
-  const status = view.status && REPLY_STATUSES[view.status.code];
+  const status = view.status && replyStatusOf(view.status.code);
   if (!status || view.status!.thread !== thread) return "";
   return `<p class="sv-account-status" role="${status.error ? "alert" : "status"}"${status.error ? " data-error" : ""}>${escape(status.text(view.status!.retry))}</p>`;
 }
@@ -178,7 +186,7 @@ function replyStatus(view: SubmissionView, thread: number | undefined): string {
 /** A reply form: on the conversation, or in the thread `thread` starts. */
 function replyForm(view: SubmissionView, thread?: number): string {
   const id = `svartz-reply-${thread ?? "conversation"}`;
-  const failed = view.status !== undefined && view.status.thread === thread && REPLY_STATUSES[view.status.code]?.error;
+  const failed = view.status !== undefined && view.status.thread === thread && replyStatusOf(view.status.code)?.error;
   const fields = `<form class="sv-account-form" method="post" action="${escape(view.replyAction!)}" data-svartz-reply="${thread ?? "conversation"}">
   <input type="hidden" name="pull" value="${view.number}">${thread === undefined ? "" : `\n  <input type="hidden" name="thread" value="${thread}">`}
   <div class="sv-account-field svartz-submissions-reply">
@@ -215,6 +223,7 @@ function entryHtml(entry: Entry, view: SubmissionView): string {
 export function submissionPage(view: SubmissionView): PluginPage {
   const github = githubLink(view.url);
   const links = [
+    ...(view.kind ? [view.kind === "edit" ? "Edit" : "New page"] : []),
     ...(view.pageUrl ? [`<a href="${escape(view.pageUrl)}">Open the page</a>`] : []),
     ...(github ? [`<a href="${escape(github)}">Pull request #${view.number} on GitHub</a>`] : []),
   ];
@@ -230,18 +239,18 @@ export function submissionPage(view: SubmissionView): PluginPage {
   return {
     title: view.title,
     html: `<div class="sv-account sv-dashboard svartz-submissions-dashboard">
-<nav class="sv-dashboard-crumbs" aria-label="Submissions"><a href="${escape(view.back)}">My submissions</a></nav>
+<nav class="sv-dashboard-crumbs" aria-label="Submissions"><a href="${escape(view.back)}">${escape(view.backLabel ?? "My submissions")}</a></nav>
 <div>
 <h1>${escape(view.title)}</h1>
-<p class="sv-account-muted svartz-submissions-links">${view.kind === "edit" ? "Edit" : "New page"} · ${links.join(" · ")}</p>
+<p class="sv-account-muted svartz-submissions-links">${links.join(" · ")}</p>
 </div>
 <div class="sv-account-who">
 <p class="sv-account-lead" data-stage="${view.stage}">${STAGE_TEXT[view.stage]}</p>${followUp}
-</div>
+</div>${view.changes ? `\n${view.changes}` : ""}
 <section aria-labelledby="svartz-conversation">
 <h2 id="svartz-conversation">Conversation</h2>
 ${conversation}
-</section>${view.replyAction ? `\n<div id="svartz-reply">\n${replyForm(view)}\n</div>` : ""}
+</section>${view.replyAction ? `\n<div id="svartz-reply">\n${replyForm(view)}\n</div>` : ""}${view.actions ? `\n${view.actions}` : ""}
 </div>`,
   };
 }

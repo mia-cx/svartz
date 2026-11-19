@@ -1,14 +1,16 @@
 /**
- * A revision's Markdown as the site renders a note's body: the build's own Markdown steps, the ones the editor's
- * Split preview runs, then the build's sanitizing rules, since a revision is untrusted text and the page puts this
- * HTML straight into the document.
+ * `@svartz/plugin-submissions/render`: a revision's Markdown as the site renders a note's body: the build's own
+ * Markdown steps, the ones the editor's Split preview runs, then the build's sanitizing rules, since a revision is
+ * untrusted text and the page puts this HTML straight into the document. The Submissions review panel renders a pull
+ * request's pages with it, and page history (`@svartz/plugin-history`) renders revisions.
  */
 import type { ElementContent, Root, RootContent } from "hast";
 import { fromHtml } from "hast-util-from-html";
 import { isUnsafeElement, safeAttributes, VOID_TAGS } from "@svartz/plugins/content";
 import { renderPreview, type PreviewOptions } from "@svartz/plugins/preview";
 import { extractFrontmatter } from "@svartz/plugins/routes";
-import { escape } from "./html";
+
+const escape = (text: string): string => text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 
 /** `node` as HTML, without what the build drops from a note: scripts and styles, handlers, script URLs, comments. */
 function serialize(node: Root | RootContent | ElementContent): string {

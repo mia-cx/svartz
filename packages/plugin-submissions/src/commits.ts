@@ -125,6 +125,11 @@ export interface CommitReader {
   previous(path: string, sha: string): Promise<Commit | undefined>;
   /** `path`'s content at commit `sha`; `missing` too when `sha` isn't on the content branch. */
   file(path: string, sha: string): Promise<FileAt>;
+  /**
+   * `path`'s content at `sha`, the head commit GitHub just named for one of this repository's open pull requests,
+   * which needn't be on the content branch. The caller vouches for `sha`: never pass one a reader sent.
+   */
+  headFile(path: string, sha: string): Promise<FileAt>;
   /** Have the reconcile poll read GitHub after the answer, when the mirror is stale; it backfills on its first run. */
   refresh(): void;
 }
@@ -436,10 +441,14 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
       },
 
       async file(path, sha) {
+        if (!await reader.onBranch(sha)) return { kind: "missing" };
+        return reader.headFile(path, sha);
+      },
+
+      async headFile(path, sha) {
         const key = `${sha}:${path}`;
         const cached = files.get(key);
         if (cached) return cached;
-        if (!await reader.onBranch(sha)) return { kind: "missing" };
         const response = await get(`/contents/${encodePath(repoPath(path))}?ref=${sha}`, "application/vnd.github.raw");
         let answer: FileAt;
         if (response.status === 404) {
