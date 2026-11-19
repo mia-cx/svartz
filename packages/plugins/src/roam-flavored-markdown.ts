@@ -120,23 +120,26 @@ function remarkRoam(options: RoamOptions) {
 }
 
 /** Add Roam prose syntax after the normal GFM parser. */
-export const roamFlavoredMarkdown = (userOptions: Partial<RoamOptions> = {}) => definePlugin(() => ({
-  id: "core:roam-flavored-markdown",
-  parseFrontmatter: {
-    run(ctx) {
-      ctx.meta.set("svartz:roamMedia", true);
-      for (const file of ctx.files) {
-        if (![".md", ".mdx", ".svx"].includes(file.extension ?? "")) continue;
-        file.rawLinks = extractRawLinks(file.content, true);
-      }
+export const roamFlavoredMarkdown = (userOptions: Partial<RoamOptions> = {}) => {
+  const options: RoamOptions = { ...defaults, ...userOptions };
+  return definePlugin(() => ({
+    id: "core:roam-flavored-markdown",
+    options,
+    parseFrontmatter: {
+      run(ctx) {
+        ctx.meta.set("svartz:roamMedia", true);
+        for (const file of ctx.files) {
+          if (![".md", ".mdx", ".svx"].includes(file.extension ?? "")) continue;
+          file.rawLinks = extractRawLinks(file.content, true);
+        }
+      },
+      options: { fatal: true, enforce: "post" },
     },
-    options: { fatal: true, enforce: "post" },
-  },
-  transformGfm: {
-    run(ctx) {
-      const options = { ...defaults, ...userOptions };
-      getCompilerContributions(ctx).remarkPlugins.push(() => remarkRoam(options));
+    transformGfm: {
+      run(ctx) {
+        getCompilerContributions(ctx).remarkPlugins.push(() => remarkRoam(options));
+      },
+      options: { fatal: true, enforce: "post" },
     },
-    options: { fatal: true, enforce: "post" },
-  },
-}))();
+  }))();
+};

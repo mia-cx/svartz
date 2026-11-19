@@ -48,6 +48,7 @@ export const transformLatex = (options: LatexOptions = {}) => {
   const { disabled, ...katexOptions } = options;
   return definePlugin(() => ({
     id: "core:transform-latex",
+    options: katexOptions,
 
     transformLatex: {
       run(ctx) {

@@ -26,6 +26,12 @@ function markBibliographyLinks() {
 /** Resolve bibliography paths from the vault, independent of the host process cwd. */
 export const citations = (options: CitationOptions = {}) => definePlugin(() => ({
   id: "core:citations",
+  options: {
+    bibliographyFile: options.bibliographyFile ?? "./bibliography.bib",
+    csl: options.csl ?? "apa",
+    suppressBibliography: options.suppressBibliography ?? false,
+    linkCitations: options.linkCitations ?? false,
+  },
   transformGfm: {
     run(ctx) {
       const files = options.bibliographyFile ?? "./bibliography.bib";

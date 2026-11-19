@@ -63,18 +63,21 @@ function normalizeBody(source: string, options: OxHugoOptions): string {
 }
 
 /** Normalize ox-hugo syntax before the required frontmatter and link parser. */
-export const oxHugoFlavoredMarkdown = (userOptions: Partial<OxHugoOptions> = {}) => definePlugin(() => ({
-  id: "core:oxhugo-flavored-markdown",
-  parseFrontmatter: {
-    run(ctx) {
-      const options = { ...defaults, ...userOptions };
-      for (const file of ctx.files) {
-        // Ox-hugo exports Markdown. Never rewrite executable Svelte source.
-        if (!file.extension || ![".md", ".mdx"].includes(file.extension)) continue;
-        const header = FRONTMATTER_HEADER.exec(file.content)?.[0] ?? "";
-        file.content = header + normalizeBody(file.content.slice(header.length), options);
-      }
+export const oxHugoFlavoredMarkdown = (userOptions: Partial<OxHugoOptions> = {}) => {
+  const options: OxHugoOptions = { ...defaults, ...userOptions };
+  return definePlugin(() => ({
+    id: "core:oxhugo-flavored-markdown",
+    options,
+    parseFrontmatter: {
+      run(ctx) {
+        for (const file of ctx.files) {
+          // Ox-hugo exports Markdown. Never rewrite executable Svelte source.
+          if (!file.extension || ![".md", ".mdx"].includes(file.extension)) continue;
+          const header = FRONTMATTER_HEADER.exec(file.content)?.[0] ?? "";
+          file.content = header + normalizeBody(file.content.slice(header.length), options);
+        }
+      },
+      options: { fatal: true, enforce: "pre" },
     },
-    options: { fatal: true, enforce: "pre" },
-  },
-}))();
+  }))();
+};

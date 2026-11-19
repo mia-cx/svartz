@@ -130,6 +130,12 @@ interface SvartzPlugin {
    * the plugin that vault runs. Throw to fail config resolution, naming the vault.
    */
   readonly forVault?: (site: SiteVaults) => SvartzPlugin;
+  /**
+   * The plain data the plugin was made from, such as a factory's options merged over its defaults. A plugin whose
+   * output depends on values its hooks close over puts them here: a closure's captured values can't be read from
+   * outside, and the version cache of `@svartz/plugin-history` compiles versions again when this changes.
+   */
+  readonly options?: unknown;
 
   // Lifecycle hooks
   buildStart?: PluginHookInput;
@@ -163,6 +169,7 @@ interface NormalizedSvartzPlugin {
   readonly server?: ServerModuleSpec;
   readonly permissions?: SvartzPlugin["permissions"];
   readonly forVault?: SvartzPlugin["forVault"];
+  readonly options?: SvartzPlugin["options"];
 
   // Lifecycle hooks
   buildStart?: PluginHook;
