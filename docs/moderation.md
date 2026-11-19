@@ -1,6 +1,6 @@
 # Moderation
 
-`@svartz/plugin-moderation` lets readers report what's wrong on a site: a page, a comment, an account, a submission or a commit, each with a reason. Moderators work through the reports on the site's [dashboard](auth.md#the-dashboard), resolve or dismiss each, and act on what was reported through the plugin that owns it: hide a comment, close a submission. Every moderator action lands in auth's [audit log](auth.md#the-audit-log).
+`@svartz/plugin-moderation` lets readers report what's wrong on a site: a page, a comment, an account, a submission or a commit, each with a reason. Moderators work through the reports on the site's [dashboard](auth.md#the-dashboard), resolve or dismiss each, and act on what was reported through the plugin that owns it: hide a comment, close a submission. They suspend accounts for a while or for good. Every moderator action lands in auth's [audit log](auth.md#the-audit-log), which the Audit log panel shows.
 
 The package is private until its npm release; it ships in this repository's workspace.
 
@@ -52,7 +52,28 @@ Moderation doesn't call GitHub, so a submission or commit report is checked by f
 - **Hide comment** hides the reported comment through annotations, for a moderator who holds `annotations:comments:delete` on its page. It stays in the report, marked hidden. A hide commits in one transaction with its audit entry, so it needs annotations to keep its comments in the accounts database, `annotations({ database: { env: "SVARTZ_DB" } })`, as the example above does; with another binding the panel doesn't offer it.
 - **Close submission** closes the reported pull request without merging it, through submissions, for a moderator who holds `submissions:reviews:write`. It shows only for a pull request the vault's own submissions saved, which takes submissions' [sync](../packages/plugin-submissions/README.md#github-sync): vaults that share a repository never close each other's.
 
-Hiding and closing leave the report open, to resolve once done. Each shows only to a moderator who holds the owning plugin's permission, and its route checks that again. A report whose target's plugin has left the vault, or whose comment was deleted since, still shows, without those actions. A comment whose page the build no longer publishes, or now protects, shows without its text.
+- **Suspend @handle** shows on a report about an account, and on one about a comment, for its author's account, to a moderator who holds `moderation:accounts:write`. It opens the [suspension form](#suspensions) for that account, which offers to go back to the report.
+
+Hiding, closing and suspending leave the report open, to resolve once done. Each shows only to a moderator who holds the owning plugin's permission, and its route checks that again. A report whose target's plugin has left the vault, or whose comment was deleted since, still shows, without those actions. A comment whose page the build no longer publishes, or now protects, shows without its text.
+
+## Suspensions
+
+A suspended account is a guest until its suspension ends: on every plugin it keeps what guests may do and loses everything else, from its next request on. It stays signed in, and its account page says why and until when, without naming the moderator. Once the suspension's time passes it has its rights back, with nothing to do. [Auth](auth.md#suspensions) keeps and enforces suspensions; this plugin offers the forms.
+
+`/-/dashboard/moderation/suspensions/` lists the suspensions in force, each with its end and reason, and finds an account by handle. Each account's page there, `?handle=<handle>`, holds the form:
+
+- **For how long**: 1 day, 1 week, 1 month (30 days) or for good.
+- **Reason**, up to 1,000 characters. The suspended person reads it.
+
+Suspending an account that's suspended replaces its suspension. While one is in force, the page shows it with **Lift suspension**, which ends it early. An account config names an admin can't be suspended, and neither can the moderator's own; the page says so instead of offering the form.
+
+Moderators reach the form from the Reports panel and from user pages: on a [user page](auth.md#user-pages), a reader who holds `moderation:accounts:write` gets **Suspend** beside **Report**. Either way the form offers to go back where they came from.
+
+Each suspension and lift commits with its audit entry, `auth:account:suspend` (with the reason and end) or `auth:account:lift`, on `account:<handle>`.
+
+## The Audit log panel
+
+`/-/dashboard/moderation/audit/` shows auth's audit log: every entry from every plugin, newest first, 50 at a time, with who made it (their handle then), what they did, on what, when, and its detail. **Who** keeps the entries of one account, under any handle it has held, and **On what** those on one target, exactly as listed. Both are GET parameters, `?actor=<handle>&target=<target>`, so a filtered view can be linked; each entry's handle and target link to the log filtered by them. The log is the whole site's, so a grant on one vault shows every vault's entries. The panel only reads: the log is append-only.
 
 ## Permissions
 
@@ -60,8 +81,8 @@ Hiding and closing leave the report open, to resolve once done. Each shows only 
 | --- | --- | --- |
 | `moderation:reports:write` | Report. | Every signed-in reader. |
 | `moderation:reports:read` | Open the Reports panel, and resolve or dismiss reports. | Nobody but admins. |
-| `moderation:accounts:write` | Suspend and unsuspend accounts. | Nobody but admins. |
-| `moderation:audit:read` | Read the audit log. | Nobody but admins. |
+| `moderation:accounts:write` | Open the Suspensions panel, and suspend and unsuspend accounts. | Nobody but admins. |
+| `moderation:audit:read` | Open the Audit log panel. | Nobody but admins. |
 
 Grant them on the dashboard's [People & permissions](auth.md#people--permissions). The plugin checks each on the vault; a grant on the site covers every vault. All but reporting are [administrative](auth.md#grants): owning a user page or a group linked to the vault gives none of them, so only the `admin` role or a grant does.
 
@@ -74,13 +95,18 @@ Under `<base><mount>/_svartz/moderation/`. Failures answer `{ error, message }`,
 | `POST reports/` | Files `{ target: { kind, id }, reason }` for the signed-in reader and answers `201 { report: { id } }`. |
 | `POST reports/<id>/resolve/` | A form post: resolves open report `<id>`, records it, and redirects to the panel. |
 | `POST reports/<id>/dismiss/` | The same, dismissing it. |
+| `POST accounts/suspend/` | A form post: suspends the account `handle` for `duration` (`day`, `week`, `month` or `for-good`) with `reason`, and redirects to `returnTo` with the outcome as `status`: `suspended`, or, changing nothing, `admin`, `self`, `not-found`, `duration-invalid` or `reason-invalid`. |
+| `POST accounts/lift/` | A form post: lifts the suspension of the account `handle` and redirects to `returnTo` with `status` `lifted`, or `not-suspended` or `not-found`. |
+
+A `returnTo` that isn't a path on this site, after normalizing too, sends the moderator to the account's suspension form instead.
+| `GET viewer/` | `{ suspends }`: whether the reader may suspend accounts here, for the Suspend action on user pages. |
 
 | Status | `error` | When |
 | --- | --- | --- |
 | 400 | `invalid_target`, `invalid_reason`, `invalid_json` | A target that isn't one of the kinds above or is malformed, a kind whose plugin the vault lacks, a reason that's empty or over 1,000 characters, or a body that isn't JSON. |
-| 401 | `signed_out` | Nobody is signed in. |
+| 401 | `signed_out` | Nobody is signed in, or their account is suspended. |
 | 403 | `cross_origin` | The `Origin` header is missing or names another site. |
-| 403 | `forbidden` | A report from an account denied `moderation:reports:write`, or a resolve or dismiss without `moderation:reports:read`. |
+| 403 | `forbidden` | A report from an account denied `moderation:reports:write`, a resolve or dismiss without `moderation:reports:read`, or a suspend or lift without `moderation:accounts:write`. |
 | 404 | `not_found` | A page, comment or account that isn't there, or a report this vault doesn't have. |
 | 413 | `too_large` | A body over 16 KiB. |
 | 429 | `rate_limited` | The reader has spent their reports for the hour. Also includes `retryAfter` in seconds. |
