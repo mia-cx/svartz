@@ -1,0 +1,14 @@
+---
+description: Submissions plugin — who owns a submission, and how the App posts and pushes for an account
+globs: packages/plugin-submissions/src/**, packages/plugin-moderation/src/**
+alwaysApply: false
+---
+
+# Acting on a submission for an account
+
+- A submission (a pull request the site opened) belongs to the account `submissions_edits.owner` names for the save that opened it, read with `readSubmission(mirror, number)`. Never decide ownership from the pull request's text, branch name, author or a `Svartz-Account` trailer. A number with no row in this vault's scope is no submission: answer 404, the same as someone else's.
+- Everything the App posts on someone's behalf (replies, comments, reviews) starts with `header(sender, host)` from `attribution.ts`, joined to the text by `attributed()`. Pass the text through `postedText()` so `@mentions` stay quiet. Never build another header format; record what was posted in `submissions_replies` so the dashboard can show it as the account.
+- Comment and review text from GitHub is untrusted: escape it and show it as plain text (`submission-page.ts`), never as rendered Markdown.
+- A push to a submission goes through `commitSubmission` with `{ ...target, branch: <the submission's branch> }`, after `readPullRequest` confirms the pull request is open and its head is the branch `submissionBranch` names for that submission id in this repository. The blob SHA the editor loaded is required; a mismatch is 409 `changed`, never an overwrite.
+- Pages render from the mirror only; schedule `sync.refresh` or `sync.progress` instead of calling GitHub while rendering.
+- Every POST checks `Origin === url.origin`, re-checks permissions with `can()`, and counts against `guard.limit()` under a per-account key.

@@ -236,7 +236,7 @@ export function submissionPage(view: SubmissionView): PluginPage {
 <section aria-labelledby="svartz-conversation">
 <h2 id="svartz-conversation">Conversation</h2>
 ${conversation}
-</section>${view.replyAction ? `\n<section aria-label="Reply" id="svartz-reply">\n${replyForm(view)}\n</section>` : ""}
+</section>${view.replyAction ? `\n<div id="svartz-reply">\n${replyForm(view)}\n</div>` : ""}
 </div>`,
   };
 }

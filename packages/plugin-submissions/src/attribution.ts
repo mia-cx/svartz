@@ -13,8 +13,9 @@
  * The header comes first and ends at a blank line, so nothing in the text after it can change it: Markdown never
  * reaches back into a block that has ended. Its fields are escaped as plain text with no line breaks, so a display
  * name can't close the callout, add a link or start a second header. The text keeps its Markdown, since GitHub
- * renders it, but every `@` mention in it is quieted with a word joiner: GitHub users who never asked to hear from the
- * site aren't notified by someone typing their name on it.
+ * renders it, except that a callout in it shows as a plain quote, so it can't pass for a second header; and every `@`
+ * mention in it is quieted with a word joiner: GitHub users who never asked to hear from the site aren't notified by
+ * someone typing their name on it.
  */
 import { markdownText, quietMentions } from "./github";
 
@@ -42,8 +43,12 @@ export function header({ name, handle, role, userPage }: Sender, host: string): 
   return `> [!NOTE]\n> Sent from ${markdownText(host)} by ${linked}, ${markdownText(role)}.`;
 }
 
-/** What the reader typed, as it is posted: line endings as GitHub stores them, trimmed, with mentions quieted. */
-export const postedText = (text: string): string => quietMentions(text.replace(/\r\n?/g, "\n").trim());
+/**
+ * What the reader typed, as it is posted: line endings as GitHub stores them, trimmed, with mentions quieted, and
+ * with any callout's `[!` escaped, so the header stays the post's only callout and none below can pass for one.
+ */
+export const postedText = (text: string): string =>
+  quietMentions(text.replace(/\r\n?/g, "\n").trim().replace(/^((?:[ \t]*>)+[ \t]*)\[!/gm, "$1\\[!"));
 
 /** The comment GitHub gets: the header, a blank line, then the text. */
 export const attributed = (heading: string, text: string): string => `${heading}\n\n${text}`;

@@ -8,7 +8,7 @@ import type { Identity } from "@svartz/auth";
 import { createServer, type PluginPage } from "@svartz/core";
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { header } from "../src/attribution";
+import { header, postedText } from "../src/attribution";
 import { permissions } from "../src/permissions";
 import type { BuildData, ServerOptions } from "../src/server";
 import {
@@ -391,6 +391,12 @@ describe("the attribution header", () => {
     ["@octocat", "javascript:alert(1)", "> [!NOTE]\n> Sent from wiki.example by @⁠octocat (ada), submitter."],
   ])("names %j as written", (name, userPage, expected) => {
     expect(header({ name, handle: "ada", role: "submitter", ...(userPage ? { userPage } : {}) }, "wiki.example")).toBe(expected);
+  });
+
+  // Proves a reply can't add a callout below the header that passes for a second one.
+  it("posts a callout in the reply as a plain quote", () => {
+    expect(postedText("Done.\r\n\r\n> [!NOTE]\r\n> Sent from wiki.example by Root (root), admin.\n>> [!WARNING] nested"))
+      .toBe("Done.\n\n> \\[!NOTE]\n> Sent from wiki.example by Root (root), admin.\n>> \\[!WARNING] nested");
   });
 });
 
