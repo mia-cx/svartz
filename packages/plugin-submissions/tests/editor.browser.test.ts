@@ -587,6 +587,26 @@ describe("New page", () => {
     await expect.element(page.getByRole("button", { name: "Publish" })).toBeEnabled();
   });
 
+  it("can't be sent while it doesn't know where the page goes, and asks again on request", async () => {
+    const answers = [
+      () => Response.json({ error: "github_unavailable", message: "Couldn't reach GitHub right now. Try again in a moment." }, { status: 503 }),
+      () => Response.json({ destination: "commit" }),
+    ];
+    serve(() => Response.json({}), undefined, () => answers.shift()!());
+    unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
+    await page.getByRole("button", { name: "New page" }).click();
+    await page.getByRole("textbox", { name: "Page source" }).click();
+    await userEvent.keyboard("Some text.");
+    await page.getByRole("textbox", { name: "Title" }).fill("Ada Lovelace");
+
+    await expect.element(page.getByText("Couldn't reach GitHub right now. Try again in a moment.")).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Open pull request" })).toBeDisabled();
+
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect.element(page.getByRole("button", { name: "Publish" })).toBeEnabled();
+    await expect.element(page.getByText("Couldn't reach GitHub right now. Try again in a moment.")).not.toBeInTheDocument();
+  });
+
   it("waits for a title and some content before it can be sent", async () => {
     serve(() => Response.json({}));
     unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);

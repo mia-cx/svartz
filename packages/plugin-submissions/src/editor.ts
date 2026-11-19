@@ -521,7 +521,12 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
   let destinationTimer: ReturnType<typeof setTimeout> | undefined;
   /** Counts questions, so only the latest answer shows. */
   let asked = 0;
-  /** Ask where a new page goes once the reader pauses: its title and section decide which grants apply. */
+  /** Whether the error says the last question about where a new page goes got no answer. */
+  let unanswered = false;
+  /**
+   * Ask where a new page goes once the reader pauses: its title and section decide which grants apply. Without an
+   * answer the reader can't send, since the button can't say whether the page goes live; the error offers to ask again.
+   */
   function askDestination() {
     clearTimeout(destinationTimer);
     const ask = ++asked;
@@ -529,11 +534,27 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     // The last answer was for another title or section, so it no longer says where this page goes.
     asking = Boolean(name);
     showDestination(null);
+    if (unanswered) {
+      unanswered = false;
+      error.hidden = true;
+      error.replaceChildren();
+    }
     if (phase === "editing") submit.disabled = !ready();
     if (!name) return;
     destinationTimer = setTimeout(async () => {
       const query = new URLSearchParams({ folder: folder?.value ?? "", title: name });
-      const answer = await request<DestinationResponse>(`${endpoint}/destination/?${query}`).catch(() => ({ destination: null }));
+      let answer: DestinationResponse;
+      try {
+        answer = await request<DestinationResponse>(`${endpoint}/destination/?${query}`);
+      } catch (failure) {
+        if (ask !== asked || !dialog.isConnected) return;
+        showError(failure as ServerError);
+        const retry = Object.assign(document.createElement("button"), { type: "button", className: "sv-action", textContent: "Try again" });
+        retry.addEventListener("click", () => askDestination());
+        error.append(" ", retry);
+        unanswered = true;
+        return;
+      }
       if (ask !== asked || !dialog.isConnected) return;
       asking = false;
       showDestination(answer.destination);
