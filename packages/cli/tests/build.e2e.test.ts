@@ -244,6 +244,79 @@ describe("svartz CLI", () => {
     }
   }, 240_000);
 
+  it("publishes a post's previous versions from git on a static vault, and nothing until a post opts in", async () => {
+    const repo = await mkdtemp(resolve(os.tmpdir(), "svartz-versions-e2e-"));
+    const vault = resolve(repo, "content");
+    const configPath = resolve(ROOT, ".svartz-versions-e2e.config.ts");
+    const dist = resolve(ROOT, ".svartz/vaults/versions-e2e/dist");
+    const packageSource = await readFile(resolve(ROOT, "package.json"), "utf8");
+    const turboSource = await readFile(resolve(ROOT, "turbo.json"), "utf8");
+    const post = (frontmatter: string, body: string) => writeFile(resolve(vault, "posts/hello.md"), `---\ntitle: Hello\n${frontmatter}---\n\n${body}\n`);
+    let day = 0;
+    const commit = async (message: string) => {
+      const date = `2026-01-${String(++day).padStart(2, "0")}T10:00:00Z`;
+      await execFileAsync("git", ["-C", repo, "add", "-A"]);
+      await execFileAsync("git", ["-C", repo, "-c", "user.name=Ada Lovelace", "-c", "user.email=ada@example.com", "commit", "-qm", message], {
+        env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
+      });
+    };
+    /** Builds the vault with `plugins`, then reads every file it emitted, without SvelteKit's per-build version stamp. */
+    const build = async (plugins: string) => {
+      await writeFile(configPath, `import { history } from ${JSON.stringify(resolve(ROOT, "packages/plugin-history/dist/index.js"))};
+        export default { version: "1.0.0", vaults: [{ id: "versions-e2e", path: ${JSON.stringify(vault)},
+          target: { type: "static" }, site: { title: "Versions" }, plugins: ${plugins} }] };\n`);
+      await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
+      const stamp = (JSON.parse(await readFile(resolve(dist, "_app/version.json"), "utf8")) as { version: string }).version;
+      const files = await readdir(dist, { recursive: true, withFileTypes: true });
+      return new Map(await Promise.all(files.filter((file) => file.isFile()).map(async (file) => {
+        const path = resolve(file.parentPath, file.name);
+        // The stamp, the global SvelteKit names after it, and the CSP hashes of the inline scripts holding both, which
+        // are compared themselves.
+        const contents = (await readFile(path, "utf8")).replaceAll(stamp, "<version>")
+          .replace(/__sveltekit_[a-z0-9]+/g, "__sveltekit").replace(/'sha256-[A-Za-z0-9+/=]+'/g, "'sha256'");
+        return [path.slice(dist.length), contents] as const;
+      })));
+    };
+    try {
+      await mkdir(resolve(vault, "posts"), { recursive: true });
+      await execFileAsync("git", ["init", "-q", repo]);
+      await post("", "First wording.");
+      await commit("Write it");
+      await post("", "Second wording.");
+      await commit("Reword it");
+
+      // With no post asking for its versions, the plugin changes no emitted file.
+      const without = await build("[]");
+      expect(await build('[history({ source: "git" })]')).toEqual(without);
+
+      await post("versions: true\n", "Third wording.");
+      await commit("Publish its versions");
+      await post("versions: true\ndraft: true\n", "SECRET draft wording.");
+      await commit("Draft SECRET-SUMMARY");
+      await post("versions: true\n", "Fourth wording.");
+      await commit("Finish it");
+      const emitted = await build('[history({ source: "git" })]');
+
+      const [finish, draft, publish, reword, write] = (await execFileAsync("git", ["-C", repo, "log", "--format=%h", "--abbrev=7"])).stdout.trim().split("\n");
+      const listing = emitted.get("/posts/hello/versions/index.html")!;
+      expect(listing).toContain("<title>Versions of Hello | Versions</title>");
+      expect(listing).toContain('<meta name="robots" content="noindex"');
+      expect([...listing.matchAll(/<a href="([0-9a-f]+\/)"/g)].map(([, href]) => href)).toEqual([finish, publish, reword, write].map((sha) => `${sha}/`));
+      const latest = emitted.get(`/posts/hello/versions/${finish}/index.html`)!;
+      expect(latest).toContain("<del>Third wording.</del>");
+      expect(latest).toContain("<ins>Fourth wording.</ins>");
+      expect(latest).toContain("<p>Fourth wording.</p>");
+      expect(emitted.has(`/posts/hello/versions/${draft}/index.html`)).toBe(false);
+      for (const [path, contents] of emitted) expect(contents, path).not.toMatch(/SECRET|ada@example\.com/);
+    } finally {
+      await rm(configPath, { force: true });
+      await rm(repo, { recursive: true, force: true });
+      await rm(resolve(ROOT, ".svartz/vaults/versions-e2e"), { recursive: true, force: true });
+      await writeFile(resolve(ROOT, "package.json"), packageSource);
+      await writeFile(resolve(ROOT, "turbo.json"), turboSource);
+    }
+  }, 480_000);
+
   it("publishes protected SVX as sealed static output only", async () => {
     const configPath = resolve(ROOT, ".svartz-protected-e2e.config.ts");
     const dist = resolve(ROOT, ".svartz/vaults/protected-e2e/dist");
