@@ -356,3 +356,41 @@ describe("submissions credentials config", () => {
     expect(() => submissions({ repo: "acme/wiki", ...options } as Parameters<typeof submissions>[0])).toThrow(message);
   });
 });
+
+describe("submissions permissions and mode", () => {
+  const app = { id: 1234567, privateKey: { env: "SVARTZ_GITHUB_APP_KEY" } };
+  const signIn = auth({ providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } } });
+  const turnstile = { siteKey: "0x4AAAAAAAtest", secret: { env: "TURNSTILE_SECRET" } };
+  const defaults = (plugin: NormalizedSvartzPlugin) =>
+    Object.fromEntries((plugin.permissions ?? []).map(({ slug, defaults = {} }) => [slug, defaults]));
+
+  it("lets signed-in readers open pull requests, and guests only behind Turnstile, and nobody else anything by default", () => {
+    const others = {
+      "submissions:commits:write": {},
+      "submissions:reviews:write": {},
+      "submissions:pull-requests:read": {},
+    };
+    expect(defaults(submissions({ repo: "acme/wiki" }))).toEqual({ "submissions:pull-requests:write": { "signed-in": "allow" }, ...others });
+    expect(defaults(submissions({ repo: "acme/wiki", guard: { turnstile } })))
+      .toEqual({ "submissions:pull-requests:write": { guest: "allow", "signed-in": "allow" }, ...others });
+    // Required sign-in turns Turnstile off, so guests get nothing.
+    expect(defaults(submissions({ repo: "acme/wiki", signIn: { required: true }, guard: { turnstile } })))
+      .toEqual({ "submissions:pull-requests:write": { "signed-in": "allow" }, ...others });
+  });
+
+  it("decides by permission unless told otherwise", () => {
+    expect(submissions({ repo: "acme/wiki" }).server?.options).toMatchObject({ mode: "permission" });
+  });
+
+  it("refuses commit mode without a GitHub App to commit as, or on a vault without auth", () => {
+    expect(() => submissions({ repo: "acme/wiki", mode: "commit" })).toThrow(/mode "commit" needs a GitHub App/);
+    const plugin = submissions({ repo: "acme/wiki", mode: "commit", app });
+    const vault = (plugins: unknown[]) => ({ id: "wiki", mountPath: "/wiki", target: { type: "node" }, plugins: [...plugins, plugin] }) as unknown as ResolvedConfig;
+    expect(() => plugin.forVault!({ vault: vault([]), vaults: [vault([])] })).toThrow(/vault "wiki" uses submissions mode "commit" without auth/);
+    expect(plugin.forVault!({ vault: vault([signIn]), vaults: [vault([signIn])] })).toBe(plugin);
+  });
+
+  it("refuses a mode it doesn't know", () => {
+    expect(() => submissions({ repo: "acme/wiki", mode: "direct" } as unknown as Parameters<typeof submissions>[0])).toThrow(/mode must be/);
+  });
+});

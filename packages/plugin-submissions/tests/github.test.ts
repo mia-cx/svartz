@@ -6,6 +6,7 @@ import {
   BUILD_COMMIT,
   editExchanges,
   type Exchange,
+  GUIDE_SHA,
   GUIDE_SOURCE,
   labelExchange,
   PULL_42,
@@ -52,10 +53,10 @@ afterEach(() => {
 });
 
 describe("PR writer", () => {
-  it("reads a note's source at the build commit byte for byte", async () => {
+  it("reads a note's source at the build commit byte for byte, with the blob SHA git gives it", async () => {
     replayGitHub([sourceExchange]);
 
-    expect(await readSource(target, "content/guide.md")).toBe(GUIDE_SOURCE);
+    expect(await readSource(target, "content/guide.md")).toEqual({ markdown: GUIDE_SOURCE, sha: GUIDE_SHA });
   });
 
   it("opens a labelled pull request with one commit on the submission's branch from the build commit", async () => {

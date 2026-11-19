@@ -28,7 +28,14 @@ const GUARD_ONLY_ENV = { TURNSTILE_SECRET: "turnstile-secret", PRIVATE_SVARTZ_SE
 function handlerWith(guard: GuardOptions) {
   return createHandler(
     { repo: REPO, labels: ["submission"], token: { env: "SVARTZ_GITHUB_TOKEN" }, guard },
-    { commit: BUILD_COMMIT, pages: { "/wiki/guide/": "content/guide.md" }, routes: { guide: "/wiki/guide/" }, vaultRoot: "content", folders: [""] },
+    {
+      commit: BUILD_COMMIT,
+      pages: { "/wiki/guide/": "content/guide.md" },
+      routes: { guide: "/wiki/guide/" },
+      vaultRoot: "content",
+      folders: [""],
+      links: [{ link: "guide", title: "Guide", slug: "guide", path: "guide.md", href: "/wiki/guide/" }],
+    },
   );
 }
 

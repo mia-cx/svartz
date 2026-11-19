@@ -1,19 +1,28 @@
 /**
  * The submissions server module, mounted at `<base><mount>/_svartz/submissions/`:
  *
- * - `GET source/?page=<route>` answers `{ markdown }`, the note's source at the build commit.
+ * - `GET source/?page=<route>` answers `{ markdown, sha, destination }`: the note's source at the build commit, its
+ *   blob SHA, and where the reader's edit of it would go.
+ * - `GET destination/?folder=<folder>&title=<title>` answers `{ destination }` for a new page.
  * - `GET links/` answers `{ notes, attachments }`, the published notes a wikilink can name and the published
  *   attachments, for the editor's autocomplete and Split preview.
- * - `POST edit/` with `{ submissionId, page, markdown, note?, turnstileToken? }` opens a pull request and answers 201 `{ url, number }`.
+ * - `POST edit/` with `{ submissionId, page, markdown, note?, sha?, turnstileToken? }` saves an edit and answers 201
+ *   with the commit or the pull request.
  * - `POST new/` with `{ submissionId, folder, title, markdown, note?, turnstileToken? }` does the same for a new note.
  *
  * The client never names a file path. Edits must target a note in the build's manifest; a new note goes in one of the
- * manifest's folders, named after its title, and never where a file already is. Every submission passes the guard
- * (required sign-in, rate limit, and Turnstile when configured) before any GitHub call, a GitHub App's token exchange
- * included. A signed-in reader is credited in the pull request, and authors its commit when signed in with GitHub.
- * Failures answer `{ error, message }`.
+ * manifest's folders, named after its title, and never where a file already is.
+ *
+ * Where a save goes is decided here for every request, on the page it writes. Without accounts (no `SVARTZ_DB`), it
+ * opens a pull request, as before accounts. With them, it commits when the mode allows commits, a GitHub App is
+ * configured and the account holds `submissions:commits:write` on the page; otherwise it opens a pull request when
+ * the mode allows those and the reader holds `submissions:pull-requests:write`; otherwise it is refused. A commit
+ * whose file changed on the branch since the reader loaded it opens a pull request instead.
+ *
+ * Every save passes the guard (required sign-in, rate limit, and Turnstile when configured) before any GitHub call, a
+ * GitHub App's token exchange included. Failures answer `{ error, message }`.
  */
-import { readIdentity } from "@svartz/auth/server";
+import { can, linkedIdentities, readIdentity, readSignIn, type Account, type Identity } from "@svartz/auth/server";
 import type { ServerContext, ServerModuleFactory } from "@svartz/core";
 import { pathRoute } from "@svartz/plugins/routes";
 import {
@@ -22,6 +31,8 @@ import {
   MAX_TITLE_LENGTH,
   PLUGIN_ID,
   SUBMISSION_ID_PATTERN,
+  type Destination,
+  type DestinationResponse,
   type EditResponse,
   type LinksResponse,
   type LinkTarget,
@@ -30,8 +41,15 @@ import {
 } from "./api";
 import { appTokens, type AppCredentials } from "./app";
 import { misconfigured, SubmissionError } from "./errors";
-import { openSubmission, readSource, type GitHubTarget, type Submission } from "./github";
+import { commitSubmission, openSubmission, readSource, type Attribution, type GitHubTarget, type Submission } from "./github";
 import { createGuard, type GuardOptions } from "./guard";
+import { COMMIT, OPEN_PULL_REQUESTS } from "./permissions";
+
+/**
+ * Which saves may commit. `permission` commits for whoever holds `submissions:commits:write` on the page and opens a
+ * pull request for the rest; `commit` refuses the rest instead; `pull-request` never commits.
+ */
+export type Mode = "commit" | "pull-request" | "permission";
 
 /** Exactly one kind of GitHub credentials: a token, or a GitHub App. */
 export type Credentials =
@@ -44,6 +62,7 @@ export type ServerOptions = Credentials & {
   readonly branch?: string;
   readonly labels: readonly string[];
   readonly guard: GuardOptions;
+  readonly mode: Mode;
 };
 
 /** What the build records for the server: never sent to the browser. */
@@ -75,6 +94,24 @@ const encoder = new TextEncoder();
 const tooLarge = () => new SubmissionError("too_large", 413, "This page is too large to submit from the site.");
 const invalid = () => new SubmissionError("invalid_request", 400, "Your changes didn't arrive intact. Reload the page and try again.");
 const invalidTitle = (message: string) => new SubmissionError("invalid_title", 400, message);
+/** A git blob SHA, as {@link SourceResponse.sha} gives it. */
+const BLOB_SHA = /^[0-9a-f]{40}$/;
+
+/** Who sent a request. Without accounts, `account` is always `null` and `identity` is the session's provider account. */
+interface Reader {
+  readonly accounts: boolean;
+  readonly account: Account | null;
+  readonly identity: Identity | null;
+}
+
+async function readReader(request: Request, env: ServerContext["env"]): Promise<Reader> {
+  const signIn = await readSignIn(request, env);
+  if (signIn.reason === "no-database") return { accounts: false, account: null, identity: await readIdentity(request, env) };
+  return { accounts: true, account: signIn.account, identity: signIn.account?.identity ?? null };
+}
+
+/** JSON that depends on who asks, so no cache keeps it for anyone else. */
+const privateJson = (body: unknown) => Response.json(body, { headers: { "cache-control": "private, no-store" } });
 
 /**
  * The body as text, read chunk by chunk: past `MAX_REQUEST_BYTES` the stream is cancelled and nothing more is
@@ -124,14 +161,18 @@ async function readSubmission(request: Request) {
 
 const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, data) => {
   const pages = new Map(Object.entries(data.pages));
+  // Every editable page is published, so the links list holds its slug, which permissions are checked on.
+  const slugs = new Map(data.links.map(({ href, slug }) => [href, slug]));
   const routes = new Map(Object.entries(data.routes));
   const folders = new Set(data.folders);
   const guard = createGuard(options.guard);
 
-  function notePath(page: string | null): string {
+  /** The repository path and slug of the editable note at route `page`. */
+  function editable(page: string | null): { path: string; slug: string } {
     const path = page === null ? undefined : pages.get(page);
-    if (!path) throw new SubmissionError("not_editable", 404, "This page can't be edited from the site.");
-    return path;
+    const slug = page === null ? undefined : slugs.get(page);
+    if (!path || slug === undefined) throw new SubmissionError("not_editable", 404, "This page can't be edited from the site.");
+    return { path, slug };
   }
 
   /** A new note's path in the vault, named after its title as in Obsidian. Refuses folders the build didn't publish. */
@@ -164,31 +205,85 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     return new URL(`${deploymentBase}${route}`, request.url).href;
   }
 
-  /** Pass the guard, then open the pull request, crediting the signed-in reader. */
-  async function open(
+  /**
+   * Where `reader`'s save of the page with slug `page` goes; `null` when they may not save it. Saves commit only on a
+   * site with accounts, as an account, and only with a GitHub App, which the commit names as its committer.
+   */
+  async function destinationFor(reader: Reader, page: string, context: ServerContext): Promise<Destination> {
+    if (!reader.accounts) {
+      if (options.mode === "commit") {
+        throw new SubmissionError("misconfigured", 503, "This site can't save edits yet: commits need accounts, and its server has no SVARTZ_DB bound.");
+      }
+      return "pull-request";
+    }
+    const { account } = reader;
+    const target = { vault: context.vault.id, page };
+    if (options.mode !== "pull-request" && options.app && account && await can(account, COMMIT, target, context.env)) return "commit";
+    if (options.mode !== "commit" && await can(account, OPEN_PULL_REQUESTS, target, context.env)) return "pull-request";
+    return null;
+  }
+
+  /** The account a commit is authored as, with its linked GitHub account as co-author. */
+  async function attribution(account: Account, request: Request, context: ServerContext): Promise<Attribution> {
+    const github = (await linkedIdentities(account, context.env)).find(({ provider }) => provider === "github");
+    return { accountId: account.id, name: account.name, handle: account.handle, host: new URL(request.url).hostname, ...(github ? { github } : {}) };
+  }
+
+  /**
+   * Decide where the save goes, on `slug`, the page it writes; pass the guard; then commit or open the pull request.
+   * `loaded` is the blob SHA the editor loaded, for an edit. A commit that finds the file changed opens a pull request.
+   */
+  async function save(
     request: Request,
     context: ServerContext,
     turnstileToken: string | undefined,
+    slug: string,
     submission: Omit<Submission, "submitter">,
-  ) {
-    const submitter = await readIdentity(request, context.env);
-    await guard({ token: turnstileToken, identity: submitter, clientAddress: context.clientAddress, env: context.env });
-    const pull = await openSubmission(await target(context), { ...submission, submitter });
-    return Response.json(pull satisfies EditResponse, { status: 201 });
+    loaded?: string,
+  ): Promise<Response> {
+    const reader = await readReader(request, context.env);
+    const destination = await destinationFor(reader, slug, context);
+    if (!destination) {
+      if (!reader.identity) throw new SubmissionError("sign_in_required", 401, "Sign in to send edits from this site.");
+      throw new SubmissionError("not_allowed", 403, "Your account can't edit this page.");
+    }
+    // Without the SHA of what the reader loaded, a commit couldn't tell whether it overwrites someone's change.
+    if (destination === "commit" && submission.kind === "edit" && loaded === undefined) throw invalid();
+    await guard({ token: turnstileToken, identity: reader.identity, clientAddress: context.clientAddress, env: context.env });
+    const github = await target(context);
+    const full: Submission = { ...submission, submitter: reader.identity };
+    let answer: EditResponse;
+    if (destination === "commit") {
+      const committed = await commitSubmission(github, full, loaded, await attribution(reader.account!, request, context));
+      answer = committed.kind === "commit" ? committed : { kind: "pull-request", ...await openSubmission(github, full), reason: "changed" };
+    } else {
+      answer = { kind: "pull-request", ...await openSubmission(github, full) };
+    }
+    return Response.json(answer, { status: 201 });
   }
 
   async function source(request: Request, context: ServerContext): Promise<Response> {
-    const path = notePath(new URL(request.url).searchParams.get("page"));
-    const markdown = await readSource(await target(context), path);
-    return Response.json({ markdown } satisfies SourceResponse);
+    const { path, slug } = editable(new URL(request.url).searchParams.get("page"));
+    const [{ markdown, sha }, destination] = await Promise.all([
+      target(context).then((github) => readSource(github, path)),
+      readReader(request, context.env).then((reader) => destinationFor(reader, slug, context)),
+    ]);
+    return privateJson({ markdown, sha, destination } satisfies SourceResponse);
+  }
+
+  async function destination(request: Request, context: ServerContext): Promise<Response> {
+    const query = new URL(request.url).searchParams;
+    const vaultPath = newNotePath(query.get("folder") ?? "", query.get("title") ?? "");
+    const reader = await readReader(request, context.env);
+    return privateJson({ destination: await destinationFor(reader, pathRoute(vaultPath), context) } satisfies DestinationResponse);
   }
 
   async function edit(request: Request, context: ServerContext): Promise<Response> {
-    const { body: { page }, submission, turnstileToken } = await readSubmission(request);
-    if (typeof page !== "string") throw invalid();
-    const path = notePath(page);
+    const { body: { page, sha }, submission, turnstileToken } = await readSubmission(request);
+    if (typeof page !== "string" || (sha !== undefined && (typeof sha !== "string" || !BLOB_SHA.test(sha)))) throw invalid();
+    const { path, slug } = editable(page);
     const pageUrl = publicUrl(page, request, context);
-    return open(request, context, turnstileToken, { ...submission, kind: "edit", path, page, pageUrl });
+    return save(request, context, turnstileToken, slug, { ...submission, kind: "edit", path, page, pageUrl }, sha);
   }
 
   async function create(request: Request, context: ServerContext): Promise<Response> {
@@ -211,13 +306,14 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     }
     // The pull request names where the reader came from: this vault's home page.
     const pageUrl = publicUrl(`${context.vault.mountPath}/`, request, context);
-    return open(request, context, turnstileToken, { ...submission, kind: "new", path, page: path.slice(0, -".md".length), pageUrl });
+    return save(request, context, turnstileToken, pathRoute(vaultPath), { ...submission, kind: "new", path, page: path.slice(0, -".md".length), pageUrl });
   }
 
   const links = async () => Response.json({ notes: data.links, ...data.preview } satisfies LinksResponse);
 
   const handlers = new Map([
     ["/source/", { method: "GET", run: source }],
+    ["/destination/", { method: "GET", run: destination }],
     ["/links/", { method: "GET", run: links }],
     ["/edit/", { method: "POST", run: edit }],
     ["/new/", { method: "POST", run: create }],

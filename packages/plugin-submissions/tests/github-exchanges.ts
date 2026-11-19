@@ -15,6 +15,8 @@ const NEW_TREE = "cd8274d15fa3ae2ab983129fb037999f264ba9a7";
 const NEW_COMMIT = "a6e2a36b2dbb2f1c4e7d3e4a5b9f0c1d2e3f4a5b";
 export const API = `https://api.github.com/repos/${REPO}`;
 
+/** {@link GUIDE_SOURCE}'s blob SHA, as `git hash-object` gives it. */
+export const GUIDE_SHA = "8edbb68c2a3aa640737ed3446437ecee9979f678";
 export const GUIDE_SOURCE = "﻿---\r\ntitle: Guide\r\n---\r\n\r\n# Guide\r\n\r\nSet up the wiki.\r\n";
 
 /** Pull request #42, as GitHub lists or creates it. */
@@ -125,6 +127,71 @@ function writeExchanges({
       response: { status: 201, json: PULL_42 },
     },
     labelExchange,
+  ];
+}
+
+/** The tip of `main` when a save commits. */
+export const HEAD_COMMIT = "3a1f9c0e5b7d2468ace013579bdf2468ace01357";
+/** Where `main` is after someone else's save lands first. */
+export const MOVED_HEAD = "5d2e8f1a3c4b6d7e9f0a1b2c3d4e5f6a7b8c9d0e";
+/** A blob SHA the editor never loaded: the file as someone else saved it. */
+export const OTHER_SHA = "e5b2c7d9f1a3b4c6d8e0f2a4b6c8d0e2f4a6b8c0";
+export const DIRECT_COMMIT = "c0ffee5b2dbb2f1c4e7d3e4a5b9f0c1d2e3f4a5b";
+const HEAD_TREE = "9e8d7c6b5a49382716051f2e3d4c5b6a79881726";
+const DIRECT_TREE = "1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e";
+
+/** The repository, with `main` as its default branch. */
+export const repositoryExchange: Exchange = {
+  request: { method: "GET", url: API },
+  response: { status: 200, json: { full_name: REPO, default_branch: "main", private: false } },
+};
+
+/** Reading where `main` points. */
+export const headExchange = (sha = HEAD_COMMIT): Exchange => ({
+  request: { method: "GET", url: `${API}/git/ref/heads/main` },
+  response: { status: 200, json: { ref: "refs/heads/main", object: { sha, type: "commit" } } },
+});
+
+/** The file at `path` in commit `ref`: its blob `sha`, or GitHub's 404 when there is none. */
+export const blobExchange = (path: string, ref: string, sha?: string): Exchange => ({
+  request: { method: "GET", url: `${API}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${ref}` },
+  response: sha
+    ? { status: 200, json: { type: "file", path, sha, size: 64, encoding: "base64", content: "" } }
+    : { status: 404, json: { message: "Not Found", status: "404" } },
+});
+
+/**
+ * Committing `markdown` at `path` on top of `head`, then moving `main` to the commit without forcing. `moved` is
+ * GitHub's answer to the move: refused with 422 when `main` moved meanwhile.
+ */
+export function commitExchanges({ path, markdown, message, author, head = HEAD_COMMIT, moved = "ok" }: {
+  path: string;
+  markdown: string;
+  message: string;
+  author: { name: string; email: string };
+  head?: string;
+  moved?: "ok" | "not-fast-forward";
+}): Exchange[] {
+  return [
+    {
+      request: { method: "GET", url: `${API}/git/commits/${head}` },
+      response: { status: 200, json: { sha: head, tree: { sha: HEAD_TREE }, parents: [] } },
+    },
+    {
+      request: { method: "POST", url: `${API}/git/trees`, body: { base_tree: HEAD_TREE, tree: [{ path, mode: "100644", type: "blob", content: markdown }] } },
+      response: { status: 201, json: { sha: DIRECT_TREE, truncated: false } },
+    },
+    {
+      // No committer: GitHub records the App.
+      request: { method: "POST", url: `${API}/git/commits`, body: { message, tree: DIRECT_TREE, parents: [head], author } },
+      response: { status: 201, json: { sha: DIRECT_COMMIT, html_url: `https://github.com/${REPO}/commit/${DIRECT_COMMIT}`, tree: { sha: DIRECT_TREE } } },
+    },
+    {
+      request: { method: "PATCH", url: `${API}/git/refs/heads/main`, body: { sha: DIRECT_COMMIT, force: false } },
+      response: moved === "ok"
+        ? { status: 200, json: { ref: "refs/heads/main", object: { sha: DIRECT_COMMIT, type: "commit" } } }
+        : { status: 422, json: { message: "Update is not a fast forward", status: "422" } },
+    },
   ];
 }
 

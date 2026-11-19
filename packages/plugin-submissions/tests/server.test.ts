@@ -11,6 +11,7 @@ import {
   BUILD_COMMIT,
   editExchanges,
   existenceCheck,
+  GUIDE_SHA,
   GUIDE_SOURCE,
   INSTALLATION_TOKEN,
   installationLookup,
@@ -88,7 +89,7 @@ describe("submissions server", () => {
   it("serves a published note's current source", async () => {
     replayGitHub([sourceExchange]);
 
-    expect(await answer(source("/wiki/guide/"))).toEqual({ status: 200, body: { markdown: GUIDE_SOURCE } });
+    expect(await answer(source("/wiki/guide/"))).toEqual({ status: 200, body: { markdown: GUIDE_SOURCE, sha: GUIDE_SHA, destination: "pull-request" } });
   });
 
   it("lists the notes a wikilink can name without calling GitHub", async () => {
@@ -111,7 +112,7 @@ describe("submissions server", () => {
 
     expect(await answer(edit({ page: "/wiki/guide/", markdown, note }))).toEqual({
       status: 201,
-      body: { url: `https://github.com/${REPO}/pull/42`, number: 42 },
+      body: { kind: "pull-request", url: `https://github.com/${REPO}/pull/42`, number: 42 },
     });
     expect(github.pending).toEqual([]);
   });
@@ -186,7 +187,7 @@ describe("submissions server", () => {
 describe("as a GitHub App", () => {
   const appHandler = (guard: GuardOptions = { rateLimit: { limit: 100, period: 60 } }) => createHandler(
     { repo: REPO, labels: ["submission"], app: { id: APP_ID, privateKey: { env: "SVARTZ_GITHUB_APP_KEY" } }, guard },
-    { commit: BUILD_COMMIT, pages: { "/wiki/guide/": "content/guide.md" }, routes: {}, vaultRoot: "content", folders: [""] },
+    { commit: BUILD_COMMIT, pages: { "/wiki/guide/": "content/guide.md" }, routes: {}, vaultRoot: "content", folders: [""], links: [GUIDE_LINK] },
   );
   const appEnv = { SVARTZ_GITHUB_APP_KEY: APP_KEY.pkcs1 };
 
@@ -201,10 +202,10 @@ describe("as a GitHub App", () => {
       ...editExchanges({ markdown, note, pageUrl: `${ORIGIN}/docs/wiki/guide/`, branch: branchFor("wiki-guide") }),
     ], INSTALLATION_TOKEN);
 
-    expect(await answer(source("/wiki/guide/"), appEnv, serve)).toEqual({ status: 200, body: { markdown: GUIDE_SOURCE } });
+    expect(await answer(source("/wiki/guide/"), appEnv, serve)).toEqual({ status: 200, body: { markdown: GUIDE_SOURCE, sha: GUIDE_SHA, destination: "pull-request" } });
     expect(await answer(edit({ page: "/wiki/guide/", markdown, note }), appEnv, serve)).toEqual({
       status: 201,
-      body: { url: `https://github.com/${REPO}/pull/42`, number: 42 },
+      body: { kind: "pull-request", url: `https://github.com/${REPO}/pull/42`, number: 42 },
     });
     expect(github.pending).toEqual([]);
   });
@@ -245,7 +246,7 @@ describe("new pages", () => {
 
     expect(await answer(newPage({ folder: "People", title: " Ada Lovelace ", note: "She deserves a page." }))).toEqual({
       status: 201,
-      body: { url: `https://github.com/${REPO}/pull/42`, number: 42 },
+      body: { kind: "pull-request", url: `https://github.com/${REPO}/pull/42`, number: 42 },
     });
     expect(github.pending).toEqual([]);
   });
