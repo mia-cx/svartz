@@ -3,7 +3,8 @@
  * - `GET ?page=<note path>` lists the page's annotations with their authors and agreements, to anyone, and names the
  *   signed-in reader as `viewer`, with whether they moderate.
  * - `POST` with `{ kind: "comment", page, anchor, body }` stores a signed-in reader's comment and answers it, 201.
- * - `POST <id>/agree/` with `{ agreed }` sets the reader's **+1** on a comment.
+ * - `POST <id>/agree/` with `{ agreed }` sets the reader's **+1** on a comment. On a site with accounts, the comment's
+ *   author gains reputation for it, and loses it again when the +1 is taken back.
  * - `DELETE <id>/` deletes an annotation and its agreements, for its author or a moderator, and answers 204.
  *   Writes need a session from `@svartz/auth` and an `Origin` header naming this site, and each spends one of the
  *   reader's `limits.writesPerHour`, counted in D1; an exhausted budget answers 429 with `retryAfter`.
@@ -16,11 +17,11 @@
  */
 import type { EnvReference, ServerContext, ServerModuleFactory } from "@svartz/core";
 import type { Account, Identity } from "@svartz/auth";
-import { can, migrateGrants, readIdentity, readSignIn } from "@svartz/auth/server";
+import { can, linkedIdentities, migrateGrants, postReputation, readIdentity, readSignIn } from "@svartz/auth/server";
 import { CONTEXT_LENGTH, type Anchor } from "./anchor";
 import { COMMENT_MAX_LENGTH, QUOTE_MAX_LENGTH } from "./limits";
 import { DELETE_COMMENTS, WRITE_COMMENTS } from "./permissions";
-import { createComment, deleteAnnotation, findAnnotation, listPage, migrate, setAgreement, spendWrite, type Database } from "./store";
+import { agreesAs, createComment, deleteAnnotation, findAnnotation, listPage, migrate, setAgreement, spendWrite, type Database } from "./store";
 
 /** One of the site's drawn reactions. */
 export interface Reaction {
@@ -273,7 +274,31 @@ async function agree(request: Request, url: URL, context: ServerContext, options
   const agreements = await setAgreement(db, { vault: context.vault.id, annotation: id, author, agreed: input.agreed });
   if (agreements === "missing") return failure(404, "not_found", "This comment has been deleted.");
   if (agreements === "reaction") return failure(400, "invalid_agreement", "Only comments take a +1.");
+  if (write.reader.account) {
+    await creditAgreement(db, context, id, write.reader.account).catch((error: unknown) => {
+      // The +1 stands; its reputation follows the next time this reader changes it.
+      console.error("[annotations] couldn't post reputation for a +1", error);
+    });
+  }
   return json({ agreed: input.agreed, agreements });
+}
+
+/**
+ * Give the comment's author reputation for `account`'s +1, or take it back, as whether any sign-in linked to `account`
+ * agrees with it now. One account scores a comment once, however many of its sign-ins +1 it, and auth credits nobody
+ * for agreeing with their own comment, from any of their sign-ins.
+ */
+async function creditAgreement(db: Database, context: ServerContext, annotation: string, account: Account): Promise<void> {
+  const target = await findAnnotation(db, context.vault.id, annotation);
+  if (!target) return;
+  const identities = (await linkedIdentities(account, context.env)).map(({ id }) => id);
+  await postReputation(context.env, {
+    kind: "agreement",
+    to: { identity: target.author },
+    ref: `annotations:${context.vault.id}:${annotation}:${account.id}`,
+    from: account.id,
+    agreed: await agreesAs(db, annotation, identities),
+  });
 }
 
 /**

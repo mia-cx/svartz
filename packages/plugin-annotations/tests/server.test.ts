@@ -1,3 +1,4 @@
+import type { Identity } from "@svartz/auth";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "../src/store";
 import { ADA, ALAN, createDatabase, createSite, ENDPOINT, GRACE, ORIGIN, seed, signIn, type Site } from "./harness";
@@ -595,5 +596,55 @@ describe("permissions on a site with accounts", () => {
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual({ error: "forbidden", message: "You can't comment on this page." });
     expect((await post("kitchen")).status).toBe(201);
+  });
+});
+
+describe("reputation for +1s", () => {
+  // Proves story 25: on a site with accounts, each person's +1 on a comment gives its author's account reputation once,
+  // taking it back takes the points back, and nobody earns from their own comment, from any of their sign-ins.
+  it("credits a comment's author once per person who agrees, and never for agreeing with oneself", async () => {
+    const { db } = await database();
+    await seed(db, [
+      { id: "c1", page: "garden", author: ADA, body: "Roses first.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" },
+      { id: "c2", page: "garden", author: GRACE, body: "Tulips first.", anchor: anchor("roses", 0), createdAt: "2026-11-03T00:00:00.000Z" },
+    ]);
+    const site = createSite({ DB: db, SVARTZ_DB: db });
+    const ada = await signIn(site, ADA);
+    const alan = await signIn(site, ALAN);
+    const accountOf = async (identity: string) =>
+      (await db.prepare("SELECT account_id FROM auth_identities WHERE id = ?").bind(identity).all<{ account_id: string }>()).results[0]!.account_id;
+    /** Link a second GitHub sign-in to `identity`'s account, and sign in with it. */
+    const secondSignIn = async (identity: Identity, id: number) => {
+      await db.prepare(`INSERT INTO auth_identities (id, account_id, provider, name, handle, created_at, updated_at)
+        VALUES (?, ?, 'github', ?, ?, ?, ?)`).bind(`github:${id}`, await accountOf(identity.id), identity.name, `${identity.handle}-2`, "2026-11-19T00:00:00.000Z", "2026-11-19T00:00:00.000Z").run();
+      return signIn(site, { ...identity, id: `github:${id}`, handle: `${identity.handle}-2` });
+    };
+    const agree = async (cookie: string, comment: string, agreed: boolean) => {
+      const response = await site(`${ENDPOINT}/${comment}/agree/`, { method: "POST", headers: { cookie, origin: ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ agreed }) });
+      expect(response.status).toBe(200);
+    };
+    const score = async () => (await (await site("/notes/_svartz/auth/users/ada/")).json() as { reputation: number }).reputation;
+
+    await agree(alan, "c1", true);
+    await agree(alan, "c1", true);
+    expect(await score()).toBe(0.5);
+    await agree(alan, "c1", false);
+    expect(await score()).toBe(0);
+    await agree(alan, "c1", true);
+    expect(await score()).toBe(0.5);
+
+    // Alan's second sign-in is still Alan: his +1 counts once, and stands while either sign-in agrees.
+    const alanAgain = await secondSignIn(ALAN, 4242);
+    await agree(alanAgain, "c1", true);
+    await agree(alan, "c1", false);
+    expect(await score()).toBe(0.5);
+
+    await agree(ada, "c1", true);
+    await agree(await secondSignIn(ADA, 4343), "c1", true);
+    expect(await score()).toBe(0.5);
+
+    // Grace has no account here, so her comment earns nobody anything.
+    await agree(alan, "c2", true);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM auth_reputation WHERE ref LIKE 'annotations:notes:c2:%'").all()).results).toEqual([{ n: 0 }]);
   });
 });

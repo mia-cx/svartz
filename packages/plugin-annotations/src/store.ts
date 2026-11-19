@@ -269,6 +269,13 @@ export async function setAgreement(db: Database, { vault, annotation, author, ag
   return (answers.at(-1)!.results as AgreementRow[]).map(agreementOf);
 }
 
+/** Whether any of `identities` agrees with `annotation`: one person's +1, whichever of their sign-ins gave it. */
+export async function agreesAs(db: Database, annotation: string, identities: readonly string[]): Promise<boolean> {
+  const { results } = await db.prepare(`SELECT 1 FROM agreements WHERE annotation_id = ?
+    AND author_id IN (SELECT value FROM json_each(?)) LIMIT 1`).bind(annotation, JSON.stringify(identities)).all();
+  return results.length > 0;
+}
+
 /** Who wrote annotation `annotation` of `vault` (their identity id) and on which page, or `undefined` when it has none. */
 export async function findAnnotation(db: Database, vault: string, annotation: string): Promise<{ author: string; page: string } | undefined> {
   const { results: [target] } = await db.prepare("SELECT author_id, page FROM annotations WHERE id = ? AND vault = ?")
