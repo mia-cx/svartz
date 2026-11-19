@@ -1,7 +1,8 @@
 /**
- * Adds Edit to the page actions of every editable note, New page to the site actions of every page, and Create your
- * page to the account page of a reader without a user page. The editor itself loads on first use, or at once when the
- * reader comes back from signing in with a draft for this page.
+ * Adds Edit to the page actions of every editable note, New page to the site actions of every page, Create your page
+ * to the account page of a reader without a user page, and Edit page to a submission in My submissions while it takes
+ * follow-up edits. The editor itself loads on first use, or at once when the reader comes back from signing in with a
+ * draft for this page. On a submission, it also keeps an unsent reply while its form posts.
  */
 import type { BrowserScriptContext } from "@svartz/core";
 import type { BrowserOptions } from "./api";
@@ -34,8 +35,9 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
   /** Opens the panel the reader left to sign in from this page. */
   let resume: (() => Promise<void>) | undefined;
 
-  /** A button in `region` that opens the editor on `target`. */
+  /** A button in `region` that opens the editor on `target`. A follow-up is followed and guarded as its submission was. */
   function action(region: Element | null, icon: string, label: string, target: EditorTarget) {
+    const followUp = target.kind === "edit" && target.pull !== undefined;
     if (!region) return;
     const button = document.createElement("button");
     button.type = "button";
@@ -51,8 +53,8 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
         mountContent: context.mountContent,
         pathname,
         opener: button,
-        turnstileSiteKey: options.turnstileSiteKey,
-        tracked: options.tracked === true,
+        turnstileSiteKey: followUp ? undefined : options.turnstileSiteKey,
+        tracked: !followUp && options.tracked === true,
       });
     };
     button.addEventListener("click", () => void open());
@@ -73,7 +75,13 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
     const slash = path.lastIndexOf("/");
     action(userPage, FILE_PLUS_ICON, "Create your page", { kind: "new", folders: [path.slice(0, slash)], title: path.slice(slash + 1) });
   }
-  if (buttons.length === 0) return;
+  // On a submission in My submissions, while it takes follow-up edits.
+  const followUp = document.querySelector<HTMLElement>('[data-svartz-region="follow-up-actions"]');
+  const pull = Number(followUp?.dataset.svartzFollowUp);
+  const file = followUp?.dataset.svartzFollowUpPath;
+  if (file && Number.isSafeInteger(pull) && pull > 0) action(followUp, PENCIL_ICON, "Edit page", { kind: "edit", page: file, pull });
+  const forgetReplies = keepReplies(pathname);
+  if (buttons.length === 0) return forgetReplies;
 
   // Back from signing in: the panel the reader left reopens with their draft.
   void resume?.();
@@ -82,5 +90,47 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
     unmounted = true;
     close?.();
     for (const button of buttons) button.remove();
+    forgetReplies?.();
+  };
+}
+
+const REPLY_KEY = "svartz-submissions:reply:";
+
+/**
+ * Keep what a reader typed in a submission's reply forms while it is sent, for this tab: the form posts and the page
+ * comes back, so a reply GitHub didn't take would otherwise be lost. It is put back into its form unless the page
+ * says that form's reply was sent. Answers the cleanup, or nothing on a page without reply forms.
+ */
+function keepReplies(pathname: string): (() => void) | undefined {
+  const forms = [...document.querySelectorAll<HTMLFormElement>("form[data-svartz-reply]")];
+  if (forms.length === 0) return undefined;
+  const query = new URLSearchParams(location.search);
+  const sent = query.get("status") === "sent" ? query.get("thread") ?? "conversation" : undefined;
+  const keep = (form: HTMLFormElement) => () => {
+    try {
+      sessionStorage.setItem(`${REPLY_KEY}${pathname} ${form.dataset.svartzReply}`, form.querySelector("textarea")?.value ?? "");
+    } catch {
+      // Blocked storage: the reply is only lost if GitHub refuses it.
+    }
+  };
+  const listeners = forms.map((form) => {
+    const key = `${REPLY_KEY}${pathname} ${form.dataset.svartzReply}`;
+    const textarea = form.querySelector("textarea");
+    try {
+      const kept = sessionStorage.getItem(key);
+      if (form.dataset.svartzReply === sent) sessionStorage.removeItem(key);
+      else if (kept && textarea && !textarea.value) {
+        textarea.value = kept;
+        form.closest("details")?.setAttribute("open", "");
+      }
+    } catch {
+      // Blocked storage keeps nothing to put back.
+    }
+    const listener = keep(form);
+    form.addEventListener("submit", listener);
+    return () => form.removeEventListener("submit", listener);
+  });
+  return () => {
+    for (const remove of listeners) remove();
   };
 }

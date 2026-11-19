@@ -198,6 +198,8 @@ export interface CommentRecord {
   readonly body: string;
   readonly path: string | null;
   readonly line: number | null;
+  /** A `review` comment's thread: the top-level comment it replies to, `null` for the top-level comment itself. */
+  readonly inReplyTo: number | null;
   readonly url: string;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -219,6 +221,7 @@ export function comment(value: unknown, kind: CommentRecord["kind"], pull: numbe
     body: deleted ? "" : text(entry?.body) ?? "",
     path: text(entry?.path) ?? null,
     line: integer(entry?.line) ?? null,
+    inReplyTo: integer(entry?.in_reply_to_id) ?? null,
     url,
     createdAt,
     updatedAt,

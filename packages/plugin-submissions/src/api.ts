@@ -91,6 +91,25 @@ export interface NewPageRequest {
   readonly turnstileToken?: string;
 }
 
+/** `GET <endpoint>/follow-up/source/?pull=<number>` answers this: the submission's file as its branch holds it now. */
+export interface FollowUpSourceResponse {
+  readonly markdown: string;
+  /** Its blob SHA, which the follow-up sends back so it never overwrites a newer change to the branch. */
+  readonly sha: string;
+  /** The file's path inside the vault. */
+  readonly path: string;
+}
+
+/** `POST <endpoint>/follow-up/` takes this JSON body, and answers 201 with a `commit` {@link EditResponse}. */
+export interface FollowUpRequest {
+  /** The submission's pull request number. */
+  readonly pull: number;
+  readonly markdown: string;
+  readonly note?: string;
+  /** {@link FollowUpSourceResponse.sha}. */
+  readonly sha: string;
+}
+
 /** `POST <endpoint>/edit/` and `POST <endpoint>/new/` answer 201 with this. */
 /**
  * Why a save that was to commit opened a pull request instead:

@@ -10,7 +10,9 @@
  *   with the commit or the pull request.
  * - `POST new/` with `{ submissionId, folder, title, markdown, note?, turnstileToken? }` does the same for a new note.
  * - With `sync` set, `POST github/webhook/` takes GitHub's deliveries into the mirror, and `GET status/?edit=<id>`
- *   answers where a saved edit has got to (see `sync.ts`). Every save is then recorded for its saver to follow.
+ *   answers where a saved edit has got to (see `sync.ts`). Every save is then recorded for its saver to follow, on the
+ *   dashboard's My submissions panel too, whose `reply/` and `follow-up/` routes answer a submission's reviews
+ *   (see `my-submissions.ts`).
  *
  * The client never names a file path. Edits must target a note in the build's manifest; a new note goes in one of the
  * manifest's folders, or is the reader's own user page, named after its title, and never where a file already is.
@@ -26,7 +28,7 @@
  * GitHub App's token exchange included. Failures answer `{ error, message }`.
  */
 import { can, linkedIdentities, readIdentity, readSignIn, userPageLocation, type Account, type Identity } from "@svartz/auth/server";
-import type { ServerContext, ServerModuleFactory } from "@svartz/core";
+import type { ServerContext, ServerHandler, ServerModuleFactory } from "@svartz/core";
 import { alternateRoutes, extractFrontmatter, pathRoute, requestedSlug } from "@svartz/plugins/routes";
 import {
   MAX_MARKDOWN_BYTES,
@@ -55,6 +57,7 @@ import {
   type Submission,
 } from "./github";
 import { createGuard, type GuardOptions } from "./guard";
+import { createMySubmissions } from "./my-submissions";
 import { COMMIT, OPEN_PULL_REQUESTS } from "./permissions";
 import { readBody } from "./request";
 import { createSync, type SyncOptions } from "./sync";
@@ -397,6 +400,18 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
 
   const links = async () => Response.json({ notes: data.links, ...data.preview } satisfies LinksResponse);
 
+  const mine = sync && createMySubmissions({
+    repo: options.repo,
+    vaultRoot: data.vaultRoot,
+    links: data.links,
+    sync,
+    guard,
+    github: target,
+    ...(committer ? { committer } : {}),
+    attribution,
+    publicUrl,
+  });
+
   const handlers = new Map<string, { method: string; run: (request: Request, context: ServerContext) => Promise<Response> }>([
     ["/source/", { method: "GET", run: source }],
     ["/destination/", { method: "GET", run: destination }],
@@ -409,9 +424,10 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
         ["/status/", { method: "GET", run: async (request: Request, context: ServerContext) => sync.status(request, context, ownerOf(await readReader(request, context.env))) }],
       ] as const
       : [],
+    ...mine ? mine.routes : [],
   ]);
 
-  return async (request, context) => {
+  const handle: ServerHandler = async (request, context) => {
     const route = handlers.get(new URL(request.url).pathname.slice(context.base.length));
     if (!route) return undefined;
     if (request.method !== route.method) {
@@ -427,6 +443,8 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
       throw error;
     }
   };
+  // My submissions reads the mirror, so it comes with sync; auth's dashboard shows it to accounts only.
+  return mine ? { handle, dashboard: { title: "Submissions", panels: [mine.panel] } } : handle;
 };
 
 export default submissions;

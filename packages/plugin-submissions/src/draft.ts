@@ -41,11 +41,14 @@ export function hashSource(markdown: string): string {
 }
 
 /**
- * Where `target`'s work is kept: by endpoint, so vaults on one site never share an entry, and by page, `new` for new
- * pages, or `new <title>` for a new page whose title is given. The panel also keys unconfirmed submission ids by it.
+ * Where `target`'s work is kept: by endpoint, so vaults on one site never share an entry, and by page, `pull <number>`
+ * for a follow-up to a submission, `new` for new pages, or `new <title>` for a new page whose title is given. The
+ * panel also keys unconfirmed submission ids by it.
  */
 export const draftSlot = (endpoint: string, target: EditorTarget) =>
-  `${endpoint} ${target.kind === "edit" ? target.page : target.title === undefined ? "new" : `new ${target.title}`}`;
+  `${endpoint} ${target.kind === "edit"
+    ? target.pull === undefined ? target.page : `pull ${target.pull}`
+    : target.title === undefined ? "new" : `new ${target.title}`}`;
 
 const DRAFT_KEY = "svartz-submissions:draft:";
 
