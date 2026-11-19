@@ -77,6 +77,8 @@ const POSITIVE = /^[1-9]\d{0,9}$/;
 const SHA = /^[0-9a-f]{40}$/;
 const LINE = /^(LEFT|RIGHT):([1-9]\d{0,6})$/;
 const MARKDOWN = /\.md$/i;
+/** Every format the build publishes as a note, and so reads route claims from. */
+const NOTE = /\.(?:md|mdx|svx)$/i;
 
 /** What the panel needs from the rest of the server module. */
 export interface ReviewSetup {
@@ -229,7 +231,7 @@ export function createReview(setup: ReviewSetup) {
    */
   async function judge(file: ChangedFile, pull: PullState, reader: CommitReader, may: Reviewer): Promise<Judged> {
     const inside = vaultPath(file.path);
-    if (!pull.open || inside === undefined || !MARKDOWN.test(inside) || file.status === "removed") return { file, reviewable: true };
+    if (!pull.open || inside === undefined || !NOTE.test(inside) || file.status === "removed") return { file, reviewable: true };
     let at: FileAt;
     try {
       at = await reader.headFile(inside, pull.headSha);
@@ -245,7 +247,8 @@ export function createReview(setup: ReviewSetup) {
     for (const page of pages) {
       if (!await may.page(page)) return { file, reviewable: false };
     }
-    return { file, reviewable: true, markdown: at.markdown };
+    // Only Markdown renders as a preview; MDX and SVX show their diff alone.
+    return MARKDOWN.test(inside) ? { file, reviewable: true, markdown: at.markdown } : { file, reviewable: true };
   }
 
   /**
