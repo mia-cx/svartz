@@ -7,23 +7,22 @@
  *   report for an account holding `moderation:reports:read` on the vault, record it in auth's audit log, and redirect
  *   back to the panel.
  *
- * The dashboard's Reports panel (`panel.ts`) lists the queue. Reports need accounts: without `SVARTZ_DB` every route
- * answers 503. The first request that reaches the database migrates it to the plugin's schema.
+ * The dashboard's Reports panel (`panel.ts`) lists the queue. Reports are kept in the accounts database, `SVARTZ_DB`,
+ * beside the accounts they name and auth's audit log, so a close and its audit entry commit in one batch. Without
+ * `SVARTZ_DB` every route answers 503. The first request that reaches the database migrates it to the plugin's schema.
  */
 import { ACCOUNTS_DATABASE_ENV, audit, can, readSignIn, type Account } from "@svartz/auth/server";
-import type { EnvReference, ServerContext, ServerModuleFactory } from "@svartz/core";
+import type { ServerContext, ServerModuleFactory } from "@svartz/core";
 import { REASON_MAX_LENGTH } from "./api";
 import { panelPath, reportsPanel } from "./panel";
 import { READ_REPORTS, WRITE_REPORTS } from "./permissions";
-import { closeStatement, fileReport, findReport, migrate, reopen, spendReport, type Database } from "./store";
+import { closeStatement, fileReport, findReport, migrate, spendReport, type Database } from "./store";
 import { checkTarget, type BuildData } from "./targets";
 
 export type { BuildData } from "./targets";
 
 /** The `moderation` plugin's options. */
 export interface ModerationOptions {
-  /** The D1 binding reports are stored in, such as `{ env: "DB" }`; it may be `SVARTZ_DB`, auth's own. */
-  readonly database: EnvReference;
   readonly limits?: {
     /** Reports each signed-in reader may send per clock hour. Default 10. */
     readonly reportsPerHour?: number;
@@ -32,7 +31,6 @@ export interface ModerationOptions {
 
 /** What the server module receives: the options with every default filled in. */
 export interface ModerationServerOptions {
-  readonly database: EnvReference;
   readonly limits: { readonly reportsPerHour: number };
 }
 
@@ -44,9 +42,6 @@ const SECONDS_PER_HOUR = 3600;
 function failure(status: number, error: string, message: string, headers: Record<string, string> = {}): Response {
   return Response.json({ error, message }, { status, headers: { "cache-control": "no-store", ...headers } });
 }
-
-const isDatabase = (value: unknown): value is Database =>
-  typeof value === "object" && value !== null && typeof (value as Database).prepare === "function";
 
 /** The body as text, or `undefined` once it passes `MAX_REQUEST_BYTES`: the stream is cancelled there. */
 async function readText(request: Request): Promise<string | undefined> {
@@ -86,27 +81,25 @@ function readReason(value: unknown): string | { message: string } {
 }
 
 /**
- * The signed-in account behind a write from this site, and the migrated database, or the refusal: another site, no
- * accounts, no session, or no database.
+ * The signed-in account behind a write from this site, and the migrated accounts database, or the refusal: another
+ * site, no accounts, or no session.
  */
-async function writer(request: Request, context: ServerContext, database: string, signedOut: string): Promise<{ account: Account; db: Database } | Response> {
+async function writer(request: Request, context: ServerContext, signedOut: string): Promise<{ account: Account; db: Database } | Response> {
   // Browsers name the page's origin on every POST, so a missing or foreign one is another site, or no browser at all.
   if (request.headers.get("origin") !== new URL(request.url).origin) return failure(403, "cross_origin", "Post from this site.");
   const signIn = await readSignIn(request, context.env);
   if (signIn.reason === "no-database") return failure(503, "misconfigured", `Reports need accounts: bind a D1 database as ${ACCOUNTS_DATABASE_ENV}.`);
   if (!signIn.account) return failure(401, "signed_out", signedOut);
-  const db = context.env[database];
-  if (!isDatabase(db)) return failure(503, "misconfigured", `Bind a D1 database as ${database} to keep reports.`);
+  // An account was read from it, so the binding is there.
+  const db = context.env[ACCOUNTS_DATABASE_ENV] as Database;
   await migrate(db);
   return { account: signIn.account, db };
 }
 
 /** The `moderation` server module: `server: { module, options }` with {@link ModerationServerOptions} and the build's {@link BuildData}. */
 const moderationServer: ServerModuleFactory<ModerationServerOptions, BuildData> = (options, data) => {
-  const database = options.database.env;
-
   async function file(request: Request, context: ServerContext): Promise<Response> {
-    const write = await writer(request, context, database, "Sign in to report.");
+    const write = await writer(request, context, "Sign in to report.");
     if (write instanceof Response) return write;
     const { account, db } = write;
     if (!await can(account, WRITE_REPORTS, { vault: context.vault.id }, context.env)) return failure(403, "forbidden", "Your account can't send reports here.");
@@ -135,7 +128,7 @@ const moderationServer: ServerModuleFactory<ModerationServerOptions, BuildData> 
 
   /** Close report `id` as `state` for a moderator, recording it, and go back to the panel at the report. */
   async function decide(request: Request, context: ServerContext, id: string, state: "resolved" | "dismissed"): Promise<Response> {
-    const write = await writer(request, context, database, "Sign in to handle reports.");
+    const write = await writer(request, context, "Sign in to handle reports.");
     if (write instanceof Response) return write;
     const { account, db } = write;
     if (!await can(account, READ_REPORTS, { vault: context.vault.id }, context.env)) return failure(403, "forbidden", "Your account can't handle reports here.");
@@ -152,27 +145,19 @@ const moderationServer: ServerModuleFactory<ModerationServerOptions, BuildData> 
       target: `report:${id}`,
       detail: { vault: context.vault.id, target: `${report.target.kind}:${report.target.id}` },
     };
-    // Another moderator may have closed it since the read above. The close itself fails then, so the write decides.
-    const shared = database === ACCOUNTS_DATABASE_ENV;
+    // The close and its entry commit together. Another moderator may have closed it since the read above; the close
+    // fails then, so the write decides.
     try {
-      // In the accounts database the close and its entry commit together; anywhere else the close lands first.
-      if (shared) await audit(context.env, entry, [closeStatement(db, closing)]);
-      else await closeStatement(db, closing).run();
+      await audit(context.env, entry, [closeStatement(db, closing)]);
     } catch (error) {
       if ((await findReport(db, context.vault.id, id))?.state !== "open") return back("already-closed");
       throw error;
-    }
-    if (!shared) {
-      await audit(context.env, entry).catch(async (error: unknown) => {
-        await reopen(db, closing);
-        throw error;
-      });
     }
     return back(state);
   }
 
   return {
-    dashboard: { title: "Moderation", panels: [reportsPanel(data, database)] },
+    dashboard: { title: "Moderation", panels: [reportsPanel(data)] },
     handle: async (request, context) => {
       const path = new URL(request.url).pathname.slice(context.base.length);
       // Report ids are UUIDs.

@@ -44,8 +44,6 @@ export async function createDatabase() {
 export interface SiteOptions {
   /** The vault's id. */
   readonly vault?: string;
-  /** The binding reports are kept in. Default: `SVARTZ_DB`, auth's own. */
-  readonly database?: string;
   /** Leave annotations or submissions off the vault. */
   readonly annotations?: boolean;
   readonly submissions?: boolean;
@@ -58,13 +56,13 @@ export interface SiteOptions {
  * One vault at /notes with `auth`, `annotations` (comments in `DB`) and `moderation`, all on `db`, answering like the
  * deployed Worker. The build published {@link PAGES}, and the vault has submissions on `wikiplace/wikiplace.live`.
  */
-export function createSite(db: Database, { vault = "notes", database = "SVARTZ_DB", annotations = true, submissions = true, reportsPerHour = DEFAULT_REPORTS_PER_HOUR, accounts = true }: SiteOptions = {}) {
+export function createSite(db: Database, { vault = "notes", annotations = true, submissions = true, reportsPerHour = DEFAULT_REPORTS_PER_HOUR, accounts = true }: SiteOptions = {}) {
   const data: BuildData = {
     pages: PAGES,
     ...annotations && { annotations: { database: "DB" } },
     ...submissions && { submissions: { repo: SUBMISSIONS.repo, records: { database: "DB", root: SUBMISSIONS.root } } },
   };
-  const options: ModerationServerOptions = { database: { env: database }, limits: { reportsPerHour } };
+  const options: ModerationServerOptions = { limits: { reportsPerHour } };
   const server = createServer({
     basePath: "/notes",
     vault: { id: vault, mountPath: "/notes", site: { title: "Notes" } },

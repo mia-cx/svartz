@@ -12,15 +12,16 @@ import { moderation } from "@svartz/plugin-moderation";
 plugins: [
   auth({ providers: { … } }),
   annotations({ database: { env: "SVARTZ_DB" } }),
-  moderation({ database: { env: "SVARTZ_DB" } }),
+  moderation(),
 ]
 ```
 
 Reports need accounts, so the vault needs `auth` with the [accounts database](auth.md#the-accounts-database) bound as `SVARTZ_DB`, and a Cloudflare target. The build fails, naming the vault, without `auth` or on a `node` target; without `SVARTZ_DB` every report answers 503.
 
+Reports are kept in the accounts database, beside the accounts they name and the audit log. The plugin creates its tables there on first use, all starting with `moderation_`. Each resolve or dismiss commits in one transaction with its audit entry: no report closes without one.
+
 | Option | Value |
 | --- | --- |
-| `database` | The D1 binding reports are kept in, such as `{ env: "SVARTZ_DB" }`. The plugin creates its tables there on first use, all starting with `moderation_`, so it can share the accounts database. Sharing it lets each resolve or dismiss commit in one transaction with its audit entry; in another database, the report closes first and reopens if the entry can't be written. |
 | `limits.reportsPerHour` | Reports each reader may send per clock hour. Default 10. Every attempt counts, refused ones included. |
 
 ## Reporting
@@ -83,6 +84,6 @@ Under `<base><mount>/_svartz/moderation/`. Failures answer `{ error, message }`,
 | 404 | `not_found` | A page, comment or account that isn't there, or a report this vault doesn't have. |
 | 413 | `too_large` | A body over 16 KiB. |
 | 429 | `rate_limited` | The reader has spent their reports for the hour. Also includes `retryAfter` in seconds. |
-| 503 | `misconfigured` | No `SVARTZ_DB`, or no database under `database`. |
+| 503 | `misconfigured` | No `SVARTZ_DB`. |
 
 Each resolve and dismiss is recorded as `moderation:report:resolve` or `moderation:report:dismiss` on `report:<id>`, with what the report was about. Annotations records hides as `annotations:comment:hide` and submissions records closes as `submissions:submission:close`.

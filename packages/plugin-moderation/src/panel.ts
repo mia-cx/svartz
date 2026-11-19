@@ -5,7 +5,7 @@
  * hide a comment, submissions' to close a submission. Each action shows only to a viewer holding the owning plugin's
  * permission, which its route checks again. Reporters are never shown.
  */
-import { can, findProfile, readAccount, userPageLocation, type Account } from "@svartz/auth/server";
+import { ACCOUNTS_DATABASE_ENV, can, findProfile, readAccount, userPageLocation, type Account } from "@svartz/auth/server";
 import type { DashboardPanel, PageContext, PluginPage } from "@svartz/core";
 import { findComment, type ReportedComment } from "@svartz/plugin-annotations/server";
 import { isVaultSubmission } from "@svartz/plugin-submissions/server";
@@ -175,15 +175,15 @@ ${items.length ? `<ol class="sv-moderation-reports">${items.join("\n")}</ol>` : 
 }
 
 /** The Reports panel, which the dashboard shows to viewers holding `moderation:reports:read` on the vault. */
-export function reportsPanel(data: BuildData, database: string): DashboardPanel {
+export function reportsPanel(data: BuildData): DashboardPanel {
   return {
     id: PANEL,
     title: TITLE,
     permission: READ_REPORTS,
     async render(request, context) {
       if (context.path !== "") return undefined;
-      const db = context.env[database] as Database | undefined;
-      if (!db) return { title: TITLE, html: `<div class="sv-account sv-dashboard"><h1>${TITLE}</h1><p class="sv-account-status" role="alert" data-error>Bind a D1 database as ${escape(database)} to keep reports.</p></div>` };
+      // The viewer holds a permission, so has an account, so the accounts database is bound.
+      const db = context.env[ACCOUNTS_DATABASE_ENV] as Database;
       await migrate(db);
       return reportsPage(request, context, data, db);
     },

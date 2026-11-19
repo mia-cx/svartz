@@ -1,9 +1,8 @@
 import { auth } from "@svartz/auth";
 import { getCompilerContributions, type NormalizedSvartzPlugin, type PluginContext, type ResolvedConfig } from "@svartz/core";
 import { describe, expect, it } from "vitest";
-import { moderation, type ModerationOptions } from "../src/index";
+import { moderation } from "../src/index";
 
-const database = { env: "SVARTZ_DB" };
 const signIn = auth({ providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } } });
 
 /** Resolve `plugin` for a vault the way config resolution does, once every vault is known. */
@@ -17,7 +16,7 @@ function resolveFor(plugin: NormalizedSvartzPlugin, type: string, others: unknow
  * data `before` them set.
  */
 async function build(plugins: unknown[], entries: unknown[] = [], before: Record<string, unknown> = {}) {
-  const plugin = moderation({ database });
+  const plugin = moderation();
   const ctx = { config: { mountPath: "/garden" }, plugins: [plugin, ...plugins], index: { entries }, files: [], meta: new Map() } as unknown as PluginContext;
   for (const [id, data] of Object.entries(before)) getCompilerContributions(ctx).serverData.set(id, data);
   await plugin.emitArtifacts!.run(ctx);
@@ -26,14 +25,14 @@ async function build(plugins: unknown[], entries: unknown[] = [], before: Record
 
 describe("the moderation plugin", () => {
   it("serves its routes with every default filled in", () => {
-    const plugin = moderation({ database });
+    const plugin = moderation();
 
     expect(resolveFor(plugin, "cloudflare-workers")).toBe(plugin);
-    expect(plugin.server).toEqual({ module: expect.stringMatching(/server\.js$/), options: { database, limits: { reportsPerHour: 10 } } });
+    expect(plugin.server).toEqual({ module: expect.stringMatching(/server\.js$/), options: { limits: { reportsPerHour: 10 } } });
   });
 
   it("declares reporting, handling reports, suspending and reading the log, which auth collects at build time", () => {
-    const vault = { id: "garden", mountPath: "/garden", target: { type: "cloudflare-workers" }, plugins: [signIn, moderation({ database })] } as unknown as ResolvedConfig;
+    const vault = { id: "garden", mountPath: "/garden", target: { type: "cloudflare-workers" }, plugins: [signIn, moderation()] } as unknown as ResolvedConfig;
 
     const resolved = signIn.forVault!({ vault, vaults: [vault] });
 
@@ -89,10 +88,9 @@ describe("the moderation plugin", () => {
   });
 
   it.each([
-    ["on a node target", () => resolveFor(moderation({ database }), "node"), /\[svartz:moderation\] vault "garden" deploys to node/],
-    ["without auth on the same vault", () => resolveFor(moderation({ database }), "cloudflare-workers", []), /\[svartz:moderation\] vault "garden" enables moderation without auth/],
-    ["without a database binding", () => moderation({} as ModerationOptions), /\[svartz:moderation\] database must name the D1 binding/],
-    ["with a report limit of zero", () => moderation({ database, limits: { reportsPerHour: 0 } }), /limits\.reportsPerHour must be a whole number above 0/],
+    ["on a node target", () => resolveFor(moderation(), "node"), /\[svartz:moderation\] vault "garden" deploys to node/],
+    ["without auth on the same vault", () => resolveFor(moderation(), "cloudflare-workers", []), /\[svartz:moderation\] vault "garden" enables moderation without auth/],
+    ["with a report limit of zero", () => moderation({ limits: { reportsPerHour: 0 } }), /limits\.reportsPerHour must be a whole number above 0/],
   ])("fails the build %s, naming the plugin", (_case, make, error) => {
     expect(make).toThrow(error);
   });

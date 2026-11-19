@@ -1,6 +1,7 @@
 /**
  * Readers report pages, edits, comments and accounts, and moderators work through the reports on the dashboard:
- * `plugins: [auth({ … }), moderation({ database: { env: "SVARTZ_DB" } })]` in `svartz.config.ts`.
+ * `plugins: [auth({ … }), moderation()]` in `svartz.config.ts`. Reports are kept in auth's accounts database,
+ * `SVARTZ_DB`.
  *
  * The browser script adds **Report** beside a note's other page actions and answers every button marked
  * `data-svartz-report="<kind>:<id>"`, as annotations marks its comment cards. The build tells the server which pages the
@@ -34,11 +35,9 @@ function fail(message: string): never {
 
 /** Refuse config the routes could never serve, so a typo fails the build instead of every request. */
 function resolve(options: ModerationOptions): ModerationServerOptions {
-  const env = options?.database?.env;
-  if (typeof env !== "string" || !env.trim()) fail('database must name the D1 binding: { env: "SVARTZ_DB" }');
   const reportsPerHour = options.limits?.reportsPerHour ?? DEFAULT_REPORTS_PER_HOUR;
   if (!Number.isSafeInteger(reportsPerHour) || reportsPerHour < 1) fail("limits.reportsPerHour must be a whole number above 0");
-  return { database: { env }, limits: { reportsPerHour } };
+  return { limits: { reportsPerHour } };
 }
 
 /** Reports need accounts, which need auth, and D1, which a node target lacks. */
@@ -57,7 +56,7 @@ function serverOptionsOf(plugins: readonly SvartzPlugin[] | undefined, id: strin
 }
 
 /** The `moderation` plugin: its routes and Reports panel on the server, and the Report action in the browser. */
-export function moderation(options: ModerationOptions): NormalizedSvartzPlugin {
+export function moderation(options: ModerationOptions = {}): NormalizedSvartzPlugin {
   const serverOptions = resolve(options);
   const plugin: NormalizedSvartzPlugin = definePlugin(() => ({
     id: PLUGIN_ID,

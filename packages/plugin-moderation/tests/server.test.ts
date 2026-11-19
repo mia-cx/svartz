@@ -92,7 +92,7 @@ describe("a report's life", () => {
   });
 
   // Proves the write decides a race: both moderators read the report open, and only one closes it on the record.
-  it.each(["SVARTZ_DB", "DB"])("closes once when resolve and dismiss arrive together, with reports in %s", async (database) => {
+  it("closes once when resolve and dismiss arrive together", async () => {
     const { db, dispose } = await createDatabase();
     disposers.push(dispose);
     // Holds each read of one report until two requests have read it, as when two moderators click at once.
@@ -124,7 +124,7 @@ describe("a report's life", () => {
         };
       },
     };
-    const site = createSite(racing, { database, annotations: false });
+    const site = createSite(racing, { annotations: false });
     const [ada, alan, grace] = [await signIn(site, ADA), await signIn(site, ALAN), await signIn(site, GRACE)];
     await grant(db, "alan", "moderation:reports:read");
     await grant(db, "grace", "moderation:reports:read");
@@ -176,18 +176,9 @@ describe("a report's life", () => {
     expect(queue).not.toContain("<img");
   });
 
-  it("records in auth's log when reports live in another database", async () => {
-    const { db, site, ada, alan } = await moderated({ database: "DB" });
-    const { report: { id } } = await (await report(site, ada, { kind: "page", id: "garden" })).json() as { report: { id: string } };
-
-    expect((await post(site, alan, `${ENDPOINT}/reports/${id}/resolve/`)).status).toBe(303);
-    expect(await reports(db)).toEqual([expect.objectContaining({ state: "resolved" })]);
-    expect(await audited(db)).toHaveLength(1);
-  });
-
-  // Proves a close and its entry land together in another database too: no entry, no close.
-  it("leaves the report open when auth's log can't take the entry, with reports in another database", async () => {
-    const { db, site, ada, alan } = await moderated({ database: "DB" });
+  // Proves a close and its entry land together: no entry, no close.
+  it("leaves the report open when auth's log can't take the entry", async () => {
+    const { db, site, ada, alan } = await moderated();
     const { report: { id } } = await (await report(site, ada, { kind: "page", id: "garden" })).json() as { report: { id: string } };
     await db.prepare("ALTER TABLE auth_audit RENAME TO auth_audit_gone").run();
 

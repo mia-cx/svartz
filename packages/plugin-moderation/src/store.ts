@@ -1,6 +1,6 @@
 /**
- * Reports in D1. The plugin owns its schema and {@link migrate} brings any database up to date on first use. Every
- * table starts with `moderation_`, so the database may be the one auth keeps accounts in.
+ * Reports in D1, in the database auth keeps accounts in. The plugin owns its schema and {@link migrate} brings the
+ * database up to date on first use. Every table starts with `moderation_`.
  */
 import type { TargetKind } from "./api";
 
@@ -208,10 +208,4 @@ export interface Closing {
 export function closeStatement(db: Database, { vault, id, state, by, at }: Closing): Statement {
   return db.prepare(`UPDATE moderation_reports SET state = CASE state WHEN 'open' THEN ?1 ELSE 'closed already' END, closed_at = ?2, closed_by = ?3
     WHERE id = ?4 AND vault = ?5`).bind(state, at, by, id, vault);
-}
-
-/** Undo `closing`, for a decision whose audit entry couldn't be written. A report someone closed since stays closed. */
-export async function reopen(db: Database, { vault, id, state, by, at }: Closing): Promise<void> {
-  await db.prepare(`UPDATE moderation_reports SET state = 'open', closed_at = NULL, closed_by = NULL
-    WHERE id = ? AND vault = ? AND state = ? AND closed_at = ? AND closed_by = ?`).bind(id, vault, state, at, by).run();
 }
