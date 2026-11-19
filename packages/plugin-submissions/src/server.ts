@@ -205,6 +205,8 @@ export async function isVaultSubmission(env: ServerContext["env"], { database, r
   return savedPull({ db, scope: scopeOf(repo, root) }, number);
 }
 
+export { savedEdits, type SavedEdits } from "./saved-edits";
+
 const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, data) => {
   const pages = new Map(Object.entries(data.pages));
   // Every editable page is published, so the links list holds its slug, which permissions are checked on.

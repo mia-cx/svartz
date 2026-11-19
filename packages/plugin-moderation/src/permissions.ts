@@ -4,9 +4,9 @@ import type { PermissionDeclaration } from "@svartz/core";
 export const WRITE_REPORTS = "moderation:reports:write";
 /** Open the Reports panel, and resolve or dismiss reports. */
 export const READ_REPORTS = "moderation:reports:read";
-/** Suspend and unsuspend accounts. Declared for suspensions; nothing checks it yet. */
+/** Open the Suspensions panel, and suspend and unsuspend accounts. */
 export const WRITE_ACCOUNTS = "moderation:accounts:write";
-/** Read the audit log. Declared for the audit log panel; nothing checks it yet. */
+/** Open the Audit log panel. */
 export const READ_AUDIT = "moderation:audit:read";
 
 /**

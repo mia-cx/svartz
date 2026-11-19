@@ -9,12 +9,13 @@
  *   linked to an account gets a 30-day session and returns to `returnTo`; a new one goes to `handle/` first.
  * - `GET handle/` asks a first-time reader for a handle; `POST handle/` creates their account and session.
  * - `GET me/` answers the identity, or `null`.
- * - `POST sign-out/` ends the session.
+ * - `POST sign-out/` ends the session; with `?returnTo=<path>`, as a form posts it, it redirects there.
  * - `POST account/profile/`, `account/unlink/`, `account/sign-out-everywhere/` and `account/link/<provider>/` change the
  *   signed-in account and redirect back to its `/-/account/` page, which this module also renders.
  * - `GET users/<handle>/` answers a public profile and reputation score, redirecting an old handle to the current one.
  * - `GET reputation/?page=<path>` answers the reputation of the account whose user page is at `path`, for that page.
- * - `GET viewer/` answers the signed-in handle and whether the dashboard has a panel for them, for the site's links.
+ * - `GET viewer/` answers the signed-in handle and whether the dashboard has a panel for them, for the site's links, or
+ *   that the account is suspended.
  * - `POST people/…` changes grants and roles from the dashboard's People & permissions panel (`people-panel.ts`).
  * - `POST groups/…` creates groups, manages their members and links them to objects (`groups-routes.ts`).
  * - `POST reputation/…` sets reputation's points and thresholds, and gives kudos (`reputation-panel.ts`).
@@ -32,7 +33,7 @@ import {
   decodeRoutePath, type EnvReference, type PageRenderer, type PermissionDeclaration, type ServerContext, type ServerHandler,
   type ServerModuleFactory,
 } from "@svartz/core";
-import { accountPage, displayName, signedOutPage, type AccountView, type StatusCode } from "./account";
+import { accountPage, displayName, signedOutPage, suspendedPage, type AccountView, type StatusCode } from "./account";
 import { AUTH_PERMISSIONS } from "./auth-permissions";
 import { chooserPage, expiredPage } from "./chooser";
 import { DASHBOARD_PAGE, dashboardPage, openableSections } from "./dashboard";
@@ -45,10 +46,12 @@ import { kudosPanel, reputationPanel, reputationRoute } from "./reputation-panel
 import { handleFrom, HANDLE_PROBLEM, isHandle, typedHandle } from "./handle";
 import { isProviderId, PROVIDERS, type Identity, type ProviderId } from "./providers";
 import { seal, SESSION_SECRET_ENV, SESSION_SECRET_MIN_LENGTH, sessionSecret, unseal } from "./seal";
-import { endSession, isIdentity, readAccount, readCookie, readCurrentSession, readIdentity, sealSession, SESSION_COOKIE, useAdmins } from "./session";
+import {
+  endSession, isIdentity, readAccount, readCookie, readCurrentSession, readIdentity, readSignIn, sealSession, SESSION_COOKIE, useAdmins,
+} from "./session";
 import {
   ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, endAccountSessions, handlesOf, hasAccount, linkIdentity,
-  profileByHandle, profilesById, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity,
+  profileByHandle, profilesByHandle, profilesById, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity,
   updateProfile, type Database, type PublicProfile,
 } from "./store";
 import { builtUserPages, DEFAULT_USER_PAGE_FOLDER, hasUserPage, useUserPages, userPageLocation, type UserPages } from "./user-pages";
@@ -58,9 +61,13 @@ export type { Account, SignIn, SignedOutReason } from "./session";
 export type { PublicProfile } from "./store";
 export { ADMIN_ROLE, readAccount, readIdentity, readSignIn } from "./session";
 export { ACCOUNTS_DATABASE_ENV };
-export { can, migrateGrants, type IdentityGrant } from "./grants";
+export { can, canEach, migrateGrants, type IdentityGrant } from "./grants";
 export type { PermissionTarget } from "./permissions";
-export { audit, auditIfChanged, type AuditEntry } from "./audit";
+export { audit, auditIfChanged, readAuditLog, type AuditEntry, type AuditLogPage, type AuditQuery, type AuditRecord } from "./audit";
+export {
+  findSuspension, liftSuspension, listSuspensions, LIFT_ACTION, suspend, SUSPEND_ACTION, type LiftResult, type SuspendedAccount,
+  type SuspendResult, type Suspension, type SuspensionSubject,
+} from "./suspensions";
 export { linkedIdentities } from "./identities";
 export { userPageLocation, type UserPageLocation } from "./user-pages";
 export { postReputation, type Recipient, type ReputationEvent, type Standing, type Threshold } from "./reputation";
@@ -73,6 +80,33 @@ export { postReputation, type Recipient, type ReputationEvent, type Standing, ty
 export async function findProfile(handle: string, env: Readonly<Record<string, unknown>>): Promise<PublicProfile | undefined> {
   const db = await accountsDatabase(env);
   return db && profileByHandle(db, handle);
+}
+
+/**
+ * The public profile of the account provider account `identity` (such as `github:583231`) is linked to, for a plugin
+ * that stored who wrote something by their sign-in; `undefined` when no account has it or the site binds no `SVARTZ_DB`.
+ */
+export async function findProfileByIdentity(identity: string, env: Readonly<Record<string, unknown>>): Promise<PublicProfile | undefined> {
+  return (await findProfilesByIdentity([identity], env)).get(identity);
+}
+
+/** {@link findProfileByIdentity} for each of `identities` in one D1 call, by identity; identities no account has are absent. */
+export async function findProfilesByIdentity(identities: readonly string[], env: Readonly<Record<string, unknown>>): Promise<Map<string, PublicProfile>> {
+  const db = await accountsDatabase(env);
+  if (!db || identities.length === 0) return new Map();
+  const { results } = await db.prepare(`SELECT i.id, a.handle, a.name, a.avatar_url FROM auth_identities i JOIN auth_accounts a ON a.id = i.account_id
+    WHERE i.id IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(identities))
+    .all<{ id: string; handle: string; name: string; avatar_url: string | null }>();
+  return new Map(results.map((row) => [row.id, { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } }]));
+}
+
+/**
+ * {@link findProfile} for each of `handles` in one D1 call, by the handle asked for; handles no account ever held are
+ * absent, and so is every one when the site binds no `SVARTZ_DB`.
+ */
+export async function findProfilesByHandle(handles: readonly string[], env: Readonly<Record<string, unknown>>): Promise<Map<string, PublicProfile>> {
+  const db = await accountsDatabase(env);
+  return db ? profilesByHandle(db, handles) : new Map();
 }
 
 /**
@@ -362,10 +396,15 @@ async function chooseHandle(request: Request, url: URL, context: ServerContext, 
   return redirect(returnTo, [cookie(PENDING_COOKIE, "", 0), cookie(SESSION_COOKIE, await sealSession(sid, secret), SESSION_MAX_AGE_SECONDS)], 303);
 }
 
+/** End the session: 204 for a script, or for a form that names a same-site `returnTo`, a redirect there. */
 async function signOut(request: Request, url: URL, context: ServerContext): Promise<Response> {
   if (crossOrigin(request, url)) return failure(403, "cross_origin", "Sign out from this site.");
+  const returnTo = url.searchParams.get("returnTo");
+  const back = returnTo === null ? undefined : sameOriginPath(returnTo, url);
+  if (returnTo !== null && !back) return failure(400, "invalid_return_to", "returnTo must be a path on this site.");
   await endSession(request, context.env);
-  return new Response(null, { status: 204, headers: { "set-cookie": cookie(SESSION_COOKIE, "", 0) } });
+  const cleared = cookie(SESSION_COOKIE, "", 0);
+  return back ? redirect(back, [cleared], 303) : new Response(null, { status: 204, headers: { "set-cookie": cleared } });
 }
 
 /** The account page of the vault at `context`: `<base><mount>/-/account/`. */
@@ -481,11 +520,13 @@ async function userProfile(handle: string, context: ServerContext): Promise<Resp
 }
 
 /**
- * `GET viewer/`: who the sign-in links name, and whether the dashboard has a panel for them: `{ handle, dashboard }`,
- * or `null` when nobody is signed in to an account.
+ * `GET viewer/`: who the sign-in links name, and whether the dashboard has a panel for them: `{ handle, dashboard }`;
+ * `{ suspended: true }` for a suspended account, whose account page says why; `null` when nobody is signed in to an
+ * account.
  */
 async function viewer(request: Request, context: ServerContext): Promise<Response> {
-  const account = await readAccount(request, context.env);
+  const { account, reason } = await readSignIn(request, context.env);
+  if (reason === "suspended") return json({ suspended: true });
   if (!account) return json(null);
   return json({ handle: account.handle, dashboard: (await openableSections(account, context)).length > 0 });
 }
@@ -556,6 +597,8 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
     const here = url.pathname;
     const session = await readCurrentSession(request, context.env);
     if (!session) {
+      const signIn = await readSignIn(request, context.env);
+      if (signIn.reason === "suspended") return suspendedPage(signIn.suspension, `${context.base}/sign-out/?returnTo=${encodeURIComponent(here)}`);
       return signedOutPage(providers, (provider) => `${context.base}/start/${provider}/?returnTo=${encodeURIComponent(here)}`);
     }
     const linkBase = options.callbackMountPath === undefined ? context.base : baseAt(context, options.callbackMountPath);

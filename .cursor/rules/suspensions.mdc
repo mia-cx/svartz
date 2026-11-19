@@ -1,0 +1,13 @@
+---
+description: Suspensions are enforced only where auth reads the session, inside its one D1 batch; plugins never check them
+globs: packages/auth/src/session.ts, packages/auth/src/store.ts, packages/auth/src/suspensions.ts, packages/plugin-moderation/src/suspensions.ts, packages/plugin-moderation/src/server.ts
+alwaysApply: false
+---
+
+# Suspensions
+
+- Auth enforces a suspension in `read()` (`session.ts`): a suspended session answers `{ account: null, reason: "suspended" }`, so every plugin's `readAccount`/`can()` sees a guest. Never add a suspension check to a plugin; a plugin that needs one is reading the session some other way, which is the bug.
+- `readSession` reads the suspension in the same `db.batch` as the session. Anything else a signed-in request needs per read joins that batch: a free Worker has 50 D1 calls a request, and `tests/suspensions.test.ts` in auth counts them.
+- Expiry is a comparison with now (`inForce` in `store.ts`, `Date.now()` bound from the Worker, never SQL's clock), so tests move the clock with `vi.useFakeTimers({ toFake: ["Date"] })`. Sessions last 30 days: a test that moves past that reads signed out for that reason instead.
+- Config's admins (`heldRoles` from linked identities) are never suspended, and a stored suspension never applies to them, so config can always reach the site.
+- Moderation owns permission checks and forms; auth's `suspend`/`liftSuspension` own the refusals that keep the site reachable (admin, self) and write the change with its audit entry in one batch. Redirect form posts only to `sameSitePath(returnTo)` (`paths.ts`), with the outcome as `status`.

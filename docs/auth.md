@@ -172,6 +172,23 @@ Cookies from before accounts held the identity itself. Each becomes an account a
 
 Local development over `http://localhost` works in Chrome and Firefox, which accept `Secure` cookies there.
 
+## Suspensions
+
+A moderator can suspend an account for a while or for good, with a reason, through [moderation](moderation.md#suspensions). While a suspension is in force, every session of the account reads as signed out: `readAccount` answers `null`, so the account is a guest on every plugin and keeps only what guests may do. Its sessions are kept, so once the suspension ends it is signed in again without doing anything. A suspension ends when its time passes, checked on each read; nothing sweeps or schedules. A new suspension replaces the one in force, and lifting one early is its own action.
+
+The check is part of reading the session: the same D1 batch, so a signed-in request costs no extra call. The [account page](#the-account-page) tells a suspended reader why and until when, never who suspended them, and lets them sign out. An account any of whose provider accounts `admins` names is never suspended, and stays signed in even when config named it after its suspension.
+
+Suspensions are kept in `auth_suspensions`, one row per account. Server plugins change and read them through `@svartz/auth/server`; the caller decides who may:
+
+| Call | Does |
+| --- | --- |
+| `suspend(env, actor, { handle, reason, until? })` | Suspends the account that holds or held `handle` until the `Date` `until`, or for good without it. Answers `"suspended"`, or, writing nothing, `"not-found"`, `"admin"` for an account config names an admin, or `"self"` for `actor`'s own. Records `auth:account:suspend` on `account:<handle>`, with `{ reason, until }`, in the same transaction. |
+| `liftSuspension(env, actor, handle)` | Ends the suspension in force early: `"lifted"`, recording `auth:account:lift`; `"not-suspended"`, recording nothing, when none is in force; or `"not-found"`. |
+| `findSuspension(handle, env)` | The account, `{ id, handle, name, admin, suspension? }`, for a moderator about to act on it. |
+| `listSuspensions(env)` | Every suspension in force, the most recent first, each `{ handle, name, suspension }`. |
+
+A `suspension` is `{ reason, until?, since }`, the times in ISO 8601; `until` is absent for good. `actor` is the signed-in moderator, from `readAccount`. `suspend` and `liftSuspension` throw without `SVARTZ_DB`.
+
 ## Bootstrap admins
 
 `admins` lists identity ids whose accounts always hold the `admin` role, so a fresh site has someone who can grant everything else. The role comes from config, not from the database, so nothing stored there takes it away; to remove an admin, take them off the list and deploy. An account holds the role when any provider account linked to it is listed. Each id's provider must be one the vault offers, or the build fails.
@@ -205,14 +222,14 @@ Under `<base><mount>/_svartz/auth/`, where `<base>` is the deployment base path,
 | `GET handle/` | The handle chooser for a first sign-in. Without one waiting, it says the sign-in expired. |
 | `POST handle/` | Creates the account with the form's `handle` and redirects to `returnTo` signed in. A taken or malformed handle shows the chooser again, answering 422. Refused from another origin. |
 | `GET me/` | The identity the reader signed in with, or `null`. |
-| `POST sign-out/` | Ends the session; answers 204. Refused from another origin. |
+| `POST sign-out/?returnTo=<path>` | Ends the session; answers 204, or with `returnTo`, as a form posts it, redirects there. Refused from another origin, and with a `returnTo` that isn't a path on the same site. |
 | `POST account/profile/?returnTo=<path>` | Sets the signed-in account's display name (`name`) and handle (`handle`), then redirects to `returnTo`, or to the account page without it. Only the callback vault answers it. |
 | `POST account/unlink/` | Unlinks the provider account named by `identity` and ends its sessions, then redirects to the account page. |
 | `POST account/sign-out-everywhere/` | Ends every session of the signed-in account, this one included, then redirects to the account page. |
 | `POST account/link/<provider>/?returnTo=<path>` | Starts linking another provider to the signed-in account. Only the callback vault answers it. |
 | `GET users/<handle>/` | The public profile and [reputation](#reputation) score, `{ handle, name, avatarUrl, reputation }`, or a 308 from an old handle to the current one's URL. |
 | `GET reputation/?page=<path>` | For the user page at `path`, below the deployment base: `{ handle, score }` of its owner, with `next`, `{ role, score }`, when the owner asks. `null` for any other page. |
-| `GET viewer/` | `{ handle, dashboard }` for a signed-in account, where `dashboard` says whether [the dashboard](#the-dashboard) has a panel for them; `null` otherwise. |
+| `GET viewer/` | `{ handle, dashboard }` for a signed-in account, where `dashboard` says whether [the dashboard](#the-dashboard) has a panel for them; `{ suspended: true }` for a [suspended](#suspensions) one; `null` otherwise. |
 | `POST people/grant/` | Sets the grant of `permission` for an account (`actor-type=account`, `actor=<handle>`) or a role (`actor-type=role`, `actor=<name>`) to `value` (`allow`, `deny` or `unset`), on the object `scope` (`site` or `vault:<id>`) and `path` (empty, a folder ending in `/`, or a page) name, or `object` names whole. Redirects to People & permissions. |
 | `POST people/role/` | Creates the role `name`, then redirects to People & permissions. |
 | `POST people/member/` | Gives the account `handle` the role `role`, then redirects to People & permissions. |
@@ -247,6 +264,8 @@ Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` and
 
 Forms on the page post to the routes above and work without JavaScript.
 
+A [suspended](#suspensions) reader sees only that their account is suspended, until when (in UTC) or for good, and the moderator's reason, with **Sign out**. The **Account** link in the site actions stays, so they can find it.
+
 ## The sign-in dialog
 
 Every page of the vault can open a dialog listing its providers. Give any element `data-svartz-sign-in` and clicking it opens the dialog, which brings the reader back to the current page:
@@ -272,7 +291,7 @@ const guestbook: ServerModuleFactory = () => async (request, context) => {
 export default guestbook;
 ```
 
-`readAccount(request, env)` answers the `Account`, or `null` when nobody is signed in, their session was deleted or expired, or the site binds no `SVARTZ_DB`. `env` is the handler's `context.env`. The plugin must be on a vault served from the same origin, since the cookie is.
+`readAccount(request, env)` answers the `Account`, or `null` when nobody is signed in, their session was deleted or expired, their account is [suspended](#suspensions), or the site binds no `SVARTZ_DB`. `env` is the handler's `context.env`. The plugin must be on a vault served from the same origin, since the cookie is.
 
 ```ts
 {
@@ -286,15 +305,19 @@ export default guestbook;
 }
 ```
 
-`readSignIn(request, env)` answers `{ account }`, or `{ account: null, reason }` saying why there is none: `"signed-out"`, or `"no-database"` when the site binds no `SVARTZ_DB`. A plugin that needs accounts can answer the second with a 503 naming the binding.
+`readSignIn(request, env)` answers `{ account }`, or `{ account: null, reason }` saying why there is none: `"signed-out"`, `"no-database"` when the site binds no `SVARTZ_DB`, or `"suspended"`, with `suspension: { reason, until?, since }`, while the account is [suspended](#suspensions). A plugin that needs accounts can answer `"no-database"` with a 503 naming the binding. A suspended reader is a guest: treat them as signed out, and leave telling them why to the account page.
 
 `linkedIdentities(account, env)` answers every provider account linked to the account, the first linked first, such as its GitHub account when it signed in with Discord. It answers `[]` without `SVARTZ_DB`.
 
-`readIdentity(request, env)` answers the provider account the reader signed in with, or `null`. It works with or without `SVARTZ_DB`, so plugins written before accounts keep working; new plugins should read the account.
+`readIdentity(request, env)` answers the provider account the reader signed in with, or `null`, as for a suspended account. It works with or without `SVARTZ_DB`, so plugins written before accounts keep working; new plugins should read the account.
 
 `findProfile(handle, env)` answers the public profile, `{ handle, name, avatarUrl }`, of the account that holds `handle` now or held it before, or `undefined`. When its `handle` differs from the one asked for, the asked one is old: redirect to the current one.
 
+`findProfileByIdentity(identity, env)` answers the public profile of the account the provider account `identity`, such as `github:583231`, is linked to, for a plugin that stored who wrote something by their sign-in, or `undefined`.
+
 `findProfiles(ids, env)` answers the public profiles of the accounts with those ids, as a `Map` by id, for a plugin that stored an account's id. Ids no account has are left out, and the map is empty without `SVARTZ_DB`. Show the handle and name; never show the id.
+
+`findProfilesByHandle(handles, env)` and `findProfilesByIdentity(identities, env)` answer what `findProfile` and `findProfileByIdentity` answer for each of a list, in one query, as a `Map` by what was asked. Use them for a page that lists many things, so its D1 calls don't grow with the list.
 
 `userPageLocation()` answers where [user pages](#user-pages) live, such as `{ vault: "notes", folder: "users" }`, so a plugin can find or start an account's page at `<folder>/<handle>` in that vault.
 
@@ -402,7 +425,7 @@ const guestbook: ServerModuleFactory = () => async (request, context) => {
 };
 ```
 
-`can(account, permission, object, env)` answers whether `account`, or a guest for `null`, holds `permission` on `object`: the site (`{}`), a vault (`{ vault }`), or a page of one (`{ vault, page }`, with the page's slug). It loads every grant that could apply in one query and decides in memory.
+`can(account, permission, object, env)` answers whether `account`, or a guest for `null`, holds `permission` on `object`: the site (`{}`), a vault (`{ vault }`), or a page of one (`{ vault, page }`, with the page's slug). It loads every grant that could apply in one query and decides in memory. `canEach(account, permission, objects, env)` answers it for each of a list of objects, in order, with the same one query, for a page that checks many, such as a queue of comments on different pages.
 
 It fails closed. Without `SVARTZ_DB` there are no grants and no accounts, so it answers `false`, defaults included; a plugin that must work without accounts decides that case itself, as [annotations](annotations.md#moderating) does. A database error throws. A permission no plugin on the site declares throws too, naming it, and so does every check in code that runs outside `svartzHandle`, since auth registers the catalogue as it starts.
 
@@ -496,9 +519,9 @@ Post only what your server knows happened, for the account your own records name
 
 ## The audit log
 
-Every grant, role and group change, every change to reputation's weights and thresholds, every role a threshold gives and every kudos is recorded in `auth_audit` in `SVARTZ_DB`: who made it, what it was, and when. The log is append-only: the database refuses to change or delete an entry. A change and its entry are written in one transaction, so neither lands without the other.
+Every grant, role and group change, every change to reputation's weights and thresholds, every role a threshold gives, every kudos and every [suspension](#suspensions) and lift is recorded in `auth_audit` in `SVARTZ_DB`: who made it, what it was, and when. The log is append-only: the database refuses to change or delete an entry. A change and its entry are written in one transaction, so neither lands without the other.
 
-Server plugins record their own changes, such as a suspension or a resolved report, with `audit(env, entry, changes?)` from `@svartz/auth/server`:
+Server plugins record their own changes, such as a resolved report, with `audit(env, entry, changes?)` from `@svartz/auth/server`:
 
 ```ts
 import { audit, readAccount } from "@svartz/auth/server";
@@ -514,3 +537,5 @@ await audit(context.env, {
 ```
 
 Pass the change itself as `changes`, statements prepared on the `SVARTZ_DB` binding: they run in the same transaction as the entry. A change kept anywhere else can't share it, so record the entry first and make the change once `audit` resolves. `audit` throws when the site binds no `SVARTZ_DB`, or when the write fails. Take `actor` from `readAccount` on the server, never from what the request says.
+
+`readAuditLog(env, { actor?, target?, before?, limit? })` reads the log, newest first, in one query: `{ entries, next? }`, each entry `{ id, at, actor, action, target, detail }`, where `actor` is the handle the actor had then. `actor` keeps the entries of the account that holds or held that handle, `target` those on exactly that target, and `before` takes the previous page's `next`; `limit` defaults to 50. Every string is as its writer stored it, so escape it to show it. The [moderation](moderation.md#the-audit-log-panel) plugin's Audit log panel shows it.

@@ -118,8 +118,11 @@ export function openSignIn(returnTo = `${location.pathname}${location.search}${l
   dialog.showModal();
 }
 
-/** Who the site's links name: the signed-in handle, and whether the dashboard has a panel for them. */
-type Viewer = { readonly handle: string; readonly dashboard: boolean } | null;
+/**
+ * Who the site's links name: the signed-in handle, and whether the dashboard has a panel for them. A suspended account
+ * gets the account link alone, to the page that says why.
+ */
+type Viewer = { readonly handle: string; readonly dashboard: boolean } | { readonly suspended: true; readonly dashboard?: undefined } | null;
 
 /** Asked once per document: signing in or out loads a new one. */
 const viewers = new Map<string, Promise<Viewer>>();

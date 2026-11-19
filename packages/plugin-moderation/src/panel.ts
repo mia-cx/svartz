@@ -3,16 +3,25 @@
  * about and the reader's reason, or with `?view=closed` the closed ones. Plain HTML forms post to this plugin's routes
  * to resolve or dismiss a report, and to the owning plugin's own routes to act on what was reported: annotations' to
  * hide a comment, submissions' to close a submission. Each action shows only to a viewer holding the owning plugin's
- * permission, which its route checks again. Reporters are never shown.
+ * permission, which its route checks again. A report about an account, a comment one wrote, or an edit one saved (a
+ * direct commit or a submission, as submissions' records name who saved it) links viewers holding
+ * `moderation:accounts:write` to the Suspensions panel's form for that account. Reporters are never shown.
+ *
+ * A view reads what its reports are about in a fixed number of D1 calls, however many it lists: a free Worker gets 50
+ * a request, and `tests/panel-cost.test.ts` counts them.
  */
-import { ACCOUNTS_DATABASE_ENV, can, findProfile, readAccount, userPageLocation, type Account } from "@svartz/auth/server";
+import {
+  ACCOUNTS_DATABASE_ENV, can, canEach, findProfiles, findProfilesByHandle, findProfilesByIdentity, readAccount, userPageLocation,
+  type Account, type PublicProfile,
+} from "@svartz/auth/server";
 import type { DashboardPanel, PageContext, PluginPage } from "@svartz/core";
-import { findComment, type ReportedComment } from "@svartz/plugin-annotations/server";
-import { isVaultSubmission } from "@svartz/plugin-submissions/server";
-import { PLUGIN_ID } from "./api";
+import { findComments, type ReportedComment } from "@svartz/plugin-annotations/server";
+import { savedEdits, type SavedEdits } from "@svartz/plugin-submissions/server";
 import { escape } from "./html";
-import { READ_REPORTS } from "./permissions";
+import { panelPath, vaultPath } from "./paths";
+import { READ_REPORTS, WRITE_ACCOUNTS } from "./permissions";
 import { listReports, migrate, type Database, type Report } from "./store";
+import { suspensionPath } from "./suspensions";
 import { publishedPage, type BuildData } from "./targets";
 
 /** The panel's id below the plugin's, so it lives at `/-/dashboard/moderation/reports/`. */
@@ -34,11 +43,8 @@ const STATUSES: ReadonlyMap<string, { text: string; error?: true }> = new Map([
   ["submission-closed", { text: "Submission closed." }],
 ]);
 
-/** `<base><mount>` from a context of this plugin. */
-const vaultPath = (context: Pick<PageContext, "base">) => context.base.slice(0, -`/_svartz/${PLUGIN_ID}`.length);
-
 /** The panel's path, which every form here goes back to. */
-export const panelPath = (context: Pick<PageContext, "base">) => `${vaultPath(context)}/-/dashboard/${PLUGIN_ID}/${PANEL}/`;
+export const reportsPath = (context: Pick<PageContext, "base">) => panelPath(context, PANEL);
 
 const KIND_LABELS = { page: "Page", commit: "Commit", submission: "Submission", annotation: "Comment", account: "Account" } as const;
 
@@ -61,8 +67,80 @@ interface Shown {
   readonly actions: readonly string[];
 }
 
+/** A report the panel couldn't look up: it still lists, so it can be resolved or dismissed. */
+const UNDESCRIBED: Shown = { what: `<span class="sv-account-muted">Couldn't show what this report is about.</span>`, actions: [] };
+
+/**
+ * What the panel knows of its reports' targets, read for the whole view at once. A source it couldn't read leaves only
+ * the reports that need it undescribed (`undefined` here), or without the actions it would have offered.
+ */
+interface Known {
+  /** Reported accounts, by the handle the report stored. */
+  readonly accounts: ReadonlyMap<string, PublicProfile> | undefined;
+  /** Reported comments, by id. */
+  readonly comments: ReadonlyMap<string, ReportedComment> | undefined;
+  /** The open comments the viewer may hide. */
+  readonly hides: ReadonlySet<string>;
+  /** The accounts behind open comments, by their author's sign-in; read only for a viewer who may suspend. */
+  readonly authors: ReadonlyMap<string, PublicProfile>;
+  /** Which reported commits and submissions the site saved for this vault, and the account behind each. */
+  readonly edits: SavedEdits;
+  /** The accounts behind those edits, by id; read only for a viewer who may suspend. */
+  readonly editors: ReadonlyMap<string, PublicProfile>;
+  readonly suspends: boolean;
+  readonly closes: boolean;
+}
+
+const unique = <T>(values: readonly T[]) => [...new Set(values)];
+const NO_EDITS: SavedEdits = { commits: new Map(), pulls: new Map() };
+const NO_PROFILES: ReadonlyMap<string, PublicProfile> = new Map();
+
+/** What `read` answers, or `fallback` when it fails, logged as `source`. */
+async function settle<T, F>(source: string, read: Promise<T>, fallback: F): Promise<T | F> {
+  try {
+    return await read;
+  } catch (cause) {
+    console.error(`[svartz:moderation] couldn't read ${source} for the Reports panel`, cause);
+    return fallback;
+  }
+}
+
+/**
+ * Everything `reports` need from auth, annotations and submissions, in two rounds of lookups that each take a list:
+ * a fixed number of D1 calls, however many reports there are. Actions are looked up for open reports only.
+ */
+async function lookUp(context: PageContext, data: BuildData, viewer: Account | null, reports: readonly Report[]): Promise<Known> {
+  const { env } = context;
+  const vault = context.vault.id;
+  const open = reports.filter((report) => report.state === "open");
+  const ids = (kind: Report["target"]["kind"], among = reports) => unique(among.filter(({ target }) => target.kind === kind).map(({ target }) => target.id));
+  const commentsDatabase = data.annotations?.database;
+  const submissions = data.submissions;
+  const asked = { commits: ids("commit", open), pulls: ids("submission", open).map(Number) };
+  const [accounts, comments, edits, suspends, closes] = await Promise.all([
+    settle("accounts", findProfilesByHandle(ids("account"), env), undefined),
+    commentsDatabase === undefined ? new Map<string, ReportedComment>() : settle("comments", findComments(env, commentsDatabase, vault, ids("annotation")), undefined),
+    submissions?.records === undefined ? NO_EDITS : settle("edits", savedEdits(env, { ...submissions.records, repo: submissions.repo }, asked), NO_EDITS),
+    open.length > 0 && settle("who may suspend", can(viewer, WRITE_ACCOUNTS, { vault }, env), false),
+    asked.pulls.length > 0 && submissions !== undefined && settle("who may close", can(viewer, CLOSE_SUBMISSIONS, { vault }, env), false),
+  ]);
+
+  const openComments = ids("annotation", open).flatMap((id) => comments?.get(id) ?? []);
+  // Annotations hides a comment only when it keeps them in the accounts database, beside the audit log.
+  const hideable = commentsDatabase === ACCOUNTS_DATABASE_ENV ? openComments.filter((comment) => !comment.hidden) : [];
+  const editAccounts = unique([...edits.commits.values(), ...edits.pulls.values()].flatMap((account) => account ?? []));
+  const [hiding, authors, editors] = await Promise.all([
+    hideable.length === 0 ? [] : settle("who may hide", canEach(viewer, HIDE_COMMENTS, hideable.map(({ page }) => ({ vault, page })), env), []),
+    // Comments name their author by sign-in; the account it's linked to is the one to suspend.
+    suspends ? settle("comments' authors", findProfilesByIdentity(unique(openComments.map(({ author }) => author.id)), env), NO_PROFILES) : NO_PROFILES,
+    suspends ? settle("edits' accounts", findProfiles(editAccounts, env), NO_PROFILES) : NO_PROFILES,
+  ]);
+  const hides = new Set(hideable.filter((_, index) => hiding[index]).map(({ id }) => id));
+  return { accounts, comments, hides, authors, edits, editors, suspends, closes };
+}
+
 /** Says what each report is about, with what this vault knows of it now, and offers the owning plugins' actions. */
-function describer(context: PageContext, data: BuildData, viewer: Account | null) {
+function describer(context: PageContext, data: BuildData, known: Known) {
   const vault = context.vault.id;
   const root = vaultPath(context);
   // Page URLs from the build are below the deployment base.
@@ -71,35 +149,40 @@ function describer(context: PageContext, data: BuildData, viewer: Account | null
     const page = publishedPage(data, slug);
     return page ? `<a href="${escape(`${site}${page.href}`)}">${escape(page.title)}</a>` : `${escape(slug)} <span class="sv-account-muted">(no longer on the site)</span>`;
   };
-  // Asked once, and only when a submission report needs it.
-  let closes: Promise<boolean> | undefined;
-  const closesSubmissions = () => closes ??= data.submissions ? can(viewer, CLOSE_SUBMISSIONS, { vault }, context.env) : Promise.resolve(false);
+  /** A link to the form that suspends `profile`'s account, coming back to this report; offered only to who may suspend. */
+  const suspendLink = (profile: PublicProfile | undefined, reportId: string, describedBy: string) => known.suspends && profile
+    ? [`<a class="sv-account-button" href="${escape(suspensionPath(context, profile.handle, `${reportsPath(context)}#report-${reportId}`))}" aria-describedby="${describedBy}">Suspend @${escape(profile.handle)}</a>`]
+    : [];
+  /** The account the site's records say saved an edit, never what the commit itself claims. */
+  const editor = (account: string | null | undefined) => account ? known.editors.get(account) : undefined;
 
-  return async (report: Report, describedBy: string): Promise<Shown> => {
+  return (report: Report, describedBy: string): Shown => {
     const { kind, id } = report.target;
-    const back = (status: string) => `${panelPath(context)}?status=${status}#report-${report.id}`;
+    const back = (status: string) => `${reportsPath(context)}?status=${status}#report-${report.id}`;
     const open = report.state === "open";
     switch (kind) {
       case "page":
         return { what: pageLink(id), actions: [] };
       case "account": {
-        const profile = await findProfile(id, context.env);
+        if (!known.accounts) return UNDESCRIBED;
+        const profile = known.accounts.get(id);
         if (!profile) return { what: `@${escape(id)} <span class="sv-account-muted">(no account has this handle now)</span>`, actions: [] };
         // Auth says where user pages live; a page at that path in another vault is an ordinary page.
         const userPages = userPageLocation();
         const userPage = userPages.vault === vault ? publishedPage(data, `${userPages.folder}/${profile.handle}`) : undefined;
         const handle = userPage ? `<a href="${escape(`${site}${userPage.href}`)}">@${escape(profile.handle)}</a>` : `@${escape(profile.handle)}`;
-        return { what: `${handle} <span class="sv-account-muted">${escape(profile.name)}</span>`, actions: [] };
+        const actions = open ? suspendLink(profile, report.id, describedBy) : [];
+        return { what: `${handle} <span class="sv-account-muted">${escape(profile.name)}</span>`, actions };
       }
       case "annotation": {
-        const comments = data.annotations?.database;
-        const comment: ReportedComment | undefined = comments === undefined ? undefined : await findComment(context.env, comments, vault, id);
-        if (!comment) return { what: comments === undefined ? "A comment" : "A comment that has since been deleted", actions: [] };
+        if (!known.comments) return UNDESCRIBED;
+        const comment = known.comments.get(id);
+        if (!comment) return { what: data.annotations === undefined ? "A comment" : "A comment that has since been deleted", actions: [] };
         const what = `${escape(comment.author.name)} on ${pageLink(comment.page)}${comment.hidden ? ' <span class="sv-account-tag">Hidden</span>' : ""}`;
-        // Annotations hides a comment only when it keeps them in the accounts database, beside the audit log.
-        const hides = open && !comment.hidden && comments === ACCOUNTS_DATABASE_ENV
-          && await can(viewer, HIDE_COMMENTS, { vault, page: comment.page }, context.env);
-        const actions = hides ? [button(`${root}/_svartz/annotations/${encodeURIComponent(id)}/hide/`, { returnTo: back("hidden") }, "Hide comment", describedBy)] : [];
+        const actions = open && known.hides.has(id)
+          ? [button(`${root}/_svartz/annotations/${encodeURIComponent(id)}/hide/`, { returnTo: back("hidden") }, "Hide comment", describedBy)]
+          : [];
+        if (open) actions.push(...suspendLink(known.authors.get(comment.author.id), report.id, describedBy));
         // A page that's since gone unpublished or protected takes its comments out of sight, here too.
         return { what, ...publishedPage(data, comment.page) && { quote: comment.body }, actions };
       }
@@ -109,9 +192,11 @@ function describer(context: PageContext, data: BuildData, viewer: Account | null
           ? `<a href="${escape(`https://github.com/${submissions.repo}/pull/${id}`)}">Pull request #${escape(id)}</a>`
           : `Pull request #${escape(id)}`;
         // Submissions closes only the vault's own pull requests, the saves its records hold, so Close shows only for those.
-        const records = submissions?.records;
-        const closable = open && records !== undefined && await closesSubmissions() && await isVaultSubmission(context.env, { ...records, repo: submissions!.repo }, Number(id));
-        const actions = closable ? [button(`${root}/_svartz/submissions/close/`, { number: id, returnTo: back("submission-closed") }, "Close submission", describedBy)] : [];
+        const number = Number(id);
+        const actions = open && known.closes && known.edits.pulls.has(number)
+          ? [button(`${root}/_svartz/submissions/close/`, { number: id, returnTo: back("submission-closed") }, "Close submission", describedBy)]
+          : [];
+        if (open) actions.push(...suspendLink(editor(known.edits.pulls.get(number)), report.id, describedBy));
         return { what, actions };
       }
       case "commit":
@@ -119,7 +204,7 @@ function describer(context: PageContext, data: BuildData, viewer: Account | null
           what: data.submissions
             ? `<a href="${escape(`https://github.com/${data.submissions.repo}/commit/${id}`)}">Commit <code>${escape(id.slice(0, 7))}</code></a>`
             : `Commit <code>${escape(id.slice(0, 7))}</code>`,
-          actions: [],
+          actions: open ? suspendLink(editor(known.edits.commits.get(id)), report.id, describedBy) : [],
         };
     }
   };
@@ -150,20 +235,13 @@ async function reportsPage(request: Request, context: PageContext, data: BuildDa
   const open = query.get("view") !== "closed";
   const viewer = await readAccount(request, context.env);
   const listed = await listReports(db, context.vault.id, open, SHOWN);
-  const describe = describer(context, data, viewer);
-  const items = await Promise.all(listed.reports.map(async (report) => {
-    // One report the panel can't describe still lists, so it can be resolved or dismissed, and never hides the rest.
-    const shown = await describe(report, `report-${report.id}-target`).catch((cause: unknown): Shown => {
-      console.error(`[svartz:moderation] couldn't describe report ${report.id}`, cause);
-      return { what: `<span class="sv-account-muted">Couldn't show what this report is about.</span>`, actions: [] };
-    });
-    return reportItem(report, shown, context);
-  }));
+  const describe = describer(context, data, await lookUp(context, data, viewer, listed.reports));
+  const items = listed.reports.map((report) => reportItem(report, describe(report, `report-${report.id}-target`), context));
   const status = STATUSES.get(query.get("status") ?? "");
   const message = status
     ? `<p class="sv-account-status" role="${status.error ? "alert" : "status"}"${status.error ? " data-error" : ""}>${escape(status.text)}</p>`
     : "";
-  const here = panelPath(context);
+  const here = reportsPath(context);
   const tab = (label: string, count: number, href: string, current: boolean) =>
     `<li><a href="${escape(href)}"${current ? ' aria-current="page"' : ""}>${label} <span class="sv-moderation-count">${count}</span></a></li>`;
   const empty = open ? "No open reports." : "No closed reports yet.";

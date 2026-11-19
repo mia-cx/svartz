@@ -54,6 +54,8 @@ export interface SiteOptions {
   readonly comments?: string;
   /** The pages the build published. Default {@link PAGES}. */
   readonly pages?: BuildData["pages"];
+  /** Identity ids config names admins. */
+  readonly admins?: readonly string[];
 }
 
 /**
@@ -62,6 +64,7 @@ export interface SiteOptions {
  */
 export function createSite(db: Database, {
   vault = "notes", annotations = true, submissions = true, reportsPerHour = DEFAULT_REPORTS_PER_HOUR, accounts = true, comments = "SVARTZ_DB", pages = PAGES,
+  admins = [],
 }: SiteOptions = {}) {
   const data: BuildData = {
     pages,
@@ -78,6 +81,7 @@ export function createSite(db: Database, {
         options: {
           providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
           permissions: [...PERMISSIONS, ...OTHERS],
+          admins,
         },
         data: { permissions: [], paths: [] },
       },
@@ -138,13 +142,49 @@ export async function signIn(site: Site, person: Identity): Promise<string> {
 /** Where the vault's submissions go, and where sync records its saves: the repository, and the vault's folder in it. */
 export const SUBMISSIONS = { repo: "wikiplace/wikiplace.live", root: "content" } as const;
 
-/** Record that the site saved `number` as a pull request for a vault at `root`, as submissions' sync does on a save. */
-export async function seedSubmission(db: Database, number: number, root: string = SUBMISSIONS.root): Promise<void> {
+/**
+ * Record that the site saved an edit for a vault at `root`, as submissions' sync does on a save: pull request `number`,
+ * or with `commit` a direct commit with that SHA; `owner` is the account id that saved it, or none for a guest.
+ */
+export async function seedSubmission(db: Database, number: number, root: string = SUBMISSIONS.root, { owner, commit }: { owner?: string; commit?: string } = {}): Promise<void> {
   // Asking migrates submissions' schema.
   await isVaultSubmission({ DB: db }, { database: "DB", repo: SUBMISSIONS.repo, root }, number);
-  await db.prepare(`INSERT INTO submissions_edits (id, scope, owner, kind, page, path, pull_number, url, saved_at)
-    VALUES (?, ?, NULL, 'pull-request', '/notes/garden/', 'content/garden.md', ?, ?, '2026-11-02T00:00:00.000Z')`)
-    .bind(crypto.randomUUID(), `${SUBMISSIONS.repo}:${root}`, number, `https://github.com/${SUBMISSIONS.repo}/pull/${number}`).run();
+  await db.prepare(`INSERT INTO submissions_edits (id, scope, owner, kind, page, path, commit_sha, pull_number, url, saved_at)
+    VALUES (?, ?, ?, ?, '/notes/garden/', 'content/garden.md', ?, ?, ?, '2026-11-02T00:00:00.000Z')`)
+    .bind(
+      crypto.randomUUID(), `${SUBMISSIONS.repo}:${root}`, owner === undefined ? null : `account:${owner}`, commit ? "commit" : "pull-request",
+      commit ?? null, commit ? null : number, `https://github.com/${SUBMISSIONS.repo}/${commit ? `commit/${commit}` : `pull/${number}`}`,
+    ).run();
+}
+
+/** The id of `handle`'s account, as plugins' records name it. */
+export async function accountId(db: Database, handle: string): Promise<string> {
+  const { results: [row] } = await db.prepare("SELECT id FROM auth_accounts WHERE handle = ?").bind(handle).all<{ id: string }>();
+  return row!.id;
+}
+
+/**
+ * `db` counting its calls in `calls.count` as a Worker invocation's D1 limit does: each query one, and a whole batch
+ * one. Hand `database` to the site.
+ */
+export function counting(db: Database) {
+  const calls = { count: 0 };
+  const real = new WeakMap<object, Statement>();
+  const count = <T>(result: T) => (calls.count++, result);
+  const statement = (prepared: Statement): Statement => {
+    const wrapped: Statement = {
+      bind: (...values) => statement(prepared.bind(...values)),
+      all: () => count(prepared.all()),
+      run: () => count(prepared.run()),
+    };
+    real.set(wrapped, prepared);
+    return wrapped;
+  };
+  const database: Database = {
+    prepare: (query) => statement(db.prepare(query)),
+    batch: (statements) => count(db.batch(statements.map((each) => real.get(each)!))),
+  };
+  return { database, calls };
 }
 
 /** Grant `permission` on the vault to `handle`'s account, as an admin would on the dashboard. */
