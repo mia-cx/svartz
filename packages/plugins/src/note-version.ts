@@ -15,6 +15,8 @@ const CONTENT_STAGES = STAGE_NAMES.slice(STAGE_NAMES.indexOf("resolveLinks"), ST
 
 /** A URL that names a scheme, the site root or a place on the same page stays as written. */
 const ANCHORED = /^(?:[a-z][a-z\d+.-]*:|\/|#)/i;
+/** A URL from the site's root, `/media/chart.svg`, as opposed to one naming another host, `//cdn.example/x`. */
+const ROOT_RELATIVE = /^\/(?!\/)/;
 
 /** A compiler step's plugin: the function itself, or the first of a `[plugin, options]` pair. */
 const stepOf = (step: unknown): unknown => (Array.isArray(step) ? step[0] : step);
@@ -111,18 +113,28 @@ export async function compileNoteVersion(
   const mount = ctx.config.mountPath ?? "";
   const moved = new Map([...options.moved ?? []].map(([path, url]) => [`${mount}/${path.replaceAll("\\", "/")}`, url]));
   const mine = new Set(added.map(({ path }) => `${mount}/${path.replaceAll("\\", "/")}`));
-  const shown = (url: string): string | undefined => {
-    if (ANCHORED.test(url)) return url;
+  /** `url`'s path, decoded, read from the note's own page; `undefined` for a malformed escape. */
+  const resolve = (url: string) => {
     const { pathname, search, hash } = new URL(url, `https://svartz.invalid${note.href}`);
-    let decoded: string;
     try {
-      decoded = decodeURIComponent(pathname);
+      return { decoded: decodeURIComponent(pathname), search, hash };
     } catch {
       return undefined;
     }
-    const elsewhere = moved.get(decoded);
-    if (elsewhere) return `${elsewhere}${search}${hash}`;
-    return mine.has(decoded) || options.published(decoded) || options.published(`${decoded}/`) ? `${options.prefix}${url}` : undefined;
+  };
+  const shown = (url: string): string | undefined => {
+    // A root-relative URL names the same file as a relative one, so it follows the file where the caller moved it.
+    if (ROOT_RELATIVE.test(url)) {
+      const at = resolve(url);
+      const elsewhere = at && moved.get(at.decoded);
+      return elsewhere ? `${elsewhere}${at.search}${at.hash}` : url;
+    }
+    if (ANCHORED.test(url)) return url;
+    const at = resolve(url);
+    if (!at) return undefined;
+    const elsewhere = moved.get(at.decoded);
+    if (elsewhere) return `${elsewhere}${at.search}${at.hash}`;
+    return mine.has(at.decoded) || options.published(at.decoded) || options.published(`${at.decoded}/`) ? `${options.prefix}${url}` : undefined;
   };
   visit(tree, "element", (node: Element, index, parent) => {
     const href = node.properties.href;

@@ -170,7 +170,8 @@ describe("previous versions from git", () => {
     await mkdir(join(repo.vault, "media"));
     await repo.write("media/kept.svg", "<svg>kept</svg>");
     await repo.write("media/chart.svg", "<svg>first-chart</svg>");
-    await repo.write("posts/hello.md", post("![Kept](../media/kept.svg)\n\n![[chart.svg]]"));
+    // Also from the site's root, as a responsive source: it names the same file, so it follows the file too.
+    await repo.write("posts/hello.md", post('![Kept](../media/kept.svg)\n\n![[chart.svg]]\n\n<picture><source srcset="/media/chart.svg 1x"><img src="/media/chart.svg" alt="Root"></picture>'));
     await repo.commit("Draw it");
     await repo.write("media/chart.svg", "<svg>second-chart</svg>");
     await repo.write("posts/hello.md", post("![Kept](../media/kept.svg)\n\n![[chart.svg]]\n\nRedrawn."));
@@ -194,6 +195,9 @@ describe("previous versions from git", () => {
     expect(shown(`/posts/hello/versions/${shas[2]}/`, "chart.svg")).toBe("<svg>first-chart</svg>");
     expect(shown(`/posts/hello/versions/${shas[1]}/`, "chart.svg")).toBe("<svg>second-chart</svg>");
     expect(asset("media/chart.svg")).toBeUndefined();
+    // No root-relative URL is left pointing where the deleted file was, in a source or an image.
+    expect(page(`/posts/hello/versions/${shas[2]}/`)).not.toMatch(/"\/media\/chart\.svg/);
+    expect(page(`/posts/hello/versions/${shas[2]}/`)).toMatch(/srcset=\\*"\.\.\/files\/[0-9a-f]{12}\/chart\.svg 1x\\*"/);
   });
 
   // Proves nothing of a version the build would have hidden shows anywhere: not listed, not as the next version's
