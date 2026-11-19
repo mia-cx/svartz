@@ -29,7 +29,8 @@ const clock = new Intl.DateTimeFormat("en-GB", { timeStyle: "short", timeZone: "
 
 /** `19 Nov 2026, 13:00 UTC`, as a `<time>`. */
 export const when = (iso: string) => `<time datetime="${escape(iso)}">${escape(`${dateTime.format(new Date(iso))} UTC`)}</time>`;
-const plainWhen = (iso: string) => `${dateTime.format(new Date(iso))} UTC`;
+/** `19 Nov 2026, 13:00 UTC`, as text. */
+export const plainWhen = (iso: string) => `${dateTime.format(new Date(iso))} UTC`;
 
 function author(who: Author): string {
   if (who.kind === "account") {
@@ -157,6 +158,10 @@ function hunkRows(hunks: readonly Hunk[]): string {
   }).join("");
 }
 
+/** `hunks` as a source diff's table: line numbers before and after, the change, and the line. */
+export const diffTable = (hunks: readonly Hunk[]) =>
+  `<table class="sv-history-diff"><thead><tr><th class="sv-history-hidden">Line before</th><th class="sv-history-hidden">Line after</th><th class="sv-history-hidden">Change</th><th class="sv-history-hidden">Text</th></tr></thead>${hunkRows(hunks)}</table>`;
+
 /** The form that reverts a page to a diff's earlier revision, posting `fields` to `action`. */
 export interface RevertForm {
   readonly action: string;
@@ -224,7 +229,7 @@ export function diffPage(
 <h2 id="sv-history-source">Source</h2>
 ${comparison.hunks.length === 0
   ? "<p>The page's source is the same in both revisions.</p>"
-  : `<table class="sv-history-diff"><thead><tr><th class="sv-history-hidden">Line before</th><th class="sv-history-hidden">Line after</th><th class="sv-history-hidden">Change</th><th class="sv-history-hidden">Text</th></tr></thead>${hunkRows(comparison.hunks)}</table>`}
+  : diffTable(comparison.hunks)}
 </section>
 ${comparison.rendered === undefined || !to ? "" : `<section class="sv-history-section" aria-labelledby="sv-history-rendered">
 <h2 id="sv-history-rendered">The page at ${escape(plainWhen(to.at))}</h2>
