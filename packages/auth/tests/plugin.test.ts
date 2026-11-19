@@ -1,6 +1,7 @@
 import type { NormalizedSvartzPlugin, PluginContext, ResolvedConfig } from "@svartz/core";
 import { describe, expect, it } from "vitest";
 import { auth, type AuthOptions } from "../src/index";
+import type { AuthServerData } from "../src/server";
 
 const github = { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } };
 
@@ -65,10 +66,11 @@ describe("the auth plugin", () => {
   );
 
   it("records the build's user pages for the server: each page directly in the folder named after a handle", async () => {
-    const plugin = auth({ providers: { github }, userPages: "people" });
+    const config = { id: "notes", mountPath: "/notes", target: { type: "node" }, plugins: [auth({ providers: { github }, userPages: "people" })] } as unknown as ResolvedConfig;
+    const plugin = (config.plugins[0] as NormalizedSvartzPlugin).forVault!({ vault: config, vaults: [config] }) as NormalizedSvartzPlugin;
     const note = (slug: string, extra = {}) => ({ slug, extension: ".md", ...extra });
     const ctx = {
-      config: { id: "notes", mountPath: "/notes", target: { type: "node" }, plugins: [plugin] },
+      config,
       plugins: [plugin],
       files: [
         note("people/ada"),
@@ -85,7 +87,7 @@ describe("the auth plugin", () => {
 
     await plugin.emitArtifacts!.run(ctx);
 
-    expect(ctx.compiler?.serverData.get("auth")).toEqual({ permissions: [], userPages: { ada: "/notes/people/ada/", grace: null } });
+    expect((ctx.compiler?.serverData.get("auth") as AuthServerData).userPages).toEqual({ ada: "/notes/people/ada/", grace: null });
   });
 });
 
@@ -114,9 +116,32 @@ describe("one sign-in per host app", () => {
 
     const work = resolve(vaults, "work");
 
-    expect(work.server?.options).toMatchObject({ callbackMountPath: "/journal" });
+    expect(work.server?.options).toMatchObject({ callbackMountPath: "/journal", userPageVault: "journal" });
     expect(await dialogEndpoint(work, "/work")).toBe("/journal/_svartz/auth");
     expect(resolve(vaults, "journal").server?.options).not.toHaveProperty("callbackMountPath");
+    expect(resolve(vaults, "journal").server?.options).toMatchObject({ userPageVault: "journal" });
+  });
+
+  // Proves only the vault that runs sign-in reserves handles: another host vault's build records no user pages.
+  it("records user pages only in the build of the vault that runs sign-in", async () => {
+    const vaults = site(
+      { id: "journal", plugins: [auth({ providers: { github } })] },
+      { id: "work", plugins: [auth({ providers: { github } })] },
+    );
+    const recorded = async (id: string) => {
+      const ctx = {
+        config: vaults.find((vault) => vault.id === id),
+        plugins: [],
+        files: [{ slug: "users/ada", extension: ".md" }],
+        index: { entries: [{ slug: "users/ada", href: `/${id}/users/ada/` }] },
+        meta: new Map(),
+      } as unknown as PluginContext;
+      await resolve(vaults, id).emitArtifacts!.run(ctx);
+      return (ctx.compiler?.serverData.get("auth") as AuthServerData).userPages;
+    };
+
+    expect(await recorded("journal")).toEqual({ ada: "/journal/users/ada/" });
+    expect(await recorded("work")).toBeUndefined();
   });
 
   it("uses the callbackVault a vault names", async () => {
@@ -208,7 +233,7 @@ describe("the permission catalogue", () => {
 
     await plugin.emitArtifacts!.run(ctx);
 
-    expect(ctx.compiler?.serverData.get("auth")).toEqual({ permissions: [comment], paths: [], userPages: {} });
+    expect(ctx.compiler?.serverData.get("auth")).toEqual({ permissions: [comment], paths: [] });
   });
 
   it("fails the build for a malformed declaration that only the build's final plugins carry", async () => {

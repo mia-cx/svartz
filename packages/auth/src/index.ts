@@ -88,7 +88,7 @@ function userPagesOf(ctx: PluginContext, folder: string): Record<string, string 
   for (const file of ctx.files) {
     if (!NOTE_EXTENSIONS.has(file.extension ?? "")) continue;
     // As the resolver reads a page object, so the build and the override agree on which pages are user pages.
-    const handle = userPageHandle(`page:${ctx.config.id}/${file.slug}`, folder);
+    const handle = userPageHandle(`page:${ctx.config.id}/${file.slug}`, { vault: ctx.config.id, folder });
     if (handle !== undefined) pages[handle] = file.protection?.hidden ? null : hrefs.get(file.slug) ?? null;
   }
   return pages;
@@ -161,11 +161,15 @@ function pathsOf(slugs: readonly string[]): string[] {
   return [...new Set([...folders, ...slugs])].sort();
 }
 
-/** What `forVault` resolved for one vault: where its sign-ins run, the catalogue, and the vaults sharing its accounts. */
+/**
+ * What `forVault` resolved for one vault: where its sign-ins run, the catalogue, the vaults sharing its accounts, and
+ * the vault that runs sign-in, which holds the user pages.
+ */
 interface Resolved {
   readonly callbackMountPath?: string;
   readonly permissions: readonly PermissionDeclaration[];
   readonly vaults: readonly string[];
+  readonly userPageVault: string;
 }
 
 /** The plugin one vault runs; `resolved` is set once every vault is known. */
@@ -183,6 +187,7 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], reso
         ...target.id !== site.vault.id && { callbackMountPath: target.mountPath },
         permissions: permissionsFor(site),
         vaults: sharingVaults(site).map(({ id }) => id),
+        userPageVault: target.id,
       });
     },
     emitArtifacts: {
@@ -199,10 +204,11 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], reso
         compiler.browserResources.set(`${AUTH_PLUGIN_ID}-css`, { id: `${AUTH_PLUGIN_ID}-css`, kind: "css", importId: STYLESHEET });
         // The build's final plugins, which config resolution couldn't see whole: a theme preset's plugins, and what
         // other plugins' `forVault` returned. Checked like the catalogue, and added to it when the server starts.
+        // Only the vault that holds user pages records them, so no other vault's build can reserve a handle.
         const built: AuthServerData = {
           permissions: collectPermissions([{ id: ctx.config.id, plugins: ctx.plugins ?? ctx.config.plugins }]),
           paths: pathsOf(ctx.index?.entries.map(({ slug }) => slug) ?? []),
-          userPages: userPagesOf(ctx, options.userPages ?? DEFAULT_USER_PAGE_FOLDER),
+          ...resolved?.userPageVault === ctx.config.id && { userPages: userPagesOf(ctx, options.userPages ?? DEFAULT_USER_PAGE_FOLDER) },
         };
         // The catalogue config resolution collected reaches every vault's server as well, so the build may add to it
         // but not contradict it, or which of the two a server read last would decide a default.

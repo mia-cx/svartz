@@ -20,14 +20,15 @@
  *
  * Accounts and sessions live in the D1 database bound as `SVARTZ_DB`; without one, the session cookie holds the
  * identity itself and nobody has an account. On a vault whose `callbackVault` is another vault, `start` forwards to
- * that vault's, and `callback`, `handle` and `account/link` answer 404.
+ * that vault's, and `callback`, `handle`, `account/profile` and `account/link` answer 404: the callback vault holds the
+ * user pages, so it alone allocates handles.
  */
 import { CodeChallengeMethod, generateCodeVerifier, generateState, OAuth2Client } from "arctic";
 import {
   decodeRoutePath, type EnvReference, type PageRenderer, type PermissionDeclaration, type ServerContext, type ServerHandler,
   type ServerModuleFactory,
 } from "@svartz/core";
-import { accountPage, NAME_MAX_LENGTH, signedOutPage, type StatusCode } from "./account";
+import { accountPage, NAME_MAX_LENGTH, signedOutPage, type AccountView, type StatusCode } from "./account";
 import { AUTH_PERMISSIONS } from "./auth-permissions";
 import { chooserPage, expiredPage } from "./chooser";
 import { DASHBOARD_PAGE, dashboardPage, openableSections } from "./dashboard";
@@ -42,7 +43,7 @@ import {
   profileByHandle, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity, updateProfile,
   type Database, type PublicProfile,
 } from "./store";
-import { DEFAULT_USER_PAGE_FOLDER, hasUserPage, useUserPages, userPageFolder } from "./user-pages";
+import { builtUserPages, DEFAULT_USER_PAGE_FOLDER, hasUserPage, useUserPages, userPageLocation, type UserPages } from "./user-pages";
 
 export type { Identity, ProviderId } from "./providers";
 export type { Account, SignIn, SignedOutReason } from "./session";
@@ -53,7 +54,7 @@ export { can, migrateGrants, type IdentityGrant } from "./grants";
 export type { PermissionTarget } from "./permissions";
 export { audit, type AuditEntry } from "./audit";
 export { linkedIdentities } from "./identities";
-export { userPageFolder } from "./user-pages";
+export { userPageLocation, type UserPageLocation } from "./user-pages";
 
 /**
  * The public profile of the account that holds or held `handle`, under its current handle; `undefined` when no account
@@ -88,8 +89,9 @@ export interface AuthOptions {
    */
   readonly admins?: readonly string[];
   /**
-   * The vault folder of user pages, as page slugs spell it. `<folder>/<handle>` is the page of the account with that
-   * handle, which it may always edit. Default: `"users"`. Host vaults share accounts, so they must set the same one.
+   * The folder of user pages, as page slugs spell it. `<folder>/<handle>` in the vault that runs sign-in is the page of
+   * the account with that handle, which it may always edit. Default: `"users"`. Host vaults share accounts, so they
+   * must set the same one.
    */
   readonly userPages?: string;
 }
@@ -102,6 +104,11 @@ export interface AuthServerOptions extends AuthOptions {
   readonly permissions?: readonly PermissionDeclaration[];
   /** The ids of the vaults that share these accounts, for the dashboard's object picker. Default: this vault alone. */
   readonly vaults?: readonly string[];
+  /**
+   * The id of the vault that holds user pages: the one that runs sign-in, set at config resolution. Without it, no
+   * page is a user page.
+   */
+  readonly userPageVault?: string;
 }
 
 /** What the plugin's build hook records for the server module. */
@@ -110,8 +117,8 @@ export interface AuthServerData {
   readonly permissions: readonly PermissionDeclaration[];
   /** The vault's published folders (ending in `/`) and pages, which the dashboard's object picker suggests. */
   readonly paths?: readonly string[];
-  /** The vault's user pages, by handle, mapped to their URL below the deployment base; `null` for a hidden page. */
-  readonly userPages: Readonly<Record<string, string | null>>;
+  /** The user pages the build found, recorded only on the vault that holds user pages. */
+  readonly userPages?: UserPages;
 }
 
 const FLOW_COOKIE = "__Host-svartz-oauth";
@@ -255,8 +262,11 @@ async function callback({ request, url, context, provider, client, secret }: Ste
   return redirect(`${context.base}/handle/`, [clearFlow, cookie(PENDING_COOKIE, pending, PENDING_MAX_AGE)]);
 }
 
-/** The handle chooser for a first sign-in waiting in the pending cookie, and the account it creates. */
-async function chooseHandle(request: Request, url: URL, context: ServerContext, secret: string, db: Database): Promise<Response> {
+/**
+ * The handle chooser for a first sign-in waiting in the pending cookie, and the account it creates. `pages` are the
+ * user pages this vault's build found, whose handles are taken.
+ */
+async function chooseHandle(request: Request, url: URL, context: ServerContext, secret: string, db: Database, pages: UserPages): Promise<Response> {
   const pending = await unseal(readCookie(request, PENDING_COOKIE), secret, "pending");
   if (!isPending(pending)) return expiredPage(siteRoot(context));
   const { identity, returnTo } = pending;
@@ -273,17 +283,17 @@ async function chooseHandle(request: Request, url: URL, context: ServerContext, 
     action: `${context.base}/handle/`,
     cancel: returnTo,
   });
-  if (request.method === "GET") return show(await suggestHandle(db, handleFrom(identity.handle ?? identity.name)));
+  if (request.method === "GET") return show(await suggestHandle(db, handleFrom(identity.handle ?? identity.name), pages));
 
   if (crossOrigin(request, url)) return failure(403, "cross_origin", "Choose your handle on this site.");
   const form = await request.formData().catch(() => undefined);
   const handle = typedHandle(String(form?.get("handle") ?? ""));
   if (!isHandle(handle)) return show(handle, HANDLE_PROBLEM);
   // A user page nobody holds the handle of would become this account's.
-  const sid = hasUserPage(handle) ? "taken" : await createAccount(db, identity, handle);
+  const sid = hasUserPage(pages, handle) ? "taken" : await createAccount(db, identity, handle);
   if (sid === "linked") return spent();
   if (sid === "taken") {
-    const free = await suggestHandle(db, handle);
+    const free = await suggestHandle(db, handle, pages);
     return show(free, `@${handle} is taken. @${free} is free, or try another.`);
   }
   return redirect(returnTo, [cookie(PENDING_COOKIE, "", 0), cookie(SESSION_COOKIE, await sealSession(sid, secret), SESSION_MAX_AGE_SECONDS)], 303);
@@ -297,6 +307,23 @@ async function signOut(request: Request, url: URL, context: ServerContext): Prom
 
 /** The account page of the vault at `context`: `<base><mount>/-/account/`. */
 const accountPagePath = (context: ServerContext): string => `${siteRoot(context)}-/account/`;
+
+/**
+ * What the account page at `context` shows of the reader's user page, from `pages`, the user page vault's build: a link
+ * to the page under the current handle, else under one held before, where a handle change left it. While there is
+ * none, room for a plugin to start it, on the vault that holds user pages only, so a page is never started where it
+ * isn't one. Nothing for a hidden page, which the site never links, or before the user page vault has started.
+ */
+function userPageView(pages: UserPages | undefined, current: string, handles: readonly string[], context: ServerContext): AccountView["userPage"] {
+  if (!pages) return undefined;
+  const owned = [current, ...handles].find((handle) => hasUserPage(pages, handle));
+  if (owned !== undefined) {
+    const href = pages[owned];
+    return href ? { href: `${deploymentBase(context)}${href}` } : undefined;
+  }
+  const { vault, folder } = userPageLocation();
+  return vault === context.vault.id ? { missing: `${folder}/${current}` } : undefined;
+}
 
 /** `path` with the account page's `status` query, and the provider or typed values it concerns. */
 function withStatus(path: string, url: URL, status: StatusCode, provider?: ProviderId, typed: Record<string, string> = {}): string {
@@ -322,17 +349,22 @@ interface AccountChange {
   readonly session: NonNullable<Awaited<ReturnType<typeof readCurrentSession>>>;
 }
 
-async function changeProfile({ request, url, context, db, session }: AccountChange): Promise<Response> {
+/**
+ * Change the display name and handle, then go back to `returnTo`, the account page the form was on, which may be
+ * another vault's. `pages` are the user pages this vault's build found.
+ */
+async function changeProfile({ request, url, context, db, session }: AccountChange, pages: UserPages): Promise<Response> {
   const form = await request.formData().catch(() => undefined);
   const typedName = String(form?.get("name") ?? "");
   const handle = typedHandle(String(form?.get("handle") ?? ""));
-  const back = (status: StatusCode) => redirect(withStatus(accountPagePath(context), url, status, undefined,
+  const page = sameOriginPath(url.searchParams.get("returnTo") ?? accountPagePath(context), url) ?? accountPagePath(context);
+  const back = (status: StatusCode) => redirect(withStatus(page, url, status, undefined,
     status === "saved" ? {} : { name: typedName, handle }), [], 303);
   const name = displayName(typedName);
   if (!name) return back("name-invalid");
   if (!isHandle(handle)) return back("handle-invalid");
   // A user page is its owner's whatever their handle: a handle with a page the account never held isn't free to take.
-  if (hasUserPage(handle) && !(await handlesOf(db, session.account.id)).includes(handle)) return back("handle-taken");
+  if (hasUserPage(pages, handle) && !(await handlesOf(db, session.account.id)).includes(handle)) return back("handle-taken");
   return back(await updateProfile(db, session.account.id, { name, handle }) === "saved" ? "saved" : "handle-taken");
 }
 
@@ -393,8 +425,11 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
   // this deployment's config, and every `can()` its permission catalogue.
   useAdmins(options.admins ?? []);
   usePermissions([...AUTH_PERMISSIONS, ...options.permissions ?? [], ...data?.permissions ?? []]);
-  const userPages = data?.userPages ?? {};
-  useUserPages(options.userPages ?? DEFAULT_USER_PAGE_FOLDER, Object.keys(userPages));
+  // User pages live in the vault that runs sign-in, and only its build records them. Its routes alone allocate
+  // handles, against `pages`, so what they reserve never depends on which vault a request reached first.
+  const runsSignIn = options.callbackMountPath === undefined;
+  const pages: UserPages = data?.userPages ?? {};
+  useUserPages({ vault: options.userPageVault, folder: options.userPages ?? DEFAULT_USER_PAGE_FOLDER }, runsSignIn ? pages : undefined);
   const providers = Object.keys(options.providers).filter(isProviderId);
   /** The OAuth client for a configured provider, or the response explaining why there is none. */
   const clientFor = (provider: ProviderId, url: URL, context: ServerContext): OAuth2Client | Response => {
@@ -408,8 +443,10 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
 
   const accountRoute = async (request: Request, url: URL, context: ServerContext, action: string | undefined, linkTo: string | undefined): Promise<Response | undefined> => {
     const provider = linkTo !== undefined && isProviderId(linkTo) && options.providers[linkTo] ? linkTo : undefined;
-    // Providers only call back to the callback vault, so only it starts a link.
-    if (linkTo !== undefined && (!provider || options.callbackMountPath !== undefined)) return undefined;
+    if (linkTo !== undefined && !provider) return undefined;
+    // Providers only call back to the callback vault, so only it starts a link; it holds the user pages, so only it
+    // changes a handle.
+    if ((provider || action === "profile") && !runsSignIn) return undefined;
     if (request.method !== "POST") return failure(405, "method_not_allowed", "Use POST.", { allow: "POST" });
     // Browsers name the page's origin on every POST: anything else is forged, or from a client that can't be checked.
     if (request.headers.get("origin") !== url.origin) return failure(403, "cross_origin", "Change your account on this site.");
@@ -426,7 +463,7 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
       const client = clientFor(provider, url, context);
       return client instanceof Response ? client : startLink(change, provider, client, secret);
     }
-    if (action === "profile") return changeProfile(change);
+    if (action === "profile") return changeProfile(change, pages);
     if (action === "unlink") return unlink(change);
     return signOutEverywhere(change);
   };
@@ -447,21 +484,18 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
     }
     const linkBase = options.callbackMountPath === undefined ? context.base : baseAt(context, options.callbackMountPath);
     const [{ identities, sessions }, handles] = await Promise.all([signInsOf(db, session.account.id), handlesOf(db, session.account.id)]);
-    // The page under the current handle, else under one held before, where a handle change left it.
-    const { handle: current } = session.account;
-    const owned = [current, ...handles.filter((handle) => handle !== current)].find((handle) => Object.hasOwn(userPages, handle));
-    const href = owned === undefined ? undefined : userPages[owned];
+    // Another vault's module registered its user pages as it started: every page request passes each host vault first.
+    const userPage = userPageView(runsSignIn ? pages : builtUserPages(), session.account.handle, handles, context);
     return accountPage({
       account: session.account,
       identities,
       sessions,
       session: session.sid,
-      // A hidden page gets no link: the site never shows where it is.
-      userPage: owned === undefined ? { missing: `${userPageFolder()}/${current}` } : href ? { href: `${deploymentBase(context)}${href}` } : undefined,
+      userPage,
       providers,
       query: url.searchParams,
       actions: {
-        profile: `${context.base}/account/profile/`,
+        profile: `${linkBase}/account/profile/?returnTo=${encodeURIComponent(here)}`,
         unlink: `${context.base}/account/unlink/`,
         signOutEverywhere: `${context.base}/account/sign-out-everywhere/`,
         link: (provider) => `${linkBase}/account/link/${provider}/?returnTo=${encodeURIComponent(here)}`,
@@ -515,7 +549,7 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
     if (handle) {
       const db = await accountsDatabase(context.env);
       if (!db) return failure(503, "misconfigured", `Bind a D1 database as ${ACCOUNTS_DATABASE_ENV} to give readers accounts.`);
-      return chooseHandle(request, url, context, secret, db);
+      return chooseHandle(request, url, context, secret, db, pages);
     }
     if (!provider || !app) return signOut(request, url, context);
 

@@ -48,7 +48,13 @@ function site(db: Database | undefined, { admins = [] as string[], built = [] as
         id: "auth",
         eager: true,
         load: () => import("../src/server"),
-        options: { providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } }, admins, permissions: PERMISSIONS, ...userPages && { userPages } },
+        options: {
+          providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
+          admins,
+          permissions: PERMISSIONS,
+          userPageVault: "notes",
+          ...userPages && { userPages },
+        },
         // What the plugin's build hook collected from the build's final plugins.
         data: { permissions: built, userPages: {} },
       },

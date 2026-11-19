@@ -8,7 +8,7 @@ import {
 } from "./permissions";
 import type { Account } from "./session";
 import { accountsDatabase, handlesOf, type Database } from "./store";
-import { userPageFolder } from "./user-pages";
+import { userPageLocation } from "./user-pages";
 
 type Env = Readonly<Record<string, unknown>>;
 
@@ -64,7 +64,7 @@ function withDefaults(stored: readonly Grant[], { slug, defaults = {} }: Permiss
  */
 async function principalsOf(db: Database, account: Pick<Account, "id" | "handle" | "roles"> | null, chain: readonly string[]): Promise<Principals> {
   if (!account) return { roles: [], groups: [] };
-  const owner = userPageHandle(chain[0], userPageFolder());
+  const owner = userPageHandle(chain[0], userPageLocation());
   const formerHandles = owner !== undefined && owner !== account.handle ? await handlesOf(db, account.id) : [];
   return { account: { id: account.id, handle: account.handle, formerHandles }, roles: account.roles, groups: [] };
 }
@@ -87,7 +87,7 @@ export interface Explanation extends Decision {
 export async function explain(db: Database, account: Pick<Account, "id" | "handle" | "roles">, permission: PermissionSlug, chain: readonly string[]): Promise<Explanation> {
   const declaration = declared(permission);
   const [stored, who] = await Promise.all([loadGrants(db, permission, chain), principalsOf(db, account, chain)]);
-  const decision = resolve(withDefaults(stored, declaration), who, chain, permission, userPageFolder());
+  const decision = resolve(withDefaults(stored, declaration), who, chain, permission, userPageLocation());
   const { decidedBy } = decision;
   return { ...decision, byDefault: decidedBy.kind === "grant" && !stored.includes(decidedBy.grant) };
 }
@@ -106,7 +106,7 @@ export async function can(account: Account | null, permission: PermissionSlug, t
   if (!db) return false;
   const chain = objectChain(target);
   const [stored, who] = await Promise.all([loadGrants(db, permission, chain), principalsOf(db, account, chain)]);
-  return resolve(withDefaults(stored, declaration), who, chain, permission, userPageFolder()).value === "allow";
+  return resolve(withDefaults(stored, declaration), who, chain, permission, userPageLocation()).value === "allow";
 }
 
 /** A grant a plugin's config gives an identity, such as a moderator it lists, to move onto that identity's account. */

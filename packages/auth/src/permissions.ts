@@ -7,7 +7,7 @@
  */
 import { isHandle } from "./handle";
 import { ADMIN_ROLE } from "./session";
-import { DEFAULT_USER_PAGE_FOLDER } from "./user-pages";
+import type { UserPageLocation } from "./user-pages";
 
 export type GrantValue = "allow" | "deny" | "unset";
 
@@ -95,22 +95,21 @@ function rank(grant: Grant, who: Principals): number | undefined {
 }
 
 /**
- * The handle whose user page `object` is, `<folder>/<handle>` in any vault, or `undefined`. Only the page itself: a page
- * below it, a handle in another case or one that breaks the handle rules is nobody's user page.
+ * The handle whose user page `object` is, `<folder>/<handle>` in the vault `at` names, or `undefined`. Only the page
+ * itself: a page below it, in another vault, or named by a handle in another case or one that breaks the handle rules
+ * is nobody's user page.
  */
-export function userPageHandle(object: string | undefined, folder: string): string | undefined {
-  const prefix = "page:";
+export function userPageHandle(object: string | undefined, { vault, folder }: UserPageLocation): string | undefined {
+  if (vault === undefined) return undefined;
+  const prefix = `page:${vault}/${folder}/`;
   if (!object?.startsWith(prefix)) return undefined;
-  // Vault ids hold no slash, so the slug starts after the first one.
-  const slug = object.slice(object.indexOf("/") + 1);
-  if (!slug.startsWith(`${folder}/`)) return undefined;
-  const handle = slug.slice(folder.length + 1);
+  const handle = object.slice(prefix.length);
   return isHandle(handle) ? handle : undefined;
 }
 
 /**
  * Decide `permission` on the object `chain` describes (from {@link objectChain}) for `who`, from `grants` already loaded.
- * User pages are `<userPages>/<handle>`.
+ * User pages are `<folder>/<handle>` in the vault `userPages` names.
  *
  * 1. The `admin` role is allowed everything.
  * 2. Owner overrides allow: an account on its own user page, under its current handle or one it held before, and a
@@ -124,7 +123,7 @@ export function resolve(
   who: Principals,
   chain: readonly string[],
   permission: string,
-  userPages: string = DEFAULT_USER_PAGE_FOLDER,
+  userPages: UserPageLocation,
 ): Decision {
   if (who.roles.includes(ADMIN_ROLE)) return { value: "allow", decidedBy: { kind: "admin" } };
   const owner = userPageHandle(chain[0], userPages);

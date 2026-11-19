@@ -87,10 +87,12 @@ interface Database {
 
 /**
  * A wiki at /wiki with `auth` and `submissions` as a GitHub App, on a fresh D1. `admins` are identities whose accounts
- * are admins; `userPages` is auth's user page folder; `build` what the submissions build recorded; `db` is the
- * database, for storing grants.
+ * are admins; `userPages` is auth's user page folder, in `userPageVault`, the vault that runs sign-in; `build` what the
+ * submissions build recorded; `db` is the database, for storing grants.
  */
-async function createSite({ mode = "permission" as Mode, admins = [] as string[], userPages = undefined as string | undefined, build = BUILD } = {}) {
+async function createSite({
+  mode = "permission" as Mode, admins = [] as string[], userPages = undefined as string | undefined, userPageVault = "wiki", build = BUILD,
+} = {}) {
   const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
   disposers.push(() => miniflare.dispose());
   const db = await miniflare.getD1Database("SVARTZ_DB") as unknown as Database;
@@ -114,6 +116,7 @@ async function createSite({ mode = "permission" as Mode, admins = [] as string[]
           providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
           admins,
           permissions: permissions(false),
+          userPageVault,
           ...userPages && { userPages },
         },
       },
@@ -562,6 +565,20 @@ describe("user pages", () => {
     github([sourceOf("content/users/grace.md")]);
 
     expect((await (await site.request(`${BASE}/source/?page=%2Fwiki%2Fusers%2Fgrace%2F`, { cookie: grace })).json() as { destination: unknown }).destination)
+      .toBe("pull-request");
+  });
+
+  // Proves a page at the user page path of a vault that doesn't run sign-in is an ordinary page: no override on it, and
+  // no starting it outside the sections.
+  it("treats the user page folder of a vault that holds no user pages as an ordinary folder", async () => {
+    const empty = await createSite({ userPageVault: "journal", build: buildWith("users", []) });
+    const started = await empty.request(`${BASE}/destination/?folder=users&title=ada`, { cookie: await signIn(empty, ADA) });
+    expect([started.status, (await started.json() as { error: unknown }).error]).toEqual([400, "not_a_section"]);
+
+    const withGrace = await createSite({ userPageVault: "journal", build: buildWith("users", ["grace"]) });
+    const grace = await signIn(withGrace, GRACE);
+    github([sourceOf("content/users/grace.md")]);
+    expect((await (await withGrace.request(`${BASE}/source/?page=%2Fwiki%2Fusers%2Fgrace%2F`, { cookie: grace })).json() as { destination: unknown }).destination)
       .toBe("pull-request");
   });
 

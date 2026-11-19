@@ -45,7 +45,7 @@ function site(db: Database | undefined, userPages: Record<string, string | null>
     basePath: "/notes",
     vault: { id: "notes", mountPath: "/notes", site: { title: "Notes" } },
     servers: [
-      { id: "auth", eager: true, pages: ["account"], load: () => import("../src/server"), options: { providers }, data: { permissions: [], userPages } },
+      { id: "auth", eager: true, pages: ["account"], load: () => import("../src/server"), options: { providers, userPageVault: "notes" }, data: { permissions: [], userPages } },
       { id: "reader", load: async () => ({ default: () => async (request: Request, context: { env: Record<string, unknown> }) => Response.json(await readSignIn(request, context.env)) }) },
     ],
   }, { privateEnv: env, building: false, dev: false });
@@ -281,7 +281,6 @@ describe("/-/account/", () => {
 
   // Proves the page stays reachable through a handle change: it stays where it was written, and stays its owner's.
   it("keeps linking the user page under the old handle after a handle change", async () => {
-    // Handles differ from the other tests': a user page the build found keeps its handle taken for the whole process.
     const db = await createDatabase();
     const hopper = await signUp(site(db).request, OCTOCAT, "hopper");
     const { request, page } = site(db, { hopper: "/notes/users/hopper/" });

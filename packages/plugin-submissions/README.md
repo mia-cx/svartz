@@ -82,7 +82,7 @@ The editor saves what a reader writes in the browser's `localStorage` as they wr
 
 Every page gets a **New page** action in the site actions (the rail or site navigation). Its panel asks for a **Title** and a **Section**, then opens on a blank page with a **Why add this page** field. The sections are the vault's folders that hold a published note, plus its top level when that does. The page is saved as `<section>/<title>.md`, so the title is the note's name as in Obsidian, and its URL follows the vault's usual slug rules. A title that a page in that section already has is refused, with a link to that page.
 
-A signed-in reader without a [user page](../../docs/auth.md#user-pages) gets **Create your page** on their account page, `/-/account/`. It opens the same panel on `users/<handle>.md`, with the title and section fixed, even before the user page folder holds a published note.
+A signed-in reader without a [user page](../../docs/auth.md#user-pages) gets **Create your page** on the account page, `/-/account/`, of the vault that holds user pages. It opens the same panel on `users/<handle>.md`, with the title and section fixed, even before the user page folder holds a published note.
 
 ## What maintainers get
 

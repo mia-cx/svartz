@@ -57,7 +57,7 @@ describe("resolve", () => {
   const userPage = (page: string): Decision => ({ value: "allow", decidedBy: { kind: "user-page", object: `page:notes/${page}` } });
   const chainOf = (page: string) => objectChain({ vault: "notes", page });
 
-  // The last element, when present, is the user page folder the `auth` plugin was given.
+  // The last element, when present, is the user page folder the `auth` plugin was given. User pages live in `notes`.
   it.each<[string, readonly Grant[], Principals, readonly string[], Decision, string?]>([
     // Object chain specificity
     ["answers unset when nothing is granted", [], ADA, CHAIN, NOTHING],
@@ -102,6 +102,7 @@ describe("resolve", () => {
     ["gives no override below the user page", [], ADA, chainOf("users/ada/drafts"), NOTHING],
     ["gives no override on a page named the handle in another case", [], ADA, objectChain({ vault: "notes", page: "users/Ada" }), NOTHING],
     ["gives no override on the folder's own page", [], ADA, chainOf("users"), NOTHING],
+    ["gives no override on the same path in a vault that holds no user pages", [], ADA, objectChain({ vault: "journal", page: "users/ada" }), NOTHING],
     ["allows an account on the user page of a handle it held before", [grant("account", "acct-ada", "page:notes/users/lovelace", "deny")],
       as({ account: { id: "acct-ada", handle: "ada", formerHandles: ["lovelace"] } }), chainOf("users/lovelace"), userPage("users/lovelace")],
     ["gives the current holder of a handle no override from someone else's former one", [], ADA, chainOf("users/lovelace"), NOTHING],
@@ -110,7 +111,7 @@ describe("resolve", () => {
     ["gives a group's mere member no override", [pageDeny], as({ groups: [gardenersMember] }), CHAIN, deniedBy(pageDeny)],
     ["gives a group's owner no override outside its linked objects", [],
       as({ groups: [{ group: "gardeners", owner: true, linked: ["folder:notes/alliances/"] }] }), CHAIN, NOTHING],
-  ])("%s", (_case, grants, who, chain, decision, userPages) => {
-    expect(resolve(grants, who, chain, DELETE, userPages)).toEqual(decision);
+  ])("%s", (_case, grants, who, chain, decision, folder = "users") => {
+    expect(resolve(grants, who, chain, DELETE, { vault: "notes", folder })).toEqual(decision);
   });
 });
