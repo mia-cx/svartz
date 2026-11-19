@@ -176,7 +176,7 @@ Local development over `http://localhost` works in Chrome and Firefox, which acc
 
 Host vaults share accounts, so every host vault that enables auth must list the same admins, or the build fails.
 
-Server plugins always read this deployment's list: auth starts before any plugin answers a request. A host app's own route that calls `readAccount` before any plugin has answered in that worker uses the list auth last stored in D1, which can still be the previous deployment's.
+Auth starts before the site answers any request, so server plugins and a host app's own routes behind `svartzHandle` always read this deployment's list. Code that calls `readAccount` without `svartzHandle` in its hooks sees no admins.
 
 ## Routes
 

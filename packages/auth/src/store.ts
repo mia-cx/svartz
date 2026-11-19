@@ -76,11 +76,6 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       session_id TEXT,
       created_at TEXT NOT NULL
     )`,
-    // The deployed config's `admins`, for isolates where the auth plugin hasn't started yet.
-    `CREATE TABLE IF NOT EXISTS auth_settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    )`,
   ],
 ];
 
@@ -130,12 +125,6 @@ export async function accountsDatabase(env: Readonly<Record<string, unknown>>): 
   return db;
 }
 
-/** Record the deployed config's bootstrap admins, replacing whatever the database held. */
-export async function storeAdmins(db: Database, admins: readonly string[]): Promise<void> {
-  await db.prepare(`INSERT INTO auth_settings (key, value) VALUES ('admins', ?)
-    ON CONFLICT (key) DO UPDATE SET value = excluded.value`).bind(JSON.stringify(admins)).run();
-}
-
 /** An account's own row, as {@link readSession} answers it. */
 export interface AccountRecord {
   readonly id: string;
@@ -145,13 +134,11 @@ export interface AccountRecord {
   readonly createdAt: string;
 }
 
-/** A live session: its account, the sign-in it used, every identity linked to the account and the stored admins. */
+/** A live session: its account, the sign-in it used and every identity linked to the account. */
 export interface SessionRecord {
   readonly account: AccountRecord;
   readonly identity: Identity;
   readonly linkedIdentities: readonly string[];
-  /** `undefined` before any auth plugin has stored them. */
-  readonly storedAdmins: readonly string[] | undefined;
 }
 
 interface SessionRow {
@@ -183,18 +170,16 @@ export async function digest(text: string): Promise<string> {
 
 /** Session `id` with its account and sign-in, or `undefined` when it was deleted or has expired. */
 export async function readSession(db: Database, id: string): Promise<SessionRecord | undefined> {
-  const [sessions, identities, settings] = await db.batch([
+  const [sessions, identities] = await db.batch([
     db.prepare(`SELECT a.id AS account_id, a.handle AS account_handle, a.name AS account_name,
         a.avatar_url AS account_avatar_url, a.created_at AS account_created_at,
         i.id AS identity_id, i.provider, i.name, i.handle, i.avatar_url, i.profile_url
       FROM auth_sessions s JOIN auth_accounts a ON a.id = s.account_id JOIN auth_identities i ON i.id = s.identity_id
       WHERE s.id = ? AND s.expires_at > ?`).bind(id, Date.now()),
     db.prepare(`SELECT i.id FROM auth_sessions s JOIN auth_identities i ON i.account_id = s.account_id WHERE s.id = ?`).bind(id),
-    db.prepare(`SELECT value FROM auth_settings WHERE key = 'admins'`),
   ]);
   const row = sessions!.results[0] as SessionRow | undefined;
   if (!row) return undefined;
-  const stored = (settings!.results[0] as { value: string } | undefined)?.value;
   return {
     account: {
       id: row.account_id,
@@ -212,7 +197,6 @@ export async function readSession(db: Database, id: string): Promise<SessionReco
       ...row.profile_url !== null && { profileUrl: row.profile_url },
     },
     linkedIdentities: (identities!.results as { id: string }[]).map(({ id }) => id),
-    storedAdmins: stored === undefined ? undefined : JSON.parse(stored) as string[],
   };
 }
 
@@ -259,12 +243,17 @@ export async function startSession(db: Database, identity: Identity): Promise<st
   return id;
 }
 
+/** Whether a provider account is linked to an account yet. */
+export async function hasAccount(db: Database, identity: string): Promise<boolean> {
+  return await linkedAccount(db, identity) !== undefined;
+}
+
 /**
  * Create an account with `handle` for `identity`, link it, and start a session, all in one batch; answer the session
- * id. When a racing sign-in linked `identity` first, this signs into that account instead. Answers `"taken"`, creating
- * nothing, when another account has `handle`.
+ * id. Creating nothing, it answers `"linked"` when a racing sign-in linked `identity` first, so one first sign-in
+ * starts one session, and `"taken"` when another account has `handle`.
  */
-export async function createAccount(db: Database, identity: Identity, handle: string): Promise<string | "taken"> {
+export async function createAccount(db: Database, identity: Identity, handle: string): Promise<string | "taken" | "linked"> {
   const account = crypto.randomUUID();
   const id = newSessionId();
   const at = new Date().toISOString();
@@ -273,8 +262,7 @@ export async function createAccount(db: Database, identity: Identity, handle: st
     return id;
   } catch (error) {
     // The batch is one transaction, so nothing landed. Which unique key refused it decides what the reader sees.
-    const linked = await startSession(db, identity);
-    if (linked) return linked;
+    if (await hasAccount(db, identity.id)) return "linked";
     if (await isTaken(db, handle)) return "taken";
     throw error;
   }

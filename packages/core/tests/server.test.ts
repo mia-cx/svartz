@@ -183,7 +183,7 @@ describe("server plugin routing", () => {
     expect(hello).toHaveBeenCalledTimes(1);
   });
 
-  it("runs an eager plugin's factory before another plugin answers its first request", async () => {
+  const eagerSite = (building = false) => {
     const order: string[] = [];
     const plugin = (id: string) => async () => ({
       default: () => {
@@ -197,13 +197,31 @@ describe("server plugin routing", () => {
     const handle = createServerHandle({
       basePath: "", vault,
       servers: [{ id: "reader", load: plugin("reader") }, { id: "accounts", load: plugin("accounts"), eager: true }],
-    }, { privateEnv: {}, building: false, dev: false });
-    const resolve = vi.fn(async () => new Response("page"));
+    }, { privateEnv: {}, building, dev: false });
+    const resolve = vi.fn(async () => {
+      order.push("page renders");
+      return new Response("page");
+    });
+    return { handle, resolve, order };
+  };
+
+  it("runs an eager plugin's factory before another plugin answers its first request", async () => {
+    const { handle, resolve, order } = eagerSite();
 
     await handle({ event: event("/_svartz/reader/"), resolve });
     await handle({ event: event("/_svartz/reader/"), resolve });
 
     expect(order).toEqual(["accounts starts", "reader starts", "reader answers", "reader answers"]);
+  });
+
+  it("runs an eager plugin's factory before the app renders its first page, but never while prerendering", async () => {
+    const { handle, resolve, order } = eagerSite();
+    await handle({ event: event("/guide/"), resolve });
+    expect(order).toEqual(["accounts starts", "page renders"]);
+
+    const prerender = eagerSite(true);
+    await prerender.handle({ event: event("/guide/"), resolve: prerender.resolve });
+    expect(prerender.order).toEqual(["page renders"]);
   });
 });
 

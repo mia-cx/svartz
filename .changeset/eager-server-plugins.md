@@ -3,4 +3,4 @@
 "@svartz/vite": minor
 ---
 
-A server plugin can start before the others. With `server: { module, eager: true }`, its factory runs before any of the vault's plugins answers its first request, instead of on its own first request. Use it for a plugin whose factory sets up what other plugins read. `@svartz/auth` is eager, so a plugin that reads accounts always sees the deployed `admins`.
+A server plugin can start before everything else. With `server: { module, eager: true }`, its factory runs before the site answers its first request at runtime (a page, a plugin or one of the app's own routes), instead of on its own first request. Use it for a plugin whose factory sets up what other code reads. `@svartz/auth` is eager, so accounts are always read with the deployed `admins`.

@@ -48,10 +48,13 @@ interface SessionCookie {
   readonly sid: string;
 }
 
-/** The deployed config's bootstrap admins, once an `auth` plugin has started in this isolate. */
-let configuredAdmins: readonly string[] | undefined;
+/**
+ * The deployed config's bootstrap admins. The `auth` plugin is eager, so its server module has set them before the
+ * site answers any request; code that reads accounts outside a Svartz site's handle sees no admins.
+ */
+let configuredAdmins: readonly string[] = [];
 
-/** Called by the `auth` server module as it starts: from then on, `admins` decides who is an admin. */
+/** Called by the `auth` server module as it starts: `admins` alone decides who is an admin. */
 export function useAdmins(admins: readonly string[]): void {
   configuredAdmins = admins;
 }
@@ -114,10 +117,9 @@ async function read(request: Request, env: Env): Promise<Reader> {
   const sid = isSessionCookie(cookie.value) ? cookie.value.sid : await legacySession(db, await digest(cookie.raw), cookie.value);
   const session = sid === undefined ? undefined : await readSession(db, sid);
   if (!session) return SIGNED_OUT;
-  const admins = configuredAdmins ?? session.storedAdmins ?? [];
   const account: Account = {
     ...session.account,
-    roles: session.linkedIdentities.some((id) => admins.includes(id)) ? [ADMIN_ROLE] : [],
+    roles: session.linkedIdentities.some((id) => configuredAdmins.includes(id)) ? [ADMIN_ROLE] : [],
     identity: session.identity,
   };
   return { signIn: { account }, identity: account.identity };

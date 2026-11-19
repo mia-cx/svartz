@@ -31,8 +31,9 @@ export interface ServerModuleSpec<Options = unknown> {
   /** JSON-serializable. Name secrets with `{ env: "NAME" }`; read them from `context.env` per request. */
   readonly options?: Options;
   /**
-   * Run this plugin's factory before any of the vault's plugins answers its first request, instead of on this plugin's
-   * own first request. For a plugin whose factory sets up what other plugins read, as `auth`'s does with its admins.
+   * Run this plugin's factory before the site answers its first request at runtime (a page, a plugin or one of the
+   * app's own routes), instead of on this plugin's own first request. For a plugin whose factory sets up what other
+   * code reads, as `auth`'s does with its admins. A factory that throws fails every request until it starts.
    */
   readonly eager?: boolean;
 }
@@ -76,7 +77,7 @@ export interface ServerRoute {
   readonly options?: unknown;
   /** What the plugin's hooks recorded for its server module during this build. */
   readonly data?: unknown;
-  /** The spec's `eager`: its factory runs before any plugin's first request is answered. */
+  /** The spec's `eager`: its factory runs before the handle answers its first request. */
   readonly eager?: boolean;
 }
 
@@ -224,7 +225,7 @@ function varyRepresentation(response: Response): Response {
  * Build a SvelteKit `handle` that sends `<basePath>/_svartz/<id>/…` to plugin `<id>` and every other request to `resolve`.
  * Published page GET/HEAD requests that prefer Markdown get a 303 to the page's emitted copy; others resolve HTML.
  * Unknown ids, and handlers answering `undefined`, return 404. Each factory runs once: on its plugin's first request,
- * or for an `eager` plugin before the first request any plugin answers.
+ * or for an `eager` plugin before the handle answers its first request of any kind.
  */
 export function createServerHandle(registry: ServerRegistry, runtime: ServerHandleRuntime) {
   const root = `${registry.basePath}/${SERVER_ROUTE_SEGMENT}/`;
@@ -245,6 +246,9 @@ export function createServerHandle(registry: ServerRegistry, runtime: ServerHand
     event: Event;
     resolve: (event: Event) => MaybePromise<Response>;
   }): Promise<Response> => {
+    // Before pages and the app's own routes too: they read what eager plugins set up as much as plugins do.
+    // Nothing answers at runtime while prerendering, so nothing starts.
+    if (!runtime.building) await Promise.all(eager.map(handlerFor));
     // Read nothing but the pathname before the prefix check: SvelteKit forbids `url.search` while prerendering.
     const { pathname } = event.url;
     const markdownHref = markdownCopyFor(registry.markdown, pathname);
@@ -277,7 +281,6 @@ export function createServerHandle(registry: ServerRegistry, runtime: ServerHand
     const route = routes.get(id);
     if (!route) return notFound(pathname);
 
-    await Promise.all(eager.map(handlerFor));
     const handler = await handlerFor(route);
     const waitUntilHost = platformWaitUntil(event.platform) ?? runtime.workers;
     const response = await handler(request, {

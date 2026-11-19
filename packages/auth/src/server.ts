@@ -21,7 +21,7 @@ import { handleFrom, HANDLE_MAX_LENGTH, isHandle, typedHandle } from "./handle";
 import { isProviderId, PROVIDERS, type Identity, type ProviderId } from "./providers";
 import { seal, SESSION_SECRET_ENV, SESSION_SECRET_MIN_LENGTH, sessionSecret, unseal } from "./seal";
 import { endSession, isIdentity, readCookie, readIdentity, sealSession, SESSION_COOKIE, useAdmins } from "./session";
-import { ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, SESSION_MAX_AGE_SECONDS, startSession, storeAdmins, suggestHandle, type Database } from "./store";
+import { ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, hasAccount, SESSION_MAX_AGE_SECONDS, startSession, suggestHandle, type Database } from "./store";
 
 export type { Identity, ProviderId } from "./providers";
 export type { Account, SignIn, SignedOutReason } from "./session";
@@ -132,9 +132,6 @@ const crossOrigin = (request: Request, url: URL): boolean => {
   return origin !== null && origin !== url.origin;
 };
 
-/** The accounts database, with the deployed `admins` stored in it; `undefined` when none is bound. */
-type Accounts = (env: ServerContext["env"]) => Promise<Database | undefined>;
-
 /** One sign-in step for a configured provider. */
 interface Step {
   readonly request: Request;
@@ -143,7 +140,6 @@ interface Step {
   readonly provider: ProviderId;
   readonly client: OAuth2Client;
   readonly secret: string;
-  readonly accounts: Accounts;
 }
 
 async function start({ url, context, provider, client, secret }: Step): Promise<Response> {
@@ -157,7 +153,7 @@ async function start({ url, context, provider, client, secret }: Step): Promise<
   return redirect(location.href, [cookie(FLOW_COOKIE, flow, FLOW_MAX_AGE)]);
 }
 
-async function callback({ request, url, context, provider, client, secret, accounts }: Step): Promise<Response> {
+async function callback({ request, url, context, provider, client, secret }: Step): Promise<Response> {
   const flow = await unseal(readCookie(request, FLOW_COOKIE), secret, "oauth");
   const clearFlow = cookie(FLOW_COOKIE, "", 0);
   if (!isFlow(flow) || flow.provider !== provider || flow.state !== url.searchParams.get("state")) {
@@ -179,7 +175,7 @@ async function callback({ request, url, context, provider, client, secret, accou
     return failure(502, "provider_failed", `${label} didn't confirm the sign-in. Sign in again.`, { "set-cookie": clearFlow });
   }
 
-  const db = await accounts(context.env);
+  const db = await accountsDatabase(context.env);
   // Without accounts, the cookie holds the identity itself.
   if (!db) return redirect(flow.returnTo, [clearFlow, cookie(SESSION_COOKIE, await seal(identity, secret, "session", SESSION_MAX_AGE_SECONDS), SESSION_MAX_AGE_SECONDS)]);
   const sid = await startSession(db, identity);
@@ -193,6 +189,10 @@ async function chooseHandle(request: Request, url: URL, context: ServerContext, 
   const pending = await unseal(readCookie(request, PENDING_COOKIE), secret, "pending");
   if (!isPending(pending)) return expiredPage(siteRoot(context));
   const { identity, returnTo } = pending;
+  // Spent: this first sign-in already made its account, here or in a racing submit. Its cookie starts no session, so
+  // a saved copy can't sign back in after a sign-out; the reader goes back, signed in if the first answer reached them.
+  const spent = () => redirect(returnTo, [cookie(PENDING_COOKIE, "", 0)], request.method === "GET" ? 302 : 303);
+  if (await hasAccount(db, identity.id)) return spent();
   const show = (handle: string, error?: string) => chooserPage({
     siteTitle: typeof context.vault.site.title === "string" ? context.vault.site.title : url.host,
     providerLabel: PROVIDERS[identity.provider].label,
@@ -211,6 +211,7 @@ async function chooseHandle(request: Request, url: URL, context: ServerContext, 
     return show(handle, `Use up to ${HANDLE_MAX_LENGTH} lowercase letters, numbers, hyphens and underscores, starting and ending with a letter or number.`);
   }
   const sid = await createAccount(db, identity, handle);
+  if (sid === "linked") return spent();
   if (sid === "taken") {
     const free = await suggestHandle(db, handle);
     return show(free, `@${handle} is taken. @${free} is free, or try another.`);
@@ -228,23 +229,9 @@ const ROUTE = /^\/(?:(start|callback)\/([^/]+)|(me)|(sign-out)|(handle))\/$/;
 
 /** The `auth` server module: `server: { module, options }` with {@link AuthOptions}. */
 const authServer: ServerModuleFactory<AuthServerOptions> = (options) => {
-  const admins = options.admins ?? [];
-  // From now on this isolate's readers resolve `admin` from config; isolates where auth hasn't started read what the
-  // database holds, which the first request here replaces.
-  useAdmins(admins);
-  const stored = new WeakMap<Database, Promise<void>>();
-  const accounts: Accounts = async (env) => {
-    const db = await accountsDatabase(env);
-    if (!db) return undefined;
-    let ready = stored.get(db);
-    if (!ready) {
-      ready = storeAdmins(db, admins);
-      ready.catch(() => stored.delete(db));
-      stored.set(db, ready);
-    }
-    await ready;
-    return db;
-  };
+  // The plugin is eager, so this runs before the site answers anything: every account read resolves `admin` from
+  // this deployment's config.
+  useAdmins(options.admins ?? []);
 
   return async (request, context) => {
     const url = new URL(request.url);
@@ -274,10 +261,9 @@ const authServer: ServerModuleFactory<AuthServerOptions> = (options) => {
       return failure(503, "misconfigured",
         `Set ${SESSION_SECRET_ENV} to a random value of at least ${SESSION_SECRET_MIN_LENGTH} characters.`);
     }
-    // Every route this deployment answers stores its admins, for isolates where auth hasn't started yet.
-    const db = await accounts(context.env);
     if (me) return json(await readIdentity(request, context.env));
     if (handle) {
+      const db = await accountsDatabase(context.env);
       if (!db) return failure(503, "misconfigured", `Bind a D1 database as ${ACCOUNTS_DATABASE_ENV} to give readers accounts.`);
       return chooseHandle(request, url, context, secret, db);
     }
@@ -288,7 +274,7 @@ const authServer: ServerModuleFactory<AuthServerOptions> = (options) => {
       return failure(503, "misconfigured", `Set ${app.clientSecret.env} to the ${PROVIDERS[provider].label} OAuth app's client secret.`);
     }
     const client = new OAuth2Client(app.clientId, clientSecret, callbackUrl(url, context, provider));
-    const args: Step = { request, url, context, provider, client, secret, accounts };
+    const args: Step = { request, url, context, provider, client, secret };
     return step === "start" ? start(args) : callback(args);
   };
 };

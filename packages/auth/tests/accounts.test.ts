@@ -121,6 +121,31 @@ describe("signing in with accounts", () => {
     });
   });
 
+  it("starts no session from a first sign-in that already made its account, so a saved copy can't undo a sign-out", async () => {
+    const request = site(await createDatabase());
+    const callback = await signInWithGitHub(request);
+    const session = cookiesFrom(await chooseHandle(request, callback, "octocat"));
+    expect((await request(`${AUTH}/sign-out/`, { method: "POST", cookies: session })).status).toBe(204);
+
+    const replayed = await chooseHandle(request, callback, "octocat");
+
+    expect([replayed.status, replayed.headers.get("location")]).toEqual([303, "/notes/garden/"]);
+    expect(cookiesFrom(replayed)).toEqual([]);
+    expect((await whoIs(request, session)).signIn).toEqual({ account: null, reason: "signed-out" });
+  });
+
+  it("starts one session when the chooser is submitted twice at once", async () => {
+    const db = await createDatabase();
+    const request = site(db);
+    const callback = await signInWithGitHub(request);
+
+    const answers = await Promise.all([chooseHandle(request, callback, "octocat"), chooseHandle(request, callback, "octocat")]);
+
+    expect(answers.map(({ status }) => status)).toEqual([303, 303]);
+    expect(answers.flatMap(cookiesFrom).filter((pair) => pair.startsWith("__Host-svartz-session="))).toHaveLength(1);
+    expect((await db.prepare("SELECT id FROM auth_sessions").bind().all()).results).toHaveLength(1);
+  });
+
   it("signs a returning reader straight in to the account their provider account is linked to", async () => {
     const request = site(await createDatabase());
     const first = await whoIs(request, await createAccount(request, OCTOCAT, "octocat"));
@@ -223,13 +248,10 @@ describe("a cookie from before accounts", () => {
 });
 
 describe("bootstrap admins", () => {
-  it("hold the admin role, which no change to the database takes away", async () => {
-    const db = await createDatabase();
-    const request = site(db, { admins: ["github:583231"] });
+  it("hold the admin role, and nobody else does", async () => {
+    const request = site(await createDatabase(), { admins: ["github:583231"] });
     const admin = await createAccount(request, OCTOCAT, "octocat");
     const reader = await createAccount(request, { id: 1, login: "hubot" }, "hubot");
-
-    await db.prepare("DELETE FROM auth_settings").run();
 
     expect((await whoIs(request, admin)).signIn.account.roles).toEqual(["admin"]);
     expect((await whoIs(request, reader)).signIn.account.roles).toEqual([]);
