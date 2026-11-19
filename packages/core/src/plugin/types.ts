@@ -104,6 +104,12 @@ interface PermissionDeclaration {
   /** One sentence on what holding it allows. */
   readonly description: string;
   readonly defaults?: { readonly guest?: "allow" | "deny"; readonly "signed-in"?: "allow" | "deny" };
+  /**
+   * Set for a permission that administers the site rather than a page's content: seeing or changing who may do what,
+   * moderating people. Owning a page, as an account owns its user page or a group's owners what the group is linked
+   * to, never gives it; only the `admin` role or a grant does.
+   */
+  readonly administrative?: boolean;
 }
 
 // --- Plugin interface (author-facing) ---

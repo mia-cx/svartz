@@ -34,8 +34,11 @@ function checked(declaration: PermissionDeclaration, plugin: string): Permission
     if (value !== "allow" && value !== "deny") fail(`permission "${declaration.slug}" defaults ${actor} to ${JSON.stringify(value)}; use "allow" or "deny"`);
     defaults[actor] = value;
   }
+  if (declaration.administrative !== undefined && typeof declaration.administrative !== "boolean") {
+    fail(`permission "${declaration.slug}" sets administrative to ${JSON.stringify(declaration.administrative)}; use true or leave it out`);
+  }
   const { slug: id, name, description } = declaration;
-  return { slug: id, name, description, ...Object.keys(defaults).length > 0 && { defaults } };
+  return { slug: id, name, description, ...Object.keys(defaults).length > 0 && { defaults }, ...declaration.administrative && { administrative: true } };
 }
 
 /** What each host vault's build collected from its final plugins, by vault id. Host vaults build in one process. */

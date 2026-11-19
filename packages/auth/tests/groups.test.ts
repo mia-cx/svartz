@@ -276,28 +276,34 @@ describe("a group's grants and links", () => {
     ]);
   });
 
-  // An owner holds every permission where the group is linked, the one to grant included. That reaches as far as the
-  // link and no further: not the site, not roles, which reach the whole site, and not another vault.
-  it("let an owner grant inside a linked vault, but not on the site, on roles or in another vault", async () => {
+  // Owning what a group is linked to is about its content. The permissions that administer the site, to see or change
+  // grants and to link groups, come only from a grant, and a grant reaches as far as its object and no further.
+  it("give an owner the content of a linked vault, not its permissions, and let a grant on one vault change only that vault", async () => {
     const site = await createSite({ vaults: ["notes", "docs"] });
     const root = await signUp(site, ADMIN, "root");
     const ada = await signUp(site, 2, "ada");
     await rosarians(site, ada, []);
     await site.post("link/", root, { group: "rosarians", scope: "vault:notes", path: "" });
-    const people = (route: string, form: Record<string, string>) =>
-      site.request(`${AUTH}/people/${route}`, { method: "POST", cookies: ada, body: new URLSearchParams(form) });
-    const grantSelf = (scope: string, path = "") =>
-      people("grant/", { "actor-type": "account", actor: "ada", permission: "auth:grants:write", scope, path, value: "allow" });
+    const people = (cookies: string[], route: string, form: Record<string, string>) =>
+      site.request(`${AUTH}/people/${route}`, { method: "POST", cookies, body: new URLSearchParams(form) });
+    const grantAda = (cookies: string[], permission: string, scope: string, path = "") =>
+      people(cookies, "grant/", { "actor-type": "account", actor: "ada", permission, scope, path, value: "allow" });
 
-    expect((await grantSelf("site")).status).toBe(403);
-    expect((await grantSelf("vault:docs")).status).toBe(403);
-    expect((await people("role/", { name: "editors" })).status).toBe(403);
+    expect(await site.mayDelete(ada, "kitchen/soup")).toBe(true);
+    expect(await site.page("/notes/-/dashboard/auth/people/", ada)).toBeUndefined();
+    expect(await site.page(PANEL, ada)).toBeUndefined();
+    expect((await grantAda(ada, "auth:grants:write", "vault:notes", "kitchen/")).status).toBe(403);
+    expect((await site.post("link/", ada, { group: "rosarians", scope: "vault:notes", path: "kitchen/" })).status).toBe(403);
+
+    // With the two permissions granted on the notes vault alone, Ada changes notes and nothing else.
+    await grantAda(root, "auth:grants:write", "vault:notes");
+    await grantAda(root, "auth:group-links:write", "vault:notes");
+    expect((await grantAda(ada, "auth:grants:write", "site")).status).toBe(403);
+    expect((await grantAda(ada, "auth:grants:write", "vault:docs")).status).toBe(403);
+    expect((await people(ada, "role/", { name: "editors" })).status).toBe(403);
     expect((await site.post("link/", ada, { group: "rosarians", scope: "vault:docs", path: "" })).status).toBe(403);
-
-    expect(await location(grantSelf("vault:notes", "kitchen/"))).toMatch(/status=grant-saved/);
-    expect((await auditLog(site.db)).filter((entry) => entry.startsWith("ada auth:grant"))).toEqual([
-      expect.stringContaining("ada auth:grant:set folder:notes/kitchen/"),
-    ]);
+    expect(await location(grantAda(ada, "guestbook:entries:delete", "vault:notes", "kitchen/"))).toMatch(/status=grant-saved/);
+    expect(await location(site.post("link/", ada, { group: "rosarians", scope: "vault:notes", path: "kitchen/" }))).toMatch(/status=group-linked/);
   });
 
   it("show no message for a status that only names something every object has", async () => {

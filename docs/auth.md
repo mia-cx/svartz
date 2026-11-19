@@ -340,6 +340,8 @@ A check on a page consults the page, each folder enclosing it, its vault and the
 
 Three things allow whatever the grants say: the `admin` role, which [bootstrap admins](#bootstrap-admins) hold, an account's own [user page](#user-pages), `users/<handle>` in the vault that runs sign-in, and, for a group's owners, every object a moderator [linked the group](#linking-a-group) to and everything inside it.
 
+Owning a page is about its content. A permission declared with `administrative: true` administers the site instead: seeing or changing who may do what, or moderating people. Neither kind of ownership gives one; only the `admin` role or a grant does. Auth's own permissions are all administrative.
+
 Grants live in `SVARTZ_DB`, in `auth_grants`. Set them on the dashboard, which records each change in [the audit log](#the-audit-log).
 
 ### Roles
@@ -417,7 +419,7 @@ It needs two permissions, which auth declares with no defaults, so only admins h
 
 Granting either is as powerful as making someone an admin: `auth:grants:read` shows every account and grant on the site, and whoever holds `auth:grants:write` can grant themselves, or anyone, any permission. Give them only to people you would make admins.
 
-The panel's forms post to the routes below and work without JavaScript. Each route checks `auth:grants:write` again, whatever the panel showed, and checks it where the change lands: a grant needs it on the object the grant is for, and creating a role or changing who holds one needs it on the whole site, since a role's grants reach everywhere. So someone who holds it on one vault, or a group's owner on what the group is linked to, changes grants there and nowhere else.
+The panel's forms post to the routes below and work without JavaScript. Each route checks `auth:grants:write` again, whatever the panel showed, and checks it where the change lands: a grant needs it on the object the grant is for, and creating a role or changing who holds one needs it on the whole site, since a role's grants reach everywhere. So someone granted it on one vault changes grants there and nowhere else.
 
 ### Groups panel
 
