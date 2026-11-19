@@ -274,9 +274,10 @@ const authServer: ServerModuleFactory<AuthServerOptions> = (options) => {
       return failure(503, "misconfigured",
         `Set ${SESSION_SECRET_ENV} to a random value of at least ${SESSION_SECRET_MIN_LENGTH} characters.`);
     }
+    // Every route this deployment answers stores its admins, for isolates where auth hasn't started yet.
+    const db = await accounts(context.env);
     if (me) return json(await readIdentity(request, context.env));
     if (handle) {
-      const db = await accounts(context.env);
       if (!db) return failure(503, "misconfigured", `Bind a D1 database as ${ACCOUNTS_DATABASE_ENV} to give readers accounts.`);
       return chooseHandle(request, url, context, secret, db);
     }

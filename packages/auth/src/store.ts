@@ -117,11 +117,16 @@ function isDatabase(value: unknown): value is Database {
     && typeof (value as Database).batch === "function";
 }
 
+/** The accounts database bound in `env`, not yet migrated, or `undefined` when none is bound. */
+export function boundDatabase(env: Readonly<Record<string, unknown>>): Database | undefined {
+  const db = env[ACCOUNTS_DATABASE_ENV];
+  return isDatabase(db) ? db : undefined;
+}
+
 /** The accounts database bound in `env`, migrated, or `undefined` when none is bound. */
 export async function accountsDatabase(env: Readonly<Record<string, unknown>>): Promise<Database | undefined> {
-  const db = env[ACCOUNTS_DATABASE_ENV];
-  if (!isDatabase(db)) return undefined;
-  await migrate(db);
+  const db = boundDatabase(env);
+  if (db) await migrate(db);
   return db;
 }
 

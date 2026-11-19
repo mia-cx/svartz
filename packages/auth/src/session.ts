@@ -4,7 +4,7 @@
  */
 import { isProviderId, type Identity } from "./providers";
 import { seal, sessionSecret, unseal } from "./seal";
-import { accountsDatabase, deleteSession, digest, forgetLegacyCookie, legacySession, readSession, SESSION_MAX_AGE_SECONDS } from "./store";
+import { accountsDatabase, boundDatabase, deleteSession, digest, forgetLegacyCookie, legacySession, migrate, readSession, SESSION_MAX_AGE_SECONDS } from "./store";
 
 type Env = Readonly<Record<string, unknown>>;
 
@@ -98,13 +98,15 @@ const SIGNED_OUT: Reader = { signIn: { account: null, reason: "signed-out" }, id
 
 async function read(request: Request, env: Env): Promise<Reader> {
   const cookie = await sessionCookie(request, env);
-  const db = await accountsDatabase(env);
+  const db = boundDatabase(env);
   if (!db) {
     // Without accounts, sign-in seals the identity itself, as it did before accounts existed.
     const identity = cookie && isIdentity(cookie.value) ? cookie.value : null;
     return { signIn: { account: null, reason: "no-database" }, identity };
   }
+  // Signed-out readers never touch the database.
   if (!cookie) return SIGNED_OUT;
+  await migrate(db);
   const sid = isSessionCookie(cookie.value) ? cookie.value.sid : await legacySession(db, await digest(cookie.raw), cookie.value);
   const session = sid === undefined ? undefined : await readSession(db, sid);
   if (!session) return SIGNED_OUT;
