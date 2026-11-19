@@ -347,7 +347,11 @@ const COMMIT_ATTEMPTS = 3;
 
 /** What {@link commitSubmission} did. */
 export type CommitResult =
-  | { readonly kind: "commit"; readonly url: string; readonly sha: string }
+  /**
+   * The commit that holds the content. `made` says this call wrote it. When the branch already held the content the
+   * call wrote nothing, and the commit answered is whoever's put it there: a retry's own first attempt, or anyone's.
+   */
+  | { readonly kind: "commit"; readonly url: string; readonly sha: string; readonly made: boolean }
   /**
    * Nothing, so the save goes to review: `changed` when the branch's file isn't the one the reader loaded, or a new
    * page's path is taken; `protected` when GitHub's rules for the branch refuse the commit.
@@ -381,7 +385,7 @@ async function blobAt(target: GitHubTarget, path: string, ref: string): Promise<
 async function latestCommit(target: GitHubTarget, head: string, path: string): Promise<CommitResult> {
   const query = new URLSearchParams({ sha: head, path, per_page: "1" });
   const [latest] = await call<Array<{ sha: string; html_url: string }>>(target, "GET", `/commits?${query}`);
-  return latest ? { kind: "commit", url: latest.html_url, sha: latest.sha } : { kind: "review", reason: "changed" };
+  return latest ? { kind: "commit", url: latest.html_url, sha: latest.sha, made: false } : { kind: "review", reason: "changed" };
 }
 
 /**
@@ -431,7 +435,7 @@ export async function commitSubmission(
       committer: attribution.committer,
     });
     const moved = await send(target, "PATCH", ref, { sha: commit.sha, force: false });
-    if (moved.ok) return { kind: "commit", url: commit.html_url, sha: commit.sha };
+    if (moved.ok) return { kind: "commit", url: commit.html_url, sha: commit.sha, made: true };
     if (moved.status !== 422) throw await failure(target, moved);
     refused = { head, response: moved };
   }

@@ -8,6 +8,7 @@ import type { Identity } from "@svartz/auth";
 import { createServerHandle } from "@svartz/core";
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { blobSha } from "../src/github";
 import { permissions } from "../src/permissions";
 import type { BuildData, ServerOptions } from "../src/server";
 import type { SyncOptions } from "../src/sync";
@@ -478,6 +479,34 @@ describe("GitHub's deliveries", () => {
 });
 
 describe("an edit's status", () => {
+  // The site's record of a save is what credits a commit to an account, so it must only name commits the save made.
+  it("keeps no record of a save that found its content on the branch already, so nobody is named for another's commit", async () => {
+    const site = await createSite();
+    const ada = await signIn(site, ADA);
+    const replay = replayGitHub([
+      tokenExchange(new Date(Date.now() + 60 * 60_000).toISOString()),
+      ...committerExchanges,
+      repositoryExchange,
+      headExchange(),
+      // Someone else's commit already put this exact content on the branch.
+      blobExchange("content/guide.md", HEAD_COMMIT, await blobSha(MARKDOWN)),
+      {
+        request: { method: "GET", url: `${API}/commits?sha=${HEAD_COMMIT}&path=content%2Fguide.md&per_page=1` },
+        response: { status: 200, json: [{ sha: DIRECT_COMMIT, html_url: `https://github.com/${REPO}/commit/${DIRECT_COMMIT}` }] },
+      },
+    ], INSTALLATION_TOKEN);
+
+    const response = await site.request(`${BASE}/edit/`, {
+      method: "POST",
+      cookie: ada,
+      body: JSON.stringify({ submissionId: SUBMISSION_ID, page: "/wiki/guide/", markdown: MARKDOWN, note: NOTE, sha: GUIDE_SHA }),
+    });
+
+    expect(await response.json()).toEqual({ kind: "commit", sha: DIRECT_COMMIT, url: `https://github.com/${REPO}/commit/${DIRECT_COMMIT}` });
+    expect(replay.pending).toEqual([]);
+    expect(await status(site, ada)).toMatchObject({ status: 404, body: { error: "not_found" } });
+  });
+
   it("follows a direct commit through its build, a failed attempt and a re-run, to live", async () => {
     const site = await createSite();
     const ada = await adaCommits(site);

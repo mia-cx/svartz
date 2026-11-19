@@ -338,7 +338,12 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
       if (await mayClaim(reader.account, vaultPath, submission.markdown, self, context)) {
         const by = await attribution(reader.account, await committer(context.env), request, context);
         const committed = await commitSubmission(github, full, loaded, by);
-        if (committed.kind === "commit") return saved(committed);
+        if (committed.kind === "commit") {
+          const answer: EditResponse = { kind: "commit", url: committed.url, sha: committed.sha };
+          // The branch already held this content, so the save made no commit. Recording it would name this reader as
+          // the one who made someone else's, and the site's record of a save is what credits a commit to an account.
+          return committed.made ? saved(answer) : Response.json(answer, { status: 201 });
+        }
         review = committed.reason;
       } else {
         review = "route";
