@@ -20,7 +20,8 @@
  * - `submissions_replies`: every comment the site posted on an account's behalf (see `attribution.ts`), and
  *   `submissions_posted_reviews` every review, with the verdict the account gave; the view `submissions_decisions`
  *   reads each review's decision and who made it from both.
- * - `submissions_credits`: what reputation still owes for each save an account made (see `credit.ts`).
+ * - `submissions_credits`: what reputation still owes for each save an account made, and whether a revert's reversal
+ *   of it is written (see `credit.ts`); `submissions_undone`: the commits reverts undid.
  *
  * Deliveries arrive at least once and in any order, so every write is idempotent and never moves a record backwards:
  * a pull request by `updated_at`, a run by attempt and progress, a deployment by status id, a comment until deleted.
@@ -254,6 +255,14 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       sha TEXT NOT NULL,
       PRIMARY KEY (scope, sha)
     )`,
+  ],
+  [
+    // 1 once auth's ledger holds the reversal of a save a revert undid, or nothing was left to take back: until then
+    // `credit.ts` takes it back again on every run, whatever the save's state (see `submissions_undone`).
+    "ALTER TABLE submissions_credits ADD COLUMN reversed INTEGER NOT NULL DEFAULT 0",
+    // How credit finds the saves behind an undone commit: a direct commit's, or a pull request's merge commit's.
+    "CREATE INDEX IF NOT EXISTS submissions_edits_by_commit ON submissions_edits (scope, commit_sha)",
+    "CREATE INDEX IF NOT EXISTS submissions_pulls_by_merge ON submissions_pulls (scope, merge_commit)",
   ],
 ];
 

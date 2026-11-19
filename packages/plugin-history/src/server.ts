@@ -28,7 +28,7 @@
  */
 import type { PageContext, PageResult, ServerContext, ServerModuleFactory } from "@svartz/core";
 import {
-  audit, can, canEach, findProfiles, findStanding, readAccount, readSignIn, reverseReputation, userPageLocation, userPageOf,
+  audit, can, canEach, findProfiles, findStanding, readAccount, readSignIn, userPageLocation, userPageOf,
   type AccountStanding,
 } from "@svartz/auth/server";
 import { commitReader, CommitsUnavailable, sourceToken, type Commit, type CommitReader } from "@svartz/plugin-submissions/commits";
@@ -296,8 +296,8 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
    * `POST revert/`, a form post from a diff page (`page`, `revision`, `head`, `to`, `reason`?): make the page read as it
    * did at `revision`, one of its latest 100 changes, for an account holding `history:reverts:write` on it and on every
    * page the restored frontmatter claims. Refused unless `head` is still the page's latest change on GitHub. The audit
-   * entry lands once the commit exists, before the branch moves; then the save is recorded and the reputation the
-   * changes since earned is taken back. Redirects to the history on success, else back to the diff with `?revert=`.
+   * entry lands once the commit exists, before the branch moves; then `restore()` records the save and takes back the
+   * reputation the changes since earned, or leaves that to credit's next run when it can't. Redirects to the history on success, else back to the diff with `?revert=`.
    */
   async function revertRoute(request: Request, context: ServerContext): Promise<Response> {
     const url = new URL(request.url);
@@ -334,9 +334,7 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
       if (restored.markdown === current.markdown) return back("unchanged");
       const claimed = writer.claims(note.path, restored.markdown, note.slug);
       if (!claimed || (await canEach(account, REVERT, [...claimed].map((page) => ({ vault, page })), context.env)).includes(false)) return back("route");
-      // Read before anything changes: whoever the site's records say made each change since, and what it earned.
       const undoes = commits.slice(0, index).map(({ sha }) => sha);
-      const owed = await writer.earnings(undoes);
       const named = `${revision.slice(0, 7)} (${messageDay(commits[index]!.committedAt)})`;
       const result = await writer.restore({
         account,
@@ -355,16 +353,6 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
         }),
       });
       if (result.kind !== "commit") return back(result.kind);
-      // Read again now that `restore()` stored what it undid: a merge credited while the commit was made is found here,
-      // and one credited later sees what was stored. Read first or second, every earning ends at zero.
-      const earned = await writer.earnings(undoes).catch((error: unknown) => {
-        console.error(`[history] reverted ${note.path} as ${result.sha} but couldn't read again what the changes since earned`, error);
-        return owed;
-      });
-      await reverseReputation(context.env, earned).catch((error: unknown) => {
-        // The page is reverted; only the reputation the undone changes earned stays, and the log says which.
-        console.error(`[history] reverted ${note.path} as ${result.sha} but couldn't take back reputation from ${JSON.stringify(earned)}`, error);
-      });
       return redirect(link.history(note, { status: "reverted" }));
     } catch (error) {
       if (!(error instanceof CommitsUnavailable)) throw error;

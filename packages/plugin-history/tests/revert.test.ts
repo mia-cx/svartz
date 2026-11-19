@@ -405,6 +405,53 @@ describe("reverting a submission the mirror doesn't know merged yet", () => {
       .toEqual([{ source: "edit", points: 4 }, { source: "reversal", points: -4 }]);
   });
 
+  // Proves a take-back that fails as the revert lands is retried until it is written: the revert answers as done, and
+  // the next settlement takes back what the undone submission earned, once. Otherwise Grace keeps 4 points for content
+  // already undone, since her save is settled and the form can't be sent twice.
+  it("takes back on the next settlement what a revert couldn't, and only once", async () => {
+    const site = await createSite();
+    const [ada, grace] = [await site.signUp(ADA), await site.signUp(GRACE)];
+    await site.graceOpensPullRequest(grace);
+    const restored = git("a", 0);
+    await site.push([restored, MERGE]);
+    await site.settle();
+    pollingGitHub();
+    // Grace following her edit runs the poll, which counts the merge's lines and credits it.
+    const settlement = async () => {
+      await site.request(`/wiki/_svartz/submissions/status/?edit=${SUBMISSION_ID}`, { headers: { cookie: grace.cookie } });
+      await site.settle();
+      return query(site, "SELECT source, points FROM auth_reputation WHERE account_id = ? ORDER BY id", grace.id);
+    };
+    expect(await settlement()).toEqual([{ source: "edit", points: 4 }]);
+
+    replayGitHub([
+      firstToken,
+      historyExchange(GUIDE_PATH, [MERGE, restored]),
+      contentExchange(GUIDE_PATH, restored.sha, RESTORED),
+      contentExchange(GUIDE_PATH, MERGE.sha, VANDALISED),
+      ...committerExchanges,
+      ...await commitAsAda(RESTORED, VANDALISED, revertMessage(restored.sha, ada.id)),
+    ], INSTALLATION_TOKEN);
+    // Auth's ledger refuses the revert's take-back, once.
+    const prepare = site.db.prepare;
+    let refused = false;
+    vi.spyOn(site.db, "prepare").mockImplementation((sql: string) => {
+      if (refused || !sql.includes("'reversal', ?2")) return prepare(sql);
+      refused = true;
+      throw new Error("D1 is unavailable");
+    });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await revert(site, ada.cookie, { revision: restored.sha, head: MERGE.sha, to: MERGE.sha });
+    expect(response.headers.get("location")).toBe(`${HISTORY}?status=reverted`);
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining("couldn't take back"), expect.any(Error));
+    expect(await query(site, "SELECT 1 FROM auth_reputation WHERE source = 'reversal'")).toEqual([]);
+
+    pollingGitHub();
+    const taken = [{ source: "edit", points: 4 }, { source: "reversal", points: -4 }];
+    expect(await settlement()).toEqual(taken);
+    expect(await settlement()).toEqual(taken);
+  });
+
   /** `db`, running `mark` once its first read has answered, before the reader goes on. */
   const markingAfterRead = (db: MirrorDatabase, mark: () => Promise<unknown>): MirrorDatabase => {
     let marked: Promise<unknown> | undefined;
@@ -488,7 +535,7 @@ describe("a revert's cost", () => {
     const six = await savedOver(6);
 
     expect(six).toBe(one);
-    // Earnings are read twice, before the commit and after `restore()` stores what it undid, in one query each.
+    // Earnings are read once `restore()` stored what it undid, and the reversals recorded, in one query each.
     expect(six).toBe(15);
   });
 });

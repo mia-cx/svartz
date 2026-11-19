@@ -4,17 +4,17 @@
  * the App's bot, with the save's trailers, and never over a file that changed since the caller read it. A branch whose
  * rules refuse the commit is never sent a pull request instead. The commit is recorded as the account's save, which
  * history and contributions show as theirs, and which reputation owes nothing: the content is someone else's work.
- * The commits it undoes are recorded with it, and earn nothing afterwards. Page history's revert (`@svartz/plugin-history`) uses it.
+ * The commits it undoes are recorded with it, and earn nothing afterwards: what their saves earned is taken back at
+ * once, or by the next credit run when that fails. Page history's revert (`@svartz/plugin-history`) uses it.
  *
- * It also answers what the saves a restore undoes earned ({@link Restorer.earnings}), as auth's `reverseReputation`
- * takes it, and which pages restored content claims ({@link Restorer.claims}), as a save's commit checks them.
+ * It also answers which pages restored content claims ({@link Restorer.claims}), as a save's commit checks them.
  */
 import { linkedIdentities, type Account } from "@svartz/auth/server";
 import type { ServerContext } from "@svartz/core";
 import { appCommitter } from "./app";
 import { routeClaims, type RouteClaims } from "./claims";
 import { CommitsUnavailable, sourceToken, type CommitSource } from "./commits";
-import { earnings } from "./credit";
+import { takeBack } from "./credit";
 import { SubmissionError } from "./errors";
 import { blobSha, commitSubmission, type Attribution, type CommitResult, type Person } from "./github";
 import { isDatabase, migrate, recordEdit, scopeOf, type Mirror } from "./mirror";
@@ -48,7 +48,7 @@ export interface Restore {
   /**
    * The commits it undoes, as GitHub lists them for the page: those after the restored revision, up to `current`'s.
    * Recorded with the save, so none of them earns reputation afterwards, even one whose landing the mirror learns of
-   * only later, such as a pull request merged a moment before.
+   * only later, such as a pull request merged a moment before; what their saves earned already is taken back.
    */
   readonly undoes: readonly string[];
   /** The commit's title. */
@@ -73,14 +73,10 @@ export interface Restorer {
   /** The pages `markdown` at `vaultPath` claims, as permissions name them, when it publishes as page `self` now. */
   claims(vaultPath: string, markdown: string, self: string): ReadonlySet<string> | undefined;
   /**
-   * What landing `commits` earned or will earn: the account behind each save the site recorded making one, and the
-   * ref its reputation is posted with. Commits the site didn't make, and saves that earn nothing, aren't listed.
-   */
-  earnings(commits: readonly string[]): Promise<Array<{ readonly account: string; readonly ref: string }>>;
-  /**
-   * Commit `restore.markdown` at its page's path as `restore.account`, then record it as their save. GitHub failing
-   * throws {@link CommitsUnavailable}; anything `beforeMove` throws propagates, and nothing moves. A failed record is
-   * logged: the commit stands.
+   * Commit `restore.markdown` at its page's path as `restore.account`, record it as their save with the commits it
+   * undoes, then take back what those commits' saves earned. GitHub failing throws {@link CommitsUnavailable};
+   * anything `beforeMove` throws propagates, and nothing moves. A failed record or take-back is logged: the commit
+   * stands, and credit takes back what the undone saves earned on its next run.
    */
   restore(restore: Restore): Promise<Restored>;
 }
@@ -107,10 +103,6 @@ export function restorer(source: CommitSource, claimed: RouteClaims, token = sou
     forRequest: (context: ServerContext): Restorer => ({
       claims,
 
-      async earnings(commits) {
-        return earnings(await mirrorFor(context), repo, commits);
-      },
-
       async restore({ account, request, page, markdown, current, undoes, title, note, beforeMove }) {
         if (!committer) throw new CommitsUnavailable("only a GitHub App commits as an account");
         const path = repoPath(page.path);
@@ -134,7 +126,8 @@ export function restorer(source: CommitSource, claimed: RouteClaims, token = sou
         if (committed.kind === "review") return { kind: committed.reason };
         if (!committed.made) return { kind: "unchanged" };
         const { sha, url } = committed;
-        await mirrorFor(context).then((mirror) => recordEdit(mirror, {
+        const mirror = mirrorFor(context);
+        await mirror.then((records) => recordEdit(records, {
           id,
           owner: `account:${account.id}`,
           kind: "commit",
@@ -151,6 +144,11 @@ export function restorer(source: CommitSource, claimed: RouteClaims, token = sou
           // The commit landed. Lost are the account's name on it (history shows its git author instead) and what it
           // undid, so a save the mirror doesn't know landed yet may still earn once it does.
           console.error(`[submissions] restored ${path} as ${sha} but couldn't record it as the account's save`, error);
+        });
+        // Read after the record above stored what it undid: a save credited meanwhile is found here, and one credited
+        // later finds the record.
+        await mirror.then((records) => takeBack(records, repo, context.env, undoes)).catch((error: unknown) => {
+          console.error(`[submissions] restored ${path} as ${sha} but couldn't take back what it undid earned yet; credit will`, error);
         });
         return { kind: "commit", sha, url };
       },
