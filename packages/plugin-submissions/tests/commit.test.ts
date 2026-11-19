@@ -6,6 +6,7 @@ import type { Identity } from "@svartz/auth";
 import { createServerHandle } from "@svartz/core";
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { blobSha } from "../src/github";
 import { permissions } from "../src/permissions";
 import type { BuildData, Mode, ServerOptions } from "../src/server";
 import {
@@ -262,6 +263,24 @@ describe("a direct commit", () => {
       committer: { name: "wikiplace-editor[bot]", email: "41898282+wikiplace-editor[bot]@users.noreply.github.com" },
       message: expect.stringMatching(/\n\nCo-authored-by: Ada Lovelace <583231\+ada@users\.noreply\.github\.com>\nSvartz-Account: \S+$/),
     })));
+  });
+
+  it("answers the commit that holds the edit when a retry finds it on the branch already", async () => {
+    const site = await createSite({ admins: [ADA.id] });
+    const ada = await signIn(site, ADA);
+    const replay = github([
+      ...commitStart,
+      // The first attempt's answer was lost; its commit is the head.
+      blobExchange("content/guide.md", "3a1f9c0e5b7d2468ace013579bdf2468ace01357", await blobSha(MARKDOWN)),
+      {
+        // Read from the head checked, so a save landing meanwhile can't answer for this one.
+        request: { method: "GET", url: `${API}/commits?sha=3a1f9c0e5b7d2468ace013579bdf2468ace01357&path=content%2Fguide.md&per_page=1` },
+        response: { status: 200, json: [{ sha: DIRECT_COMMIT, html_url: commitAnswer.url }] },
+      },
+    ]);
+
+    expect(await save(site, { page: "/wiki/guide/", sha: GUIDE_SHA }, ada)).toEqual({ status: 201, body: commitAnswer });
+    expect(replay.pending).toEqual([]);
   });
 
   it("opens a pull request instead, and says why, when a rule for the branch refuses the commit", async () => {

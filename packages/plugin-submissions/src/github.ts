@@ -374,9 +374,9 @@ async function blobAt(target: GitHubTarget, path: string, ref: string): Promise<
   return !Array.isArray(body) && body.type === "file" && typeof body.sha === "string" ? body.sha : "";
 }
 
-/** The latest commit on `branch` that touched `path`. */
-async function latestCommit(target: GitHubTarget, branch: string, path: string): Promise<CommitResult> {
-  const query = new URLSearchParams({ sha: branch, path, per_page: "1" });
+/** The latest commit that touched `path` in the history of commit `head`. */
+async function latestCommit(target: GitHubTarget, head: string, path: string): Promise<CommitResult> {
+  const query = new URLSearchParams({ sha: head, path, per_page: "1" });
   const [latest] = await call<Array<{ sha: string; html_url: string }>>(target, "GET", `/commits?${query}`);
   return latest ? { kind: "commit", url: latest.html_url, sha: latest.sha } : { kind: "review", reason: "changed" };
 }
@@ -414,7 +414,8 @@ export async function commitSubmission(
       return { kind: "review", reason: "protected" };
     }
     const current = await blobAt(target, submission.path, head);
-    if (current === wanted) return latestCommit(target, branch, submission.path);
+    // From the head checked: the branch may have moved on since, past someone else's change to the file.
+    if (current === wanted) return latestCommit(target, head, submission.path);
     if (current !== loaded) return { kind: "review", reason: "changed" };
     const parent = await call<{ tree: { sha: string } }>(target, "GET", `/git/commits/${head}`);
     const tree = await writeTree(target, parent.tree.sha, submission);
