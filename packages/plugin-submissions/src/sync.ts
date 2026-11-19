@@ -21,7 +21,7 @@ import type { ServerContext } from "@svartz/core";
 import { SUBMISSION_ID_PATTERN, type StatusResponse } from "./api";
 import { credit } from "./credit";
 import { SubmissionError } from "./errors";
-import { requestGitHub } from "./github";
+import { requestGitHub, sameRepository } from "./github";
 import {
   ancestryOf,
   deploymentSignals,
@@ -34,6 +34,7 @@ import {
   readPull,
   recordEdit,
   rereadReviews,
+  savedPull,
   scopeOf,
   toSignals,
   workflowSignals,
@@ -190,7 +191,7 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     }
     const repository = object(payload?.repository);
     if (!payload || !repository) throw new SubmissionError("invalid_request", 400, "The delivery isn't one of GitHub's.");
-    if (text(repository.full_name)?.toLowerCase() !== setup.repo.toLowerCase()) {
+    if (!sameRepository(text(repository.full_name), setup.repo)) {
       throw new SubmissionError("other_repository", 403, `This site mirrors ${setup.repo} only.`);
     }
     const mirror = await mirrorFor(context);
@@ -338,6 +339,11 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     await recordEdit(await mirrorFor(context), edit);
   }
 
+  /** Whether pull request `number` is a save of this vault's, as {@link record} kept it. */
+  async function saved(context: ServerContext, number: number): Promise<boolean> {
+    return savedPull(await mirrorFor(context), number);
+  }
+
   /** The mirror, for a page that reads it: the reconcile poll runs after the answer when it is stale. */
   async function read(context: ServerContext): Promise<Mirror> {
     const mirror = await mirrorFor(context);
@@ -358,5 +364,5 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     return new Map([...found].map(([sha, { stage }]) => [sha, stage]));
   }
 
-  return { webhook, status, record, mirrorFor, refresh, progress, read, stages };
+  return { webhook, status, record, saved, mirrorFor, refresh, progress, read, stages };
 }

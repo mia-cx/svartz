@@ -99,7 +99,18 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       version INTEGER NOT NULL
     )`,
   ],
+  [
+    // Comments a moderator hid, and when: they stay stored for the report about them, and no list shows them. A table
+    // rather than a column, because SQLite has no ADD COLUMN IF NOT EXISTS for racing isolates to run twice.
+    `CREATE TABLE IF NOT EXISTS hidden_annotations (
+      annotation_id TEXT PRIMARY KEY REFERENCES annotations (id) ON DELETE CASCADE,
+      hidden_at TEXT NOT NULL
+    )`,
+  ],
 ];
+
+/** SQL true when annotation `a` is hidden. */
+const HIDDEN = "EXISTS (SELECT 1 FROM hidden_annotations h WHERE h.annotation_id = a.id)";
 
 const migrated = new WeakMap<Database, Promise<void>>();
 
@@ -251,7 +262,7 @@ export interface AgreementChange {
  * it isn't a comment, changing nothing.
  */
 export async function setAgreement(db: Database, { vault, annotation, author, agreed }: AgreementChange): Promise<Agreement[] | "missing" | "reaction"> {
-  const { results: [target] } = await db.prepare("SELECT kind FROM annotations WHERE id = ? AND vault = ?")
+  const { results: [target] } = await db.prepare(`SELECT kind FROM annotations a WHERE id = ? AND vault = ? AND NOT ${HIDDEN}`)
     .bind(annotation, vault).all<{ kind: Annotation["kind"] }>();
   if (!target) return "missing";
   if (target.kind !== "comment") return "reaction";
@@ -263,7 +274,7 @@ export async function setAgreement(db: Database, { vault, annotation, author, ag
       upsertIdentity(db, author, createdAt),
       // Through the comment itself, so a comment deleted since the check above gains nothing.
       db.prepare(`INSERT INTO agreements (annotation_id, author_id, created_at)
-        SELECT id, ?2, ?3 FROM annotations WHERE id = ?1 AND kind = 'comment'
+        SELECT id, ?2, ?3 FROM annotations a WHERE id = ?1 AND kind = 'comment' AND NOT ${HIDDEN}
         ON CONFLICT (annotation_id, author_id) DO NOTHING`).bind(annotation, author.id, createdAt),
     ]
     : [db.prepare("DELETE FROM agreements WHERE annotation_id = ? AND author_id = ?").bind(annotation, author.id)];
@@ -301,23 +312,54 @@ export async function findAnnotation(db: Database, vault: string, annotation: st
 
 /** Delete `annotation` of `vault` and its agreements in one batch. Deleting one already gone changes nothing. */
 export async function deleteAnnotation(db: Database, vault: string, annotation: string): Promise<void> {
-  // Agreements first and explicitly, rather than trusting the foreign key's cascade to be enforced.
+  // Agreements and the hidden mark first and explicitly, rather than trusting the foreign keys' cascade to be enforced.
   await db.batch([
     db.prepare("DELETE FROM agreements WHERE annotation_id = (SELECT id FROM annotations WHERE id = ? AND vault = ?)").bind(annotation, vault),
+    db.prepare("DELETE FROM hidden_annotations WHERE annotation_id = (SELECT id FROM annotations WHERE id = ? AND vault = ?)").bind(annotation, vault),
     db.prepare("DELETE FROM annotations WHERE id = ? AND vault = ?").bind(annotation, vault),
   ]);
 }
 
-/** Every annotation on `page` of `vault`, oldest first, with its author and agreements. */
+/** A comment as a report about it shows it to moderators, hidden or not. */
+export interface ReportedComment {
+  readonly id: string;
+  /** The note it's on, as annotations key it: the note's slug. */
+  readonly page: string;
+  readonly body: string;
+  readonly author: Identity;
+  readonly createdAt: string;
+  /** Whether a moderator hid it: no list shows it, and nobody can +1 it. */
+  readonly hidden: boolean;
+}
+
+/** Comment `annotation` of `vault`, hidden or not; `undefined` when `vault` has no such comment. */
+export async function readComment(db: Database, vault: string, annotation: string): Promise<ReportedComment | undefined> {
+  const { results: [row] } = await db.prepare(`SELECT a.id, a.page, a.body, a.created_at, ${HIDDEN} AS hidden, ${AUTHOR_COLUMNS}
+    FROM annotations a JOIN identities i ON i.id = a.author_id
+    WHERE a.id = ? AND a.vault = ? AND a.kind = 'comment'`)
+    .bind(annotation, vault).all<IdentityRow & { id: string; page: string; body: string; created_at: string; hidden: number }>();
+  return row && { id: row.id, page: row.page, body: row.body, author: identityOf(row), createdAt: row.created_at, hidden: row.hidden === 1 };
+}
+
+/**
+ * The statement that hides `annotation` of `vault` at `at`, for the batch that records who hid it, right after it. On a
+ * comment already hidden, or gone, it changes nothing, so the record after it is skipped.
+ */
+export function hideStatement(db: Database, vault: string, annotation: string, at: string): Statement {
+  return db.prepare(`INSERT INTO hidden_annotations (annotation_id, hidden_at) SELECT id, ? FROM annotations WHERE id = ? AND vault = ?
+    ON CONFLICT (annotation_id) DO NOTHING`).bind(at, annotation, vault);
+}
+
+/** Every annotation on `page` of `vault` that isn't hidden, oldest first, with its author and agreements. */
 export async function listPage(db: Database, vault: string, page: string): Promise<Annotation[]> {
   const [annotationRows, agreementRows] = await db.batch([
     db.prepare(`SELECT a.id, a.kind, a.reaction, a.body, a.exact, a.prefix, a.suffix, a.start, a."end", a.created_at, ${AUTHOR_COLUMNS}
       FROM annotations a JOIN identities i ON i.id = a.author_id
-      WHERE a.vault = ?1 AND a.page = ?2
+      WHERE a.vault = ?1 AND a.page = ?2 AND NOT ${HIDDEN}
       ORDER BY a.created_at, a.id`).bind(vault, page),
     db.prepare(`SELECT g.annotation_id, g.created_at, ${AUTHOR_COLUMNS}
       FROM agreements g JOIN annotations a ON a.id = g.annotation_id JOIN identities i ON i.id = g.author_id
-      WHERE a.vault = ?1 AND a.page = ?2
+      WHERE a.vault = ?1 AND a.page = ?2 AND NOT ${HIDDEN}
       ORDER BY g.created_at`).bind(vault, page),
   ]);
 

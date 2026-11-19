@@ -60,7 +60,7 @@ export { ADMIN_ROLE, readAccount, readIdentity, readSignIn } from "./session";
 export { ACCOUNTS_DATABASE_ENV };
 export { can, migrateGrants, type IdentityGrant } from "./grants";
 export type { PermissionTarget } from "./permissions";
-export { audit, type AuditEntry } from "./audit";
+export { audit, auditIfChanged, type AuditEntry } from "./audit";
 export { linkedIdentities } from "./identities";
 export { userPageLocation, type UserPageLocation } from "./user-pages";
 export { postReputation, type Recipient, type ReputationEvent, type Standing, type Threshold } from "./reputation";

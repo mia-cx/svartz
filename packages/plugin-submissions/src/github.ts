@@ -442,6 +442,37 @@ export async function commitSubmission(
   throw new SubmissionError("branch_busy", 503, "Other edits are being saved right now. Try again in a moment.");
 }
 
+/** Whether `name`, an `owner/name` GitHub answered, is `repo`: GitHub's owner and repository names ignore case. */
+export const sameRepository = (name: string | null | undefined, repo: string) => name?.toLowerCase() === repo.toLowerCase();
+
+/** Every submission's branch starts with this, as {@link submissionBranch} names it. */
+const SUBMISSION_BRANCH_PREFIX = "svartz/submission/";
+
+/** The answer for a number that names no submission of the vault: the same whether or not GitHub has the pull request. */
+export const noSubmission = (repo: string, number: number) => new SubmissionError("not_found", 404, `${repo} has no submission #${number}.`);
+
+/**
+ * Close submission `number`, a pull request this site opened on `target.repo`, without merging it. `record` runs once
+ * the pull request is known to be an open submission and before GitHub closes it, so whatever it records (an audit
+ * entry) precedes the change. Answers the pull request's URL and whether this call closed it: one closed already, or
+ * merged, is left as it is. A number naming no pull request, one that isn't a submission, or one based on any branch
+ * but the one submissions target, answers `not_found`.
+ */
+export async function closeSubmission(target: GitHubTarget, number: number, record: () => Promise<void>): Promise<{ url: string; closed: boolean }> {
+  const response = await send(target, "GET", `/pulls/${number}`);
+  const notFound = noSubmission(target.repo, number);
+  if (response.status === 404) throw notFound;
+  if (!response.ok) throw await failure(target, response);
+  const pull = await response.json() as PullRequest & { state: string; head: { ref: string; repo: { full_name: string } | null }; base: { ref: string } };
+  if (!pull.head.ref.startsWith(SUBMISSION_BRANCH_PREFIX) || !sameRepository(pull.head.repo?.full_name, target.repo)) throw notFound;
+  // Retargeted to another branch, it no longer submits to this vault's content.
+  if (pull.base.ref !== await baseBranch(target)) throw notFound;
+  if (pull.state !== "open") return { url: pull.html_url, closed: false };
+  await record();
+  await call(target, "PATCH", `/pulls/${number}`, { state: "closed" });
+  return { url: pull.html_url, closed: true };
+}
+
 /** What a follow-up edit needs to know of a pull request, as GitHub says now. */
 export interface PullState {
   readonly open: boolean;

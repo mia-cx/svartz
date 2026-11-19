@@ -25,7 +25,7 @@ Enable it per vault. It needs [`auth`](auth.md) on the same vault, and a Cloudfl
 
 | Option | Value |
 | --- | --- |
-| `database` | The D1 binding to store annotations in: `{ env: "DB" }`. |
+| `database` | The D1 binding to store annotations in: `{ env: "DB" }`. Moderators can [hide comments](#moderating) only when it's the accounts database, `{ env: "SVARTZ_DB" }`. |
 | `reactions` | Optional. The site's drawn reactions, `[{ id, label, src }]`, in the order readers are offered them. `id` is lowercase letters, digits and hyphens; `label` is what screen readers announce. |
 | `moderators` | Deprecated: grant `annotations:comments:delete` instead. Identity ids, such as `"github:583231"`, that may delete any annotation. See [moderating](#moderating). |
 | `limits` | Optional. `{ writesPerHour }`: write attempts each signed-in reader may make per clock hour. Default 30. See [write limits](#write-limits). |
@@ -139,6 +139,8 @@ annotations({ database: { env: "DB" }, moderators: ["github:583231"] }),
 
 The id is the provider and its stable account number, never a username, so it survives a rename.
 
+With [`@svartz/plugin-moderation`](moderation.md) on the vault, other people's comments end with **Report**, and a moderator who holds `annotations:comments:delete` on the page can **Hide comment** from the report about it on the dashboard. A hidden comment stays stored, so the report still shows it, but no list shows it and nobody can **+1** it. Each hide lands in auth's [audit log](auth.md#the-audit-log) in the same transaction, so hiding needs the comments kept in the accounts database: `annotations({ database: { env: "SVARTZ_DB" } })`. With any other binding, comments work as ever, but nobody can hide one.
+
 ### Styling
 
 The stylesheet follows theme-minimal's tokens (`--sv-accent`, `--sv-paper`, …) and falls back to system colours elsewhere. Set these to restyle it:
@@ -163,6 +165,7 @@ Under `<base><mount>/_svartz/annotations/`:
 | `POST` | Stores a comment, `{ kind: "comment", page, anchor, body }`, for the signed-in reader, and answers `201 { annotation }`. Writing also refreshes the reader's stored identity. |
 | `POST <id>/agree/` | Sets the signed-in reader's **+1** on comment `<id>`: `{ agreed: true }` adds it, `{ agreed: false }` takes it back. Answers `{ agreed, agreements }`, the comment's agreements after the change, oldest first. Sending the same state again changes nothing, so a retry is safe. |
 | `DELETE <id>/` | Deletes annotation `<id>` and its agreements, for its author or a moderator of its page, and answers `204`. A retry finds it gone and answers `404`. |
+| `POST <id>/hide/` | A form post with `returnTo`, a path on this site. Hides comment `<id>` for a moderator of its page, records it in auth's audit log, and redirects to `returnTo` (the vault's home otherwise). Hiding a hidden or deleted comment changes and records nothing, even when two moderators hide it at once. Needs `database: { env: "SVARTZ_DB" }`: 503 with any other binding. |
 
 `anchor` is what `describe` returns for the selection: `{ exact, prefix, suffix, start, end }`, where `end - start` is the length of `exact`.
 
@@ -176,8 +179,8 @@ Failures answer `{ error, message }`, where `message` is written for the reader:
 | 400 | `invalid_json` | A write body that isn't JSON. |
 | 401 | `signed_out` | A write from a reader who isn't signed in. |
 | 403 | `cross_origin` | A write whose `Origin` header is missing or names another site. |
-| 403 | `forbidden` | A delete by someone who neither wrote the annotation nor moderates its page, or a comment from a reader denied `annotations:comments:write` there. |
-| 404 | `not_found` | A **+1** or delete on an annotation that isn't in this vault, or was deleted. |
+| 403 | `forbidden` | A delete by someone who neither wrote the annotation nor moderates its page, a hide by someone who doesn't moderate it, or a comment from a reader denied `annotations:comments:write` there. |
+| 404 | `not_found` | A **+1**, delete or hide of an annotation that isn't in this vault, or was deleted; a **+1** of a hidden comment. |
 | 413 | `too_large` | A write body over 32 KiB. |
 | 429 | `rate_limited` | The signed-in reader has spent their write budget. Also includes `retryAfter` in seconds. |
-| 503 | `misconfigured` | No D1 binding under `database.env`. |
+| 503 | `misconfigured` | No D1 binding under `database.env`; a hide when `database.env` isn't `SVARTZ_DB`. |

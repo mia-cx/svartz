@@ -1,0 +1,55 @@
+{
+  "name": "@svartz/plugin-moderation",
+  "version": "0.0.0",
+  "private": true,
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "type": "module",
+  "description": "Readers report pages, edits, comments and accounts, and moderators work through the reports on the site's dashboard",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./server": {
+      "import": "./dist/server.js",
+      "types": "./dist/server.d.ts"
+    },
+    "./browser": {
+      "import": "./dist/browser.js",
+      "types": "./dist/browser.d.ts"
+    },
+    "./browser.css": "./dist/browser.css"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/server.ts src/browser.ts --format esm --dts && node -e \"require('node:fs').copyFileSync('src/browser.css', 'dist/browser.css')\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mia-cx/svartz.git",
+    "directory": "packages/plugin-moderation"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "dependencies": {
+    "@svartz/auth": "workspace:*",
+    "@svartz/core": "workspace:*",
+    "@svartz/plugin-annotations": "workspace:*",
+    "@svartz/plugin-submissions": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vitest/browser-playwright": "^4.1.12",
+    "miniflare": "^4.20260305.0",
+    "playwright": "^1.58.2",
+    "tsup": "^8.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.12"
+  }
+}

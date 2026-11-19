@@ -16,6 +16,7 @@ import {
   APP_KEY,
   blobExchange,
   branchFor,
+  closeExchange,
   BUILD_COMMIT,
   commitExchanges,
   committerExchanges,
@@ -30,6 +31,7 @@ import {
   newPageExchanges,
   OTHER_SHA,
   PULL_42,
+  pullExchange,
   REPO,
   replayGitHub,
   repositoryExchange,
@@ -88,24 +90,29 @@ interface Database {
 /**
  * A wiki at /wiki with `auth` and `submissions` as a GitHub App, on a fresh D1. `admins` are identities whose accounts
  * are admins; `userPages` is auth's user page folder, in `userPageVault`, the vault that runs sign-in; `build` what the
- * submissions build recorded; `db` is the database, for storing grants.
+ * submissions build recorded; `db` is the database, for storing grants, or another site's to share it. `sync` keeps
+ * the mirror, and the site's record of each save, in `SVARTZ_DB`; `vault` is the vault's id.
  */
 async function createSite({
   mode = "permission" as Mode, admins = [] as string[], userPages = undefined as string | undefined, userPageVault = "wiki", build = BUILD,
+  sync = false, vault = "wiki", db = undefined as Database | undefined,
 } = {}) {
-  const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
-  disposers.push(() => miniflare.dispose());
-  const db = await miniflare.getD1Database("SVARTZ_DB") as unknown as Database;
+  if (!db) {
+    const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
+    disposers.push(() => miniflare.dispose());
+    db = await miniflare.getD1Database("SVARTZ_DB") as unknown as Database;
+  }
   const options: ServerOptions = {
     repo: REPO,
     labels: [],
     app: { id: APP_ID, privateKey: { env: "SVARTZ_GITHUB_APP_KEY" }, installation: INSTALLATION_ID },
     guard: { rateLimit: { limit: 100, period: 60 } },
     mode,
+    ...sync && { sync: { database: { env: "SVARTZ_DB" }, webhookSecret: { env: "SVARTZ_GITHUB_WEBHOOK_SECRET" }, live: { workflow: "deploy.yml" } } },
   };
   const handle = createServerHandle({
     basePath: "/wiki",
-    vault: { id: "wiki", mountPath: "/wiki", site: { title: "Wiki" } },
+    vault: { id: vault, mountPath: "/wiki", site: { title: "Wiki" } },
     servers: [
       {
         // As config resolution registers it: eager, with the catalogue the vault's plugins declare.
@@ -674,5 +681,129 @@ describe("user pages", () => {
     expect(await save(site, { page: "/wiki/users/ada/", sha: GUIDE_SHA }, ada)).toEqual({ status: 201, body: commitAnswer });
     expect(await save(site, { page: "/wiki/users/ada/", sha: GUIDE_SHA, markdown: moved }, ada)).toEqual({ status: 201, body: commitAnswer });
     expect(replay.pending).toEqual([]);
+  });
+});
+
+describe("closing a submission", () => {
+  const PANEL = "/wiki/-/dashboard/moderation/reports/?status=closed#report-1";
+  const close = (site: Site, cookie: string | undefined, number = "42") =>
+    site.request(`${BASE}/close/`, { method: "POST", cookie, body: new URLSearchParams({ number, returnTo: PANEL }) });
+  const audited = async ({ db }: Site) => (await db.prepare("SELECT actor_handle, action, target, detail FROM auth_audit").all()).results;
+
+  /** A syncing wiki where Ada, a reader, saved an edit of the guide as pull request #42, and Grace is signed in. */
+  async function submitted(options: Parameters<typeof createSite>[0] = {}) {
+    const site = await createSite({ sync: true, ...options });
+    const ada = await signIn(site, ADA);
+    const grace = await signIn(site, GRACE);
+    github(adaPullRequest());
+    expect(await save(site, { page: "/wiki/guide/" }, ada)).toMatchObject({ status: 201, body: { kind: "pull-request", number: 42 } });
+    return { site, ada, grace };
+  }
+
+  it("closes a submission saved through this vault for a reviewer, records who did, and goes back", async () => {
+    const { site, grace } = await submitted();
+    await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
+    // The App's token from the save is still good. No branch is configured, so submissions target the default.
+    const replay = replayGitHub([pullExchange(), repositoryExchange, closeExchange], INSTALLATION_TOKEN);
+
+    const answer = await close(site, grace);
+
+    expect(answer.status).toBe(303);
+    expect(answer.headers.get("location")).toBe(PANEL);
+    expect(replay.pending).toEqual([]);
+    expect(await audited(site)).toEqual([{
+      actor_handle: "grace", action: "submissions:submission:close", target: "submission:42", detail: JSON.stringify({ repo: REPO, vault: "wiki" }),
+    }]);
+  });
+
+  // Proves GitHub's case-insensitive names: the repository spelled in another case is still the one submissions target.
+  it("closes a submission whose repository GitHub names in another case", async () => {
+    const { site, grace } = await submitted();
+    await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
+    const replay = replayGitHub([pullExchange({ fullName: "WikiPlace/WikiPlace.live" }), repositoryExchange, closeExchange], INSTALLATION_TOKEN);
+
+    expect((await close(site, grace)).status).toBe(303);
+    expect(replay.pending).toEqual([]);
+  });
+
+  it("refuses a pull request from another repository", async () => {
+    const { site, grace } = await submitted();
+    await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
+    replayGitHub([pullExchange({ fullName: "someone/wikiplace.live" })], INSTALLATION_TOKEN);
+
+    expect((await close(site, grace)).status).toBe(404);
+    expect(await audited(site)).toEqual([]);
+  });
+
+  // Proves review rights stay with their vault: another vault on the same repository can't close this vault's submission.
+  it("refuses a submission another vault on the same repository saved, as it refuses one that doesn't exist", async () => {
+    const { site, grace } = await submitted();
+    const docs = await createSite({ sync: true, vault: "docs", build: { ...BUILD, vaultRoot: "docs" }, db: site.db });
+    await grant(site, await accountId(site, "grace"), "vault:docs", "submissions:reviews:write");
+    const replay = replayGitHub([], INSTALLATION_TOKEN);
+
+    const theirs = await close(docs, grace);
+    const none = await close(docs, grace, "43");
+
+    expect(theirs.status).toBe(404);
+    expect(await theirs.json()).toEqual({ error: "not_found", message: `${REPO} has no submission #42.` });
+    expect(none.status).toBe(404);
+    expect(replay.requests).toEqual([]);
+    expect(await audited(site)).toEqual([]);
+  });
+
+  it("refuses every pull request on a vault without sync, which keeps no record of its saves", async () => {
+    const site = await createSite({ admins: [ADA.id] });
+    const ada = await signIn(site, ADA);
+    const replay = github([]);
+
+    expect((await close(site, ada)).status).toBe(404);
+    expect(replay.requests).toEqual([]);
+  });
+
+  it("leaves a closed submission as it is, recording nothing", async () => {
+    const { site, grace } = await submitted();
+    await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
+    const replay = replayGitHub([pullExchange({ state: "closed" }), repositoryExchange], INSTALLATION_TOKEN);
+
+    expect((await close(site, grace)).status).toBe(303);
+    expect(replay.pending).toEqual([]);
+    expect(await audited(site)).toEqual([]);
+  });
+
+  it("refuses a pull request whose branch isn't a submission's", async () => {
+    const { site, grace } = await submitted();
+    await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
+    replayGitHub([pullExchange({ ref: "main" })], INSTALLATION_TOKEN);
+
+    const answer = await close(site, grace);
+
+    expect(answer.status).toBe(404);
+    expect(await audited(site)).toEqual([]);
+  });
+
+  // Proves a saved submission someone retargeted at another branch is no longer the vault's to close.
+  it("refuses a saved submission retargeted at another branch, as it refuses one that doesn't exist", async () => {
+    const { site, grace } = await submitted();
+    await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
+    const replay = replayGitHub([pullExchange({ base: "release" }), repositoryExchange], INSTALLATION_TOKEN);
+
+    const answer = await close(site, grace);
+
+    expect(answer.status).toBe(404);
+    expect(await answer.json()).toEqual({ error: "not_found", message: `${REPO} has no submission #42.` });
+    expect(replay.pending).toEqual([]);
+    expect(await audited(site)).toEqual([]);
+  });
+
+  it("refuses an account without the review permission, and a guest, before asking GitHub", async () => {
+    const site = await createSite();
+    const grace = await signIn(site, GRACE);
+    const replay = github([]);
+
+    expect((await close(site, grace)).status).toBe(403);
+    expect((await close(site, undefined)).status).toBe(401);
+    expect(replay.requests).toEqual([]);
+    expect(await audited(site)).toEqual([]);
   });
 });
