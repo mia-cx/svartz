@@ -400,3 +400,33 @@ describe("submissions permissions and mode", () => {
     expect(() => submissions({ repo: "acme/wiki", mode: "direct" } as unknown as Parameters<typeof submissions>[0])).toThrow(/mode must be/);
   });
 });
+
+describe("submissions sync config", () => {
+  const sync = { database: { env: "SVARTZ_DB" }, webhookSecret: { env: "SVARTZ_GITHUB_WEBHOOK_SECRET" }, live: { workflow: "deploy.yml" } };
+  const vault = (type: string, plugin: NormalizedSvartzPlugin) =>
+    ({ id: "wiki", mountPath: "/wiki", target: { type }, plugins: [plugin] }) as unknown as ResolvedConfig;
+
+  it("tells the editor to follow saved edits, and keeps the secret's and the database's names on the server", async () => {
+    const { ctx } = await build({ sync });
+
+    expect(ctx.compiler?.browserResources.get("submissions")?.options).toMatchObject({ tracked: true });
+    expect(submissions({ repo: "acme/wiki", sync }).server?.options).toMatchObject({ sync });
+  });
+
+  it("refuses sync on a vault that deploys to node, where there is no D1", () => {
+    const plugin = submissions({ repo: "acme/wiki", sync: { ...sync, live: { environment: "production" } } });
+    expect(() => plugin.forVault!({ vault: vault("node", plugin), vaults: [] })).toThrow(/keeps its mirror in Cloudflare D1/);
+    expect(plugin.forVault!({ vault: vault("cloudflare-workers", plugin), vaults: [] })).toBe(plugin);
+  });
+
+  it.each([
+    ["no database", { ...sync, database: undefined }, /sync\.database/],
+    ["an inlined webhook secret", { ...sync, webhookSecret: "whsec" }, /sync\.webhookSecret/],
+    ["no live signal", { ...sync, live: {} }, /sync\.live must name either/],
+    ["both live signals", { ...sync, live: { workflow: "deploy.yml", environment: "production" } }, /sync\.live must name either/],
+    ["a workflow path rather than its file", { ...sync, live: { workflow: ".github/workflows/deploy.yml" } }, /sync\.live\.workflow/],
+    ["a blank environment", { ...sync, live: { environment: " " } }, /sync\.live\.environment/],
+  ])("refuses %s when the config loads", (_case, options, message) => {
+    expect(() => submissions({ repo: "acme/wiki", sync: options } as unknown as Parameters<typeof submissions>[0])).toThrow(message);
+  });
+});

@@ -23,11 +23,18 @@ export const GUIDE_SOURCE = "﻿---\r\ntitle: Guide\r\n---\r\n\r\n# Guide\r\n\r\
 export const PULL_42 = { number: 42, html_url: `https://github.com/${REPO}/pull/42`, state: "open" };
 
 export interface Exchange {
-  readonly request: { readonly method: string; readonly url: string; readonly body?: unknown };
+  /** `ifNoneMatch`: the ETag a conditional request sends. */
+  readonly request: { readonly method: string; readonly url: string; readonly body?: unknown; readonly ifNoneMatch?: string };
   /** The `Authorization` header GitHub expects, or a matcher for it. Default: the token `replayGitHub` was given. */
   readonly authorization?: unknown;
   /** `hang`: GitHub never answers; the request ends only when its signal aborts. No `json` or `raw`: an empty body. */
-  readonly response: { readonly status: number; readonly json?: unknown; readonly raw?: string; readonly hang?: true };
+  readonly response: {
+    readonly status: number;
+    readonly json?: unknown;
+    readonly raw?: string;
+    readonly hang?: true;
+    readonly headers?: Readonly<Record<string, string>>;
+  };
 }
 
 /** Reading `content/guide.md` at the build commit. */
@@ -272,21 +279,24 @@ export function replayGitHub(exchanges: readonly Exchange[], token = TOKEN) {
   const pending = [...exchanges];
   const requests: Array<{ method: string; url: string; body?: unknown; authorization: string | null }> = [];
   const fetch = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const headers = new Headers(init.headers);
+    const ifNoneMatch = headers.get("if-none-match");
     const request = {
       method: init.method ?? "GET",
       url: String(input),
       ...(init.body === undefined ? {} : { body: JSON.parse(String(init.body)) as unknown }),
+      ...(ifNoneMatch === null ? {} : { ifNoneMatch }),
     };
-    const authorization = new Headers(init.headers).get("authorization");
+    const authorization = headers.get("authorization");
     requests.push({ ...request, authorization });
     const next = pending.shift();
     if (!next) throw new Error(`GitHub got an unexpected ${request.method} ${request.url}`);
     expect(request).toEqual(next.request);
     expect(authorization).toEqual(next.authorization ?? `Bearer ${token}`);
-    const { status, json, raw, hang } = next.response;
+    const { status, json, raw, hang, headers: answered = {} } = next.response;
     if (hang) return new Promise<Response>((_, reject) => init.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
-    if (raw !== undefined) return new Response(raw, { status });
-    return json === undefined ? new Response(null, { status }) : Response.json(json, { status });
+    if (raw !== undefined) return new Response(raw, { status, headers: answered });
+    return json === undefined ? new Response(null, { status, headers: answered }) : Response.json(json, { status, headers: answered });
   });
   vi.stubGlobal("fetch", fetch);
   return { pending, requests };

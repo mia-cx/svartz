@@ -1,0 +1,264 @@
+/**
+ * The reconcile poll: reads what GitHub holds now into the mirror, for the deliveries a webhook missed. It runs when
+ * a reader's request finds the mirror stale, never on a timer, and at most once per {@link POLL_INTERVAL_MS} per
+ * scope across every isolate, claimed through a lease in D1. Its first run backfills.
+ *
+ * Each poll lists, newest first and one page each: the content branch's workflow runs, deployments, pull requests into
+ * it, the commits touching the vault, and the comments on pull requests. Lists are conditional (`If-None-Match` with
+ * the ETag GitHub last sent), so a list that hasn't changed costs a 304. Then, while its budget of
+ * {@link MAX_REQUESTS} lasts, it fills in what the lists leave out: deployments' statuses, which pull requests touch
+ * the vault, their reviews, and commits' files. What it doesn't reach waits in the mirror for the next poll.
+ *
+ * It keeps {@link RATE_LIMIT_RESERVE} requests of GitHub's hourly allowance for saves: below that, or when GitHub says
+ * to wait (`Retry-After`, a spent `X-RateLimit-Remaining`), it stops and polls again only after the reset.
+ */
+import { requestGitHub } from "./github";
+import {
+  writeBranch,
+  writeComment,
+  writeCommit,
+  writeDeployment,
+  writePull,
+  writeReview,
+  writeRun,
+  type Mirror,
+  type Statement,
+} from "./mirror";
+import {
+  comment,
+  deployment,
+  deploymentStatus,
+  inVault,
+  list,
+  listedCommit,
+  object,
+  pullNumber,
+  pullRequest,
+  review,
+  text,
+  workflowRun,
+} from "./records";
+
+/** A poll runs at most this often per scope. */
+export const POLL_INTERVAL_MS = 60_000;
+/** A poll that hasn't finished by then lets the next one start. */
+const LEASE_MS = 60_000;
+/** GitHub requests one poll may make. */
+export const MAX_REQUESTS = 30;
+/** Requests of GitHub's hourly allowance a poll leaves for saves. */
+export const RATE_LIMIT_RESERVE = 100;
+/** Items per list; also how far the first poll backfills. */
+const PAGE_SIZE = 100;
+/** Pages of a pull request's files read to tell whether it touches the vault. */
+const MAX_FILE_PAGES = 3;
+/** Rows of each kind a poll fills in at most, before the budget decides. */
+const FILL_BATCH = 10;
+const MS_PER_SECOND = 1000;
+
+export interface PollTarget {
+  readonly mirror: Mirror;
+  readonly repo: string;
+  /** The vault folder in the repository. */
+  readonly root: string;
+  /** The configured content branch; the repository's default branch when unset. */
+  readonly branch?: string;
+  /** The deployment environment that means live, so its deployments are the ones listed. */
+  readonly environment?: string;
+}
+
+/**
+ * Claim the scope's next poll, or answer `undefined` when one ran within {@link POLL_INTERVAL_MS}, is running, or
+ * GitHub's rate limit hasn't reset. Answers the branch deliveries named, when any did.
+ */
+async function claim({ db, scope }: Mirror, now: number): Promise<{ branch: string | null } | undefined> {
+  const [, claimed] = await db.batch([
+    db.prepare("INSERT OR IGNORE INTO submissions_sync (scope) VALUES (?)").bind(scope),
+    db.prepare(`UPDATE submissions_sync SET lease_until = ?1
+      WHERE scope = ?2 AND polled_at <= ?3 AND lease_until <= ?4 AND paused_until <= ?4 RETURNING branch`)
+      .bind(now + LEASE_MS, scope, now - POLL_INTERVAL_MS, now),
+  ]) as [unknown, { results: Array<{ branch: string | null }> }];
+  return claimed.results[0];
+}
+
+/** End the poll: it counts as run, failed or not, so an unreachable GitHub isn't asked again at once. */
+async function release({ db, scope }: Mirror, now: number, pausedUntil: number): Promise<void> {
+  await db.prepare("UPDATE submissions_sync SET polled_at = ?, lease_until = 0, paused_until = MAX(paused_until, ?) WHERE scope = ?")
+    .bind(now, pausedUntil, scope).run();
+}
+
+/** When to ask GitHub again, if its answer says to wait: a `Retry-After`, or an hourly allowance at the reserve. */
+function waitUntil(response: Response, now: number): number | undefined {
+  const retryAfter = Number(response.headers.get("retry-after"));
+  if (retryAfter > 0) return now + retryAfter * MS_PER_SECOND;
+  const remaining = response.headers.get("x-ratelimit-remaining");
+  const limited = response.status === 429 || (response.status === 403 && remaining === "0");
+  if (!limited && (remaining === null || Number(remaining) > RATE_LIMIT_RESERVE)) return undefined;
+  const reset = Number(response.headers.get("x-ratelimit-reset")) * MS_PER_SECOND;
+  return reset > now ? reset : now + POLL_INTERVAL_MS;
+}
+
+/** The poll ran out of budget, or GitHub said to wait. */
+class Stop extends Error {}
+
+/** Poll when the mirror is stale; otherwise do nothing. Failures end the poll and are logged without credentials. */
+export async function reconcile(target: PollTarget, token: () => Promise<string>): Promise<void> {
+  const { mirror, repo, root } = target;
+  const claimed = await claim(mirror, Date.now());
+  if (!claimed) return;
+  let requests = 0;
+  let pausedUntil = 0;
+
+  /**
+   * GET `path` below the repository. `conditional` sends the ETag stored for it and answers `undefined` for a 304;
+   * call {@link remember} with the answer once it is stored. A 404 answers `null`.
+   */
+  async function get(path: string, conditional = false): Promise<{ body: unknown; etag: string | null } | null | undefined> {
+    if (requests >= MAX_REQUESTS || pausedUntil) throw new Stop();
+    requests++;
+    const [stored] = conditional
+      ? (await mirror.db.prepare("SELECT etag FROM submissions_etags WHERE scope = ? AND path = ?").bind(mirror.scope, path).all<{ etag: string }>()).results
+      : [];
+    const response = await requestGitHub(await token(), "GET", `/repos/${repo}${path}`, undefined, undefined,
+      stored ? { "if-none-match": stored.etag } : {});
+    pausedUntil = waitUntil(response, Date.now()) ?? 0;
+    if (response.status === 304) return undefined;
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      if (pausedUntil) throw new Stop();
+      throw new Error(`GitHub answered ${response.status} to GET ${path.split("?")[0]}`);
+    }
+    return { body: await response.json(), etag: conditional ? response.headers.get("etag") : null };
+  }
+
+  async function remember(path: string, etag: string | null) {
+    if (!etag) return;
+    await mirror.db.prepare(`INSERT INTO submissions_etags (scope, path, etag) VALUES (?1, ?2, ?3)
+      ON CONFLICT (scope, path) DO UPDATE SET etag = excluded.etag`).bind(mirror.scope, path, etag).run();
+  }
+
+  /** Store a list's items, then its ETag, so a list cut short is read again in full. */
+  async function sync(path: string, statements: (body: unknown) => Statement[]) {
+    const answer = await get(path, true);
+    if (!answer) return;
+    const written = statements(answer.body);
+    if (written.length > 0) await mirror.db.batch(written);
+    await remember(path, answer.etag);
+  }
+
+  const query = (params: Record<string, string | number>) => `?${new URLSearchParams(Object.entries(params).map(([key, value]) => [key, String(value)]))}`;
+  const whole = root === "" ? 1 : null;
+
+  try {
+    let branch = target.branch ?? claimed.branch ?? undefined;
+    if (!branch) {
+      branch = text(object((await get(""))?.body)?.default_branch);
+      if (!branch) throw new Error("GitHub named no default branch");
+      await writeBranch(mirror, branch).run();
+    }
+
+    // What decides edit status first: runs and deployments.
+    await sync(`/actions/runs${query({ branch, per_page: PAGE_SIZE })}`, (body) =>
+      list(object(body)?.workflow_runs).flatMap((value) => {
+        const run = workflowRun(value);
+        return run ? [writeRun(mirror, run)] : [];
+      }));
+    await sync(`/deployments${query({ ...(target.environment ? { environment: target.environment } : {}), per_page: PAGE_SIZE })}`, (body) =>
+      list(body).flatMap((value) => {
+        const record = deployment(value);
+        return record ? [writeDeployment(mirror, record)] : [];
+      }));
+    await sync(`/pulls${query({ state: "all", base: branch, sort: "updated", direction: "desc", per_page: PAGE_SIZE })}`, (body) =>
+      list(body).flatMap((value) => {
+        const pull = pullRequest(value);
+        return pull ? [writePull(mirror, pull, whole)] : [];
+      }));
+    await sync(`/commits${query({ sha: branch, ...(root ? { path: root } : {}), per_page: PAGE_SIZE })}`, (body) =>
+      list(body).flatMap((value) => {
+        const commit = listedCommit(value);
+        return commit ? [writeCommit(mirror, commit)] : [];
+      }));
+    for (const kind of ["issue", "review"] as const) {
+      await sync(`/${kind === "issue" ? "issues" : "pulls"}/comments${query({ sort: "updated", direction: "desc", per_page: PAGE_SIZE })}`, (body) =>
+        list(body).flatMap((value) => {
+          // Issue comments on issues rather than pull requests have no pull request to belong to.
+          const number = pullNumber(kind === "issue" ? object(value)?.html_url : object(value)?.pull_request_url);
+          const record = number === undefined ? undefined : comment(value, kind, number);
+          return record ? [writeComment(mirror, record)] : [];
+        }));
+    }
+
+    await fillDeploymentStatuses();
+    await fillPullScopes();
+    await fillReviews();
+    await fillCommitFiles();
+  } catch (error) {
+    if (!(error instanceof Stop)) console.warn(`[submissions] the GitHub mirror's poll stopped: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    await release(mirror, Date.now(), pausedUntil);
+  }
+
+  async function rows<Row>(sql: string): Promise<Row[]> {
+    return (await mirror.db.prepare(sql).bind(mirror.scope, FILL_BATCH).all<Row>()).results;
+  }
+
+  /** The latest status of deployments still under way, or never seen with one. */
+  async function fillDeploymentStatuses() {
+    const pending = await rows<{ id: number }>(`SELECT id FROM submissions_deployments
+      WHERE scope = ? AND (state IS NULL OR state IN ('queued', 'pending', 'in_progress')) ORDER BY created_at DESC LIMIT ?`);
+    for (const { id } of pending) {
+      const answer = await get(`/deployments/${id}/statuses${query({ per_page: 1 })}`);
+      const status = deploymentStatus(list(answer?.body)[0]);
+      if (!status) continue;
+      await mirror.db.prepare(`UPDATE submissions_deployments SET status_id = ?, state = ?, status_url = ?, status_at = ?
+        WHERE scope = ? AND id = ? AND COALESCE(status_id, 0) < ?`)
+        .bind(status.id, status.state, status.url, status.createdAt, mirror.scope, id, status.id).run();
+    }
+  }
+
+  /** Whether each pull request not yet known to touch the vault does, from its files at its head commit. */
+  async function fillPullScopes() {
+    const unknown = await rows<{ number: number; head_sha: string }>(`SELECT number, head_sha FROM submissions_pulls
+      WHERE scope = ? AND in_vault IS NULL ORDER BY updated_at DESC LIMIT ?`);
+    for (const { number, head_sha } of unknown) {
+      let touches = false;
+      for (let page = 1; page <= MAX_FILE_PAGES && !touches; page++) {
+        const files = list((await get(`/pulls/${number}/files${query({ per_page: PAGE_SIZE, page })}`))?.body);
+        touches = files.some((file) => [object(file)?.filename, object(file)?.previous_filename].some((path) => typeof path === "string" && inVault(path, root)));
+        if (files.length < PAGE_SIZE) break;
+      }
+      await mirror.db.prepare("UPDATE submissions_pulls SET in_vault = ? WHERE scope = ? AND number = ? AND head_sha = ?")
+        .bind(touches ? 1 : 0, mirror.scope, number, head_sha).run();
+    }
+  }
+
+  /** The reviews of pull requests in the vault updated since their reviews were last read. */
+  async function fillReviews() {
+    const stale = await rows<{ number: number; updated_at: string }>(`SELECT number, updated_at FROM submissions_pulls
+      WHERE scope = ? AND in_vault = 1 AND (reviews_synced_at IS NULL OR reviews_synced_at < updated_at) ORDER BY updated_at DESC LIMIT ?`);
+    for (const { number, updated_at } of stale) {
+      const answer = await get(`/pulls/${number}/reviews${query({ per_page: PAGE_SIZE })}`);
+      const written = list(answer?.body).flatMap((value) => {
+        const record = review(value, number);
+        return record ? [writeReview(mirror, record)] : [];
+      });
+      await mirror.db.batch([
+        ...written,
+        mirror.db.prepare("UPDATE submissions_pulls SET reviews_synced_at = ? WHERE scope = ? AND number = ?").bind(updated_at, mirror.scope, number),
+      ]);
+    }
+  }
+
+  /** The vault files of commits the list gave without them. */
+  async function fillCommitFiles() {
+    const bare = await rows<{ sha: string }>("SELECT sha FROM submissions_commits WHERE scope = ? AND files IS NULL ORDER BY committed_at DESC LIMIT ?");
+    for (const { sha } of bare) {
+      const answer = await get(`/commits/${sha}`);
+      const files = list(object(answer?.body)?.files).flatMap((file) => {
+        const path = text(object(file)?.filename);
+        return path && inVault(path, root) ? [path] : [];
+      });
+      await mirror.db.prepare("UPDATE submissions_commits SET files = ? WHERE scope = ? AND sha = ? AND files IS NULL")
+        .bind(JSON.stringify(files.sort()), mirror.scope, sha).run();
+    }
+  }
+}

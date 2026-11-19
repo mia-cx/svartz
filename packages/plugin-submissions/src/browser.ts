@@ -51,6 +51,7 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
         pathname,
         opener: button,
         turnstileSiteKey: options.turnstileSiteKey,
+        tracked: options.tracked === true,
       });
     };
     button.addEventListener("click", () => void open());

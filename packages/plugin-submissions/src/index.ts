@@ -29,6 +29,7 @@ import { PLUGIN_ID, type BrowserOptions, type LinkTarget } from "./api";
 import type { GuardOptions, RateLimitOptions, TurnstileOptions } from "./guard";
 import { permissions } from "./permissions";
 import type { BuildData, Credentials, Mode, RouteHolder, ServerOptions } from "./server";
+import type { SyncOptions } from "./sync";
 
 export interface SubmissionsOptions {
   /** The GitHub repository pull requests open on, as `owner/name`. */
@@ -63,6 +64,21 @@ export interface SubmissionsOptions {
   readonly signIn?: {
     /** Refuse submissions from readers who aren't signed in; the editor asks them to sign in. Default: `false`. */
     readonly required?: boolean;
+  };
+  /**
+   * Mirror the repository's activity through GitHub webhooks into D1, and show editors their edit going live. Needs a
+   * Cloudflare target.
+   */
+  readonly sync?: {
+    /** The D1 binding the mirror lives in, such as `{ env: "SVARTZ_DB" }`; it may be the one `auth` uses. */
+    readonly database: EnvReference;
+    /** The server environment variable holding the webhook secret the GitHub App signs its deliveries with. */
+    readonly webhookSecret: EnvReference;
+    /**
+     * What "live" means: a successful run of a workflow file in `.github/workflows/`, such as `{ workflow: "deploy.yml" }`,
+     * or a successful deployment to an environment, such as `{ environment: "production" }`.
+     */
+    readonly live: { readonly workflow: string } | { readonly environment: string };
   };
   /** What every submission must pass before it reaches GitHub. */
   readonly guard?: {
@@ -216,12 +232,37 @@ function credentials({ token, app }: SubmissionsOptions): Credentials {
   };
 }
 
+/** A workflow file's name, as `.github/workflows/` holds it. */
+const WORKFLOW_FILE = /^[\w.-]+\.ya?ml$/;
+
+/** The `sync` option, refused at load when the server could never use it. */
+function syncOptions({ sync }: SubmissionsOptions): SyncOptions | undefined {
+  if (sync === undefined) return undefined;
+  if (isBlank(sync.database?.env)) fail('sync.database must name the D1 binding: { env: "SVARTZ_DB" }');
+  if (isBlank(sync.webhookSecret?.env)) fail('sync.webhookSecret must name its environment variable: { env: "NAME" }');
+  const live = sync.live as { workflow?: unknown; environment?: unknown } | undefined;
+  const { workflow, environment } = live ?? {};
+  if ((workflow === undefined) === (environment === undefined)) {
+    fail('sync.live must name either a workflow file, { workflow: "deploy.yml" }, or a deployment environment, { environment: "production" }');
+  }
+  if (workflow !== undefined && (typeof workflow !== "string" || !WORKFLOW_FILE.test(workflow))) {
+    fail('sync.live.workflow must be a file name in .github/workflows/, such as "deploy.yml"');
+  }
+  if (environment !== undefined && isBlank(environment)) fail("sync.live.environment must name a deployment environment");
+  return {
+    database: { env: sync.database.env },
+    webhookSecret: { env: sync.webhookSecret.env },
+    live: typeof workflow === "string" ? { workflow } : { environment: environment as string },
+  };
+}
+
 /** Let readers edit any published Markdown note, or add one in a published folder, as a pull request on `repo`. */
 export function submissions(options: SubmissionsOptions) {
   if (!REPO_PATTERN.test(options.repo)) fail(`repo "${options.repo}" must be "owner/name".`);
   const guard = guardOptions(options);
   const mode = modeOption(options);
   const vaultRoot = options.vaultRoot === undefined ? undefined : normalizeVaultRoot(options.vaultRoot);
+  const sync = syncOptions(options);
   const serverOptions: ServerOptions = {
     repo: options.repo,
     ...(options.branch ? { branch: options.branch } : {}),
@@ -229,6 +270,7 @@ export function submissions(options: SubmissionsOptions) {
     ...credentials(options),
     guard,
     mode,
+    ...(sync ? { sync } : {}),
   };
 
   const plugin: NormalizedSvartzPlugin = definePlugin(() => ({
@@ -239,6 +281,9 @@ export function submissions(options: SubmissionsOptions) {
     forVault({ vault }) {
       if (guard.signInRequired) checkVault(vault, "requires sign-in for submissions");
       if (mode === "commit") checkVault(vault, 'uses submissions mode "commit"');
+      if (sync && vault.target.type === "node") {
+        fail(`vault "${vault.id}" deploys to node, but sync keeps its mirror in Cloudflare D1; deploy it to cloudflare-workers or cloudflare-pages`);
+      }
       return plugin;
     },
     emitArtifacts: {
@@ -284,6 +329,7 @@ export function submissions(options: SubmissionsOptions) {
             pages: Object.keys(pages),
             folders,
             ...(guard.turnstile ? { turnstileSiteKey: guard.turnstile.siteKey } : {}),
+            ...(sync ? { tracked: true } : {}),
           } satisfies BrowserOptions,
         });
         compiler.browserResources.set(`${PLUGIN_ID}:css`, { id: `${PLUGIN_ID}:css`, kind: "css", importId: STYLESHEET });
