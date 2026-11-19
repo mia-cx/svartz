@@ -437,3 +437,25 @@ export async function commitSubmission(
   }
   throw new SubmissionError("branch_busy", 503, "Other edits are being saved right now. Try again in a moment.");
 }
+
+/** Every submission's branch starts with this, as {@link submissionBranch} names it. */
+const SUBMISSION_BRANCH_PREFIX = "svartz/submission/";
+
+/**
+ * Close submission `number`, a pull request this site opened on `target.repo`, without merging it. `record` runs once
+ * the pull request is known to be an open submission and before GitHub closes it, so whatever it records (an audit
+ * entry) precedes the change. Answers the pull request's URL and whether this call closed it: one closed already, or
+ * merged, is left as it is. A number naming no pull request, or one that isn't a submission, answers `not_found`.
+ */
+export async function closeSubmission(target: GitHubTarget, number: number, record: () => Promise<void>): Promise<{ url: string; closed: boolean }> {
+  const response = await send(target, "GET", `/pulls/${number}`);
+  const notFound = new SubmissionError("not_found", 404, `${target.repo} has no submission #${number}.`);
+  if (response.status === 404) throw notFound;
+  if (!response.ok) throw await failure(target, response);
+  const pull = await response.json() as PullRequest & { state: string; head: { ref: string; repo: { full_name: string } | null } };
+  if (!pull.head.ref.startsWith(SUBMISSION_BRANCH_PREFIX) || pull.head.repo?.full_name !== target.repo) throw notFound;
+  if (pull.state !== "open") return { url: pull.html_url, closed: false };
+  await record();
+  await call(target, "PATCH", `/pulls/${number}`, { state: "closed" });
+  return { url: pull.html_url, closed: true };
+}

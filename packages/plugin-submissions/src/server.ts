@@ -11,6 +11,9 @@
  * - `POST new/` with `{ submissionId, folder, title, markdown, note?, turnstileToken? }` does the same for a new note.
  * - With `sync` set, `POST github/webhook/` takes GitHub's deliveries into the mirror, and `GET status/?edit=<id>`
  *   answers where a saved edit has got to (see `sync.ts`). Every save is then recorded for its saver to follow.
+ * - `POST close/`, a form post with `number` and `returnTo`, closes submission `number` without merging it, for an
+ *   account holding `submissions:reviews:write` on the vault, records it in auth's audit log, and redirects to
+ *   `returnTo`. The moderation plugin's Reports panel posts to it.
  *
  * The client never names a file path. Edits must target a note in the build's manifest; a new note goes in one of the
  * manifest's folders, or is the reader's own user page, named after its title, and never where a file already is.
@@ -25,7 +28,9 @@
  * Every save passes the guard (required sign-in, rate limit, and Turnstile when configured) before any GitHub call, a
  * GitHub App's token exchange included. Failures answer `{ error, message }`.
  */
-import { can, linkedIdentities, readIdentity, readSignIn, userPageLocation, type Account, type Identity } from "@svartz/auth/server";
+import {
+  ACCOUNTS_DATABASE_ENV, audit, can, linkedIdentities, readIdentity, readSignIn, userPageLocation, type Account, type Identity,
+} from "@svartz/auth/server";
 import type { ServerContext, ServerModuleFactory } from "@svartz/core";
 import { alternateRoutes, extractFrontmatter, pathRoute, requestedSlug } from "@svartz/plugins/routes";
 import {
@@ -46,6 +51,7 @@ import {
 import { appCommitter, appTokens, type AppCredentials } from "./app";
 import { misconfigured, SubmissionError } from "./errors";
 import {
+  closeSubmission,
   commitSubmission,
   openSubmission,
   readSource,
@@ -55,7 +61,7 @@ import {
   type Submission,
 } from "./github";
 import { createGuard, type GuardOptions } from "./guard";
-import { COMMIT, OPEN_PULL_REQUESTS } from "./permissions";
+import { COMMIT, OPEN_PULL_REQUESTS, REVIEW } from "./permissions";
 import { readBody } from "./request";
 import { createSync, type SyncOptions } from "./sync";
 
@@ -397,12 +403,48 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
 
   const links = async () => Response.json({ notes: data.links, ...data.preview } satisfies LinksResponse);
 
+  /**
+   * Close submission `number` for a reviewer of the vault, and go back to `returnTo`, a path on this site (the vault's
+   * home otherwise). The audit entry lands once GitHub confirms an open submission, before GitHub closes it.
+   */
+  async function close(request: Request, context: ServerContext): Promise<Response> {
+    const url = new URL(request.url);
+    if (request.headers.get("origin") !== url.origin) throw new SubmissionError("cross_origin", 403, "Close submissions from this site.");
+    const signIn = await readSignIn(request, context.env);
+    if (signIn.reason === "no-database") {
+      throw new SubmissionError("misconfigured", 503, `Closing submissions needs accounts: bind a D1 database as ${ACCOUNTS_DATABASE_ENV}.`);
+    }
+    const { account } = signIn;
+    if (!account) throw new SubmissionError("sign_in_required", 401, "Sign in to close a submission.");
+    if (!await can(account, REVIEW, { vault: context.vault.id }, context.env)) {
+      throw new SubmissionError("not_allowed", 403, "Your account can't close submissions here.");
+    }
+    const bytes = await readBody(request, MAX_REQUEST_BYTES);
+    if (!bytes) throw tooLarge();
+    const form = new URLSearchParams(new TextDecoder().decode(bytes));
+    const number = Number(form.get("number"));
+    if (!Number.isSafeInteger(number) || number < 1) throw invalid();
+    const home = publicPath(`${context.vault.mountPath}/`, context);
+    const returnTo = form.get("returnTo") ?? "";
+    const back = /^\/(?![/\\])/.test(returnTo) && new URL(returnTo, url.origin).origin === url.origin ? returnTo : home;
+    await closeSubmission(await target(context), number, () => audit(context.env, {
+      actor: account, action: "submissions:submission:close", target: `submission:${number}`, detail: { repo: options.repo, vault: context.vault.id },
+    }));
+    return new Response(null, { status: 303, headers: { location: back, "cache-control": "no-store" } });
+  }
+
+  /** `route`, a path below the deployment base, with the deployment base. */
+  function publicPath(route: string, context: ServerContext): string {
+    return `${context.base.slice(0, -`${context.vault.mountPath}/_svartz/${PLUGIN_ID}`.length)}${route}`;
+  }
+
   const handlers = new Map<string, { method: string; run: (request: Request, context: ServerContext) => Promise<Response> }>([
     ["/source/", { method: "GET", run: source }],
     ["/destination/", { method: "GET", run: destination }],
     ["/links/", { method: "GET", run: links }],
     ["/edit/", { method: "POST", run: edit }],
     ["/new/", { method: "POST", run: create }],
+    ["/close/", { method: "POST", run: close }],
     ...sync
       ? [
         ["/github/webhook/", { method: "POST", run: sync.webhook }],

@@ -378,3 +378,15 @@ export function useFakeTimeouts() {
     return controller.signal;
   });
 }
+
+/** Reading pull request #42: a submission from this site, unless `ref` names another branch. */
+export const pullExchange = ({ state = "open", ref = branchFor("wiki-guide") } = {}): Exchange => ({
+  request: { method: "GET", url: `${API}/pulls/42` },
+  response: { status: 200, json: { ...PULL_42, state, head: { ref, repo: { full_name: REPO } } } },
+});
+
+/** Closing pull request #42 without merging it. */
+export const closeExchange: Exchange = {
+  request: { method: "PATCH", url: `${API}/pulls/42`, body: { state: "closed" } },
+  response: { status: 200, json: { ...PULL_42, state: "closed" } },
+};

@@ -16,6 +16,7 @@ import {
   APP_KEY,
   blobExchange,
   branchFor,
+  closeExchange,
   BUILD_COMMIT,
   commitExchanges,
   committerExchanges,
@@ -30,6 +31,7 @@ import {
   newPageExchanges,
   OTHER_SHA,
   PULL_42,
+  pullExchange,
   REPO,
   replayGitHub,
   repositoryExchange,
@@ -621,5 +623,60 @@ describe("user pages", () => {
     expect(await save(site, { page: "/wiki/users/ada/", sha: GUIDE_SHA }, ada)).toEqual({ status: 201, body: commitAnswer });
     expect(await save(site, { page: "/wiki/users/ada/", sha: GUIDE_SHA, markdown: moved }, ada)).toEqual({ status: 201, body: commitAnswer });
     expect(replay.pending).toEqual([]);
+  });
+});
+
+describe("closing a submission", () => {
+  const PANEL = "/wiki/-/dashboard/moderation/reports/?status=closed#report-1";
+  const close = (site: Site, cookie: string | undefined, number = "42") =>
+    site.request(`${BASE}/close/`, { method: "POST", cookie, body: new URLSearchParams({ number, returnTo: PANEL }) });
+  const audited = async ({ db }: Site) => (await db.prepare("SELECT actor_handle, action, target, detail FROM auth_audit").all()).results;
+
+  it("closes an open submission for a reviewer, records who did, and goes back", async () => {
+    const site = await createSite();
+    const grace = await signIn(site, GRACE);
+    await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
+    const replay = github([pullExchange(), closeExchange]);
+
+    const answer = await close(site, grace);
+
+    expect(answer.status).toBe(303);
+    expect(answer.headers.get("location")).toBe(PANEL);
+    expect(replay.pending).toEqual([]);
+    expect(await audited(site)).toEqual([{
+      actor_handle: "grace", action: "submissions:submission:close", target: "submission:42", detail: JSON.stringify({ repo: REPO, vault: "wiki" }),
+    }]);
+  });
+
+  it("leaves a closed submission as it is, recording nothing", async () => {
+    const site = await createSite({ admins: [ADA.id] });
+    const ada = await signIn(site, ADA);
+    const replay = github([pullExchange({ state: "closed" })]);
+
+    expect((await close(site, ada)).status).toBe(303);
+    expect(replay.pending).toEqual([]);
+    expect(await audited(site)).toEqual([]);
+  });
+
+  it("refuses a pull request that isn't a submission", async () => {
+    const site = await createSite({ admins: [ADA.id] });
+    const ada = await signIn(site, ADA);
+    github([pullExchange({ ref: "main" })]);
+
+    const answer = await close(site, ada);
+
+    expect(answer.status).toBe(404);
+    expect(await audited(site)).toEqual([]);
+  });
+
+  it("refuses an account without the review permission, and a guest, before asking GitHub", async () => {
+    const site = await createSite();
+    const grace = await signIn(site, GRACE);
+    const replay = github([]);
+
+    expect((await close(site, grace)).status).toBe(403);
+    expect((await close(site, undefined)).status).toBe(401);
+    expect(replay.requests).toEqual([]);
+    expect(await audited(site)).toEqual([]);
   });
 });
