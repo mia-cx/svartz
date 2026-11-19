@@ -133,7 +133,7 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], reso
     id: AUTH_PLUGIN_ID,
     // Eager, so every plugin that reads accounts or checks permissions sees this deployment's `admins` and catalogue
     // from its first request on.
-    server: { module: SERVER_MODULE, options: serverOptions, eager: true, pages: ["account", "dashboard"] },
+    server: { module: SERVER_MODULE, options: serverOptions, eager: true, pages: ["account", "dashboard", "groups"] },
     forVault(site) {
       const target = callbackVaultFor(options, providers, site);
       return authPlugin(options, providers, {

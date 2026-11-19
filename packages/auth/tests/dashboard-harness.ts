@@ -22,7 +22,7 @@ export async function createDashboardSite() {
     vault: { id: "notes", mountPath: "/notes", site: { title: "Notes" } },
     servers: [
       {
-        id: "auth", eager: true, pages: ["account", "dashboard"], load: () => import("../src/server"),
+        id: "auth", eager: true, pages: ["account", "dashboard", "groups"], load: () => import("../src/server"),
         options: {
           providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
           admins: ["github:1"],

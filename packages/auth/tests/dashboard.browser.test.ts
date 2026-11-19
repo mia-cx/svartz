@@ -64,7 +64,7 @@ describe("People & permissions", () => {
     }
     expect(names).toEqual([
       "Roles", "Check access", "People", "Permissions",
-      "Grant to", "Handle or role name", "Permission", "Set to", "Where", "Folder or page", "Save grant",
+      "Grant to", "Handle, role or group name", "Permission", "Set to", "Where", "Folder or page", "Save grant",
     ]);
   });
 

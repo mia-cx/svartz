@@ -9,7 +9,10 @@ export const GRANTS_READ = "auth:grants:read";
 /** Changes grants and roles, which makes whoever holds it as powerful as an admin. */
 export const GRANTS_WRITE = "auth:grants:write";
 
-/** Neither has a default, so only admins hold them until someone is granted them. */
+/** Opens the Groups panel, which links groups to objects. Linking gives a group's owners everything there. */
+export const GROUP_LINKS_WRITE = "auth:group-links:write";
+
+/** None has a default, so only admins hold them until someone is granted them. */
 export const AUTH_PERMISSIONS: readonly PermissionDeclaration[] = [
   {
     slug: GRANTS_READ, name: "See people and permissions",
@@ -18,5 +21,9 @@ export const AUTH_PERMISSIONS: readonly PermissionDeclaration[] = [
   {
     slug: GRANTS_WRITE, name: "Change permissions and roles",
     description: "Grant, deny and unset permissions, create roles and choose who holds them. Whoever holds it can give themselves anything, as an admin can.",
+  },
+  {
+    slug: GROUP_LINKS_WRITE, name: "Link groups to pages",
+    description: "Link a group to a vault, folder or page, or unlink it. A group's owners may do everything where it is linked.",
   },
 ];

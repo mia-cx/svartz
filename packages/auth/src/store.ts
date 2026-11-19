@@ -147,6 +147,38 @@ const MIGRATIONS: readonly (readonly string[])[] = [
     `CREATE TRIGGER IF NOT EXISTS auth_audit_no_delete BEFORE DELETE ON auth_audit
       BEGIN SELECT RAISE(ABORT, 'auth_audit is append-only'); END`,
   ],
+  [
+    // Groups by name, which never changes: grants name a group by it (`actor_type = 'group'`).
+    `CREATE TABLE IF NOT EXISTS auth_groups (
+      name TEXT PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS auth_group_members (
+      group_name TEXT NOT NULL REFERENCES auth_groups (name),
+      account_id TEXT NOT NULL REFERENCES auth_accounts (id),
+      owner INTEGER NOT NULL CHECK (owner IN (0, 1)),
+      added_at TEXT NOT NULL,
+      PRIMARY KEY (group_name, account_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS auth_group_members_by_account ON auth_group_members (account_id)`,
+    // An owner's invitation, waiting for the invited account to accept or decline it.
+    `CREATE TABLE IF NOT EXISTS auth_group_invitations (
+      group_name TEXT NOT NULL REFERENCES auth_groups (name),
+      account_id TEXT NOT NULL REFERENCES auth_accounts (id),
+      invited_by TEXT NOT NULL REFERENCES auth_accounts (id),
+      invited_at TEXT NOT NULL,
+      PRIMARY KEY (group_name, account_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS auth_group_invitations_by_account ON auth_group_invitations (account_id)`,
+    // Objects a moderator linked a group to; its owners hold every permission on them and below.
+    `CREATE TABLE IF NOT EXISTS auth_group_links (
+      group_name TEXT NOT NULL REFERENCES auth_groups (name),
+      object TEXT NOT NULL,
+      linked_at TEXT NOT NULL,
+      PRIMARY KEY (group_name, object)
+    )`,
+  ],
 ];
 
 const migrated = new WeakMap<Database, Promise<void>>();
