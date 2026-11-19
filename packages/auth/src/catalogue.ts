@@ -42,7 +42,7 @@ function checked(declaration: PermissionDeclaration, plugin: string): Permission
  * Every permission the enabled plugins of `vaults` declare, once each. The same permission declared on two vaults must
  * be declared alike, since vaults that share accounts share grants.
  */
-export function collectPermissions(vaults: readonly ResolvedConfig[]): PermissionDeclaration[] {
+export function collectPermissions(vaults: readonly Pick<ResolvedConfig, "id" | "plugins">[]): PermissionDeclaration[] {
   const catalogue = new Map<string, { declaration: PermissionDeclaration; vault: string }>();
   for (const vault of vaults) {
     for (const plugin of vault.plugins as readonly SvartzPlugin[]) {

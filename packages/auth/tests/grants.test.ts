@@ -33,7 +33,7 @@ async function createDatabase(): Promise<Database> {
  * A vault at /notes with auth, as config resolution registers it with the site's catalogue, and a `probe` plugin that
  * answers `can(reader, ?permission, { vault: "notes", page: ?page })`.
  */
-function site(db: Database | undefined, { admins = [] as string[] } = {}) {
+function site(db: Database | undefined, { admins = [] as string[], built = [] as PermissionDeclaration[] } = {}) {
   const probe = (): ServerHandler => async (request, context) => {
     const url = new URL(request.url);
     const page = url.searchParams.get("page") ?? undefined;
@@ -49,6 +49,8 @@ function site(db: Database | undefined, { admins = [] as string[] } = {}) {
         eager: true,
         load: () => import("../src/server"),
         options: { providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } }, admins, permissions: PERMISSIONS },
+        // What the plugin's build hook collected from the build's final plugins.
+        data: { permissions: built },
       },
       { id: "probe", load: async () => ({ default: probe }) },
     ],
@@ -165,6 +167,13 @@ describe("can", () => {
     const request = site(undefined);
 
     expect(await ask(request, "guestbook:entries:read")).toBe(false);
+  });
+
+  it("checks a permission only the build's final plugins declared, such as a theme preset's", async () => {
+    const stickers: PermissionDeclaration = { slug: "stickers:packs:read", name: "See sticker packs", description: "Browse packs.", defaults: { guest: "allow" } };
+    const request = site(await createDatabase(), { built: [stickers] });
+
+    expect(await ask(request, "stickers:packs:read")).toBe(true);
   });
 
   it("fails the request for a permission no plugin declared", async () => {

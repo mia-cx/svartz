@@ -257,7 +257,7 @@ export const guestbook = definePlugin(() => ({
 }));
 ```
 
-Auth collects every enabled plugin's declarations when the build resolves its config, and fails the build naming the plugin when a slug is malformed or outside the plugin's namespace, a name or description is missing, or a default isn't `"allow"` or `"deny"`. Host vaults share accounts, so they share one catalogue: a permission two host vaults declare must be declared alike.
+Auth collects every enabled plugin's declarations at build time, a theme preset's plugins included, and fails the build naming the plugin when a slug is malformed or outside the plugin's namespace, a name or description is missing, or a default isn't `"allow"` or `"deny"`. Host vaults share accounts, so they share one catalogue: a permission two host vaults declare must be declared alike.
 
 `defaults` grants the permission on the whole site to the built-in actors, until a stored grant to the same actor on the site replaces it:
 

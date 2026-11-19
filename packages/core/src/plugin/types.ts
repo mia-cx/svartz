@@ -43,6 +43,11 @@ type PluginChangeHookInput =
 
 interface PluginContext {
   readonly config: ResolvedConfig;
+  /**
+   * Every plugin this build runs for the vault: core's, the theme preset's and the config's, merged. `config.plugins`
+   * holds only the config's.
+   */
+  readonly plugins?: readonly NormalizedSvartzPlugin[];
   files: ProcessedFile[];
   artifacts: ArtifactBag;
   index?: Index;

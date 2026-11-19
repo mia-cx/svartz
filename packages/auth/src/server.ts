@@ -60,8 +60,14 @@ export interface AuthOptions {
 export interface AuthServerOptions extends AuthOptions {
   /** The callback vault's mount path; absent when this vault runs its own sign-ins. */
   readonly callbackMountPath?: string;
-  /** Every permission the site's plugins declare, collected at build time. */
+  /** Every permission the config's plugins declare, across the vaults that share accounts, collected at config resolution. */
   readonly permissions?: readonly PermissionDeclaration[];
+}
+
+/** What the plugin's build hook records for the server module. */
+export interface AuthServerData {
+  /** Every permission the vault's final plugins declare, a theme preset's included, collected as the build runs. */
+  readonly permissions: readonly PermissionDeclaration[];
 }
 
 const FLOW_COOKIE = "__Host-svartz-oauth";
@@ -234,11 +240,11 @@ async function signOut(request: Request, url: URL, context: ServerContext): Prom
 const ROUTE = /^\/(?:(start|callback)\/([^/]+)|(me)|(sign-out)|(handle))\/$/;
 
 /** The `auth` server module: `server: { module, options }` with {@link AuthOptions}. */
-const authServer: ServerModuleFactory<AuthServerOptions> = (options) => {
+const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefined> = (options, data) => {
   // The plugin is eager, so this runs before the site answers anything: every account read resolves `admin` from
   // this deployment's config, and every `can()` its permission catalogue.
   useAdmins(options.admins ?? []);
-  usePermissions(options.permissions ?? []);
+  usePermissions([...options.permissions ?? [], ...data?.permissions ?? []]);
 
   return async (request, context) => {
     const url = new URL(request.url);

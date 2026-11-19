@@ -7,7 +7,7 @@ import { definePlugin, getCompilerContributions, type PermissionDeclaration, typ
 import type { SignInConfig } from "./browser";
 import { collectPermissions } from "./catalogue";
 import { isProviderId, PROVIDERS, type ProviderId } from "./providers";
-import type { AuthOptions, AuthServerOptions } from "./server";
+import type { AuthOptions, AuthServerData, AuthServerOptions } from "./server";
 
 export type { Identity, ProviderId } from "./providers";
 export type { Account, SignIn, SignedOutReason } from "./session";
@@ -137,6 +137,10 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], call
         const compiler = getCompilerContributions(ctx);
         compiler.browserResources.set(AUTH_PLUGIN_ID, { id: AUTH_PLUGIN_ID, kind: "script", importId: BROWSER_MODULE, options: browser });
         compiler.browserResources.set(`${AUTH_PLUGIN_ID}-css`, { id: `${AUTH_PLUGIN_ID}-css`, kind: "css", importId: STYLESHEET });
+        // The build's final plugins, which config resolution couldn't see whole: a theme preset's plugins, and what
+        // other plugins' `forVault` returned. Checked like the catalogue, and added to it when the server starts.
+        const built: AuthServerData = { permissions: collectPermissions([{ id: ctx.config.id, plugins: ctx.plugins ?? ctx.config.plugins }]) };
+        compiler.serverData.set(AUTH_PLUGIN_ID, built);
       },
       options: { fatal: true },
     },

@@ -13,11 +13,14 @@ type Env = Readonly<Record<string, unknown>>;
  * The deployed site's permission catalogue, by slug. The `auth` plugin is eager, so its server module registers it
  * before the site answers any request; code that checks permissions outside a Svartz site's handle finds it empty.
  */
-let catalogue = new Map<string, PermissionDeclaration>();
+const catalogue = new Map<string, PermissionDeclaration>();
 
-/** Called by the `auth` server module as it starts, with the catalogue collected at build time. */
+/**
+ * Called by the `auth` server module as it starts, with the permissions collected at build time. It adds to the
+ * catalogue: in a host app each vault's `auth` starts on its own, and brings what only its vault's build knew.
+ */
 export function usePermissions(declarations: readonly PermissionDeclaration[]): void {
-  catalogue = new Map(declarations.map((declaration) => [declaration.slug, declaration]));
+  for (const declaration of declarations) catalogue.set(declaration.slug, declaration);
 }
 
 /** `permission`'s declaration; a permission nobody declared is a bug in the plugin checking it, so it throws. */

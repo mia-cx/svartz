@@ -1,10 +1,11 @@
 ---
 "@svartz/core": minor
+"@svartz/vite": minor
 "@svartz/auth": minor
 "@svartz/plugin-annotations": minor
 ---
 
-Plugins can declare permissions and check them with one call. A plugin lists what it checks under `permissions`, as `namespace:feature:action` slugs with a name, a description and optional defaults for the built-in actors `guest` (everyone) and `signed-in` (everyone with an account). Auth collects the declarations when the build resolves its config, and fails the build on a malformed one.
+Plugins can declare permissions and check them with one call. A plugin lists what it checks under `permissions`, as `namespace:feature:action` slugs with a name, a description and optional defaults for the built-in actors `guest` (everyone) and `signed-in` (everyone with an account). Auth collects the declarations at build time, a theme preset's plugins included, and fails the build on a malformed one. Build hooks can read every plugin the build runs as `ctx.plugins`.
 
 `can(account, permission, object, env)` from `@svartz/auth/server` answers whether an account, or a guest, holds a permission on the site, a vault or a page. Grants live in `SVARTZ_DB` and give an actor `allow`, `deny` or `unset` on an object: the most specific object with a grant that applies decides, then the most specific actor, and a deny beats an allow between equals. Admins are allowed everything, and every account everything on its own `users/<handle>` page. Without `SVARTZ_DB`, `can()` answers `false`.
 

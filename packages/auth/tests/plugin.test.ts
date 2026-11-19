@@ -7,7 +7,7 @@ const github = { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHU
 describe("the auth plugin", () => {
   it("serves its routes and gives the dialog the vault's providers, endpoint and privacy notice", async () => {
     const plugin = auth({ providers: { github }, privacyNotice: "/privacy/" });
-    const ctx = { config: { mountPath: "/notes", target: { type: "node", basePath: "/site/" } }, files: [], meta: new Map() } as unknown as PluginContext;
+    const ctx = { config: { mountPath: "/notes", target: { type: "node", basePath: "/site/" } }, plugins: [], files: [], meta: new Map() } as unknown as PluginContext;
 
     await plugin.emitArtifacts!.run(ctx);
 
@@ -49,7 +49,7 @@ describe("one sign-in per host app", () => {
     return plugin.forVault!({ vault, vaults }) as NormalizedSvartzPlugin;
   };
   const dialogEndpoint = async (plugin: NormalizedSvartzPlugin, mountPath: string) => {
-    const ctx = { config: { mountPath, target: { type: "host" } }, files: [], meta: new Map() } as unknown as PluginContext;
+    const ctx = { config: { mountPath, target: { type: "host" } }, plugins: [], files: [], meta: new Map() } as unknown as PluginContext;
     await plugin.emitArtifacts!.run(ctx);
     return (ctx.compiler?.browserResources.get("auth")?.options as { endpoint: string }).endpoint;
   };
@@ -143,6 +143,23 @@ describe("the permission catalogue", () => {
 
     expect(catalogueOf("notes", { id: "notes", type: "cloudflare-workers", plugins: [auth({ providers: { github } }), guestbook(comment, remove), off] }))
       .toEqual([comment, remove]);
+  });
+
+  it("also collects from the build's final plugins, so a theme preset's plugin can declare permissions", async () => {
+    const plugin = auth({ providers: { github } });
+    // What the build runs: the config's plugins plus one only the theme's preset brings.
+    const ctx = { config: { id: "notes", mountPath: "/notes", plugins: [plugin] }, plugins: [plugin, guestbook(comment)], files: [], meta: new Map() } as unknown as PluginContext;
+
+    await plugin.emitArtifacts!.run(ctx);
+
+    expect(ctx.compiler?.serverData.get("auth")).toEqual({ permissions: [comment] });
+  });
+
+  it("fails the build for a malformed declaration that only the build's final plugins carry", async () => {
+    const plugin = auth({ providers: { github } });
+    const ctx = { config: { id: "notes", mountPath: "/notes", plugins: [plugin] }, plugins: [plugin, guestbook({ ...comment, slug: "guestbook:entries:sign" })], files: [], meta: new Map() } as unknown as PluginContext;
+
+    expect(() => plugin.emitArtifacts!.run(ctx)).toThrow(/use "namespace:feature:action"/);
   });
 
   it("gives every host vault one catalogue, since they share accounts and grants", () => {
