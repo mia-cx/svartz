@@ -76,7 +76,7 @@ describe("/-/history/<page>", () => {
       // Everything git says is Ada's, but the site has no record of making it: shown as its git author.
       "19 Nov 2026, 10:45 UTC Ada Lovelace Fix typo",
       // The site recorded committing it: Ada's account, with the note she wrote as its summary.
-      "19 Nov 2026, 10:30 UTC Ada Lovelace @ada Added the time it takes.",
+      "19 Nov 2026, 10:30 UTC Ada Lovelace Reputation 0 @ada Added the time it takes.",
       // It also changed a note the site hides, so its summary stays out.
       "19 Nov 2026, 10:00 UTC Grace Hopper grace on GitHub",
     ]);
@@ -212,7 +212,7 @@ describe("/-/changes/", () => {
     expect(text(changes!.html)).toContain("19 November 2026");
     expect(rows(changes)).toEqual([
       "10:45 UTC Guide (changes, history) Ada Lovelace Fix typo",
-      "10:30 UTC Guide (changes, history) Ada Lovelace @ada Added the time it takes.",
+      "10:30 UTC Guide (changes, history) Ada Lovelace Reputation 0 @ada Added the time it takes.",
       "10:00 UTC Guide (changes, history) Grace Hopper grace on GitHub",
     ]);
     expect(changes!.html).toContain(`href="${HISTORY}?to=${saved.sha}">changes`);
@@ -357,13 +357,13 @@ describe("who made a change", () => {
 
     expect(rows(history)).toEqual([
       "19 Nov 2026, 10:45 UTC Ada Lovelace Fix typo",
-      `19 Nov 2026, 10:30 UTC Ada Lovelace @ada ${NOTE}`,
+      `19 Nov 2026, 10:30 UTC Ada Lovelace Reputation 0 @ada ${NOTE}`,
     ]);
     expect(rows(changes)).toEqual([
       "10:45 UTC Guide (changes, history) Ada Lovelace Fix typo",
-      `10:30 UTC Guide (changes, history) Ada Lovelace @ada ${NOTE}`,
+      `10:30 UTC Guide (changes, history) Ada Lovelace Reputation 0 @ada ${NOTE}`,
     ]);
-    expect(text(diff!.html)).toContain(`From 19 Nov 2026, 10:30 UTC Ada Lovelace @ada ${NOTE} To 19 Nov 2026, 10:45 UTC Ada Lovelace Fix typo`);
+    expect(text(diff!.html)).toContain(`From 19 Nov 2026, 10:30 UTC Ada Lovelace Reputation 0 @ada ${NOTE} To 19 Nov 2026, 10:45 UTC Ada Lovelace Fix typo`);
   });
 
   // Proves a submission merged on GitHub is credited to the account that sent it from the site, by its merge commit,
@@ -393,7 +393,7 @@ describe("who made a change", () => {
     replayGitHub([firstToken, historyExchange(GUIDE_PATH, [merge, inside]), ...backfill([merge, inside])], INSTALLATION_TOKEN);
 
     expect(rows(await site.page(HISTORY))).toEqual([
-      "19 Nov 2026, 10:40 UTC Grace Hopper @grace Merge pull request #42 from wikiplace/svartz/submission/edit/wiki-guide",
+      "19 Nov 2026, 10:40 UTC Grace Hopper Reputation 0 @grace Merge pull request #42 from wikiplace/svartz/submission/edit/wiki-guide",
       `19 Nov 2026, 10:00 UTC Grace Hopper grace on GitHub Edit ${GUIDE_PATH}`,
     ]);
   });

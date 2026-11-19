@@ -816,6 +816,10 @@ describe("reputation for +1s", () => {
     // Grace has no account here, so her comment earns nobody anything.
     await agree(alan, "c2", true);
     expect((await db.prepare("SELECT COUNT(*) AS n FROM auth_reputation WHERE ref LIKE 'annotations:notes:c2:%'").all()).results).toEqual([{ n: 0 }]);
+
+    // The page's list carries each comment author's reputation, to anyone: Ada's account's, and none for Grace.
+    const listed = await (await site(`${ENDPOINT}/?page=garden`)).json() as { annotations: { id: string; reputation?: number }[] };
+    expect(listed.annotations.map(({ id, reputation }) => ({ id, reputation }))).toEqual([{ id: "c1", reputation: 0.5 }, { id: "c2", reputation: undefined }]);
   });
 
   describe("when a reader's +1 races their own changes to it", () => {

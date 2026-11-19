@@ -72,6 +72,8 @@ describe("suspending from a report", () => {
     expect((await comment(site, grace)).status).toBe(201);
 
     const queue = await html(site, REPORTS, alan);
+    // The reported account shows with its reputation, as everywhere the site names it.
+    expect(queue!.replace(/<[^>]+>/g, "")).toMatch(/@grace Reputation \d+ Grace Hopper/);
     const link = new RegExp(`href="(${SUSPENSIONS.replaceAll("/", "\\/")}[^"]+)"[^>]*>Suspend @grace<`).exec(queue!)![1]!.replaceAll("&#38;", "&");
     expect(new URL(link, ORIGIN).searchParams.get("returnTo")).toBe(`${REPORTS}#report-${id}`);
     const page = await html(site, link, alan);

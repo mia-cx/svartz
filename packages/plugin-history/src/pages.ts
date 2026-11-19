@@ -2,16 +2,17 @@
  * The history plugin's pages, as the HTML the theme's shell puts in its body. Everything a commit carries (names,
  * summaries, file content) arrives escaped or sanitized; links are built from the build's own routes.
  */
+import { reputationBadgeHtml } from "@svartz/auth/badge";
 import type { PluginPage } from "@svartz/core";
 import type { Hunk } from "./diff";
 import { escape } from "./html";
 
 /**
- * Who made a change: an account the site vouches for, linked to its user page or else its contributions, or a git
- * author with their GitHub login when GitHub knows it.
+ * Who made a change: an account the site vouches for, linked to its user page or else its contributions, with its
+ * reputation, or a git author with their GitHub login when GitHub knows it.
  */
 export type Author =
-  | { readonly kind: "account"; readonly name: string; readonly handle: string; readonly href: string }
+  | { readonly kind: "account"; readonly name: string; readonly handle: string; readonly href: string; readonly reputation: number }
   | { readonly kind: "github"; readonly name: string; readonly login: string | null };
 
 /** One change as a page lists it. */
@@ -33,7 +34,7 @@ const plainWhen = (iso: string) => `${dateTime.format(new Date(iso))} UTC`;
 
 function author(who: Author): string {
   if (who.kind === "account") {
-    return `<span class="sv-history-who"><a class="sv-history-name" href="${escape(who.href)}">${escape(who.name)}</a> <span class="sv-history-muted">@${escape(who.handle)}</span></span>`;
+    return `<span class="sv-history-who"><a class="sv-history-name" href="${escape(who.href)}">${escape(who.name)}</a> ${reputationBadgeHtml(who.reputation)} <span class="sv-history-muted">@${escape(who.handle)}</span></span>`;
   }
   if (!who.login) return `<span class="sv-history-who"><span class="sv-history-name">${escape(who.name)}</span></span>`;
   return `<span class="sv-history-who"><span class="sv-history-name">${escape(who.name)}</span> <a class="sv-history-muted" href="https://github.com/${encodeURIComponent(who.login)}" rel="external noopener">${escape(who.login)} on GitHub</a></span>`;
@@ -354,14 +355,13 @@ ${pageList(view.pages)}
 }
 
 /**
- * The section a user page shows below its note: the account's reputation, its latest changes and the pages they
- * changed, as many as the caller passes, and a link to `all`, its contributions page.
+ * The section a user page shows below its note: the account's latest changes and the pages they changed, as many as
+ * the caller passes, and a link to `all`, its contributions page. Its reputation is already beside the page's actions.
  */
-export function contributionsSection(view: Contributions & { readonly all: string }): string {
+export function contributionsSection(view: Omit<Contributions, "reputation"> & { readonly all: string }): string {
   const rows = view.changes.map((change) => wikiChangeRow(change, when(change.at), false));
   return `<section class="sv-history sv-history-contributions" aria-labelledby="sv-history-contributions">
 <h2 id="sv-history-contributions">Contributions</h2>
-${reputation(view.reputation)}
 ${rows.length > 0 ? `<h3>Latest edits</h3>
 <ol class="sv-history-list">${rows.join("")}</ol>` : "<p>No edits yet.</p>"}
 ${view.pages.length > 0 ? `<h3>Pages edited</h3>

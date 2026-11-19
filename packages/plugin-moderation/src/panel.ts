@@ -16,6 +16,7 @@ import {
   ACCOUNTS_DATABASE_ENV, can, canEach, findProfiles, findProfilesByHandle, findProfilesByIdentity, readAccount, userPageLocation,
   type Account, type PublicProfile,
 } from "@svartz/auth/server";
+import { reputationBadgeHtml } from "@svartz/auth/badge";
 import type { DashboardPanel, PageContext, PluginPage } from "@svartz/core";
 import { findComments, type ReportedComment } from "@svartz/plugin-annotations/server";
 import { changedFiles, savedEdits, type SavedEdits } from "@svartz/plugin-submissions/server";
@@ -143,8 +144,8 @@ async function lookUp(context: PageContext, data: BuildData, viewer: Account | n
   const editAccounts = unique([...edits.commits.values(), ...edits.pulls.values()].flatMap((account) => account ?? []));
   const [hiding, authors, editors, reverting] = await Promise.all([
     hideable.length === 0 ? [] : settle("who may hide", canEach(viewer, HIDE_COMMENTS, hideable.map(({ page }) => ({ vault, page })), env), []),
-    // Comments name their author by sign-in; the account it's linked to is the one to suspend.
-    suspends ? settle("comments' authors", findProfilesByIdentity(unique(openComments.map(({ author }) => author.id)), env), NO_PROFILES) : NO_PROFILES,
+    // Comments name their author by sign-in; the account it's linked to carries the reputation, and is the one to suspend.
+    openComments.length === 0 ? NO_PROFILES : settle("comments' authors", findProfilesByIdentity(unique(openComments.map(({ author }) => author.id)), env), NO_PROFILES),
     suspends ? settle("edits' accounts", findProfiles(editAccounts, env), NO_PROFILES) : NO_PROFILES,
     revertible.length === 0 ? [] : settle("who may revert", canEach(viewer, REVERT_PAGES, revertible.map((page) => ({ vault, page })), env), []),
   ]);
@@ -187,17 +188,19 @@ function describer(context: PageContext, data: BuildData, known: Known) {
         const userPage = userPages.vault === vault ? publishedPage(data, `${userPages.folder}/${profile.handle}`) : undefined;
         const handle = userPage ? `<a href="${escape(`${site}${userPage.href}`)}">@${escape(profile.handle)}</a>` : `@${escape(profile.handle)}`;
         const actions = open ? suspendLink(profile, report.id, describedBy) : [];
-        return { what: `${handle} <span class="sv-account-muted">${escape(profile.name)}</span>`, actions };
+        return { what: `${handle} ${reputationBadgeHtml(profile.reputation)} <span class="sv-account-muted">${escape(profile.name)}</span>`, actions };
       }
       case "annotation": {
         if (!known.comments) return UNDESCRIBED;
         const comment = known.comments.get(id);
         if (!comment) return { what: data.annotations === undefined ? "A comment" : "A comment that has since been deleted", actions: [] };
-        const what = `${escape(comment.author.name)} on ${pageLink(comment.page)}${comment.hidden ? ' <span class="sv-account-tag">Hidden</span>' : ""}`;
+        const account = known.authors.get(comment.author.id);
+        const badge = account ? ` ${reputationBadgeHtml(account.reputation)}` : "";
+        const what = `${escape(comment.author.name)}${badge} on ${pageLink(comment.page)}${comment.hidden ? ' <span class="sv-account-tag">Hidden</span>' : ""}`;
         const actions = open && known.hides.has(id)
           ? [button(`${root}/_svartz/annotations/${encodeURIComponent(id)}/hide/`, { returnTo: back("hidden") }, "Hide comment", describedBy)]
           : [];
-        if (open) actions.push(...suspendLink(known.authors.get(comment.author.id), report.id, describedBy));
+        if (open) actions.push(...suspendLink(account, report.id, describedBy));
         // A page that's since gone unpublished or protected takes its comments out of sight, here too.
         return { what, ...publishedPage(data, comment.page) && { quote: comment.body }, actions };
       }

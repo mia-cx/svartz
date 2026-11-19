@@ -17,7 +17,7 @@
  */
 import type { Identity } from "@svartz/auth";
 import type { BrowserScriptContext } from "@svartz/core";
-import { openSignIn } from "@svartz/auth/browser";
+import { openSignIn, reputationBadge } from "@svartz/auth/browser";
 import { describe, locate, rangeOf, type Anchor, type Position } from "./anchor";
 import { COMMENT_MAX_LENGTH } from "./limits";
 import type { Agreement, Annotation } from "./store";
@@ -196,7 +196,9 @@ function agreedBy(people: readonly Identity[], viewer: string | undefined): stri
 function byline(comment: Comment): HTMLElement {
   const time = create("time", "sv-annotations-time", new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(comment.createdAt)));
   time.dateTime = comment.createdAt;
-  return create("div", "sv-annotations-byline", avatar(comment.author), author(comment.author), time);
+  const who = author(comment.author);
+  if (comment.reputation !== undefined) who.firstElementChild!.after(" ", reputationBadge(comment.reputation));
+  return create("div", "sv-annotations-byline", avatar(comment.author), who, time);
 }
 
 function card(comment: Comment, id: string, ...footer: HTMLElement[]): HTMLElement {

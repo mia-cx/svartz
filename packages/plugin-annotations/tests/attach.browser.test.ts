@@ -98,6 +98,31 @@ describe("a page with comments, read signed out", () => {
     expect(root.innerHTML).toBe(before);
   });
 
+  // Proves a comment's card shows its author's reputation beside their name when the list carries it, as it does for
+  // a sign-in linked to a site account, and nothing for one without.
+  it("shows the author's reputation beside their name when their sign-in has an account", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      const response = await realFetch(input, init);
+      if (init?.method) return response;
+      const answer = await response.json() as { annotations: Array<{ author: { name: string } }> };
+      return Response.json({
+        ...answer,
+        annotations: answer.annotations.map((annotation) => (annotation.author.name === "Ada Lovelace" ? { ...annotation, reputation: 1_234 } : annotation)),
+      });
+    };
+    try {
+      const [dewPoint, pressure] = await attached();
+      const cardOf = (marker: HTMLButtonElement) => document.getElementById(marker.getAttribute("popovertarget")!)!;
+
+      expect(cardOf(dewPoint!).querySelector(".sv-annotations-who")!.textContent).toContain("Ada Lovelace Reputation 1,234");
+      expect(cardOf(dewPoint!).querySelector(".sv-reputation-badge")!.getAttribute("title")).toBe("Reputation 1,234");
+      expect(cardOf(pressure!).querySelector(".sv-reputation-badge")).toBeNull();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   it("opens each comment from the keyboard, with its author and its text, and returns focus on Escape", async () => {
     const [dewPoint, pressure] = await attached();
     expect(dewPoint!.getAttribute("aria-label")).toBe(`Comment by Ada Lovelace on “${DEW_POINT}”`);
