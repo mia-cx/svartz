@@ -22,6 +22,7 @@ import {
   deploymentSignals,
   isDatabase,
   markLive,
+  markSucceeded,
   migrate,
   readAncestry,
   readBranch,
@@ -128,8 +129,11 @@ const EVENTS: Readonly<Record<string, Event>> = {
     const run = workflowRun(payload.workflow_run);
     return run?.headBranch === branch ? [writeRun(mirror, run)] : [];
   },
-  deployment_status: (payload, mirror) =>
-    writes(deployment(payload.deployment, payload.deployment_status), (record) => writeDeployment(mirror, record)),
+  deployment_status: (payload, mirror) => {
+    const record = deployment(payload.deployment, payload.deployment_status);
+    if (!record) return [];
+    return [writeDeployment(mirror, record), ...(record.status?.state === "success" ? [markSucceeded(mirror, record.id)] : [])];
+  },
 };
 
 /** Sync's routes and the hook that records each save. */

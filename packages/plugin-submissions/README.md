@@ -224,7 +224,7 @@ Each vault's rows are its own, keyed by the repository and the vault's folder in
 
 - **Commits** on the content branch that change a file in the vault's folder, with those files. A commit's `Svartz-Account` trailer is kept as a claim: anyone writing a commit can add one, so it names the account only on commits the App committed.
 - **Pull requests** into the content branch, with whether they change a file in the vault's folder, their **reviews**, and the **comments** on their conversation and their diff. A deleted comment stays as an empty tombstone.
-- **Workflow runs** on the content branch, and **deployments** with their latest status.
+- **Workflow runs** on the content branch, and **deployments** with their latest status and whether any status said it succeeded.
 - Every save the site made, with who made it.
 
 Deliveries arrive at least once and in any order, so storing one is idempotent and never moves a record backwards: a pull request keeps its latest update, a run its latest attempt and step, a deployment its latest status, and a comment stays deleted.
@@ -252,7 +252,7 @@ After a save, the editor's line follows the edit while the panel is open:
 
 The browser remembers the last edit saved from each page, and the last new page, for 30 days. When the reader opens the editor there again, its progress shows above everything else, such as "The site is rebuilding with your last edit.", with a link to the commit or pull request, until they have seen it live or closed.
 
-An edit is live once a run of the workflow (or a deployment to the environment) succeeded at a commit that holds the edit's commit, or its pull request's merge commit. The site never guesses that from times: a run at the edit's own commit holds it, and for any other the server asks GitHub's compare API once and remembers the answer. A run that is cancelled or skipped says nothing; otherwise the newest run that holds the edit decides building or failed, and a re-run that succeeds makes it live.
+An edit is live once a run of the workflow (or a deployment to the environment) succeeded at a commit that holds the edit's commit, or its pull request's merge commit. The site never guesses that from times: a run at the edit's own commit holds it, and for any other the server asks GitHub's compare API once and remembers the answer. A deployment counts once any of its statuses said `success`, so one later made `inactive` by a newer deployment still counts; one made `inactive` without succeeding doesn't. A run that is cancelled or skipped says nothing; otherwise the newest run that holds the edit decides building or failed, and a re-run that succeeds makes it live.
 
 Only the reader who saved an edit can ask about it: the account, or without accounts the sign-in, that saved it. A guest's edit is known by its random submission id, which only their browser holds.
 

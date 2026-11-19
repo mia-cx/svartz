@@ -14,6 +14,7 @@
  */
 import { requestGitHub } from "./github";
 import {
+  markSucceeded,
   writeBranch,
   writeComment,
   writeCommit,
@@ -37,6 +38,7 @@ import {
   review,
   text,
   workflowRun,
+  type DeploymentStatus,
 } from "./records";
 
 /** A poll runs at most this often per scope. */
@@ -201,17 +203,24 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
     return (await mirror.db.prepare(sql).bind(mirror.scope, FILL_BATCH).all<Row>()).results;
   }
 
-  /** The latest status of deployments still under way, or never seen with one. */
+  /**
+   * The statuses of deployments still under way, or never seen with one: the latest, and whether any said `success`,
+   * since a later `inactive` hides it. GitHub doesn't document their order, so the latest is the highest id.
+   */
   async function fillDeploymentStatuses() {
     const pending = await rows<{ id: number }>(`SELECT id FROM submissions_deployments
       WHERE scope = ? AND (state IS NULL OR state IN ('queued', 'pending', 'in_progress')) ORDER BY created_at DESC LIMIT ?`);
     for (const { id } of pending) {
-      const answer = await get(`/deployments/${id}/statuses${query({ per_page: 1 })}`);
-      const status = deploymentStatus(list(answer?.body)[0]);
+      const answer = await get(`/deployments/${id}/statuses${query({ per_page: PAGE_SIZE })}`);
+      const statuses = list(answer?.body).flatMap((value) => deploymentStatus(value) ?? []);
+      const status = statuses.reduce<DeploymentStatus | undefined>((latest, next) => (latest && latest.id > next.id ? latest : next), undefined);
       if (!status) continue;
-      await mirror.db.prepare(`UPDATE submissions_deployments SET status_id = ?, state = ?, status_url = ?, status_at = ?
-        WHERE scope = ? AND id = ? AND COALESCE(status_id, 0) < ?`)
-        .bind(status.id, status.state, status.url, status.createdAt, mirror.scope, id, status.id).run();
+      await mirror.db.batch([
+        mirror.db.prepare(`UPDATE submissions_deployments SET status_id = ?, state = ?, status_url = ?, status_at = ?
+          WHERE scope = ? AND id = ? AND COALESCE(status_id, 0) < ?`)
+          .bind(status.id, status.state, status.url, status.createdAt, mirror.scope, id, status.id),
+        ...(statuses.some(({ state }) => state === "success") ? [markSucceeded(mirror, id)] : []),
+      ]);
     }
   }
 

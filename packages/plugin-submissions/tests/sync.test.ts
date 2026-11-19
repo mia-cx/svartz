@@ -528,6 +528,19 @@ describe("an edit's status", () => {
     expect((await status(site, ada)).body).toMatchObject({ stage: "committed" });
   });
 
+  it.each([
+    ["failed, then was deactivated", [{ statusId: 70, state: "failure" }, { statusId: 71, state: "inactive" }], "committed"],
+    ["succeeded, then was deactivated, delivered out of order", [{ statusId: 71, state: "inactive" }, { statusId: 70, state: "success" }], "live"],
+  ])("reads a deployment that %s by whether it ever succeeded", async (_case, statuses, stage) => {
+    const site = await createSite({ live: { environment: "production" } });
+    const ada = await adaCommits(site);
+    quietGitHub();
+
+    for (const delivered of statuses) await deliver(site, "deployment_status", deploymentStatus(delivered));
+
+    expect((await status(site, ada)).body).toMatchObject({ stage });
+  });
+
   it("says a pull request closed without merging is closed", async () => {
     const site = await createSite();
     const grace = await graceOpensPullRequest(site);
@@ -586,7 +599,8 @@ describe("the reconcile poll", () => {
     const replay = replayGitHub([
       { request: { method: "GET", url: API }, response: { status: 200, json: { full_name: REPO, default_branch: "main" } } },
       ...lists.map((url, index): Exchange => ({ request: { method: "GET", url }, response: { status: 200, json: answers[index], headers: { etag: etag(index) } } })),
-      { request: { method: "GET", url: `${API}/deployments/7/statuses?per_page=1` }, response: { status: 200, json: [deploymentStatus().deployment_status] } },
+      // Live, and since replaced by a later deployment.
+      { request: { method: "GET", url: `${API}/deployments/7/statuses?per_page=100` }, response: { status: 200, json: [{ ...deploymentStatus().deployment_status, id: 71, state: "inactive" }, deploymentStatus().deployment_status] } },
       { request: { method: "GET", url: `${API}/pulls/42/files?per_page=100&page=1` }, response: { status: 200, json: [{ filename: "content/guide.md", status: "modified" }] } },
       { request: { method: "GET", url: `${API}/pulls/42/reviews?per_page=100` }, response: { status: 200, json: [{ ...reviewDelivery("submitted", "APPROVED").review }] } },
       { request: { method: "GET", url: `${API}/commits/${DIRECT_COMMIT}` }, response: { status: 200, json: { sha: DIRECT_COMMIT, files: [{ filename: "content/guide.md" }, { filename: "README.md" }] } } },

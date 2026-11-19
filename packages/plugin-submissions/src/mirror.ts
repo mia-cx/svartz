@@ -11,7 +11,7 @@
  * - `submissions_reviews` and `submissions_comments`: what was said on those pull requests, `comments.kind` being
  *   `issue` (the conversation) or `review` (a diff line). Deleted comments stay as tombstones with an empty body.
  * - `submissions_runs`: workflow runs on the content branch, and `submissions_deployments`: deployments with their
- *   latest status.
+ *   latest status, and `succeeded` once any status said `success`, since a later `inactive` doesn't say.
  * - `submissions_edits`: every save the site made, keyed by its submission id, with who made it.
  *
  * Deliveries arrive at least once and in any order, so every write is idempotent and never moves a record backwards:
@@ -148,6 +148,7 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       state TEXT,
       status_url TEXT,
       status_at TEXT,
+      succeeded INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (scope, id)
     )`,
     `CREATE INDEX IF NOT EXISTS submissions_deployments_by_environment ON submissions_deployments (scope, environment, created_at)`,
@@ -286,7 +287,7 @@ export function writeRun({ db, scope }: Mirror, run: RunRecord): Statement {
     );
 }
 
-/** A deployment, and its status unless the mirror holds a later one. */
+/** A deployment, and its status unless the mirror holds a later one. A `success` status also needs {@link markSucceeded}. */
 export function writeDeployment({ db, scope }: Mirror, deployment: DeploymentRecord): Statement {
   const status: Partial<DeploymentStatus> = deployment.status ?? {};
   return db.prepare(`INSERT INTO submissions_deployments (scope, id, sha, ref, environment, created_at, status_id, state, status_url, status_at)
@@ -298,6 +299,11 @@ export function writeDeployment({ db, scope }: Mirror, deployment: DeploymentRec
       scope, deployment.id, deployment.sha, deployment.ref, deployment.environment, deployment.createdAt,
       status.id ?? null, status.state ?? null, status.url ?? null, status.createdAt ?? null,
     );
+}
+
+/** Record that a status of deployment `id` said `success`: it was live, whatever status came before or after. */
+export function markSucceeded({ db, scope }: Mirror, id: number): Statement {
+  return db.prepare("UPDATE submissions_deployments SET succeeded = 1 WHERE scope = ? AND id = ?").bind(scope, id);
 }
 
 /** Remember the content branch's name, which GitHub's deliveries carry, when config leaves it to the default branch. */
@@ -378,8 +384,6 @@ export interface Signal {
 
 const RUN_SUCCESS = new Set(["success"]);
 const RUN_FAILURE = new Set(["failure", "timed_out", "startup_failure"]);
-/** `inactive` marks a deployment a later one replaced: it was live. */
-const DEPLOYMENT_SUCCESS = new Set(["success", "inactive"]);
 const DEPLOYMENT_FAILURE = new Set(["failure", "error"]);
 /** How many live signals since an edit landed are weighed; the most recent count. */
 const MAX_SIGNALS = 20;
@@ -401,16 +405,18 @@ export async function workflowSignals({ db, scope }: Mirror, workflow: string, b
   });
 }
 
-/** The deployments to `environment` made since `since`, newest first. */
+/**
+ * The deployments to `environment` made since `since`, newest first. One that ever succeeded is a success. One made
+ * `inactive` without succeeding says nothing: GitHub lets a failed or unfinished deployment be deactivated too.
+ */
 export async function deploymentSignals({ db, scope }: Mirror, environment: string, since: string): Promise<Signal[]> {
-  const { results } = await db.prepare(`SELECT sha, state, created_at FROM submissions_deployments
+  const { results } = await db.prepare(`SELECT sha, state, succeeded, created_at FROM submissions_deployments
     WHERE scope = ? AND environment = ? AND created_at >= ? ORDER BY created_at DESC LIMIT ?`)
-    .bind(scope, environment, since, MAX_SIGNALS).all<{ sha: string; state: string | null; created_at: string }>();
-  return results.map(({ sha, state, created_at }) => ({
-    sha,
-    outcome: DEPLOYMENT_SUCCESS.has(state ?? "") ? "success" : DEPLOYMENT_FAILURE.has(state ?? "") ? "failure" : "pending",
-    createdAt: created_at,
-  }));
+    .bind(scope, environment, since, MAX_SIGNALS).all<{ sha: string; state: string | null; succeeded: number; created_at: string }>();
+  return results.flatMap(({ sha, state, succeeded, created_at }): Signal[] => {
+    const outcome = succeeded ? "success" : DEPLOYMENT_FAILURE.has(state ?? "") ? "failure" : state === "inactive" ? undefined : "pending";
+    return outcome ? [{ sha, outcome, createdAt: created_at }] : [];
+  });
 }
 
 /** What GitHub said about whether each of `descendants` contains `ancestor`; pairs never asked are absent. */
