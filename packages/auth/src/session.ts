@@ -25,7 +25,10 @@ export interface Account {
   readonly avatarUrl?: string;
   /** ISO 8601. */
   readonly createdAt: string;
-  /** Roles the account holds. `admin` for every account linked to an identity in the `auth` plugin's `admins`. */
+  /**
+   * Roles the account holds: `admin` first for every account linked to an identity in the `auth` plugin's `admins`,
+   * then the roles stored for it, by name.
+   */
   readonly roles: readonly string[];
   /** The provider account this session signed in with. */
   readonly identity: Identity;
@@ -57,6 +60,15 @@ let configuredAdmins: readonly string[] = [];
 /** Called by the `auth` server module as it starts: `admins` alone decides who is an admin. */
 export function useAdmins(admins: readonly string[]): void {
   configuredAdmins = admins;
+}
+
+/**
+ * The roles of an account with these linked identities and stored roles: `admin` first when config names any of its
+ * identities, then the stored ones. A stored role named `admin` never counts; the schema refuses one anyway.
+ */
+export function heldRoles(linkedIdentities: readonly string[], stored: readonly string[]): string[] {
+  const admin = linkedIdentities.some((id) => configuredAdmins.includes(id));
+  return [...admin ? [ADMIN_ROLE] : [], ...stored.filter((role) => role !== ADMIN_ROLE)];
 }
 
 export function readCookie(request: Request, name: string): string | undefined {
@@ -121,7 +133,7 @@ async function read(request: Request, env: Env): Promise<Reader> {
   if (!session) return SIGNED_OUT;
   const account: Account = {
     ...session.account,
-    roles: session.linkedIdentities.some((id) => configuredAdmins.includes(id)) ? [ADMIN_ROLE] : [],
+    roles: heldRoles(session.linkedIdentities, session.roles),
     identity: session.identity,
   };
   return { signIn: { account }, identity: account.identity, sid };

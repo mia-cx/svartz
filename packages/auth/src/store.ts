@@ -117,6 +117,36 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       signed_out_at TEXT NOT NULL
     )`,
   ],
+  [
+    // Roles stored by name: actors that hold grants (`actor_type = 'role'`), held by accounts. `admin` comes from
+    // config alone, so no row may name it.
+    `CREATE TABLE IF NOT EXISTS auth_roles (
+      name TEXT PRIMARY KEY CHECK (name <> 'admin'),
+      created_at TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS auth_role_members (
+      role TEXT NOT NULL REFERENCES auth_roles (name),
+      account_id TEXT NOT NULL REFERENCES auth_accounts (id),
+      added_at TEXT NOT NULL,
+      PRIMARY KEY (role, account_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS auth_role_members_by_account ON auth_role_members (account_id)`,
+    // Who did what, when: every grant, role and moderation change, written with the change it records. The triggers
+    // keep it append-only.
+    `CREATE TABLE IF NOT EXISTS auth_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      at TEXT NOT NULL,
+      actor_id TEXT NOT NULL,
+      actor_handle TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target TEXT NOT NULL,
+      detail TEXT NOT NULL
+    )`,
+    `CREATE TRIGGER IF NOT EXISTS auth_audit_no_update BEFORE UPDATE ON auth_audit
+      BEGIN SELECT RAISE(ABORT, 'auth_audit is append-only'); END`,
+    `CREATE TRIGGER IF NOT EXISTS auth_audit_no_delete BEFORE DELETE ON auth_audit
+      BEGIN SELECT RAISE(ABORT, 'auth_audit is append-only'); END`,
+  ],
 ];
 
 const migrated = new WeakMap<Database, Promise<void>>();
@@ -174,11 +204,12 @@ export interface AccountRecord {
   readonly createdAt: string;
 }
 
-/** A live session: its account, the sign-in it used and every identity linked to the account. */
+/** A live session: its account, the sign-in it used, every identity linked to the account and its stored roles. */
 export interface SessionRecord {
   readonly account: AccountRecord;
   readonly identity: Identity;
   readonly linkedIdentities: readonly string[];
+  readonly roles: readonly string[];
 }
 
 interface SessionRow {
@@ -214,7 +245,7 @@ export async function digest(text: string): Promise<string> {
  * link elsewhere in between can leave a session whose sign-in is now another account's; it never reads.
  */
 export async function readSession(db: Database, id: string): Promise<SessionRecord | undefined> {
-  const [sessions, identities] = await db.batch([
+  const [sessions, identities, roles] = await db.batch([
     db.prepare(`SELECT a.id AS account_id, a.handle AS account_handle, a.name AS account_name,
         a.avatar_url AS account_avatar_url, a.created_at AS account_created_at,
         i.id AS identity_id, i.provider, i.name, i.handle, i.avatar_url, i.profile_url
@@ -222,6 +253,8 @@ export async function readSession(db: Database, id: string): Promise<SessionReco
         JOIN auth_identities i ON i.id = s.identity_id AND i.account_id = s.account_id
       WHERE s.id = ? AND s.expires_at > ?`).bind(id, Date.now()),
     db.prepare(`SELECT i.id FROM auth_sessions s JOIN auth_identities i ON i.account_id = s.account_id WHERE s.id = ?`).bind(id),
+    db.prepare(`SELECT m.role FROM auth_sessions s JOIN auth_role_members m ON m.account_id = s.account_id
+      WHERE s.id = ? ORDER BY m.role`).bind(id),
   ]);
   const row = sessions!.results[0] as SessionRow | undefined;
   if (!row) return undefined;
@@ -242,6 +275,7 @@ export async function readSession(db: Database, id: string): Promise<SessionReco
       ...row.profile_url !== null && { profileUrl: row.profile_url },
     },
     linkedIdentities: (identities!.results as { id: string }[]).map(({ id }) => id),
+    roles: (roles!.results as { role: string }[]).map(({ role }) => role),
   };
 }
 

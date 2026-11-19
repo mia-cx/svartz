@@ -15,6 +15,8 @@ export interface SignInProvider {
 export interface SignInConfig {
   /** The auth routes' path below the deployment base, such as `/notes/_svartz/auth`. */
   readonly endpoint: string;
+  /** This vault's mount path below the deployment base, where its account page and dashboard live. */
+  readonly mountPath: string;
   /** Enabled providers, in the order the dialog lists them. */
   readonly providers: readonly SignInProvider[];
   readonly privacyNotice?: string;
@@ -114,9 +116,61 @@ export function openSignIn(returnTo = `${location.pathname}${location.search}${l
   dialog.showModal();
 }
 
+/** Who the site's links name: the signed-in handle, and whether the dashboard has a panel for them. */
+type Viewer = { readonly handle: string; readonly dashboard: boolean } | null;
+
+/** Asked once per document: signing in or out loads a new one. */
+const viewers = new Map<string, Promise<Viewer>>();
+
+// Lucide "circle-user-round" and "layout-dashboard", as the theme's other actions draw their icons.
+const ACCOUNT_ICON: Mark = {
+  paths: ["M18 20a6 6 0 0 0-12 0", "M14 10a2 2 0 1 1-4 0 2 2 0 0 1 4 0", "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0"],
+  attributes: { fill: "none", stroke: "currentColor", "stroke-linecap": "round", "stroke-linejoin": "round" },
+};
+const DASHBOARD_ICON: Mark = {
+  paths: ["M3 4a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z", "M14 4a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1z", "M14 13a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1z", "M3 17a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"],
+  attributes: { fill: "none", stroke: "currentColor", "stroke-linecap": "round", "stroke-linejoin": "round" },
+};
+
 /**
- * Browser script entry: remember the vault's config and open the dialog from `data-svartz-sign-in` elements.
- * The build doesn't know a host app's `paths.base`, so the routes get the deployment base here, from `context`.
+ * Link a signed-in reader to their account page, and to the dashboard when it has a panel for them, in the site
+ * actions. Answers what removes them.
+ */
+function showViewerLinks(home: string): () => void {
+  const links: HTMLAnchorElement[] = [];
+  let gone = false;
+  const url = `${home}/_svartz/auth/viewer/`;
+  let viewer = viewers.get(url);
+  if (!viewer) {
+    viewer = fetch(url, { headers: { accept: "application/json" } })
+      .then((response) => response.ok ? response.json() as Promise<Viewer> : null);
+    viewers.set(url, viewer);
+    // A failed request is asked again on the next page.
+    viewer.catch(() => viewers.delete(url));
+  }
+  viewer.then((answer) => {
+    const region = document.querySelector('[data-svartz-region="site-actions"]');
+    if (gone || !answer || !region) return;
+    const link = (path: string, mark: Mark, label: string) => {
+      const anchor = element("a", "");
+      anchor.href = `${home}/-/${path}/`;
+      anchor.append(icon(mark), label);
+      links.push(anchor);
+      region.append(anchor);
+    };
+    link("account", ACCOUNT_ICON, "Account");
+    if (answer.dashboard) link("dashboard", DASHBOARD_ICON, "Dashboard");
+  }).catch((cause: unknown) => console.error("[svartz:auth] couldn't tell who is signed in", cause));
+  return () => {
+    gone = true;
+    for (const link of links) link.remove();
+  };
+}
+
+/**
+ * Browser script entry: remember the vault's config, open the dialog from `data-svartz-sign-in` elements, and link a
+ * signed-in reader to their account and the dashboard. The build doesn't know a host app's `paths.base`, so the routes
+ * get the deployment base here, from `context`.
  */
 export function mount(_pathname: string, options: SignInConfig, { base }: BrowserScriptContext = { base: "" }): () => void {
   config = { ...options, endpoint: `${base}${options.endpoint}` };
@@ -126,7 +180,9 @@ export function mount(_pathname: string, options: SignInConfig, { base }: Browse
     openSignIn();
   };
   document.addEventListener("click", onClick);
+  const hideViewerLinks = showViewerLinks(`${base}${options.mountPath}`);
   return () => {
+    hideViewerLinks();
     document.removeEventListener("click", onClick);
     // The dialog lives on <body>, outside the page, so client-side navigation alone would leave it open
     // over the next page with this page's returnTo. Removing it (rather than close()) skips the focus

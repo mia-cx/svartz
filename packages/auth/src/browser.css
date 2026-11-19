@@ -367,3 +367,135 @@
 	border-inline-start-color: light-dark(oklch(0.53 0.15 var(--sv-hue-red, 25)), oklch(0.76 0.12 var(--sv-hue-red, 25)));
 	color: light-dark(oklch(0.45 0.15 var(--sv-hue-red, 25)), oklch(0.8 0.1 var(--sv-hue-red, 25)));
 }
+
+/*
+ * `/-/dashboard/` and its panels. They are `.sv-account` too, so forms, lists and messages look as on the account page.
+ */
+.sv-dashboard {
+	max-inline-size: 46rem;
+}
+
+.sv-dashboard h3 {
+	margin: 0 0 var(--sv-space-2, 0.5rem);
+	color: var(--sv-ink, CanvasText);
+	font-size: var(--sv-step-0, 1rem);
+	font-weight: 700;
+	overflow-wrap: anywhere;
+}
+
+.sv-dashboard code {
+	font-family: var(--sv-font-mono, ui-monospace, monospace);
+	font-size: var(--sv-step--1, 0.875rem);
+	color: var(--sv-muted, GrayText);
+	overflow-wrap: anywhere;
+}
+
+.sv-dashboard-crumbs,
+.sv-dashboard-sections ul {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sv-space-1, 0.25rem) var(--sv-space-4, 1rem);
+	margin: 0 0 var(--sv-space-3, 0.75rem);
+	padding: 0;
+	font-family: var(--sv-font-sans, system-ui, sans-serif);
+	list-style: none;
+}
+
+.sv-dashboard-sections ul {
+	margin: calc(-1 * var(--sv-space-3, 0.75rem)) 0 0;
+}
+
+.sv-dashboard-crumbs a,
+.sv-dashboard-sections a {
+	display: inline-flex;
+	align-items: center;
+	min-block-size: 2rem;
+	color: var(--sv-accent-text, LinkText);
+	text-underline-offset: 0.2em;
+}
+
+.sv-dashboard-crumbs a:focus-visible {
+	outline: var(--sv-focus-width, 2px) solid var(--sv-accent, Highlight);
+	outline-offset: var(--sv-focus-offset, 2px);
+}
+
+.sv-dashboard-panels {
+	display: grid;
+	gap: var(--sv-space-2, 0.5rem);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.sv-dashboard-panels a {
+	display: flex;
+	align-items: center;
+	min-block-size: 3rem;
+	padding-inline: var(--sv-space-4, 1rem);
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	border-radius: var(--sv-radius-m, 6px);
+	color: var(--sv-ink, CanvasText);
+	font-weight: 600;
+	text-decoration: none;
+	transition: border-color var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out);
+}
+
+.sv-dashboard-panels a:hover {
+	border-color: var(--sv-accent, AccentColor);
+}
+
+/* Two fields a row where they fit; the submit button takes a row of its own. */
+.sv-dashboard-grid {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+	align-items: start;
+}
+
+.sv-dashboard-grid .sv-account-field {
+	max-inline-size: none;
+}
+
+.sv-dashboard-submit {
+	grid-column: 1 / -1;
+}
+
+/* One field and its button, side by side. */
+.sv-dashboard-inline {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: var(--sv-space-2, 0.5rem);
+	margin-block-end: var(--sv-space-4, 1rem);
+}
+
+.sv-dashboard-inline .sv-account-field {
+	flex: 1 1 14rem;
+}
+
+.sv-dashboard-role {
+	margin-block-start: var(--sv-space-5, 1.5rem);
+}
+
+.sv-dashboard-list {
+	margin-block-start: var(--sv-space-4, 1rem);
+}
+
+.sv-dashboard-list .sv-account-row,
+.sv-dashboard .sv-account-row {
+	flex-wrap: wrap;
+}
+
+.sv-dashboard .sv-account-what {
+	flex-basis: 12rem;
+}
+
+.sv-dashboard-permission {
+	display: grid;
+	gap: var(--sv-space-1, 0.25rem);
+	padding-block: var(--sv-space-3, 0.75rem);
+	border-block-end: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+}
+
+.sv-dashboard-answer {
+	display: grid;
+	gap: var(--sv-space-1, 0.25rem);
+}

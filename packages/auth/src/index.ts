@@ -102,35 +102,52 @@ function callbackVaultFor(options: AuthOptions, providers: readonly ProviderId[]
  * The permissions every plugin sharing `vault`'s accounts declares: its own, or on a host vault, those of every host
  * vault with auth, since they share one app, one auth module and one grants table.
  */
-function permissionsFor({ vault, vaults }: SiteVaults): PermissionDeclaration[] {
-  if (vault.target.type !== "host") return collectPermissions([vault]);
-  return collectPermissions(vaults.filter((candidate) => candidate.target.type === "host" && authOptionsOf(candidate)));
+function permissionsFor(site: SiteVaults): PermissionDeclaration[] {
+  return collectPermissions(sharingVaults(site));
 }
 
-/**
- * The plugin one vault runs. `callbackMountPath` is set when another vault runs its sign-ins; `permissions` is the
- * catalogue, collected once every vault is known.
- */
-function authPlugin(options: AuthOptions, providers: readonly ProviderId[], callbackMountPath?: string, permissions?: readonly PermissionDeclaration[]): NormalizedSvartzPlugin {
-  const serverOptions: AuthServerOptions = {
-    ...options,
-    ...callbackMountPath !== undefined && { callbackMountPath },
-    ...permissions !== undefined && { permissions },
-  };
+/** The vaults that share `vault`'s accounts: itself, or every host vault with auth, since they share one app. */
+function sharingVaults({ vault, vaults }: SiteVaults): ResolvedConfig[] {
+  if (vault.target.type !== "host") return [vault];
+  return vaults.filter((candidate) => candidate.target.type === "host" && authOptionsOf(candidate));
+}
+
+/** The vault's published pages by slug, and every folder that holds one, ending in `/`. */
+function pathsOf(slugs: readonly string[]): string[] {
+  const folders = slugs.flatMap((slug) => slug.split("/").slice(0, -1).map((_, index, parts) => `${parts.slice(0, index + 1).join("/")}/`));
+  return [...new Set([...folders, ...slugs])].sort();
+}
+
+/** What `forVault` resolved for one vault: where its sign-ins run, the catalogue, and the vaults sharing its accounts. */
+interface Resolved {
+  readonly callbackMountPath?: string;
+  readonly permissions: readonly PermissionDeclaration[];
+  readonly vaults: readonly string[];
+}
+
+/** The plugin one vault runs; `resolved` is set once every vault is known. */
+function authPlugin(options: AuthOptions, providers: readonly ProviderId[], resolved?: Resolved): NormalizedSvartzPlugin {
+  const serverOptions: AuthServerOptions = { ...options, ...resolved };
+  const callbackMountPath = resolved?.callbackMountPath;
   return definePlugin(() => ({
     id: AUTH_PLUGIN_ID,
     // Eager, so every plugin that reads accounts or checks permissions sees this deployment's `admins` and catalogue
     // from its first request on.
-    server: { module: SERVER_MODULE, options: serverOptions, eager: true, pages: ["account"] },
+    server: { module: SERVER_MODULE, options: serverOptions, eager: true, pages: ["account", "dashboard"] },
     forVault(site) {
       const target = callbackVaultFor(options, providers, site);
-      return authPlugin(options, providers, target.id === site.vault.id ? undefined : target.mountPath, permissionsFor(site));
+      return authPlugin(options, providers, {
+        ...target.id !== site.vault.id && { callbackMountPath: target.mountPath },
+        permissions: permissionsFor(site),
+        vaults: sharingVaults(site).map(({ id }) => id),
+      });
     },
     emitArtifacts: {
       run(ctx) {
         const browser: SignInConfig = {
           // Below the deployment base, which the dialog adds when it mounts.
           endpoint: `${callbackMountPath ?? ctx.config.mountPath}/_svartz/${AUTH_PLUGIN_ID}`,
+          mountPath: ctx.config.mountPath,
           providers: providers.map((id) => ({ id, label: PROVIDERS[id].label })),
           ...options.privacyNotice ? { privacyNotice: options.privacyNotice } : {},
         };
@@ -139,10 +156,13 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], call
         compiler.browserResources.set(`${AUTH_PLUGIN_ID}-css`, { id: `${AUTH_PLUGIN_ID}-css`, kind: "css", importId: STYLESHEET });
         // The build's final plugins, which config resolution couldn't see whole: a theme preset's plugins, and what
         // other plugins' `forVault` returned. Checked like the catalogue, and added to it when the server starts.
-        const built: AuthServerData = { permissions: collectPermissions([{ id: ctx.config.id, plugins: ctx.plugins ?? ctx.config.plugins }]) };
+        const built: AuthServerData = {
+          permissions: collectPermissions([{ id: ctx.config.id, plugins: ctx.plugins ?? ctx.config.plugins }]),
+          paths: pathsOf(ctx.index?.entries.map(({ slug }) => slug) ?? []),
+        };
         // The catalogue config resolution collected reaches every vault's server as well, so the build may add to it
         // but not contradict it, or which of the two a server read last would decide a default.
-        const configured = new Map((permissions ?? []).map((declaration) => [declaration.slug, declaration]));
+        const configured = new Map((resolved?.permissions ?? []).map((declaration) => [declaration.slug, declaration]));
         const changed = built.permissions.find((ours) => configured.has(ours.slug) && JSON.stringify(configured.get(ours.slug)) !== JSON.stringify(ours));
         if (changed) {
           fail(`vault "${ctx.config.id}" builds with "${changed.slug}" declared differently than the config's plugins declare it; a theme preset or a forVault can add permissions, not change them`);
