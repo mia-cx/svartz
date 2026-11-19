@@ -1,6 +1,6 @@
 ---
 description: Dashboard panels — core lists them, auth gates them, every write re-checks and audits
-globs: packages/core/src/plugin/server.ts, packages/auth/src/dashboard.ts, packages/auth/src/people*.ts, packages/auth/src/audit.ts, packages/plugin-*/src/server.ts
+globs: packages/core/src/plugin/server.ts, packages/auth/src/dashboard.ts, packages/auth/src/people*.ts, packages/auth/src/groups*.ts, packages/auth/src/audit.ts, packages/plugin-*/src/server.ts
 alwaysApply: false
 ---
 
@@ -12,5 +12,6 @@ alwaysApply: false
 - A panel that shows repository content names only what the last build published (its links and attachments). Everything else is counted, never named, and commit text shows only when every file the commit changed is published and the list of them is known. A commit names an account only through the site's own record of the save, `submissions_edits` (a direct commit's SHA, or a recorded pull request's merge commit): its trailer, author and committer are git metadata anyone can forge, the App's bot address included (`listCommits` in submissions' `mirror.ts`).
 - Hiding a panel is not the gate. Every route a panel's forms post to checks `Origin === url.origin` and its own write permission with `can()` on the server.
 - Record every grant, role and moderation change with the change in one batch: `auditStatement` inside auth, `audit(env, entry, changes)` from `@svartz/auth/server` elsewhere. The actor comes from `readAccount`, never from the form. `auth_audit` is append-only by trigger.
+- A change that guards itself in SQL (the asker still owns the group, an invitation still waits, a last owner stays) may land nothing. Put `auditIfChanged` right after its last statement: it appends only when that statement changed a row, and its result rows say whether it did, so the route answers from the batch rather than from a check made before it.
 - `admin` is config-only: no stored role, member or grant may name it, and grants on an admin's account are refused.
 - Object strings come only from `pickedObject` in `objects.ts` (known vault, no `.`/`..`/empty segments); a whole `object` field must round-trip through it unchanged.

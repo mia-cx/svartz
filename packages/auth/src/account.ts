@@ -10,8 +10,14 @@ import { isProviderId, PROVIDERS, type ProviderId } from "./providers";
 import type { Account } from "./session";
 import type { LinkedIdentity, SessionSummary } from "./store";
 
-/** The longest display name an account may set. */
+/** The longest display name an account or a group may set. */
 export const NAME_MAX_LENGTH = 100;
+
+/** A display name: trimmed, at most {@link NAME_MAX_LENGTH} characters, with no control characters. */
+export function displayName(input: string): string | undefined {
+  const name = input.trim();
+  return name && [...name].length <= NAME_MAX_LENGTH && !/\p{Cc}/u.test(name) ? name : undefined;
+}
 
 const TITLE = "Account";
 
@@ -76,6 +82,8 @@ export interface AccountView {
   };
   /** The page's query: `status`, and the `provider`, `name` and `handle` it concerns. */
   readonly query: URLSearchParams;
+  /** The Groups section, rendered by `groups-page.ts`. */
+  readonly groups: string;
 }
 
 function message(section: Section, query: URLSearchParams): { html: string; id: string; error: boolean } | undefined {
@@ -161,7 +169,7 @@ function userPageLink({ userPage }: AccountView): string {
   return `<div class="sv-account-page" data-svartz-region="user-page-actions" data-svartz-user-page="${escape(userPage.missing)}"></div>`;
 }
 
-/** The signed-in page: profile, linked sign-in methods and sessions. */
+/** The signed-in page: profile, groups, linked sign-in methods and sessions. */
 export function accountPage(view: AccountView): PluginPage {
   const { account } = view;
   const avatar = account.avatarUrl ? `<img class="sv-account-avatar" src="${escape(account.avatarUrl)}" alt="" width="48" height="48">` : "";
@@ -171,6 +179,7 @@ export function accountPage(view: AccountView): PluginPage {
 <h1>${TITLE}</h1>
 <div class="sv-account-who">${avatar}<p><span class="sv-account-name">${escape(account.name)}</span> <span class="sv-account-muted">@${escape(account.handle)}</span></p>${userPageLink(view)}</div>
 ${profileSection(view)}
+${view.groups}
 ${signInsSection(view)}
 ${sessionsSection(view)}
 </div>`,
