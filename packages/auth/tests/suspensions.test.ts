@@ -161,6 +161,8 @@ describe("a suspended account", () => {
     expect(page?.html).toContain("Posted &#60;script&#62;alert(1)&#60;/script&#62;.");
     expect(page?.html).not.toContain("hubot");
     const signOut = /<form method="post" action="([^"]+)"><button class="sv-account-button" type="submit">Sign out<\/button>/.exec(page!.html)![1]!;
+    const offSite = await request.fetch(`${AUTH}/sign-out/?returnTo=${encodeURIComponent("/a/..//evil.test/")}`, { method: "POST", headers: { cookie: octocat, origin: ORIGIN } });
+    expect(offSite.status).toBe(400);
     const signedOut = await request.fetch(signOut.replaceAll("&#38;", "&"), { method: "POST", headers: { cookie: octocat, origin: ORIGIN } });
     expect([signedOut.status, signedOut.headers.get("location")]).toEqual([303, "/notes/-/account/"]);
     vi.setSystemTime(new Date("2026-11-27T00:00:00.000Z"));
