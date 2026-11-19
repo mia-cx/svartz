@@ -1,6 +1,6 @@
 import type { Identity } from "@svartz/auth";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Database } from "../src/store";
+import type { Database, Statement } from "../src/store";
 import { ADA, ALAN, createDatabase, createSite, ENDPOINT, GRACE, ORIGIN, seed, signIn, type Site } from "./harness";
 
 const disposers: Array<() => Promise<void>> = [];
@@ -646,5 +646,50 @@ describe("reputation for +1s", () => {
     // Grace has no account here, so her comment earns nobody anything.
     await agree(alan, "c2", true);
     expect((await db.prepare("SELECT COUNT(*) AS n FROM auth_reputation WHERE ref LIKE 'annotations:notes:c2:%'").all()).results).toEqual([{ n: 0 }]);
+  });
+
+  // Proves the ledger ends as the +1 is stored when one reader's requests race: a +1 read just before its withdrawal
+  // settled leaves no points for an agreement that no longer exists.
+  it("leaves no points for a +1 taken back while it was being credited", async () => {
+    const { db } = await database();
+    await seed(db, [{ id: "c1", page: "garden", author: ADA, body: "Roses first.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
+    // Once held, the next read of whether a reader agrees waits, after reading, until the test releases it.
+    let hold: { reached: () => void; released: Promise<void> } | undefined;
+    const holding = (statement: Statement): Statement => ({
+      bind: (...values) => holding(statement.bind(...values)),
+      run: () => statement.run(),
+      async all<Row>() {
+        const result = await statement.all<Row>();
+        const held = hold;
+        hold = undefined;
+        if (held) {
+          held.reached();
+          await held.released;
+        }
+        return result;
+      },
+    });
+    const annotations: Database = {
+      prepare: (query) => query.startsWith("SELECT 1 FROM agreements") ? holding(db.prepare(query)) : db.prepare(query),
+      batch: (statements) => db.batch(statements),
+    };
+    const site = createSite({ DB: annotations, SVARTZ_DB: db });
+    await signIn(site, ADA);
+    const alan = await signIn(site, ALAN);
+    const agree = (agreed: boolean) => site(`${ENDPOINT}/c1/agree/`, { method: "POST", headers: { cookie: alan, origin: ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ agreed }) });
+    let release!: () => void;
+    const reached = new Promise<void>((resolve) => {
+      hold = { reached: resolve, released: new Promise((go) => { release = go; }) };
+    });
+
+    // Alan's +1 reads that he agrees, then his withdrawal runs to the end before the +1 settles.
+    const plusOne = agree(true);
+    await reached;
+    expect((await agree(false)).status).toBe(200);
+    release();
+    expect((await plusOne).status).toBe(200);
+
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM agreements").all()).results).toEqual([{ n: 0 }]);
+    expect((await (await site("/notes/_svartz/auth/users/ada/")).json() as { reputation: number }).reputation).toBe(0);
   });
 });
