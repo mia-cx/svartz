@@ -77,6 +77,78 @@ interface Access {
 const json = (status: number, error: string, message: string) =>
   Response.json({ error, message }, { status, headers: { "cache-control": "no-store" } });
 
+/**
+ * Two columns of a list of pull requests, for the pull request whose scope and number are the SQL expressions `scope`
+ * and `number`: `verdict`, what its reviewers decided, and `comments`, how many comments it has. The verdict counts
+ * each reviewer's latest decision, as GitHub does: comments and dismissed reviews decide nothing, and one reviewer's
+ * approval doesn't clear another's request for changes.
+ */
+export const verdictAndComments = (scope: string, number: string) => `(SELECT CASE WHEN MAX(r.state = 'changes_requested') THEN 'changes_requested' WHEN COUNT(*) > 0 THEN 'approved' END
+    FROM submissions_reviews r WHERE r.scope = ${scope} AND r.pull_number = ${number} AND r.state IN ('approved', 'changes_requested')
+      AND NOT EXISTS (SELECT 1 FROM submissions_reviews l WHERE l.scope = r.scope AND l.pull_number = r.pull_number
+        AND l.author_login IS r.author_login AND l.state IN ('approved', 'changes_requested')
+        AND (l.submitted_at > r.submitted_at OR (l.submitted_at = r.submitted_at AND l.id > r.id)))) AS verdict,
+  (SELECT COUNT(*) FROM submissions_comments c WHERE c.scope = ${scope} AND c.pull_number = ${number} AND c.deleted = 0) AS comments`;
+
+/**
+ * Pull request `number`'s conversation from the mirror, in time order, with what the site posted shown as the account
+ * that wrote it: the newest {@link MAX_COMMENTS} comments and the first comment of each thread they're in, and whether
+ * there are earlier ones. The Submissions review panel shows the same conversation.
+ */
+export async function conversation(mirror: Mirror, number: number): Promise<{ entries: Entry[]; earlier: boolean }> {
+  const [{ results: reviews }, { results: comments }, { results: [count] }] = await Promise.all([
+    mirror.db.prepare(`SELECT state, author_login, body, url, submitted_at FROM submissions_reviews
+      WHERE scope = ? AND pull_number = ? AND submitted_at IS NOT NULL AND state <> 'pending' ORDER BY submitted_at, id`)
+      .bind(mirror.scope, number).all<{ state: string; author_login: string | null; body: string; url: string; submitted_at: string }>(),
+    // A thread's first comment says where it is and takes its replies, so it comes along however old it is.
+    mirror.db.prepare(`WITH recent AS (SELECT * FROM submissions_comments WHERE scope = ?1 AND pull_number = ?2 AND deleted = 0
+        ORDER BY created_at DESC, id DESC LIMIT ?3)
+      SELECT c.kind, c.id, c.author_login, c.body, c.path, c.line, c.in_reply_to, c.url, c.created_at,
+        r.name, r.role, r.header, r.body AS typed
+      FROM (SELECT * FROM recent UNION SELECT * FROM submissions_comments WHERE scope = ?1 AND pull_number = ?2 AND deleted = 0
+        AND kind = 'review' AND id IN (SELECT in_reply_to FROM recent WHERE kind = 'review')) c
+      LEFT JOIN submissions_replies r ON r.scope = c.scope AND r.kind = c.kind AND r.id = c.id
+      ORDER BY c.created_at, c.id`)
+      .bind(mirror.scope, number, MAX_COMMENTS)
+      .all<{
+        kind: "issue" | "review"; id: number; author_login: string | null; body: string; path: string | null; line: number | null;
+        in_reply_to: number | null; url: string; created_at: string;
+        name: string | null; role: string | null; header: string | null; typed: string | null;
+      }>(),
+    mirror.db.prepare("SELECT COUNT(*) AS comments FROM submissions_comments WHERE scope = ? AND pull_number = ? AND deleted = 0")
+      .bind(mirror.scope, number).all<{ comments: number }>(),
+  ]);
+  const timeline: Entry[] = reviews
+    // A review that only holds diff comments says nothing of its own; its comments show in their threads.
+    .filter(({ state, body }) => state !== "commented" || body.trim())
+    .map(({ state, author_login, body, url, submitted_at }) => ({ kind: "review", author: { login: author_login }, state, body, at: submitted_at, url }));
+
+  const threads = new Map<number, { path: string | null; line: number | null; comments: Comment[]; open: boolean; at: string }>();
+  for (const row of comments) {
+    // Shown as its account only while GitHub holds exactly what the site posted; an edit on GitHub shows as it is.
+    const ours = row.header !== null && row.typed !== null && row.body === attributed(row.header, row.typed);
+    const author: Author = ours ? { name: row.name!, role: row.role! } : { login: row.author_login };
+    const shown: Comment = { id: row.id, author, body: ours ? row.typed! : row.body, at: row.created_at, url: row.url };
+    if (row.kind === "issue") {
+      timeline.push({ kind: "comment", comment: shown });
+      continue;
+    }
+    const root = row.in_reply_to ?? row.id;
+    const thread = threads.get(root) ?? { path: row.path, line: row.line, comments: [], open: false, at: row.created_at };
+    threads.set(root, thread);
+    if (row.id === root) {
+      // The first comment says where the thread is, and replies go to it: it was read, so it isn't deleted.
+      Object.assign(thread, { path: row.path, line: row.line, open: true, at: row.created_at });
+    }
+    thread.comments.push(shown);
+  }
+  for (const [root, { path, line, comments: said, open, at }] of threads) {
+    timeline.push({ kind: "thread", path, line, comments: said, at, ...(open ? { replyTo: root } : {}) });
+  }
+  const time = (entry: Entry) => (entry.kind === "comment" ? entry.comment.at : entry.at);
+  return { entries: timeline.sort((a, b) => time(a).localeCompare(time(b))), earlier: count!.comments > MAX_COMMENTS };
+}
+
 export function createMySubmissions(setup: MySubmissionsSetup) {
   const byPath = new Map(setup.links.map((link) => [link.path, link]));
 
@@ -119,15 +191,8 @@ export function createMySubmissions(setup: MySubmissionsSetup) {
   async function list(request: Request, context: ServerContext, account: Account, mirror: Mirror) {
     const requested = Number(new URL(request.url).searchParams.get("page") ?? "1");
     const page = Number.isSafeInteger(requested) && requested > 0 ? requested : 1;
-    // The verdict counts each reviewer's latest decision, as GitHub does: comments and dismissed reviews decide
-    // nothing, and one reviewer's approval doesn't clear another's request for changes.
     const { results } = await mirror.db.prepare(`SELECT e.page, e.path, e.pull_number, e.saved_at, p.state, p.merged_at,
-        (SELECT CASE WHEN MAX(r.state = 'changes_requested') THEN 'changes_requested' WHEN COUNT(*) > 0 THEN 'approved' END
-          FROM submissions_reviews r WHERE r.scope = e.scope AND r.pull_number = e.pull_number AND r.state IN ('approved', 'changes_requested')
-            AND NOT EXISTS (SELECT 1 FROM submissions_reviews l WHERE l.scope = r.scope AND l.pull_number = r.pull_number
-              AND l.author_login IS r.author_login AND l.state IN ('approved', 'changes_requested')
-              AND (l.submitted_at > r.submitted_at OR (l.submitted_at = r.submitted_at AND l.id > r.id)))) AS verdict,
-        (SELECT COUNT(*) FROM submissions_comments c WHERE c.scope = e.scope AND c.pull_number = e.pull_number AND c.deleted = 0) AS comments
+        ${verdictAndComments("e.scope", "e.pull_number")}
       FROM submissions_edits e LEFT JOIN submissions_pulls p ON p.scope = e.scope AND p.number = e.pull_number
       WHERE e.scope = ?1 AND e.owner = ?2 AND e.kind = 'pull-request'
       ORDER BY CASE WHEN p.state = 'closed' THEN 1 ELSE 0 END, e.saved_at DESC, e.id
@@ -147,65 +212,6 @@ export function createMySubmissions(setup: MySubmissionsSetup) {
       href: `${here}${row.pull_number}/`,
     }));
     return listPage({ submissions, here, page, more: results.length > PAGE_SIZE });
-  }
-
-  /**
-   * The conversation from the mirror, in time order, with what the site posted shown as the account that wrote it:
-   * the newest {@link MAX_COMMENTS} comments and the first comment of each thread they're in, and whether there are
-   * earlier ones.
-   */
-  async function conversation(mirror: Mirror, number: number): Promise<{ entries: Entry[]; earlier: boolean }> {
-    const [{ results: reviews }, { results: comments }, { results: [count] }] = await Promise.all([
-      mirror.db.prepare(`SELECT state, author_login, body, url, submitted_at FROM submissions_reviews
-        WHERE scope = ? AND pull_number = ? AND submitted_at IS NOT NULL AND state <> 'pending' ORDER BY submitted_at, id`)
-        .bind(mirror.scope, number).all<{ state: string; author_login: string | null; body: string; url: string; submitted_at: string }>(),
-      // A thread's first comment says where it is and takes its replies, so it comes along however old it is.
-      mirror.db.prepare(`WITH recent AS (SELECT * FROM submissions_comments WHERE scope = ?1 AND pull_number = ?2 AND deleted = 0
-          ORDER BY created_at DESC, id DESC LIMIT ?3)
-        SELECT c.kind, c.id, c.author_login, c.body, c.path, c.line, c.in_reply_to, c.url, c.created_at,
-          r.name, r.role, r.header, r.body AS typed
-        FROM (SELECT * FROM recent UNION SELECT * FROM submissions_comments WHERE scope = ?1 AND pull_number = ?2 AND deleted = 0
-          AND kind = 'review' AND id IN (SELECT in_reply_to FROM recent WHERE kind = 'review')) c
-        LEFT JOIN submissions_replies r ON r.scope = c.scope AND r.kind = c.kind AND r.id = c.id
-        ORDER BY c.created_at, c.id`)
-        .bind(mirror.scope, number, MAX_COMMENTS)
-        .all<{
-          kind: "issue" | "review"; id: number; author_login: string | null; body: string; path: string | null; line: number | null;
-          in_reply_to: number | null; url: string; created_at: string;
-          name: string | null; role: string | null; header: string | null; typed: string | null;
-        }>(),
-      mirror.db.prepare("SELECT COUNT(*) AS comments FROM submissions_comments WHERE scope = ? AND pull_number = ? AND deleted = 0")
-        .bind(mirror.scope, number).all<{ comments: number }>(),
-    ]);
-    const timeline: Entry[] = reviews
-      // A review that only holds diff comments says nothing of its own; its comments show in their threads.
-      .filter(({ state, body }) => state !== "commented" || body.trim())
-      .map(({ state, author_login, body, url, submitted_at }) => ({ kind: "review", author: { login: author_login }, state, body, at: submitted_at, url }));
-
-    const threads = new Map<number, { path: string | null; line: number | null; comments: Comment[]; open: boolean; at: string }>();
-    for (const row of comments) {
-      // Shown as its account only while GitHub holds exactly what the site posted; an edit on GitHub shows as it is.
-      const ours = row.header !== null && row.typed !== null && row.body === attributed(row.header, row.typed);
-      const author: Author = ours ? { name: row.name!, role: row.role! } : { login: row.author_login };
-      const shown: Comment = { id: row.id, author, body: ours ? row.typed! : row.body, at: row.created_at, url: row.url };
-      if (row.kind === "issue") {
-        timeline.push({ kind: "comment", comment: shown });
-        continue;
-      }
-      const root = row.in_reply_to ?? row.id;
-      const thread = threads.get(root) ?? { path: row.path, line: row.line, comments: [], open: false, at: row.created_at };
-      threads.set(root, thread);
-      if (row.id === root) {
-        // The first comment says where the thread is, and replies go to it: it was read, so it isn't deleted.
-        Object.assign(thread, { path: row.path, line: row.line, open: true, at: row.created_at });
-      }
-      thread.comments.push(shown);
-    }
-    for (const [root, { path, line, comments: said, open, at }] of threads) {
-      timeline.push({ kind: "thread", path, line, comments: said, at, ...(open ? { replyTo: root } : {}) });
-    }
-    const time = (entry: Entry) => (entry.kind === "comment" ? entry.comment.at : entry.at);
-    return { entries: timeline.sort((a, b) => time(a).localeCompare(time(b))), earlier: count!.comments > MAX_COMMENTS };
   }
 
   async function view(request: Request, context: ServerContext, account: Account, mirror: Mirror, number: number) {

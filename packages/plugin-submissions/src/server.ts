@@ -12,7 +12,8 @@
  * - With `sync` set, `POST github/webhook/` takes GitHub's deliveries into the mirror, and `GET status/?edit=<id>`
  *   answers where a saved edit has got to (see `sync.ts`). Every save is then recorded for its saver to follow, on the
  *   dashboard's My submissions panel too, whose `reply/` and `follow-up/` routes answer a submission's reviews
- *   (see `my-submissions.ts`), and the dashboard gets the Recent edits panel (`recent-edits.ts`).
+ *   (see `my-submissions.ts`), and the dashboard gets the Submissions review panel, whose `review/` routes comment,
+ *   review and merge (`review.ts`), and the Recent edits panel (`recent-edits.ts`).
  *
  * The client never names a file path. Edits must target a note in the build's manifest; a new note goes in one of the
  * manifest's folders, or is the reader's own user page, named after its title, and never where a file already is.
@@ -57,9 +58,11 @@ import {
   type Submission,
 } from "./github";
 import { createGuard, type GuardOptions } from "./guard";
+import { commitReader } from "./commits";
 import { createMySubmissions } from "./my-submissions";
 import { COMMIT, OPEN_PULL_REQUESTS } from "./permissions";
 import { recentEditsPanel } from "./recent-edits";
+import { createReview } from "./review";
 import { readBody } from "./request";
 import { createSync, type SyncOptions } from "./sync";
 
@@ -419,6 +422,26 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     publicUrl,
   });
 
+  const review = sync && options.sync && createReview({
+    repo: options.repo,
+    ...(options.branch ? { branch: options.branch } : {}),
+    vaultRoot: data.vaultRoot,
+    links: data.links,
+    preview: data.preview,
+    sync,
+    guard,
+    github: target,
+    reader: commitReader({
+      repo: options.repo,
+      ...(options.branch ? { branch: options.branch } : {}),
+      root: data.vaultRoot,
+      credentials: options.app ? { app: options.app } : { token: options.token },
+      database: options.sync.database,
+      ...(options.sync.live.environment ? { environment: options.sync.live.environment } : {}),
+    }),
+    publicUrl,
+  });
+
   const handlers = new Map<string, { method: string; run: (request: Request, context: ServerContext) => Promise<Response> }>([
     ["/source/", { method: "GET", run: source }],
     ["/destination/", { method: "GET", run: destination }],
@@ -432,6 +455,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
       ] as const
       : [],
     ...mine ? mine.routes : [],
+    ...review ? review.routes : [],
   ]);
 
   const handle: ServerHandler = async (request, context) => {
@@ -452,9 +476,9 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
   };
 
   // The panels read the mirror, so they come with sync; auth's dashboard shows My submissions to accounts only.
-  if (!sync || !mine) return handle;
+  if (!sync || !mine || !review) return handle;
   const recentEdits = recentEditsPanel({ repo: options.repo, vaultRoot: data.vaultRoot, links: data.links, attachments: data.preview.attachments, sync });
-  return { handle, dashboard: { title: "Submissions", panels: [mine.panel, recentEdits] } };
+  return { handle, dashboard: { title: "Submissions", panels: [mine.panel, review.panel, recentEdits] } };
 };
 
 export default submissions;

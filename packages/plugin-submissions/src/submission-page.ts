@@ -103,7 +103,8 @@ export type Entry =
 export interface SubmissionView {
   readonly number: number;
   readonly title: string;
-  readonly kind: "edit" | "new";
+  /** What the site's save made it; absent for a pull request opened on GitHub. */
+  readonly kind?: "edit" | "new";
   readonly stage: EditStage;
   /** The pull request on GitHub. */
   readonly url: string;
@@ -112,8 +113,13 @@ export interface SubmissionView {
   readonly entries: readonly Entry[];
   /** Whether comments older than those in `entries` exist, which only GitHub shows. */
   readonly earlier?: boolean;
-  /** The list it belongs to. */
+  /** The list it belongs to, and that list's name: My submissions unless said. */
   readonly back: string;
+  readonly backLabel?: string;
+  /** HTML shown before the conversation, such as the changes a reviewer looks at; escaped by whoever made it. */
+  readonly changes?: string;
+  /** HTML shown after the conversation, such as a reviewer's verdict and merge forms; escaped by whoever made it. */
+  readonly actions?: string;
   /** Where reply forms post; without it, the view takes no replies. */
   readonly replyAction?: string;
   /** The file a follow-up edit changes, inside the vault; the browser script offers the editor on it. */
@@ -215,6 +221,7 @@ function entryHtml(entry: Entry, view: SubmissionView): string {
 export function submissionPage(view: SubmissionView): PluginPage {
   const github = githubLink(view.url);
   const links = [
+    ...(view.kind ? [view.kind === "edit" ? "Edit" : "New page"] : []),
     ...(view.pageUrl ? [`<a href="${escape(view.pageUrl)}">Open the page</a>`] : []),
     ...(github ? [`<a href="${escape(github)}">Pull request #${view.number} on GitHub</a>`] : []),
   ];
@@ -230,18 +237,18 @@ export function submissionPage(view: SubmissionView): PluginPage {
   return {
     title: view.title,
     html: `<div class="sv-account sv-dashboard svartz-submissions-dashboard">
-<nav class="sv-dashboard-crumbs" aria-label="Submissions"><a href="${escape(view.back)}">My submissions</a></nav>
+<nav class="sv-dashboard-crumbs" aria-label="Submissions"><a href="${escape(view.back)}">${escape(view.backLabel ?? "My submissions")}</a></nav>
 <div>
 <h1>${escape(view.title)}</h1>
-<p class="sv-account-muted svartz-submissions-links">${view.kind === "edit" ? "Edit" : "New page"} · ${links.join(" · ")}</p>
+<p class="sv-account-muted svartz-submissions-links">${links.join(" · ")}</p>
 </div>
 <div class="sv-account-who">
 <p class="sv-account-lead" data-stage="${view.stage}">${STAGE_TEXT[view.stage]}</p>${followUp}
-</div>
+</div>${view.changes ? `\n${view.changes}` : ""}
 <section aria-labelledby="svartz-conversation">
 <h2 id="svartz-conversation">Conversation</h2>
 ${conversation}
-</section>${view.replyAction ? `\n<div id="svartz-reply">\n${replyForm(view)}\n</div>` : ""}
+</section>${view.replyAction ? `\n<div id="svartz-reply">\n${replyForm(view)}\n</div>` : ""}${view.actions ? `\n${view.actions}` : ""}
 </div>`,
   };
 }
