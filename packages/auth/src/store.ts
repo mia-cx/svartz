@@ -99,6 +99,17 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       PRIMARY KEY (identity_id, object, permission)
     )`,
   ],
+  [
+    // Every handle an account has held, its current one included. An old handle stays with its account for good: it
+    // points at the account's current handle, and no other account can take it.
+    `CREATE TABLE IF NOT EXISTS auth_handles (
+      handle TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL REFERENCES auth_accounts (id),
+      created_at TEXT NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS auth_handles_by_account ON auth_handles (account_id)`,
+    `INSERT OR IGNORE INTO auth_handles (handle, account_id, created_at) SELECT handle, id, created_at FROM auth_accounts`,
+  ],
 ];
 
 const migrated = new WeakMap<Database, Promise<void>>();
@@ -290,8 +301,9 @@ export async function createAccount(db: Database, identity: Identity, handle: st
   }
 }
 
+/** Whether any account holds `handle`, now or before: old handles stay with their account. */
 async function isTaken(db: Database, handle: string): Promise<boolean> {
-  const { results } = await db.prepare("SELECT 1 FROM auth_accounts WHERE handle = ?").bind(handle).all();
+  const { results } = await db.prepare("SELECT 1 FROM auth_handles WHERE handle = ?").bind(handle).all();
   return results.length > 0;
 }
 
@@ -307,6 +319,7 @@ function insertAccount(db: Database, account: string, identity: Identity, handle
   return [
     db.prepare("INSERT INTO auth_accounts (id, handle, name, avatar_url, created_at) VALUES (?, ?, ?, ?, ?)")
       .bind(account, handle, identity.name, identity.avatarUrl ?? null, at),
+    db.prepare("INSERT INTO auth_handles (handle, account_id, created_at) VALUES (?, ?, ?)").bind(handle, account, at),
     db.prepare(`INSERT INTO auth_identities (id, account_id, provider, name, handle, avatar_url, profile_url, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(identity.id, account, identity.provider, identity.name, identity.handle ?? null, identity.avatarUrl ?? null,
@@ -345,6 +358,139 @@ export async function legacySession(db: Database, hash: string, identity: Identi
       if (attempt === HANDLE_ATTEMPTS) throw error;
     }
   }
+}
+
+/** A provider account linked to an account, as the account page lists it. */
+export interface LinkedIdentity extends Identity {
+  /** ISO 8601. */
+  readonly linkedAt: string;
+}
+
+/** A live session of an account, as the account page lists it. */
+export interface SessionSummary {
+  readonly id: string;
+  /** The provider account it signed in with. */
+  readonly identity: string;
+  readonly provider: Identity["provider"];
+  /** ISO 8601. */
+  readonly createdAt: string;
+}
+
+interface IdentityRow {
+  id: string;
+  provider: Identity["provider"];
+  name: string;
+  handle: string | null;
+  avatar_url: string | null;
+  profile_url: string | null;
+  created_at: string;
+}
+
+/** The account's linked provider accounts, oldest first, and its live sessions, newest first. */
+export async function signInsOf(db: Database, account: string): Promise<{ identities: LinkedIdentity[]; sessions: SessionSummary[] }> {
+  const [identities, sessions] = await db.batch([
+    db.prepare(`SELECT id, provider, name, handle, avatar_url, profile_url, created_at FROM auth_identities
+      WHERE account_id = ? ORDER BY created_at, id`).bind(account),
+    db.prepare(`SELECT s.id, s.identity_id, i.provider, s.created_at FROM auth_sessions s
+      JOIN auth_identities i ON i.id = s.identity_id WHERE s.account_id = ? AND s.expires_at > ? ORDER BY s.created_at DESC, s.id`)
+      .bind(account, Date.now()),
+  ]);
+  return {
+    identities: (identities!.results as IdentityRow[]).map((row) => ({
+      id: row.id,
+      provider: row.provider,
+      name: row.name,
+      ...row.handle !== null && { handle: row.handle },
+      ...row.avatar_url !== null && { avatarUrl: row.avatar_url },
+      ...row.profile_url !== null && { profileUrl: row.profile_url },
+      linkedAt: row.created_at,
+    })),
+    sessions: (sessions!.results as { id: string; identity_id: string; provider: Identity["provider"]; created_at: string }[])
+      .map((row) => ({ id: row.id, identity: row.identity_id, provider: row.provider, createdAt: row.created_at })),
+  };
+}
+
+/**
+ * Link `identity` to `account`, or refresh its profile when it already is. `"elsewhere"`, changing nothing, when
+ * another account has it: one provider account reaches one person.
+ */
+export async function linkIdentity(db: Database, account: string, identity: Identity): Promise<"linked" | "elsewhere"> {
+  const owner = await linkedAccount(db, identity.id);
+  if (owner !== undefined && owner !== account) return "elsewhere";
+  const at = new Date().toISOString();
+  if (owner === account) {
+    await refreshIdentity(db, identity, at).run();
+    return "linked";
+  }
+  try {
+    await db.prepare(`INSERT INTO auth_identities (id, account_id, provider, name, handle, avatar_url, profile_url, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(identity.id, account, identity.provider, identity.name, identity.handle ?? null, identity.avatarUrl ?? null,
+        identity.profileUrl ?? null, at, at)
+      .run();
+    return "linked";
+  } catch (error) {
+    // A racing link or first sign-in took it first.
+    const winner = await linkedAccount(db, identity.id);
+    if (winner === undefined) throw error;
+    return winner === account ? "linked" : "elsewhere";
+  }
+}
+
+/**
+ * Unlink provider account `identity` from `account`, ending the sessions it signed in. Answers `false`, changing
+ * nothing, when it is the account's last: the guard and both deletes run as one transaction, so racing unlinks can't
+ * leave an account nobody can sign in to.
+ */
+export async function unlinkIdentity(db: Database, account: string, identity: string): Promise<boolean> {
+  const others = "(SELECT COUNT(*) FROM auth_identities WHERE account_id = ?2) > 1";
+  await db.batch([
+    db.prepare(`DELETE FROM auth_sessions WHERE identity_id = ?1 AND account_id = ?2 AND ${others}`).bind(identity, account),
+    db.prepare(`DELETE FROM auth_identities WHERE id = ?1 AND account_id = ?2 AND ${others}`).bind(identity, account),
+  ]);
+  const { results } = await db.prepare("SELECT 1 FROM auth_identities WHERE id = ? AND account_id = ?").bind(identity, account).all();
+  return results.length === 0;
+}
+
+/** End every session of `account`, so each of its browsers reads as signed out on its next request. */
+export async function endAccountSessions(db: Database, account: string): Promise<void> {
+  await db.prepare("DELETE FROM auth_sessions WHERE account_id = ?").bind(account).run();
+}
+
+/**
+ * Set `account`'s display name and handle in one transaction. A new handle joins the account's handles, so the old one
+ * keeps pointing here; `"taken"`, changing nothing, when another account holds or held it.
+ */
+export async function updateProfile(db: Database, account: string, { name, handle }: { name: string; handle: string }): Promise<"saved" | "taken"> {
+  try {
+    await db.batch([
+      // Nothing to add when the account held this handle before; a handle another account holds fails the key.
+      db.prepare(`INSERT INTO auth_handles (handle, account_id, created_at)
+        SELECT ?1, ?2, ?3 WHERE NOT EXISTS (SELECT 1 FROM auth_handles WHERE handle = ?1 AND account_id = ?2)`)
+        .bind(handle, account, new Date().toISOString()),
+      db.prepare("UPDATE auth_accounts SET handle = ?, name = ? WHERE id = ?").bind(handle, name, account),
+    ]);
+    return "saved";
+  } catch (error) {
+    if (await isTaken(db, handle)) return "taken";
+    throw error;
+  }
+}
+
+/** A person's public profile, as their handle reaches it. */
+export interface PublicProfile {
+  /** The current handle, which differs from the one asked for when that one is old. */
+  readonly handle: string;
+  readonly name: string;
+  readonly avatarUrl?: string;
+}
+
+/** The account that holds or held `handle`, by its current handle; `undefined` when no account ever held it. */
+export async function profileByHandle(db: Database, handle: string): Promise<PublicProfile | undefined> {
+  const { results: [row] } = await db.prepare(`SELECT a.handle, a.name, a.avatar_url FROM auth_handles h
+    JOIN auth_accounts a ON a.id = h.account_id WHERE h.handle = ?`).bind(handle)
+    .all<{ handle: string; name: string; avatar_url: string | null }>();
+  return row && { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } };
 }
 
 /** Sign a cookie from before accounts out for good: its session goes, and the cookie can't start another. */

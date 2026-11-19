@@ -99,6 +99,8 @@ interface Reader {
   readonly signIn: SignIn;
   /** Without accounts, the identity a cookie from before accounts holds. */
   readonly identity: Identity | null;
+  /** The live session the cookie stands for, when signed in to an account. */
+  readonly sid?: string;
 }
 
 const SIGNED_OUT: Reader = { signIn: { account: null, reason: "signed-out" }, identity: null };
@@ -122,7 +124,13 @@ async function read(request: Request, env: Env): Promise<Reader> {
     roles: session.linkedIdentities.some((id) => configuredAdmins.includes(id)) ? [ADMIN_ROLE] : [],
     identity: session.identity,
   };
-  return { signIn: { account }, identity: account.identity };
+  return { signIn: { account }, identity: account.identity, sid };
+}
+
+/** The signed-in account and the id of the session it reads through, for auth's own account routes. */
+export async function readCurrentSession(request: Request, env: Env): Promise<{ account: Account; sid: string } | undefined> {
+  const { signIn: { account }, sid } = await read(request, env);
+  return account && sid !== undefined ? { account, sid } : undefined;
 }
 
 /**

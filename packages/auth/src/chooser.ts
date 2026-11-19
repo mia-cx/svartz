@@ -3,9 +3,8 @@
  * posts back to itself, so it works before any script loads and outside the theme.
  */
 import { HANDLE_MAX_LENGTH } from "./handle";
+import { escape } from "./html";
 import type { Identity } from "./providers";
-
-const escape = (text: string): string => text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 
 // Script-free and self-contained: only inline styles, images from https, and a form posting to this origin.
 const SECURITY_HEADERS = {

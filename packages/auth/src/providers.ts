@@ -1,4 +1,4 @@
-/** The sign-in providers `@svartz/auth` supports. Adding one extends `ProviderId`, adds its entry here and its mark in the browser module. */
+/** The sign-in providers `@svartz/auth` supports. Adding one extends `ProviderId`, adds its entry here and its mark in `marks.ts`. */
 
 export type ProviderId = "github" | "google" | "discord" | "x";
 
