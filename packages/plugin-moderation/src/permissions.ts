@@ -9,7 +9,10 @@ export const WRITE_ACCOUNTS = "moderation:accounts:write";
 /** Read the audit log. Declared for the audit log panel; nothing checks it yet. */
 export const READ_AUDIT = "moderation:audit:read";
 
-/** What the plugin declares to `auth`, which collects it at build time and checks it with `can()`. */
+/**
+ * What the plugin declares to `auth`, which collects it at build time and checks it with `can()`. All but reporting are
+ * administrative: owning a user page or a group's linked pages gives none of them.
+ */
 export const PERMISSIONS = [
   {
     slug: WRITE_REPORTS,
@@ -21,15 +24,18 @@ export const PERMISSIONS = [
     slug: READ_REPORTS,
     name: "Handle reports",
     description: "See the reports readers send, and resolve or dismiss them.",
+    administrative: true,
   },
   {
     slug: WRITE_ACCOUNTS,
     name: "Suspend accounts",
     description: "Suspend and unsuspend accounts.",
+    administrative: true,
   },
   {
     slug: READ_AUDIT,
     name: "Read the audit log",
     description: "See what every moderator and admin changed, and when.",
+    administrative: true,
   },
 ] as const satisfies readonly PermissionDeclaration[];

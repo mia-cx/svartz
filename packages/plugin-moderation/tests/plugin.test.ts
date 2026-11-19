@@ -31,16 +31,17 @@ describe("the moderation plugin", () => {
     expect(plugin.server).toEqual({ module: expect.stringMatching(/server\.js$/), options: { limits: { reportsPerHour: 10 } } });
   });
 
-  it("declares reporting, handling reports, suspending and reading the log, which auth collects at build time", () => {
+  it("declares reporting, and administrative handling reports, suspending and reading the log, which auth collects at build time", () => {
     const vault = { id: "garden", mountPath: "/garden", target: { type: "cloudflare-workers" }, plugins: [signIn, moderation()] } as unknown as ResolvedConfig;
 
     const resolved = signIn.forVault!({ vault, vaults: [vault] });
 
-    expect((resolved.server?.options as { permissions: Array<{ slug: string; defaults?: unknown }> }).permissions.map(({ slug, defaults }) => [slug, defaults])).toEqual([
-      ["moderation:reports:write", { "signed-in": "allow" }],
-      ["moderation:reports:read", undefined],
-      ["moderation:accounts:write", undefined],
-      ["moderation:audit:read", undefined],
+    const collected = (resolved.server?.options as { permissions: Array<{ slug: string; defaults?: unknown; administrative?: boolean }> }).permissions;
+    expect(collected.map(({ slug, defaults, administrative }) => [slug, defaults, administrative])).toEqual([
+      ["moderation:reports:write", { "signed-in": "allow" }, undefined],
+      ["moderation:reports:read", undefined, true],
+      ["moderation:accounts:write", undefined, true],
+      ["moderation:audit:read", undefined, true],
     ]);
   });
 

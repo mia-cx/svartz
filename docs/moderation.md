@@ -63,7 +63,7 @@ Hiding and closing leave the report open, to resolve once done. Each shows only 
 | `moderation:accounts:write` | Suspend and unsuspend accounts. | Nobody but admins. |
 | `moderation:audit:read` | Read the audit log. | Nobody but admins. |
 
-Grant them on the dashboard's [People & permissions](auth.md#people--permissions). The plugin checks each on the vault; a grant on the site covers every vault.
+Grant them on the dashboard's [People & permissions](auth.md#people--permissions). The plugin checks each on the vault; a grant on the site covers every vault. All but reporting are [administrative](auth.md#grants): owning a user page or a group linked to the vault gives none of them, so only the `admin` role or a grant does.
 
 ## Routes
 

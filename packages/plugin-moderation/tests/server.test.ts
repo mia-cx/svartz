@@ -314,6 +314,21 @@ describe("the Reports panel", () => {
     expect(await audited(db)).toEqual([]);
   });
 
+  // Proves handling reports is administrative: owning a group linked to the whole vault gives its content, not this.
+  it("stays closed to the owner of a group linked to the vault", async () => {
+    const { db, site, ada } = await moderated();
+    const { report: { id } } = await (await report(site, ada, { kind: "page", id: "garden" })).json() as { report: { id: string } };
+    await db.batch([
+      db.prepare("INSERT INTO auth_groups (name, display_name, created_at) VALUES ('gardeners', 'Gardeners', '2026-11-19T00:00:00.000Z')"),
+      db.prepare(`INSERT INTO auth_group_members (group_name, account_id, owner, added_at)
+        SELECT 'gardeners', id, 1, '2026-11-19T00:00:00.000Z' FROM auth_accounts WHERE handle = 'ada'`),
+      db.prepare("INSERT INTO auth_group_links (group_name, object, linked_at) VALUES ('gardeners', 'vault:notes', '2026-11-19T00:00:00.000Z')"),
+    ]);
+
+    expect(await panel(site, ada)).toBeUndefined();
+    expect((await post(site, ada, `${ENDPOINT}/reports/${id}/resolve/`)).status).toBe(403);
+  });
+
   it("refuses a resolve from another site", async () => {
     const { site, ada, alan } = await moderated();
     const { report: { id } } = await (await report(site, ada, { kind: "page", id: "garden" })).json() as { report: { id: string } };
