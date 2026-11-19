@@ -1607,11 +1607,12 @@ describe("following a saved edit", () => {
   it("follows a published edit through the site's rebuild until it is live", async () => {
     const asked = serveStages(["building", "failed", "building", "live"]);
     await openEditor(TRACKED);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await page.getByRole("button", { name: "Publish" }).click();
     const said = page.getByRole("status");
     await expect.element(said).toHaveTextContent("Published. It goes live once the site rebuilds.");
+    expect(asked).toEqual([]);
 
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     for (const sentence of [
       "The site is rebuilding with your edit.",
       "The site's rebuild failed, so your edit isn't live yet.",
