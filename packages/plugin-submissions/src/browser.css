@@ -956,7 +956,8 @@
 	border-block-start: var(--sv-rule-width) dashed var(--sv-rule-strong);
 }
 
-.svartz-submissions-diff tr {
+/* A blank line keeps its height; the header row, read only by screen readers, takes none. */
+.svartz-submissions-diff tbody tr {
 	block-size: 1.5em;
 }
 
