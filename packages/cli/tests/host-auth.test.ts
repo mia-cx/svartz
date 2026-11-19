@@ -74,7 +74,8 @@ async function createHost(base: string) {
   roots.push(root);
   await symlink(kit2Toolchain, path.join(root, "node_modules"), "dir");
   await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
-  for (const name of ["+page.svelte", "+page.ts"]) {
+  for (const name of ["+page.svelte", "+page.ts", "-/[...page]/+page.svelte", "-/[...page]/+page.ts", "-/[...page]/+page.server.ts"]) {
+    await mkdir(path.dirname(path.join(root, "src/routes/[...slug]", name)), { recursive: true });
     await writeFile(path.join(root, "src/routes/[...slug]", name),
       await readFile(path.join(workspaceRoot, "packages/cli/template/src/routes/[...slug]", name)));
   }

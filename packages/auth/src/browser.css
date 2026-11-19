@@ -239,14 +239,17 @@
 	display: flex;
 	align-items: center;
 	gap: var(--sv-space-1, 0.25rem);
+	padding-block: 0;
 }
 
 .sv-account-handle span {
 	color: var(--sv-muted, GrayText);
 }
 
+/* The input fills the frame's height, so the whole field takes a tap. */
 .sv-account-handle input {
 	flex: 1;
+	align-self: stretch;
 	min-inline-size: 0;
 	padding: 0;
 	border: 0;

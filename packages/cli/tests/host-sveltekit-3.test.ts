@@ -149,10 +149,18 @@ kit3("prerenders a SvelteKit 3 host that reads the published index without compi
   }
 }, 240_000);
 
-kit3("prerenders a note page through the init catchall in a SvelteKit 3 host", async () => {
-  const catchall = path.join(workspaceRoot, "packages/cli/template/src/routes/[...slug]");
+/** The init catchall's route files, its plugin page route under `/-/` included, keyed by path under `src/routes`. */
+async function initRoutes(): Promise<Record<string, string>> {
+  const routesRoot = path.join(workspaceRoot, "packages/cli/template/src/routes");
   const routes: Record<string, string> = {};
-  for (const name of await readdir(catchall)) routes[`[...slug]/${name}`] = await readFile(path.join(catchall, name), "utf8");
+  for (const file of await filesUnder(path.join(routesRoot, "[...slug]"))) {
+    routes[path.relative(routesRoot, file)] = await readFile(file, "utf8");
+  }
+  return routes;
+}
+
+kit3("prerenders a note page through the init catchall in a SvelteKit 3 host", async () => {
+  const routes = await initRoutes();
   const root = await tempRoot();
   await createKit3Host(root, routes);
   await build(root);
@@ -201,3 +209,55 @@ kit3("serves a SvelteKit 3 host's server plugins the Wrangler bindings its adapt
     if (dev.exitCode === null) await once(dev, "exit");
   }
 }, 240_000);
+
+kit3("renders a plugin page in the theme shell of a SvelteKit 3 host, from its build and in dev", async () => {
+  const root = await tempRoot();
+  await createKit3Host(root, await initRoutes(), [
+    { id: "greeter", server: { module: path.join(root, "greeter.mjs"), pages: ["greet"] } },
+  ]);
+  await writeFile(path.join(root, "src/hooks.server.js"),
+    "import { svartzHandle } from 'virtual:svartz/server';\nexport const handle = svartzHandle;\n");
+  await writeFile(path.join(root, "greeter.mjs"), `export default () => ({
+    page: (_request, context) => context.path === "greet/"
+      ? { title: "Greetings", html: '<h1 class="greeter-page">Hello from ' + (context.env.DB ?? "nowhere") + "</h1>" }
+      : undefined,
+  });\n`);
+
+  // The production build bundles the page into the worker and prerenders nothing under /-/.
+  await build(root);
+  const server = path.join(root, ".svelte-kit/output/server");
+  const bundled = await Promise.all((await filesUnder(server)).map((file) => readFile(file, "utf8")));
+  expect(bundled.some((source) => source.includes("greeter-page"))).toBe(true);
+  expect((await filesUnder(path.join(root, ".svelte-kit/cloudflare"))).filter((file) => file.includes(`${path.sep}-${path.sep}`))).toEqual([]);
+
+  // Svartz reads bindings through wrangler's getPlatformProxy; this one answers without starting workerd.
+  await writeFile(path.join(root, "wrangler.json"), "{}\n");
+  await rm(path.join(root, "node_modules/wrangler"));
+  await mkdir(path.join(root, "node_modules/wrangler"));
+  await writeFile(path.join(root, "node_modules/wrangler/package.json"), JSON.stringify({ name: "wrangler", type: "module", main: "index.js" }));
+  await writeFile(path.join(root, "node_modules/wrangler/index.js"),
+    "export const getPlatformProxy = async () => ({ env: { DB: 'wrangler' }, dispose: async () => {} });\n");
+  const port = await freePort();
+  const dev = spawn(process.execPath, cliArgs(root, "dev", "--host", "127.0.0.1", "--port", String(port)), { cwd: root, stdio: "pipe" });
+  let output = "";
+  dev.stdout.on("data", (chunk: Buffer) => { output += chunk.toString(); });
+  dev.stderr.on("data", (chunk: Buffer) => { output += chunk.toString(); });
+  try {
+    const url = `http://127.0.0.1:${port}/learn/course/-/greet`;
+    let response: Response | undefined;
+    for (let attempt = 0; attempt < 1_200 && !response?.ok; attempt++) {
+      if (dev.exitCode !== null) throw new Error(`svartz dev exited:\n${output}`);
+      response = await fetch(url).catch(() => undefined);
+      if (!response?.ok) await sleep(100);
+    }
+    const html = await response!.text();
+    expect(response?.ok, output + html).toBe(true);
+    expect(html).toContain('<h1 class="greeter-page">Hello from wrangler</h1>');
+    expect(html).toContain("<title>Greetings | Course index</title>");
+    expect(html).toContain('id="explorer-panel"');
+    expect(response!.headers.get("cache-control")).toBe("private, no-store");
+  } finally {
+    dev.kill("SIGTERM");
+    if (dev.exitCode === null) await once(dev, "exit");
+  }
+}, 300_000);
