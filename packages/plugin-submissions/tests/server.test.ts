@@ -37,7 +37,12 @@ const handlerWith = (guard: GuardOptions) => createHandler(
   {
     commit: BUILD_COMMIT,
     pages: { "/wiki/guide/": "content/guide.md" },
-    routes: { guide: "/wiki/guide/", "people/timeline": "/wiki/people/timeline/" },
+    routes: {
+      guide: { slug: "guide", href: "/wiki/guide/" },
+      "people/timeline": { slug: "people/timeline", href: "/wiki/people/timeline/" },
+    },
+    aliases: {},
+    aliasesField: "aliases",
     vaultRoot: "content",
     folders: ["", "People"],
     links: [GUIDE_LINK],
@@ -187,7 +192,7 @@ describe("submissions server", () => {
 describe("as a GitHub App", () => {
   const appHandler = (guard: GuardOptions = { rateLimit: { limit: 100, period: 60 } }) => createHandler(
     { repo: REPO, labels: ["submission"], app: { id: APP_ID, privateKey: { env: "SVARTZ_GITHUB_APP_KEY" } }, guard },
-    { commit: BUILD_COMMIT, pages: { "/wiki/guide/": "content/guide.md" }, routes: {}, vaultRoot: "content", folders: [""], links: [GUIDE_LINK] },
+    { commit: BUILD_COMMIT, pages: { "/wiki/guide/": "content/guide.md" }, routes: {}, aliases: {}, aliasesField: "aliases", vaultRoot: "content", folders: [""], links: [GUIDE_LINK] },
   );
   const appEnv = { SVARTZ_GITHUB_APP_KEY: APP_KEY.pkcs1 };
 

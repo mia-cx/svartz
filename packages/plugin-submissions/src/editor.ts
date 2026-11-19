@@ -651,15 +651,19 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
   /** What became of the save, in place of the buttons: the commit, the pull request, or why it went to review. */
   function showSaved(saved: EditResponse) {
     query<HTMLElement>(dialog, ".svartz-submissions-note").hidden = true;
-    const changed = target.kind === "edit"
-      ? "This page changed since you opened it, so your edit went to review"
-      : "A page with this title was saved meanwhile, so yours went to review";
+    const edit = target.kind === "edit";
+    const why = {
+      changed: edit
+        ? "This page changed since you opened it, so your edit went to review"
+        : "A page with this title was saved meanwhile, so yours went to review",
+      route: `Your ${edit ? "edit gives this page" : "page asks for"} an address you can't publish to, so it went to review`,
+    };
     const status = Object.assign(document.createElement("p"), {
       className: "svartz-submissions-opened",
       textContent: saved.kind === "commit"
         ? "Published. It goes live once the site rebuilds."
-        : saved.reason === "changed"
-          ? `${changed} as pull request #${saved.number}.`
+        : saved.reason
+          ? `${why[saved.reason]} as pull request #${saved.number}.`
           : `Opened pull request #${saved.number}.`,
     });
     status.setAttribute("role", "status");

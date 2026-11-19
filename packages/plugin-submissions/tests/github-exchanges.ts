@@ -69,9 +69,9 @@ export const existenceCheck = (path: string, found = false): Exchange => ({
     : { status: 404, json: { message: "Not Found", status: "404" } },
 });
 
-/** An edit of `content/guide.md` on `branch`, from the pull request lookup to the labels. */
-export function editExchanges(written: Written): Exchange[] {
-  return writeExchanges({ ...written, path: "content/guide.md", title: "Edit content/guide.md" });
+/** An edit of `path`, `content/guide.md` by default, on `branch`, from the pull request lookup to the labels. */
+export function editExchanges({ path = "content/guide.md", ...written }: Written & { path?: string }): Exchange[] {
+  return writeExchanges({ ...written, path, title: `Edit ${path}` });
 }
 
 /** A new note at `path` on `branch`: the lookup, the check that nothing is at `path`, then as an edit. */

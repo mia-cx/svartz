@@ -92,9 +92,17 @@ export interface NewPageRequest {
 }
 
 /** `POST <endpoint>/edit/` and `POST <endpoint>/new/` answer 201 with this. */
+/**
+ * Why a save that was to commit opened a pull request instead:
+ * - `changed`: the file changed on the branch since the editor loaded it, or a new page's path was taken meanwhile.
+ * - `route`: the note asks for an address, by its slug or an alias, that the account may not commit to, or that a
+ *   page it may not commit to holds.
+ */
+export type ReviewReason = "changed" | "route";
+
 export type EditResponse =
-  /** The save opened pull request `number`. `reason: "changed"` when it was to commit, but the file changed since. */
-  | { readonly kind: "pull-request"; readonly url: string; readonly number: number; readonly reason?: "changed" }
+  /** The save opened pull request `number`; `reason` when it was to commit instead. */
+  | { readonly kind: "pull-request"; readonly url: string; readonly number: number; readonly reason?: ReviewReason }
   /** The save committed `sha` to the branch; the site shows it once the next deploy finishes. */
   | { readonly kind: "commit"; readonly url: string; readonly sha: string };
 

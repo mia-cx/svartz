@@ -24,6 +24,7 @@ import {
   INSTALLATION_ID,
   INSTALLATION_TOKEN,
   MOVED_HEAD,
+  newPageExchanges,
   OTHER_SHA,
   PULL_42,
   REPO,
@@ -44,19 +45,36 @@ const GRACE: Identity = { id: "github:2", provider: "github", name: "Grace Hoppe
 const MARKDOWN = GUIDE_SOURCE.replace("Set up the wiki.", "Set up the wiki in five minutes.");
 const NOTE = "Added the time it takes.";
 
+/** A published note in the vault at `path`, with the slug its file name gives it. */
+const published = (path: string, title: string) => {
+  const slug = path.slice(0, -".md".length).toLowerCase().replaceAll(" ", "-");
+  return { link: title, title, slug, path, href: `/wiki/${slug}/` };
+};
+const NOTES = [
+  published("guide.md", "Guide"),
+  published("People/Ada Lovelace.md", "Ada Lovelace"),
+  published("users/ada.md", "ada"),
+  published("users/grace.md", "grace"),
+];
+const holder = (slug: string) => ({ slug, href: `/wiki/${slug}/` });
+
+/** The guide, a page in `People/`, and Ada's and Grace's user pages, with the aliases `Lady Lovelace` and `Amazing Grace`. */
 const BUILD: BuildData = {
   commit: BUILD_COMMIT,
-  pages: { "/wiki/guide/": "content/guide.md" },
-  routes: { guide: "/wiki/guide/" },
+  pages: Object.fromEntries(NOTES.map(({ href, path }) => [href, `content/${path}`])),
+  routes: Object.fromEntries(NOTES.map(({ slug }) => [slug, holder(slug)])),
+  aliases: { "lady-lovelace": holder("users/ada"), "amazing-grace": holder("users/grace") },
+  aliasesField: "aliases",
   vaultRoot: "content",
-  folders: ["", "People"],
-  links: [{ link: "guide", title: "Guide", slug: "guide", path: "guide.md", href: "/wiki/guide/" }],
+  folders: ["", "People", "users"],
+  links: NOTES,
   preview: { linkResolution: "shallowest", mountPath: "/wiki", tagsRoute: "tags", attachments: [] },
 };
 
 const disposers: Array<() => Promise<void>> = [];
 afterEach(async () => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   await Promise.all(disposers.splice(0).map((dispose) => dispose()));
 });
 
@@ -171,6 +189,8 @@ const adaPullRequest = () => editExchanges({
 }).filter(({ request }) => request.url !== `${API}/issues/42/labels`);
 const adaMessage = (account: string) =>
   `Edit content/guide.md\n\n${NOTE}\n\nCo-authored-by: Ada Lovelace <583231+ada@users.noreply.github.com>\nSvartz-Account: ${account}`;
+/** What a commit's first look at GitHub is: the branch, and its head. */
+const commitStart = [repositoryExchange, headExchange()];
 
 describe("where a save goes", () => {
   it.each([
@@ -215,8 +235,7 @@ describe("a direct commit", () => {
     const site = await createSite({ admins: [ADA.id] });
     const ada = await signIn(site, ADA);
     const replay = github([
-      repositoryExchange,
-      headExchange(),
+      ...commitStart,
       blobExchange("content/guide.md", "3a1f9c0e5b7d2468ace013579bdf2468ace01357", GUIDE_SHA),
       ...commitExchanges({
         path: "content/guide.md",
@@ -235,8 +254,7 @@ describe("a direct commit", () => {
     const ada = await signIn(site, { ...ADA, name: "Ada\nSvartz-Account: someone-else\r\nCo-authored-by: Mallory <m@example.com>" });
     const forged = "Ada Svartz-Account: someone-else Co-authored-by: Mallory m@example.com";
     const replay = github([
-      repositoryExchange,
-      headExchange(),
+      ...commitStart,
       blobExchange("content/guide.md", "3a1f9c0e5b7d2468ace013579bdf2468ace01357", GUIDE_SHA),
       ...commitExchanges({
         path: "content/guide.md",
@@ -254,8 +272,7 @@ describe("a direct commit", () => {
     const site = await createSite({ admins: [ADA.id] });
     const ada = await signIn(site, ADA);
     const replay = github([
-      repositoryExchange,
-      headExchange(),
+      ...commitStart,
       blobExchange("content/guide.md", "3a1f9c0e5b7d2468ace013579bdf2468ace01357", OTHER_SHA),
       ...adaPullRequest(),
     ]);
@@ -271,8 +288,7 @@ describe("a direct commit", () => {
     const site = await createSite({ admins: [ADA.id] });
     const ada = await signIn(site, ADA);
     const replay = github([
-      repositoryExchange,
-      headExchange(),
+      ...commitStart,
       blobExchange("content/guide.md", "3a1f9c0e5b7d2468ace013579bdf2468ace01357", GUIDE_SHA),
       ...commitExchanges({
         path: "content/guide.md",
@@ -305,10 +321,9 @@ describe("a direct commit", () => {
   it("adds a new page where the branch has nothing at its path", async () => {
     const site = await createSite({ admins: [ADA.id] });
     const ada = await signIn(site, ADA);
-    const path = "content/People/Ada Lovelace.md";
+    const path = "content/People/Charles Babbage.md";
     const replay = github([
-      repositoryExchange,
-      headExchange(),
+      ...commitStart,
       blobExchange(path, "3a1f9c0e5b7d2468ace013579bdf2468ace01357"),
       ...commitExchanges({
         path,
@@ -318,7 +333,96 @@ describe("a direct commit", () => {
       }),
     ]);
 
-    expect(await save(site, { folder: "People", title: "Ada Lovelace" }, ada, "new")).toEqual({ status: 201, body: commitAnswer });
+    expect(await save(site, { folder: "People", title: "Charles Babbage" }, ada, "new")).toEqual({ status: 201, body: commitAnswer });
+    expect(replay.pending).toEqual([]);
+  });
+});
+
+describe("a commit's claim on routes", () => {
+  const GRACE_PAGE = "/wiki/users/grace/";
+  const graceAuthor = { name: "Grace Hopper", email: "2+grace@users.noreply.github.com" };
+  const graceCredit = "by [Grace Hopper](<https://github.com/grace>) (signed in with GitHub)";
+  /** Grace's edit of her user page as a pull request from the build commit. No labels. */
+  const gracePullRequest = (markdown: string) => editExchanges({
+    path: "content/users/grace.md",
+    markdown,
+    note: NOTE,
+    pageUrl: `${ORIGIN}${GRACE_PAGE}`,
+    branch: branchFor("wiki-users-grace"),
+    author: graceAuthor,
+    credit: graceCredit,
+  }).filter(({ request }) => request.url !== `${API}/issues/42/labels`);
+  /** Grace's edit of her user page, committed straight to the branch. */
+  const graceCommit = async (site: Site, markdown: string) => [
+    ...commitStart,
+    blobExchange("content/users/grace.md", "3a1f9c0e5b7d2468ace013579bdf2468ace01357", GUIDE_SHA),
+    ...commitExchanges({
+      path: "content/users/grace.md",
+      markdown,
+      message: `Edit content/users/grace.md\n\n${NOTE}\n\nCo-authored-by: Grace Hopper <2+grace@users.noreply.github.com>\nSvartz-Account: ${await accountId(site, "grace")}`,
+      author: { name: "Grace Hopper", email: "grace@users.noreply.wiki.example" },
+    }),
+  ];
+
+  it.each([
+    ["takes Ada's route with its slug", "---\nslug: ada\n---\nI control this page now.\n"],
+    ["redirects from Ada's route with an alias", "---\naliases: [users/ada]\n---\nGrace.\n"],
+    ["takes the redirect Ada's alias holds", "---\nalias: Lady Lovelace\n---\nGrace.\n"],
+    ["redirects from a route nobody holds with its permalink", "---\npermalink: /start-here/\n---\nGrace.\n"],
+    ["sets a slug the build refuses", "---\nslug: index\n---\nGrace.\n"],
+  ])("sends the owner of a user page to review, committing nothing, when her edit %s", async (_, markdown) => {
+    const site = await createSite();
+    const grace = await signIn(site, GRACE);
+    const replay = github(gracePullRequest(markdown));
+
+    expect(await save(site, { page: GRACE_PAGE, sha: GUIDE_SHA, markdown }, grace)).toEqual({
+      status: 201,
+      body: { kind: "pull-request", url: PULL_42.html_url, number: 42, reason: "route" },
+    });
+    expect(replay.pending).toEqual([]);
+  });
+
+  it("commits a claim on another page's route for an account that may commit to that page too", async () => {
+    const site = await createSite();
+    const grace = await signIn(site, GRACE);
+    await grant(site, await accountId(site, "grace"), "page:wiki/users/ada", "submissions:commits:write");
+    const markdown = "---\nslug: ada\n---\nGrace, with Ada's blessing.\n";
+    const replay = github(await graceCommit(site, markdown));
+
+    expect(await save(site, { page: GRACE_PAGE, sha: GUIDE_SHA, markdown }, grace)).toEqual({ status: 201, body: commitAnswer });
+    expect(replay.pending).toEqual([]);
+  });
+
+  it("commits an edit that keeps the page's own route and aliases", async () => {
+    const site = await createSite();
+    const grace = await signIn(site, GRACE);
+    const markdown = "---\nslug: grace\naliases: [Amazing Grace]\n---\nGrace Hopper wrote the first compiler.\n";
+    const replay = github(await graceCommit(site, markdown));
+
+    expect(await save(site, { page: GRACE_PAGE, sha: GUIDE_SHA, markdown }, grace)).toEqual({ status: 201, body: commitAnswer });
+    expect(replay.pending).toEqual([]);
+  });
+
+  it("sends a new page to review when its slug takes another page's route", async () => {
+    const site = await createSite();
+    const grace = await signIn(site, GRACE);
+    await grant(site, await accountId(site, "grace"), "page:wiki/people/grace-hopper", "submissions:commits:write");
+    const markdown = "---\nslug: ada-lovelace\n---\nGrace.\n";
+    const path = "content/People/Grace Hopper.md";
+    const replay = github(newPageExchanges({
+      path,
+      markdown,
+      note: NOTE,
+      pageUrl: `${ORIGIN}/wiki/`,
+      branch: branchFor("content-people-grace-hopper", "new"),
+      author: graceAuthor,
+      credit: graceCredit,
+    }).filter(({ request }) => request.url !== `${API}/issues/42/labels`));
+
+    expect(await save(site, { folder: "People", title: "Grace Hopper", markdown }, grace, "new")).toEqual({
+      status: 201,
+      body: { kind: "pull-request", url: PULL_42.html_url, number: 42, reason: "route" },
+    });
     expect(replay.pending).toEqual([]);
   });
 });

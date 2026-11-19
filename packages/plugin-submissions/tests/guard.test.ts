@@ -31,7 +31,9 @@ function handlerWith(guard: GuardOptions) {
     {
       commit: BUILD_COMMIT,
       pages: { "/wiki/guide/": "content/guide.md" },
-      routes: { guide: "/wiki/guide/" },
+      routes: { guide: { slug: "guide", href: "/wiki/guide/" } },
+      aliases: {},
+      aliasesField: "aliases",
       vaultRoot: "content",
       folders: [""],
       links: [{ link: "guide", title: "Guide", slug: "guide", path: "guide.md", href: "/wiki/guide/" }],

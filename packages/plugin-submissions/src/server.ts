@@ -17,14 +17,15 @@
  * opens a pull request, as before accounts. With them, it commits when the mode allows commits, a GitHub App is
  * configured and the account holds `submissions:commits:write` on the page; otherwise it opens a pull request when
  * the mode allows those and the reader holds `submissions:pull-requests:write`; otherwise it is refused. A commit
- * whose file changed on the branch since the reader loaded it opens a pull request instead.
+ * opens a pull request instead when its frontmatter claims a route the account may not commit to, or when its file
+ * changed on the branch since the reader loaded it.
  *
  * Every save passes the guard (required sign-in, rate limit, and Turnstile when configured) before any GitHub call, a
  * GitHub App's token exchange included. Failures answer `{ error, message }`.
  */
 import { can, linkedIdentities, readIdentity, readSignIn, type Account, type Identity } from "@svartz/auth/server";
 import type { ServerContext, ServerModuleFactory } from "@svartz/core";
-import { pathRoute } from "@svartz/plugins/routes";
+import { alternateRoutes, extractFrontmatter, pathRoute, requestedSlug } from "@svartz/plugins/routes";
 import {
   MAX_MARKDOWN_BYTES,
   MAX_NOTE_LENGTH,
@@ -37,6 +38,7 @@ import {
   type LinksResponse,
   type LinkTarget,
   type PreviewSettings,
+  type ReviewReason,
   type SourceResponse,
 } from "./api";
 import { appTokens, type AppCredentials } from "./app";
@@ -65,6 +67,12 @@ export type ServerOptions = Credentials & {
   readonly mode: Mode;
 };
 
+/** The page holding a route: its slug, which permissions are checked on, and its URL below the deployment base, `null` when hidden. */
+export interface RouteHolder {
+  readonly slug: string;
+  readonly href: string | null;
+}
+
 /** What the build records for the server: never sent to the browser. */
 export interface BuildData {
   /** The commit the site was built from. */
@@ -73,10 +81,13 @@ export interface BuildData {
   readonly pages: Readonly<Record<string, string>>;
   /**
    * Every route a page holds or asks for, of any type and protected or hidden ones included, as `core:allocate-routes`
-   * derives it, mapped to the page's route below the deployment base, or `null` for a hidden page. A new note asking
-   * for one of these would take that page's URL or move it.
+   * derives it, mapped to that page. A note asking for one of these would take that page's URL or move it.
    */
-  readonly routes: Readonly<Record<string, string | null>>;
+  readonly routes: Readonly<Record<string, RouteHolder>>;
+  /** Every route a page's aliases redirect from or ask to, mapped to the page that holds the redirect. */
+  readonly aliases: Readonly<Record<string, RouteHolder>>;
+  /** The frontmatter field the build reads aliases from, besides `alias` and `permalink`. */
+  readonly aliasesField: string;
   /** The vault's folder inside the repository, `""` at its root. */
   readonly vaultRoot: string;
   /** Vault folders that hold a published note, where new notes may go. `""` is the vault's top level. */
@@ -162,17 +173,45 @@ async function readSubmission(request: Request) {
 const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, data) => {
   const pages = new Map(Object.entries(data.pages));
   // Every editable page is published, so the links list holds its slug, which permissions are checked on.
-  const slugs = new Map(data.links.map(({ href, slug }) => [href, slug]));
+  const notes = new Map(data.links.map((link) => [link.href, link]));
   const routes = new Map(Object.entries(data.routes));
+  const aliases = new Map(Object.entries(data.aliases));
   const folders = new Set(data.folders);
   const guard = createGuard(options.guard);
 
-  /** The repository path and slug of the editable note at route `page`. */
-  function editable(page: string | null): { path: string; slug: string } {
+  /** The repository path, vault path and slug of the editable note at route `page`. */
+  function editable(page: string | null): { path: string; vaultPath: string; slug: string } {
     const path = page === null ? undefined : pages.get(page);
-    const slug = page === null ? undefined : slugs.get(page);
-    if (!path || slug === undefined) throw new SubmissionError("not_editable", 404, "This page can't be edited from the site.");
-    return { path, slug };
+    const link = page === null ? undefined : notes.get(page);
+    if (!path || !link) throw new SubmissionError("not_editable", 404, "This page can't be edited from the site.");
+    return { path, vaultPath: link.path, slug: link.slug };
+  }
+
+  /**
+   * Whether `account` may commit `markdown` at `vaultPath` without taking a route it may not commit to. Every route
+   * the note would claim, read as the build reads it (its slug, from frontmatter or its file name, and each route its
+   * aliases ask to redirect from), needs `submissions:commits:write`, and so does any other page holding one of them,
+   * which the note would move or take a redirect from. A route `self`, the page being edited, already holds is no new
+   * claim. Frontmatter the build would refuse claims nothing that can be checked, so it may not commit either.
+   */
+  async function mayClaim(account: Account, vaultPath: string, markdown: string, self: string | undefined, context: ServerContext): Promise<boolean> {
+    let claimed: string[];
+    try {
+      const { frontmatter } = extractFrontmatter(markdown);
+      claimed = [requestedSlug({ path: vaultPath, frontmatter }), ...alternateRoutes(frontmatter, data.aliasesField)];
+    } catch {
+      return false;
+    }
+    const objects = new Set<string>();
+    for (const route of claimed) {
+      const holders = [routes.get(route), aliases.get(route)].filter((holder) => holder !== undefined);
+      if (!holders.some(({ slug }) => slug === self)) objects.add(route);
+      for (const { slug } of holders) if (slug !== self) objects.add(slug);
+    }
+    for (const page of objects) {
+      if (!await can(account, COMMIT, { vault: context.vault.id, page }, context.env)) return false;
+    }
+    return true;
   }
 
   /** A new note's path in the vault, named after its title as in Obsidian. Refuses folders the build didn't publish. */
@@ -230,14 +269,15 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
   }
 
   /**
-   * Decide where the save goes, on `slug`, the page it writes; pass the guard; then commit or open the pull request.
-   * `loaded` is the blob SHA the editor loaded, for an edit. A commit that finds the file changed opens a pull request.
+   * Decide where the save goes, on `slug`, the page it writes at `vaultPath`; pass the guard; then commit or open the
+   * pull request. `loaded` is the blob SHA the editor loaded, for an edit. A commit that would claim a route the
+   * account may not commit to, or that finds the file changed, opens a pull request instead.
    */
   async function save(
     request: Request,
     context: ServerContext,
     turnstileToken: string | undefined,
-    slug: string,
+    { slug, vaultPath }: { slug: string; vaultPath: string },
     submission: Omit<Submission, "submitter">,
     loaded?: string,
   ): Promise<Response> {
@@ -252,13 +292,18 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     await guard({ token: turnstileToken, identity: reader.identity, clientAddress: context.clientAddress, env: context.env });
     const github = await target(context);
     const full: Submission = { ...submission, submitter: reader.identity };
-    let answer: EditResponse;
-    if (destination === "commit") {
-      const committed = await commitSubmission(github, full, loaded, await attribution(reader.account!, request, context));
-      answer = committed.kind === "commit" ? committed : { kind: "pull-request", ...await openSubmission(github, full), reason: "changed" };
-    } else {
-      answer = { kind: "pull-request", ...await openSubmission(github, full) };
+    let review: ReviewReason | undefined;
+    if (destination === "commit" && reader.account) {
+      const self = submission.kind === "edit" ? slug : undefined;
+      if (await mayClaim(reader.account, vaultPath, submission.markdown, self, context)) {
+        const committed = await commitSubmission(github, full, loaded, await attribution(reader.account, request, context));
+        if (committed.kind === "commit") return Response.json(committed satisfies EditResponse, { status: 201 });
+        review = "changed";
+      } else {
+        review = "route";
+      }
     }
+    const answer: EditResponse = { kind: "pull-request", ...await openSubmission(github, full), ...(review ? { reason: review } : {}) };
     return Response.json(answer, { status: 201 });
   }
 
@@ -281,9 +326,9 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
   async function edit(request: Request, context: ServerContext): Promise<Response> {
     const { body: { page, sha }, submission, turnstileToken } = await readSubmission(request);
     if (typeof page !== "string" || (sha !== undefined && (typeof sha !== "string" || !BLOB_SHA.test(sha)))) throw invalid();
-    const { path, slug } = editable(page);
+    const { path, vaultPath, slug } = editable(page);
     const pageUrl = publicUrl(page, request, context);
-    return save(request, context, turnstileToken, slug, { ...submission, kind: "edit", path, page, pageUrl }, sha);
+    return save(request, context, turnstileToken, { slug, vaultPath }, { ...submission, kind: "edit", path, page, pageUrl }, sha);
   }
 
   async function create(request: Request, context: ServerContext): Promise<Response> {
@@ -292,21 +337,23 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     const vaultPath = newNotePath(folder, title);
     const path = data.vaultRoot ? `${data.vaultRoot}/${vaultPath}` : vaultPath;
     const existing = routes.get(pathRoute(vaultPath));
-    if (existing !== undefined) {
+    if (existing) {
       // A hidden page gets no link: the site never shows where it is.
+      const { href } = existing;
       throw new SubmissionError(
         "exists",
         409,
-        existing !== null && pages.has(existing)
+        href !== null && pages.has(href)
           ? "A page with this title already exists. Choose another title, or edit that page."
           : "A page with this title already exists. Choose another title.",
         undefined,
-        existing === null ? undefined : publicUrl(existing, request, context),
+        href === null ? undefined : publicUrl(href, request, context),
       );
     }
     // The pull request names where the reader came from: this vault's home page.
     const pageUrl = publicUrl(`${context.vault.mountPath}/`, request, context);
-    return save(request, context, turnstileToken, pathRoute(vaultPath), { ...submission, kind: "new", path, page: path.slice(0, -".md".length), pageUrl });
+    const slug = pathRoute(vaultPath);
+    return save(request, context, turnstileToken, { slug, vaultPath }, { ...submission, kind: "new", path, page: path.slice(0, -".md".length), pageUrl });
   }
 
   const links = async () => Response.json({ notes: data.links, ...data.preview } satisfies LinksResponse);

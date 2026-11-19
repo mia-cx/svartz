@@ -24,11 +24,11 @@ import {
   type SvartzPlugin,
 } from "@svartz/core";
 import { publishedAttachments, sharedAttachmentNames, wikilinkResolver } from "@svartz/plugins";
-import { alternateNames, isNote, pathRoute, requestedSlug, routeHref } from "@svartz/plugins/routes";
+import { alternateNames, alternateRoutes, isNote, pathRoute, requestedSlug, routeHref } from "@svartz/plugins/routes";
 import { PLUGIN_ID, type BrowserOptions, type LinkTarget } from "./api";
 import type { GuardOptions, RateLimitOptions, TurnstileOptions } from "./guard";
 import { permissions } from "./permissions";
-import type { BuildData, Credentials, Mode, ServerOptions } from "./server";
+import type { BuildData, Credentials, Mode, RouteHolder, ServerOptions } from "./server";
 
 export interface SubmissionsOptions {
   /** The GitHub repository pull requests open on, as `owner/name`. */
@@ -160,21 +160,22 @@ function normalizeVaultRoot(value: string): string {
 }
 
 /**
- * Every route a note holds or would ask for again, of any type and protected ones included, mapped to the page's
- * public URL, or `null` when the page is hidden. Read from the files rather than the index: the index redacts
- * protected notes' paths and leaves hidden ones out.
+ * Every route a note holds or would ask for again, of any type and protected ones included, and every route its
+ * aliases redirect from or ask to, each mapped to the note that holds it. Read from the files rather than the index:
+ * the index redacts protected notes' paths and leaves hidden ones out.
  */
-function routeClaims(files: readonly ProcessedFile[], mountPath: string): Record<string, string | null> {
-  const notes = files.filter(isNote);
-  const link = (file: ProcessedFile) => file.protection?.hidden ? null : routeHref(file.slug, mountPath);
-  // A note's own route first, so a key two notes ask for links the one holding it.
-  const claims: Record<string, string | null> = Object.fromEntries(notes.map((file) => [file.slug, link(file)]));
+function routeClaims(files: readonly ProcessedFile[], mountPath: string, aliasesField: string): Pick<BuildData, "routes" | "aliases"> {
+  const notes = files.filter(isNote).sort((a, b) => a.path.localeCompare(b.path));
+  const holder = (file: ProcessedFile): RouteHolder => ({ slug: file.slug, href: file.protection?.hidden ? null : routeHref(file.slug, mountPath) });
+  // A note's own route first, so a key two notes ask for names the one holding it.
+  const routes: Record<string, RouteHolder> = Object.fromEntries(notes.map((file) => [file.slug, holder(file)]));
+  // Path order, as `core:allocate-routes` grants a redirect two notes ask for to the first.
+  const aliases: Record<string, RouteHolder> = {};
   for (const file of notes) {
-    for (const key of [requestedSlug(file), pathRoute(file.path)]) {
-      if (!(key in claims)) claims[key] = link(file);
-    }
+    for (const key of [requestedSlug(file), pathRoute(file.path)]) routes[key] ??= holder(file);
+    for (const key of alternateRoutes(file.frontmatter, aliasesField)) aliases[key] ??= holder(file);
   }
-  return claims;
+  return { routes, aliases };
 }
 
 /**
@@ -246,7 +247,8 @@ export function submissions(options: SubmissionsOptions) {
         const checkout = await readCheckout(resolve(ctx.config.path));
         const root = vaultRoot ?? checkout.vaultRoot;
         const entries = ctx.index?.entries ?? [];
-        const routes = routeClaims(ctx.files, ctx.config.mountPath ?? "");
+        const { aliasesField } = ctx.config.frontmatter;
+        const { routes, aliases } = routeClaims(ctx.files, ctx.config.mountPath ?? "", aliasesField);
         // Protected notes stay out: their source must not leave the repository through the site.
         const published = entries
           .filter((entry) => !entry.locked)
@@ -270,7 +272,9 @@ export function submissions(options: SubmissionsOptions) {
           attachments: publishedAttachments(ctx).map((file) => file.path),
           sharedNames: sharedAttachmentNames(ctx),
         };
-        compiler.serverData.set(PLUGIN_ID, { commit: checkout.commit, pages, routes, vaultRoot: root, folders, links, preview } satisfies BuildData);
+        compiler.serverData.set(PLUGIN_ID, {
+          commit: checkout.commit, pages, routes, aliases, aliasesField, vaultRoot: root, folders, links, preview,
+        } satisfies BuildData);
         compiler.browserResources.set(PLUGIN_ID, {
           id: PLUGIN_ID,
           kind: "script",

@@ -116,16 +116,18 @@ describe("Edit", () => {
       .toHaveAttribute("href", `https://github.com/acme/wiki/commit/${commit}`);
   });
 
-  it("says why an edit that was to go live went to review", async () => {
+  it.each([
+    ["changed", "This page changed since you opened it, so your edit went to review as pull request #7."],
+    ["route", "Your edit gives this page an address you can't publish to, so it went to review as pull request #7."],
+  ])("says why an edit that was to go live went to review: %s", async (reason, sentence) => {
     serve(
-      () => Response.json({ kind: "pull-request", url: "https://github.com/acme/wiki/pull/7", number: 7, reason: "changed" }, { status: 201 }),
+      () => Response.json({ kind: "pull-request", url: "https://github.com/acme/wiki/pull/7", number: 7, reason }, { status: 201 }),
       () => Response.json({ markdown: SOURCE, sha: SOURCE_SHA, destination: "commit" }),
     );
     await openEditor();
     await page.getByRole("button", { name: "Publish" }).click();
 
-    await expect.element(page.getByRole("status"))
-      .toHaveTextContent("This page changed since you opened it, so your edit went to review as pull request #7.");
+    await expect.element(page.getByRole("status")).toHaveTextContent(sentence);
     await expect.element(page.getByRole("link", { name: "View pull request #7" })).toBeVisible();
   });
 
@@ -908,7 +910,6 @@ describe("drafts", () => {
       const [, init] = vi.mocked(globalThis.fetch).mock.calls.find(([url]) => String(url).endsWith("/edit/"))!;
       expect(JSON.parse(String(init!.body))).toMatchObject({ sha: "0".repeat(40) });
     });
-
     it("forgets the draft the reader discards", async () => {
       await reopenChanged();
       await page.getByRole("button", { name: "Discard edit" }).click();

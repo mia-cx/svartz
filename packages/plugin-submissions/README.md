@@ -151,6 +151,8 @@ The editor sends the blob SHA of the source it loaded. The server reads where th
 
 A restored draft written against an older source sends no SHA the branch could have, so it opens a pull request.
 
+A note's frontmatter decides addresses too: its `slug` names its own, and its aliases (`alias`, the field `frontmatter.aliasesField` names, and `permalink`) ask for addresses that redirect to it. The server reads the saved Markdown as the build will, and commits only when the account holds `submissions:commits:write` on every address the note asks for that the page doesn't hold already, and on every other page holding one, which the note would move or take a redirect from. Otherwise, or when the build would refuse the slug, the save opens a pull request, answers `reason: "route"`, and the editor says "Your edit gives this page an address you can't publish to, so it went to review as pull request #42." An account that may edit only its own `users/<handle>` page can't take another user's address by giving its page `slug: <their handle>`.
+
 Each commit is authored as the account and committed by the App:
 
 ```
