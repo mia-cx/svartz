@@ -703,8 +703,8 @@ describe("closing a submission", () => {
   it("closes a submission saved through this vault for a reviewer, records who did, and goes back", async () => {
     const { site, grace } = await submitted();
     await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
-    // The App's token from the save is still good.
-    const replay = replayGitHub([pullExchange(), closeExchange], INSTALLATION_TOKEN);
+    // The App's token from the save is still good. No branch is configured, so submissions target the default.
+    const replay = replayGitHub([pullExchange(), repositoryExchange, closeExchange], INSTALLATION_TOKEN);
 
     const answer = await close(site, grace);
 
@@ -745,7 +745,7 @@ describe("closing a submission", () => {
   it("leaves a closed submission as it is, recording nothing", async () => {
     const { site, grace } = await submitted();
     await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
-    const replay = replayGitHub([pullExchange({ state: "closed" })], INSTALLATION_TOKEN);
+    const replay = replayGitHub([pullExchange({ state: "closed" }), repositoryExchange], INSTALLATION_TOKEN);
 
     expect((await close(site, grace)).status).toBe(303);
     expect(replay.pending).toEqual([]);
@@ -760,6 +760,20 @@ describe("closing a submission", () => {
     const answer = await close(site, grace);
 
     expect(answer.status).toBe(404);
+    expect(await audited(site)).toEqual([]);
+  });
+
+  // Proves a saved submission someone retargeted at another branch is no longer the vault's to close.
+  it("refuses a saved submission retargeted at another branch, as it refuses one that doesn't exist", async () => {
+    const { site, grace } = await submitted();
+    await grant(site, await accountId(site, "grace"), "vault:wiki", "submissions:reviews:write");
+    const replay = replayGitHub([pullExchange({ base: "release" }), repositoryExchange], INSTALLATION_TOKEN);
+
+    const answer = await close(site, grace);
+
+    expect(answer.status).toBe(404);
+    expect(await answer.json()).toEqual({ error: "not_found", message: `${REPO} has no submission #42.` });
+    expect(replay.pending).toEqual([]);
     expect(await audited(site)).toEqual([]);
   });
 
