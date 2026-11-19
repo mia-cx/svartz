@@ -119,7 +119,12 @@ declare module "virtual:svartz/index" {
   export const vaults: readonly PublishedVault[];
 }
 
-/** Server-only. Add `svartzHandle` to `hooks.server` to route `/_svartz/<id>/` to every vault's server plugins. */
+/**
+ * Server-only. Add `svartzHandle` to `hooks.server` to route `/_svartz/<id>/` to every vault's server plugins.
+ * `svartzPage` renders plugin pages under `/-/` from the plugin page route's server `load`.
+ */
 declare module "virtual:svartz/server" {
   export const svartzHandle: import("@sveltejs/kit").Handle;
+  /** The plugin page at `event.url`, or `undefined` when no plugin renders one there. */
+  export function svartzPage(event: import("@sveltejs/kit").RequestEvent): Promise<import("@svartz/core").PageResult | undefined>;
 }

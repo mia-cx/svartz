@@ -92,10 +92,18 @@ function serverRuntimeSource({ kit3, cloudflare }: ServerRuntime): { imports: st
   };
 }
 
+/** `virtual:svartz/server` for a vault without runtime routes: the handle passes through and no page renders. */
+const PASSTHROUGH_SERVER_SOURCE = [
+  "export const svartzHandle = ({ event, resolve }) => resolve(event);",
+  "export const svartzPage = async () => undefined;",
+  "",
+].join("\n");
+
 /**
- * The vault's server-only module: its active server plugins as a registry, and `svartzHandle`, the SvelteKit `handle`
- * that routes `/_svartz/<id>/` to them. `virtual:svartz/server` is this module in the standalone shell; host apps get
- * one that chains every vault's. Its env imports keep it out of client bundles.
+ * The vault's server-only module: its active server plugins as a registry; `svartzHandle`, the SvelteKit `handle`
+ * that routes `/_svartz/<id>/` to them; and `svartzPage`, which renders their pages under `/-/` for the plugin page
+ * route's `load`. `virtual:svartz/server` is this module in the standalone shell; host apps get one that chains every
+ * vault's. Its env imports keep it out of client bundles.
  * `serverData` is what each plugin's hooks recorded for its server module this build, keyed by plugin id.
  */
 function createServerRegistrySource(
@@ -112,10 +120,11 @@ function createServerRegistrySource(
     const options = jsonExpression(server.options);
     const data = jsonExpression(serverData.get(id));
     const eager = server.eager ? ", eager: true" : "";
-    return [`  { id: ${JSON.stringify(id)}, load: () => import(${JSON.stringify(specifier)}), options: ${options}, data: ${data}${eager} },`];
+    const pages = server.pages?.length ? `, pages: ${JSON.stringify(server.pages)}` : "";
+    return [`  { id: ${JSON.stringify(id)}, load: () => import(${JSON.stringify(specifier)}), options: ${options}, data: ${data}${eager}${pages} },`];
   });
   // With no runtime routes the handle passes through, so the server bundle gains nothing else.
-  if (servers.length === 0 && Object.keys(markdown).length === 0) return "export const svartzHandle = ({ event, resolve }) => resolve(event);\n";
+  if (servers.length === 0 && Object.keys(markdown).length === 0) return PASSTHROUGH_SERVER_SOURCE;
   const { favicon: _faviconSource, ...site } = config.site;
   const registry = [
     `const registry = {`,
@@ -128,10 +137,12 @@ function createServerRegistrySource(
   const { imports, runtime } = serverRuntimeSource(serverRuntime);
   return [
     ...imports,
-    `import { createServerHandle } from ${JSON.stringify(resolveCoreModuleId())};`,
+    `import { createServer } from ${JSON.stringify(resolveCoreModuleId())};`,
     "",
     registry,
-    `export const svartzHandle = createServerHandle(registry, ${runtime});`,
+    `const server = createServer(registry, ${runtime});`,
+    "export const svartzHandle = server.handle;",
+    "export const svartzPage = server.page;",
     "",
   ].join("\n");
 }

@@ -1,6 +1,7 @@
 import {
   mergePlugins,
   normalizePlugin,
+  PAGE_ROUTE_SEGMENT,
   SECRET_ENV_NAME_PATTERN,
   SERVER_PLUGIN_ID_PATTERN,
   THEME_FEATURE_STAGES,
@@ -99,11 +100,13 @@ function assertServerPlugins(
   for (const { id, server } of plugins) {
     if (!server) continue;
     const target = config.target.type;
+    // Pages render per request too, so they need a server just as requests do.
+    const serves = Array.isArray(server.pages) && server.pages.length > 0 ? "serves pages" : "serves requests";
     if (target === "host" && hostAdapter === STATIC_ADAPTER) {
-      throw new Error(`Vault "${config.id}" is mounted in a host app that uses ${STATIC_ADAPTER}, but plugin "${id}" serves requests. Use a server adapter, such as @sveltejs/adapter-node or @sveltejs/adapter-cloudflare, or disable the plugin.`);
+      throw new Error(`Vault "${config.id}" is mounted in a host app that uses ${STATIC_ADAPTER}, but plugin "${id}" ${serves}. Use a server adapter, such as @sveltejs/adapter-node or @sveltejs/adapter-cloudflare, or disable the plugin.`);
     }
     if (target !== "host" && !(SERVER_TARGETS as readonly string[]).includes(target)) {
-      throw new Error(`Vault "${config.id}" targets "${target}", but plugin "${id}" serves requests. Use a server target (${SERVER_TARGETS.join(", ")}) or disable the plugin.`);
+      throw new Error(`Vault "${config.id}" targets "${target}", but plugin "${id}" ${serves}. Use a server target (${SERVER_TARGETS.join(", ")}) or disable the plugin.`);
     }
     if (!SERVER_PLUGIN_ID_PATTERN.test(id)) {
       throw new Error(`Plugin "${id}" serves requests under /_svartz/<id>/, so its id may hold only lowercase letters, digits and hyphens.`);
@@ -113,6 +116,42 @@ function assertServerPlugins(
     }
     const problem = serverOptionsProblem(server.options ?? null, "server.options");
     if (problem) throw new Error(`Plugin "${id}": ${problem}.`);
+  }
+  assertPluginPages(config, plugins);
+}
+
+/** Page names are URL path segments, and each one belongs to one plugin on the vault. */
+function assertPluginPages(config: ResolvedConfig, plugins: readonly NormalizedSvartzPlugin[]): void {
+  const owners = new Map<string, string>();
+  for (const { id, server } of plugins) {
+    const pages: unknown = server?.pages ?? [];
+    if (!Array.isArray(pages)) throw new Error(`Plugin "${id}": server.pages must list page names, such as ["account"].`);
+    for (const name of pages) {
+      if (typeof name !== "string" || !SERVER_PLUGIN_ID_PATTERN.test(name)) {
+        throw new Error(`Plugin "${id}" claims page ${JSON.stringify(name)} under /${PAGE_ROUTE_SEGMENT}/; a page name may hold only lowercase letters, digits and hyphens.`);
+      }
+      const owner = owners.get(name);
+      if (owner) throw new Error(`Vault "${config.id}": plugins "${owner}" and "${id}" both claim the page /${PAGE_ROUTE_SEGMENT}/${name}/.`);
+      owners.set(name, id);
+    }
+  }
+}
+
+/** Whether any active plugin renders pages under `/-/`. */
+function hasPluginPages(plugins: readonly NormalizedSvartzPlugin[]): boolean {
+  return plugins.some(({ server }) => Boolean(server?.pages?.length));
+}
+
+/**
+ * Plugin pages own `<mount>/-/`, so a published note there would be shadowed at runtime. Fail the build naming it.
+ * `routes` are the vault's published routes, mount path included.
+ */
+function assertNoNotesUnderPages(config: ResolvedConfig, plugins: readonly NormalizedSvartzPlugin[], routes: readonly string[]): void {
+  if (!hasPluginPages(plugins)) return;
+  const prefix = `${config.mountPath}/${PAGE_ROUTE_SEGMENT}/`;
+  const shadowed = routes.find((route) => route.startsWith(prefix));
+  if (shadowed) {
+    throw new Error(`Vault "${config.id}" publishes ${shadowed}, but plugin pages own ${prefix}. Rename the note's folder or slug.`);
   }
 }
 
@@ -139,4 +178,12 @@ function resolveRuntimePlugins(
   return normalized;
 }
 
-export { assertRequiredStages, assertServerPlugins, assertThemeRequirements, getThemePresetPlugins, resolveRuntimePlugins };
+export {
+  assertNoNotesUnderPages,
+  assertRequiredStages,
+  assertServerPlugins,
+  assertThemeRequirements,
+  getThemePresetPlugins,
+  hasPluginPages,
+  resolveRuntimePlugins,
+};

@@ -143,15 +143,25 @@ export function getGeneratedHostServerPath(configDir: string): string {
   return join(configDir, ".svartz", "host", "server.ts");
 }
 
-/** `virtual:svartz/server` in a host app: `svartzHandle` runs every host vault's generated handle in turn. */
+/**
+ * `virtual:svartz/server` in a host app: `svartzHandle` runs every host vault's generated handle in turn, and
+ * `svartzPage` asks each vault for the plugin page at a URL.
+ */
 export function createHostServerSource(vaults: readonly ResolvedConfig[]): string {
   return [
     ...vaults.map((vault, index) =>
-      `import { svartzHandle as vault${index} } from ${JSON.stringify(getGeneratedRuntimeServerModulePath(vault))};`),
+      `import { svartzHandle as vault${index}, svartzPage as page${index} } from ${JSON.stringify(getGeneratedRuntimeServerModulePath(vault))};`),
     `const handles = [${vaults.map((_vault, index) => `vault${index}`).join(", ")}];`,
+    `const pages = [${vaults.map((_vault, index) => `page${index}`).join(", ")}];`,
     "// Mounts never overlap, so at most one vault answers; the others pass the request on.",
     "export const svartzHandle = ({ event, resolve }) =>",
     "  handles.reduceRight((next, handle) => (request) => handle({ event: request, resolve: next }), resolve)(event);",
+    "export const svartzPage = async (event) => {",
+    "  for (const page of pages) {",
+    "    const result = await page(event);",
+    "    if (result) return result;",
+    "  }",
+    "};",
     "",
   ].join("\n");
 }

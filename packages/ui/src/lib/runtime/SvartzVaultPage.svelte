@@ -9,6 +9,7 @@
 		type PageModule
 	} from './vault-page-state.svelte.js';
 	import type { ContentComponentOverrides } from './content-components.js';
+	import type { PluginPage } from '@svartz/core';
 	type ThemeModule = typeof import('virtual:svartz/theme');
 	type ArtifactsModule = typeof import('virtual:svartz/artifacts');
 
@@ -20,12 +21,15 @@
 		pathname,
 		runtimeTheme,
 		artifacts: runtimeArtifacts,
-		contentComponents: hostContentComponents = {}
+		contentComponents: hostContentComponents = {},
+		pluginPage
 	}: {
 		pathname: string;
 		runtimeTheme: ThemeModule;
 		artifacts: ArtifactsModule;
 		contentComponents?: ContentComponentOverrides;
+		/** A plugin page's title and HTML, rendered as the body of the theme's default layout. */
+		pluginPage?: PluginPage;
 	} = $props();
 
 	const siteConfig = $derived(runtimeArtifacts.siteConfig);
@@ -43,7 +47,8 @@
 		appPathname,
 		runtimeTheme,
 		artifacts: runtimeArtifacts,
-		contentComponents: hostContentComponents
+		contentComponents: hostContentComponents,
+		pluginPage: Boolean(pluginPage)
 	}));
 	useBrowserResources(() => ({
 		artifacts: runtimeArtifacts,
@@ -129,14 +134,13 @@
 		return new URL(value, new URL(activePathname, origin)).href;
 	}
 
-	const pageTitle = $derived(entry?.title ?? siteConfig.title);
+	const pageTitle = $derived(entry?.title ?? pluginPage?.title ?? siteConfig.title);
 	const documentTitle = $derived(
-		entry && entry.title !== siteConfig.title
-			? `${entry.title} | ${siteConfig.title}`
-			: siteConfig.title
+		pageTitle !== siteConfig.title ? `${pageTitle} | ${siteConfig.title}` : siteConfig.title
 	);
 	const pageDescription = $derived(entry?.description ?? siteConfig.description);
-	const canonicalUrl = $derived(resolvePublishedUrl(activePathname));
+	// A plugin page differs per reader, so it has no canonical address and stays out of search results.
+	const canonicalUrl = $derived(pluginPage ? undefined : resolvePublishedUrl(activePathname));
 	const socialImageUrl = $derived(
 		entry?.socialImage && entry.socialImage !== siteConfig.image
 			? resolvePublishedUrl(entry.socialImage)
@@ -165,6 +169,7 @@
 			/>{/if}
 	{/if}
 	{#if pageDescription}<meta name="description" content={pageDescription} />{/if}
+	{#if pluginPage}<meta name="robots" content="noindex" />{/if}
 	{#if canonicalUrl}<link rel="canonical" href={canonicalUrl} />{/if}
 	{#if entry?.markdownHref}<link rel="alternate" type="text/markdown" href={entry.markdownHref} />{/if}
 	<meta property="og:title" content={pageTitle} />
@@ -187,7 +192,14 @@
 		/>{/if}
 </svelte:head>
 
-{#if LayoutComponent && pageModule}
+{#if LayoutComponent && pluginPage}
+	<!-- A plugin page shows the reader's own account data; Clarity must never record it. -->
+	<div data-clarity-mask="true" style="display: contents">
+		<LayoutComponent {...state.themeProps} {theme}>
+			{@html pluginPage.html}
+		</LayoutComponent>
+	</div>
+{:else if LayoutComponent && pageModule}
 	<!-- Clarity must never record a note body, including content decrypted after hydration. -->
 	<div data-clarity-mask="true" style="display: contents">
 		<LayoutComponent {...state.themeProps} {theme}>

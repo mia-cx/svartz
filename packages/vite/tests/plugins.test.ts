@@ -139,6 +139,24 @@ describe("server plugins", () => {
     }
   });
 
+  // Proves plugin pages need a server like requests do, and that the build names the vault and the plugin.
+  it("fails a static vault whose plugin serves pages", () => {
+    expect(() => resolveRuntimePlugins(vault("static", [hello({ pages: ["account"] })]))).toThrow(
+      'Vault "wiki" targets "static", but plugin "hello" serves pages.',
+    );
+  });
+
+  // Proves a page name is a URL path segment, and that two plugins can never both answer one page.
+  it("refuses page names that can't be a path segment, and pages two plugins claim", () => {
+    for (const name of ["Account", "a/b", "", "-"]) {
+      expect(() => resolveRuntimePlugins(vault("node", [hello({ pages: [name] })])))
+        .toThrow(`Plugin "hello" claims page ${JSON.stringify(name)} under /-/`);
+    }
+    const other = { id: "other", server: { module: "/plugins/other/server.js", pages: ["account"] } } as SvartzPlugin;
+    expect(() => resolveRuntimePlugins(vault("node", [hello({ pages: ["account"] }), other])))
+      .toThrow('Vault "wiki": plugins "hello" and "other" both claim the page /-/account/.');
+  });
+
   it("refuses ids that can't be a URL path segment and relative modules", () => {
     expect(() => resolveRuntimePlugins(vault("node", [{ ...hello(), id: "core:hello" } as SvartzPlugin])))
       .toThrow('Plugin "core:hello" serves requests under /_svartz/<id>/');

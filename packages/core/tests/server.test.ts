@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createServerHandle, DEV_BINDINGS, type DevBindings, type ServerContext, type ServerHandleEvent, type ServerHandleRuntime, type ServerRegistry } from "../src/plugin/server";
+import { createServer, createServerHandle, DEV_BINDINGS, type DevBindings, type PageContext, type PageRenderer, type ServerContext, type ServerHandleEvent, type ServerHandleRuntime, type ServerRegistry } from "../src/plugin/server";
 
 const vault = { id: "wiki", mountPath: "", site: { title: "Wiki" } };
 
@@ -222,6 +222,77 @@ describe("server plugin routing", () => {
     const prerender = eagerSite(true);
     await prerender.handle({ event: event("/guide/"), resolve: prerender.resolve });
     expect(prerender.order).toEqual(["page renders"]);
+  });
+});
+
+describe("plugin pages", () => {
+  const pagesSite = ({ building = false } = {}) => {
+    const rendered: Array<{ url: string; context: PageContext }> = [];
+    const page: PageRenderer = (request, context) => {
+      rendered.push({ url: request.url, context });
+      return context.path.startsWith("account/away/") ? { redirect: "/docs/" } : { title: "Account", html: "<h1>Account</h1>" };
+    };
+    const server = createServer({
+      basePath: "/site/docs", vault,
+      servers: [
+        { id: "auth", pages: ["account"], load: async () => ({ default: () => ({ handle: () => new Response("api"), page }) }) },
+        { id: "hello", load: async () => ({ default: () => () => new Response("hello") }) },
+      ],
+    }, { privateEnv: { SECRET: "from-process" }, building, dev: false });
+    const pageEvent = (path: string): ServerHandleEvent => ({
+      request: new Request(`https://wiki.test${path}`), url: new URL(`https://wiki.test${path}`), getClientAddress: () => "",
+    });
+    return { server, rendered, pageEvent };
+  };
+
+  // Proves a plugin renders every path below the name it claims, with its server context, the decoded path below /-/
+  // and the page's own URL, and that its API routes still answer.
+  it("renders the pages a plugin claims under /-/", async () => {
+    const { server, rendered, pageEvent } = pagesSite();
+
+    expect(await server.page(pageEvent("/site/docs/-/account/"))).toEqual({ title: "Account", html: "<h1>Account</h1>" });
+    expect(await server.page(pageEvent("/site/docs/-/account/caf%C3%A9?tab=1"))).toEqual({ title: "Account", html: "<h1>Account</h1>" });
+    expect(await server.page(pageEvent("/site/docs/-/account/away/"))).toEqual({ redirect: "/docs/" });
+    expect(rendered.map(({ url, context }) => [url, context.path, context.base, context.env.SECRET])).toEqual([
+      ["https://wiki.test/site/docs/-/account/", "account/", "/site/docs/_svartz/auth", "from-process"],
+      ["https://wiki.test/site/docs/-/account/caf%C3%A9?tab=1", "account/café/", "/site/docs/_svartz/auth", "from-process"],
+      ["https://wiki.test/site/docs/-/account/away/", "account/away/", "/site/docs/_svartz/auth", "from-process"],
+    ]);
+    const api = await server.handle({ event: pageEvent("/site/docs/_svartz/auth/"), resolve: async () => new Response("page") });
+    expect(await api.text()).toBe("api");
+  });
+
+  // Proves nothing renders where no plugin claims the name, outside this vault, or while prerendering.
+  it("renders nothing for unclaimed or foreign paths, or while prerendering", async () => {
+    const { server, rendered, pageEvent } = pagesSite();
+    for (const path of ["/site/docs/-/", "/site/docs/-/settings/", "/site/docs/-/accounts/", "/-/account/", "/site/docs/account/", "/site/docs/-/%E9/"]) {
+      expect(await server.page(pageEvent(path))).toBeUndefined();
+    }
+    const prerendering = pagesSite({ building: true });
+    expect(await prerendering.server.page(prerendering.pageEvent("/site/docs/-/account/"))).toBeUndefined();
+    expect([...rendered, ...prerendering.rendered]).toEqual([]);
+  });
+
+  // Proves a page holding a reader's account never lands in a shared cache, while other pages keep their headers.
+  it("marks claimed pages uncacheable", async () => {
+    const { server, pageEvent } = pagesSite();
+    const resolve = async () => new Response("<html>", { headers: { "cache-control": "public, max-age=600" } });
+
+    const page = await server.handle({ event: pageEvent("/site/docs/-/account/"), resolve });
+    const note = await server.handle({ event: pageEvent("/site/docs/guide/"), resolve });
+
+    expect([await page.text(), page.headers.get("cache-control")]).toEqual(["<html>", "private, no-store"]);
+    expect(note.headers.get("cache-control")).toBe("public, max-age=600");
+  });
+
+  // Proves a plugin that claims pages without rendering them fails loudly, naming itself.
+  it("names a plugin that claims pages but renders none", async () => {
+    const server = createServer({
+      basePath: "", vault, servers: [{ id: "auth", pages: ["account"], load: async () => ({ default: () => () => new Response() }) }],
+    }, { privateEnv: {}, building: false, dev: false });
+
+    await expect(server.page({ request: new Request("https://wiki.test/-/account/"), url: new URL("https://wiki.test/-/account/"), getClientAddress: () => "" }))
+      .rejects.toThrow('plugin "auth" claims pages, but its server factory returns no page renderer');
   });
 });
 

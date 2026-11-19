@@ -528,6 +528,9 @@ const initProjectEffect = (
           ? catchallPageTemplate
           : existingCatchallPage === previousCatchallPage ? previousStyledCatchallPage : undefined;
       const migrateCatchallPage = catchallPageUpdate !== undefined && catchallPageUpdate !== existingCatchallPage;
+      // Plugin pages under /-/ render through their own route; a host that has one keeps it as it is.
+      const pageRoute = path.join("src", "routes", "[...slug]", "-", "[...page]");
+      const installPageRoute = !existsSync(path.join(root, pageRoute));
       const viteSource = yield* operation("read host Vite config", () =>
         readFile(location.viteConfigPath, "utf8"),
       );
@@ -553,7 +556,8 @@ const initProjectEffect = (
         !migrateRootLayout &&
         !migrateCatchallPage &&
         !installCatchallServer &&
-        !migrateCatchall
+        !migrateCatchall &&
+        !installPageRoute
       ) {
         return { kind: "already-configured", packageManager: manager };
       }
@@ -611,6 +615,16 @@ const initProjectEffect = (
           );
           yield* operation(`write ${name}`, () =>
             writeNewFile(path.join(catchallRoot, name), source),
+          );
+        }
+      }
+      if (installPageRoute) {
+        for (const name of ["+page.svelte", "+page.ts", "+page.server.ts"]) {
+          const source = yield* operation(`read plugin page ${name} template`, () =>
+            readFile(path.join(templateRoot, pageRoute, name), "utf8"),
+          );
+          yield* operation(`write plugin page ${name}`, () =>
+            writeNewFile(path.join(root, pageRoute, name), source),
           );
         }
       }
