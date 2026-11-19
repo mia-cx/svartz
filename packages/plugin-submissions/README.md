@@ -204,6 +204,8 @@ submissions({
 
 Sync needs D1, so the vault deploys to `cloudflare-workers` or `cloudflare-pages`; on `node` it fails the build.
 
+The site records each save under its repository and the vault's folder in it, which say which submissions are the vault's own. Vaults may share a repository, each syncing its own folder. Two syncing vaults on the same folder of the same repository would share their saves, and a reviewer of one could close the other's, so the config fails, naming both vaults. Repository names match whatever their case.
+
 ### Set up
 
 1. In the App's settings, under **Webhook**, tick **Active**, set **Webhook URL** to `https://<site><base><mount>/_svartz/submissions/github/webhook/` (with the trailing slash: GitHub doesn't follow the redirect a missing one gets), and set a **Webhook secret**, a long random string.

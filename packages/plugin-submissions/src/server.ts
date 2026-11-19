@@ -92,6 +92,11 @@ export type ServerOptions = Credentials & {
   readonly mode: Mode;
   /** Mirror GitHub and follow saved edits to live. */
   readonly sync?: SyncOptions;
+  /**
+   * The vault's folder in the repository when the config names one, for other vaults' config checks; the server reads
+   * {@link BuildData.vaultRoot}, which the build fills in either way.
+   */
+  readonly vaultRoot?: string;
 };
 
 /** The page holding a route: its slug, which permissions are checked on, and its URL below the deployment base, `null` when hidden. */
