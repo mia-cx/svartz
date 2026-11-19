@@ -2,6 +2,8 @@
 
 `@svartz/plugin-history` gives every published page a history: each change, who made it and what they said it changed, and the diff between any two revisions. Recent changes lists every change to the wiki, and each account's contributions list its own. Moderators [revert](#reverting-a-page) a page to an earlier revision from its history. It reads the GitHub mirror that [`@svartz/plugin-submissions`](../packages/plugin-submissions/README.md#github-sync) keeps, and asks GitHub, through that plugin, for what the mirror lacks.
 
+A vault without that wiki around it, such as a blog on a `static` target, can publish its notes' [previous versions from git](#previous-versions-from-git) instead.
+
 The package isn't on npm yet; it ships with the workspace until it is.
 
 ```ts
@@ -115,3 +117,64 @@ History follows a file's path: a page that was moved or renamed shows its change
 A diff shows each changed line of the source with three lines around it. Revisions over 1 MiB, sources over 40,000 lines together, or diffs of more than 1,000 changed lines aren't computed here: the page links to the comparison on GitHub instead.
 
 Each page view makes at most seven requests to GitHub, what comparing two revisions the mirror doesn't hold takes: the default branch's name when the mirror doesn't know it yet, then for each revision a check that the content branch holds it, the commit, and the page's file at it. It asks only while the submissions plugin's shared pause allows: once GitHub says fewer than 100 of its hourly requests remain, history asks nothing more until the limit resets, keeping them for saves. The page then says GitHub isn't answering. File contents read from GitHub are kept in the worker's memory, since a commit never changes. A moderator's diff page also reads the page's latest changes within those seven, to offer the revert form; when they're spent, the form stays off.
+
+## Previous versions from git
+
+`history({ source: "git" })` shows readers how a note changed, from the vault's own git repository. It reads the history when the site builds and prerenders the pages, so it works on every target, `static` included, with no server plugin, D1, GitHub App or accounts.
+
+```ts
+import { defineConfig } from "@svartz/config";
+import { history } from "@svartz/plugin-history";
+
+export default defineConfig({
+  version: "1.0.0",
+  vaults: [{
+    id: "blog",
+    path: "content",
+    target: { type: "static" },
+    plugins: [history({ source: "git" })],
+  }],
+});
+```
+
+Publishing a note's versions publishes every past wording of it, including what was removed on purpose, so each note opts in too, in its frontmatter:
+
+```yaml
+---
+title: Hello
+versions: true
+---
+```
+
+| Page | Shows |
+| --- | --- |
+| `<note>versions/` | The note's versions, newest first: when, the commit author's name, and the summary. |
+| `<note>versions/<commit>/` | The changes to the note's source since the version before it, then the note as it read then, rendered with the build's own Markdown steps and sanitizer. It links the newer and the older version. |
+
+`<note>` is the note's address, so `/posts/hello/` lists its versions at `/posts/hello/versions/`. `<commit>` is the first seven characters of the commit's SHA, or more when two versions of the note share them. The note gets a **Previous versions** action beside Copy page. A note with fewer than two versions that show gets neither the action nor the pages, and a vault where no note has them builds exactly as it would without the plugin.
+
+The pages render in the theme's shell like the note and carry `noindex`, so search engines keep to the note itself. They stay out of search, the explorer, the graph, tags, backlinks, feeds and sitemaps. A version page's address must be free: a note, alias or list page at `posts/hello/versions/` fails the build, naming the note.
+
+### What shows
+
+Versions come from `git log --follow` on the note's file, so a note that was renamed or moved keeps its history. Merge commits are left out; the commits they bring in show.
+
+A version shows only when the build would have published it unprotected at the path it had then: inside the vault's folder, let through by `include` and `exclude`, not a draft or private, and in no password group. Nothing of a version that wasn't public shows, not in the list and not as the "before" of the next version's diff: each diff runs between consecutive versions that show.
+
+A version shows its commit author's name, never their email, and the first line of its commit message as its summary. As in the live history, the summary shows only when every vault file the commit changed is published, or is a path the note had in a version that shows, since a summary can name what the site keeps back.
+
+### How far back
+
+Each note lists its latest 50 versions. `history({ source: "git", maxVersions: 100 })` lists more; it takes a whole number of at least 2. Past it, older versions aren't listed, and the list says so.
+
+Building a note's versions takes a few git calls (its log, the files its commits changed, and its text at each version, read in batches) and then one Markdown render and one diff per listed version, so build time grows with `maxVersions`, not with the length of the note's history. A diff of more than 1,000 changed lines, or of sources over 40,000 lines together, isn't shown line by line; its page says so and still shows the note as it read then.
+
+### Building in CI
+
+The build needs the repository's full history. A shallow clone fails the build of a vault with versions to show, naming the vault, rather than showing one version. `actions/checkout` fetches only the latest commit unless told otherwise:
+
+```yaml
+- uses: actions/checkout@v7
+  with:
+    fetch-depth: 0
+```

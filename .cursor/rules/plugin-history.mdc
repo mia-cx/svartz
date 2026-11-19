@@ -1,10 +1,21 @@
 ---
-description: Page history reads commits only through submissions' read API, and shows nothing the site doesn't publish
+description: Page history reads commits only through submissions' read API (or, from git, at build time), and shows nothing the site doesn't publish
 globs: packages/plugin-history/**, packages/plugin-submissions/src/commits.ts, packages/plugin-submissions/src/restore.ts
 alwaysApply: false
 ---
 
 # Page history
+
+## Previous versions from git (`history({ source: "git" })`, `versions.ts`)
+
+- The version pages are page artifacts (`pages/<path below the mount>.svelte`) and routes added to `ctx.index.routes.all` in a normal-tier `emitArtifacts` hook, before `core:emit-artifacts` (`enforce: "post"`) writes both. Never `ProcessedFile`s: those would reach search, the explorer, the graph, tags, backlinks, feeds and sitemaps. The theme's note route finds the artifact by path and, with no index entry, renders it bare in the shell.
+- Check every address against `routes.all`, note slugs and the theme's routes (`matchThemeRoute`, which must find a route without a `component`) and fail the build naming the note: a silent collision serves the wrong page.
+- Links are relative to the page: revisions render with a random placeholder `base`, replaced by `../` per segment, since only SvelteKit knows the deployment base.
+- A version shows only when `publishesNote` (from `@svartz/plugins`, the build's own rule) holds at the path it had then and it has no `password_group`. Diff consecutive *shown* versions; never read past a hidden one into a page. A summary follows the live rule below, plus the note's own shown paths so a rename's summary shows.
+- When no note has two versions to show, add no artifact, route or browser resource: the build must stay byte-identical (the CLI e2e compares it).
+- Git calls go through `git.ts` with `-z`/NUL parsing; `%aN` only, never an email format.
+
+## Live history from the mirror
 
 - History reads commits only through `@svartz/plugin-submissions/commits`: never the `submissions_*` tables with its own SQL, never GitHub with credentials of its own. What it needs from the mirror or GitHub goes into that file.
 - `commitSource(ctx)` reads the vault folder submissions' `emitArtifacts` recorded, so history's `emitArtifacts` runs with `enforce: "post"`.
