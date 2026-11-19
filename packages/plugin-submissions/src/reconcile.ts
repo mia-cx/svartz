@@ -215,14 +215,17 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
   }
 
   /**
-   * The statuses of deployments still under way, or never seen with one, and of each environment's newest deployment
-   * while it stands failed: GitHub lets it succeed later, and the list carries no status to say so. Read for the
-   * latest, and whether any said `success`, since a later `inactive` hides it. GitHub doesn't document their order,
-   * so the latest is the highest id. Conditional, so asking again about a failure nothing changed costs a 304.
+   * The statuses of deployments not known to have succeeded that are still under way, or never seen with one; whose
+   * latest status a delivery brought but whose earlier ones the poll hasn't read, since a lost `success` may hide
+   * behind a later `inactive` or failure; and each environment's newest deployment while it stands failed, since
+   * GitHub lets it succeed later and the list carries no status to say so. Read for the latest, and whether any said
+   * `success`. GitHub doesn't document their order, so the latest is the highest id. Conditional, so asking again
+   * about a failure nothing changed costs a 304.
    */
   async function fillDeploymentStatuses() {
     const unsettled = await rows<{ id: number }>(`SELECT id FROM submissions_deployments d
       WHERE scope = ? AND succeeded = 0 AND (state IS NULL OR state IN ('queued', 'pending', 'in_progress')
+        OR status_id > statuses_read
         OR (state IN ('failure', 'error') AND NOT EXISTS (SELECT 1 FROM submissions_deployments newer
           WHERE newer.scope = d.scope AND newer.environment = d.environment AND newer.created_at > d.created_at)))
       ORDER BY created_at DESC LIMIT ?`);
@@ -235,6 +238,8 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
           mirror.db.prepare(`UPDATE submissions_deployments SET status_id = ?, state = ?, status_url = ?, status_at = ?
             WHERE scope = ? AND id = ? AND COALESCE(status_id, 0) < ?`)
             .bind(status.id, status.state, status.url, status.createdAt, mirror.scope, id, status.id),
+          mirror.db.prepare("UPDATE submissions_deployments SET statuses_read = MAX(statuses_read, ?) WHERE scope = ? AND id = ?")
+            .bind(status.id, mirror.scope, id),
           ...(statuses.some(({ state }) => state === "success") ? [markSucceeded(mirror, id)] : []),
         ];
       });

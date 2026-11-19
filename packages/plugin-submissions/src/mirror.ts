@@ -12,7 +12,8 @@
  * - `submissions_reviews` and `submissions_comments`: what was said on those pull requests, `comments.kind` being
  *   `issue` (the conversation) or `review` (a diff line). Deleted comments stay as tombstones with an empty body.
  * - `submissions_runs`: workflow runs on the content branch, and `submissions_deployments`: deployments with their
- *   latest status, and `succeeded` once any status said `success`, since a later `inactive` doesn't say.
+ *   latest status, `succeeded` once any status said `success`, since a later `inactive` doesn't say, and
+ *   `statuses_read`, the latest status id the poll has seen in a deployment's whole status history.
  * - `submissions_edits`: every save the site made, keyed by its submission id, with who made it.
  *
  * Deliveries arrive at least once and in any order, so every write is idempotent and never moves a record backwards:
@@ -151,6 +152,7 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       status_url TEXT,
       status_at TEXT,
       succeeded INTEGER NOT NULL DEFAULT 0,
+      statuses_read INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (scope, id)
     )`,
     `CREATE INDEX IF NOT EXISTS submissions_deployments_by_environment ON submissions_deployments (scope, environment, created_at)`,

@@ -584,6 +584,28 @@ describe("an edit's status", () => {
     expect((await status(site, ada)).body).toMatchObject({ stage: "live" });
   });
 
+  it.each([
+    ["succeeded", "success", "live"],
+    ["failed", "failure", "committed"],
+  ])("reads once whether a deployment delivered only as deactivated %s first", async (_case, earlier, stage) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const site = await createSite({ live: { environment: "production" } });
+    const ada = await adaCommits(site);
+    const inactive = { ...deploymentStatus({ statusId: 71, state: "inactive" }).deployment_status };
+    const requests = quietGitHub({}, (path) =>
+      path === "/deployments/7/statuses" ? Response.json([inactive, { ...inactive, id: 70, state: earlier }]) : undefined);
+
+    // The earlier status's delivery is lost; only the deactivation arrives.
+    await deliver(site, "deployment_status", deploymentStatus({ statusId: 71, state: "inactive" }));
+    await status(site, ada);
+    expect((await status(site, ada)).body).toMatchObject({ stage });
+
+    vi.setSystemTime(Date.now() + 61_000);
+    await status(site, ada);
+    await site.settle();
+    expect(requests.filter((path) => path.startsWith(`/repos/${REPO}/deployments/7/statuses`))).toHaveLength(1);
+  });
+
   it("asks GitHub nothing about an edit's deployments while GitHub's allowance is paused", async () => {
     const site = await createSite({ live: { environment: "production" } });
     const ada = await adaCommits(site);
