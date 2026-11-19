@@ -163,6 +163,12 @@ export const headExchange = (sha = HEAD_COMMIT): Exchange => ({
   response: { status: 200, json: { ref: "refs/heads/main", object: { sha, type: "commit" } } },
 });
 
+/** GitHub comparing `base` with `head`: `ahead` when `head` holds `base`, `diverged` when it doesn't. */
+export const ancestryExchange = (base: string, head: string, status: "ahead" | "diverged"): Exchange => ({
+  request: { method: "GET", url: `${API}/compare/${base}...${head}?per_page=1` },
+  response: { status: 200, json: { status } },
+});
+
 /** The file at `path` in commit `ref`: its blob `sha`, or GitHub's 404 when there is none. */
 export const blobExchange = (path: string, ref: string, sha?: string): Exchange => ({
   request: { method: "GET", url: `${API}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${ref}` },

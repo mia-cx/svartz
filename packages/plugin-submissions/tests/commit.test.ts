@@ -17,6 +17,7 @@ import {
   APP_KEY,
   blobExchange,
   branchFor,
+  ancestryExchange,
   closeExchange,
   BUILD_COMMIT,
   commitExchanges,
@@ -302,11 +303,15 @@ describe("a direct commit", () => {
 
   // Proves a save GitHub committed is recorded even when the branch move's answer never arrived: the branch's head says
   // it moved. Otherwise the save fails, its retry finds the content on the branch and records nothing either, and the
-  // account has no edit to follow and no credit for it. A head elsewhere still fails the save.
+  // account has no edit to follow and no credit for it. A branch that moved on past it holds it too; a head that doesn't
+  // still fails the save.
   it.each([
-    ["records the commit as made when the branch is at it", DIRECT_COMMIT, { status: 201, body: commitAnswer }, [DIRECT_COMMIT]],
-    ["fails the save when the branch is elsewhere", MOVED_HEAD, { status: 503, body: expect.objectContaining({ error: "github_unavailable" }) }, []],
-  ])("reads the branch once after a move GitHub never answered, and %s", async (_case, head, answer, recorded) => {
+    ["records the commit as made when the branch is at it", DIRECT_COMMIT, [], { status: 201, body: commitAnswer }, [DIRECT_COMMIT]],
+    ["records the commit as made when the branch has moved on past it", MOVED_HEAD, [ancestryExchange(DIRECT_COMMIT, MOVED_HEAD, "ahead")],
+      { status: 201, body: commitAnswer }, [DIRECT_COMMIT]],
+    ["fails the save when the branch doesn't hold it", MOVED_HEAD, [ancestryExchange(DIRECT_COMMIT, MOVED_HEAD, "diverged")],
+      { status: 503, body: expect.objectContaining({ error: "github_unavailable" }) }, []],
+  ])("reads the branch once after a move GitHub never answered, and %s", async (_case, head, ancestry, answer, recorded) => {
     const site = await createSite({ admins: [ADA.id], sync: true });
     const ada = await signIn(site, ADA);
     const replay = github([
@@ -320,6 +325,7 @@ describe("a direct commit", () => {
         moved: "lost",
       }),
       headExchange(head),
+      ...ancestry,
     ]);
 
     expect(await save(site, { page: "/wiki/guide/", sha: GUIDE_SHA }, ada)).toEqual(answer);

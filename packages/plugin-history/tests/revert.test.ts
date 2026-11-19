@@ -9,6 +9,7 @@ import { credit } from "../../plugin-submissions/src/credit";
 import { blobSha } from "../../plugin-submissions/src/github";
 import { recordEdit, scopeOf, type Database as MirrorDatabase, type Statement } from "../../plugin-submissions/src/mirror";
 import {
+  ancestryExchange,
   blobExchange,
   branchFor,
   commitExchanges,
@@ -266,11 +267,15 @@ describe("reverting a page", () => {
 
   // Proves a revert GitHub applied but never answered for still records what it undid and takes back its earnings: the
   // branch's head says the move landed. Otherwise the audit entry stands with no record, and a retry finds the content
-  // on the branch and records nothing either. A head elsewhere is still GitHub failing.
+  // on the branch and records nothing either. A branch that moved on past the revert holds it too; a head that doesn't
+  // is still GitHub failing.
   it.each([
-    ["reverted when the branch is at the revert's commit", DIRECT_COMMIT, `${HISTORY}?status=reverted`, [{ commit_sha: DIRECT_COMMIT }], [-4]],
-    ["refused when the branch is elsewhere", "f".repeat(40), "&revert=github#sv-history-revert", [], []],
-  ])("reads the branch once after a move GitHub never answered: %s", async (_case, head, location, recorded, reversed) => {
+    ["reverted when the branch is at the revert's commit", DIRECT_COMMIT, [], `${HISTORY}?status=reverted`, [{ commit_sha: DIRECT_COMMIT }], [-4]],
+    ["reverted when the branch has moved on past it", "f".repeat(40), [ancestryExchange(DIRECT_COMMIT, "f".repeat(40), "ahead")],
+      `${HISTORY}?status=reverted`, [{ commit_sha: DIRECT_COMMIT }], [-4]],
+    ["refused when the branch doesn't hold it", "f".repeat(40), [ancestryExchange(DIRECT_COMMIT, "f".repeat(40), "diverged")],
+      "&revert=github#sv-history-revert", [], []],
+  ])("reads the branch once after a move GitHub never answered: %s", async (_case, head, ancestry, location, recorded, reversed) => {
     const page = await wiki();
     const { site, ada, grace, commits: c } = page;
     const github = replayGitHub([
@@ -281,6 +286,7 @@ describe("reverting a page", () => {
       ...committerExchanges,
       ...await commitAsAda(RESTORED, VANDALISED, revertMessage(c.restored.sha, ada.id), "lost"),
       headExchange(head),
+      ...ancestry,
     ], INSTALLATION_TOKEN);
     const response = await revert(site, ada.cookie, { revision: c.restored.sha, head: c.vandalised.sha, to: c.vandalised.sha });
 

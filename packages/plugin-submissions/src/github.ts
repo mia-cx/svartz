@@ -465,8 +465,8 @@ export async function commitSubmission(
     try {
       moved = await send(target, "PATCH", ref, { sha: commit.sha, force: false });
     } catch (error) {
-      // No answer, yet GitHub may have moved the branch: a head at this commit says it did.
-      if (error instanceof SubmissionError && error.code === "github_unavailable" && await headOf() === commit.sha) return made;
+      // No answer, yet GitHub may have moved the branch: a head that holds this commit says it did, at it or past it.
+      if (error instanceof SubmissionError && error.code === "github_unavailable" && await holds(target, await headOf(), commit.sha)) return made;
       throw error;
     }
     if (moved.ok) return made;
@@ -477,6 +477,19 @@ export async function commitSubmission(
 }
 
 const busy = () => new SubmissionError("branch_busy", 503, "Other edits are being saved right now. Try again in a moment.");
+
+/** Whether `head` is `commit` or GitHub says it is ahead of it; `false` when GitHub can't say. */
+async function holds(target: Repository, head: string, commit: string): Promise<boolean> {
+  if (head === commit) return true;
+  try {
+    const response = await send(target, "GET", `/compare/${commit}...${head}?per_page=1`);
+    if (!response.ok) return false;
+    const { status } = await response.json() as { status?: unknown };
+    return status === "ahead" || status === "identical";
+  } catch {
+    return false;
+  }
+}
 
 /** Whether `name`, an `owner/name` GitHub answered, is `repo`: GitHub's owner and repository names ignore case. */
 export const sameRepository = (name: string | null | undefined, repo: string) => name?.toLowerCase() === repo.toLowerCase();
