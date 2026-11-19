@@ -60,13 +60,21 @@ async function change(db: Database, statements: readonly Statement[], entry: Aud
 /** SQL that holds when `?2`, the asker, owns group `?1`. */
 const ASKER_OWNS = "EXISTS (SELECT 1 FROM auth_group_members WHERE group_name = ?1 AND account_id = ?2 AND owner = 1)";
 
-/** The groups `account` belongs to, whether it owns each, and each group's links: who it is to the resolver. */
-export async function membershipsOf(db: Database, account: string): Promise<Membership[]> {
-  const { results } = await db.prepare(`SELECT m.group_name, m.owner, l.object FROM auth_group_members m
-      LEFT JOIN auth_group_links l ON l.group_name = m.group_name WHERE m.account_id = ?`)
-    .bind(account).all<{ group_name: string; owner: number; object: string | null }>();
+export interface MembershipRow {
+  group_name: string;
+  owner: number;
+  object: string | null;
+}
+
+/** Reads the groups `account` belongs to, one {@link MembershipRow} per link, for {@link memberships}. */
+export const membershipsQuery = (db: Database, account: string): Statement =>
+  db.prepare(`SELECT m.group_name, m.owner, l.object FROM auth_group_members m
+      LEFT JOIN auth_group_links l ON l.group_name = m.group_name WHERE m.account_id = ?`).bind(account);
+
+/** The groups an account belongs to, whether it owns each, and each group's links: who it is to the resolver. */
+export function memberships(rows: readonly MembershipRow[]): Membership[] {
   const groups = new Map<string, { group: string; owner: boolean; linked: string[] }>();
-  for (const { group_name, owner, object } of results) {
+  for (const { group_name, owner, object } of rows) {
     const membership = groups.get(group_name) ?? { group: group_name, owner: owner === 1, linked: [] };
     if (object !== null) membership.linked.push(object);
     groups.set(group_name, membership);
