@@ -218,6 +218,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   function createRunnerContext(): PluginContext {
     return {
       config: context.config,
+      plugins,
       files: [],
       artifacts: new Map(),
       meta: runnerMeta,

@@ -37,6 +37,8 @@ const PluginSchema = Schema.Struct({
   contractVersion: Schema.optional(Schema.String),
   disabled: Schema.optional(Schema.Boolean),
   server: Schema.optional(ServerModuleSchema),
+  // Each declaration's shape is `@svartz/auth`'s to check, since it alone reads them.
+  permissions: Schema.optional(Schema.Array(Schema.Unknown)),
   forVault: Schema.optional(FnSchema),
   buildStart: Schema.optional(HookInputSchema),
   configResolved: Schema.optional(HookInputSchema),
@@ -63,6 +65,7 @@ const KNOWN_KEYS = new Set<string>([
   "contractVersion",
   "disabled",
   "server",
+  "permissions",
   "forVault",
   ...STAGE_NAMES,
   "handleChange",

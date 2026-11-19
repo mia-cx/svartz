@@ -7,7 +7,7 @@ const github = { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHU
 describe("the auth plugin", () => {
   it("serves its routes and gives the dialog the vault's providers, endpoint and privacy notice", async () => {
     const plugin = auth({ providers: { github }, privacyNotice: "/privacy/" });
-    const ctx = { config: { mountPath: "/notes", target: { type: "node", basePath: "/site/" } }, files: [], meta: new Map() } as unknown as PluginContext;
+    const ctx = { config: { mountPath: "/notes", target: { type: "node", basePath: "/site/" } }, plugins: [], files: [], meta: new Map() } as unknown as PluginContext;
 
     await plugin.emitArtifacts!.run(ctx);
 
@@ -49,7 +49,7 @@ describe("one sign-in per host app", () => {
     return plugin.forVault!({ vault, vaults }) as NormalizedSvartzPlugin;
   };
   const dialogEndpoint = async (plugin: NormalizedSvartzPlugin, mountPath: string) => {
-    const ctx = { config: { mountPath, target: { type: "host" } }, files: [], meta: new Map() } as unknown as PluginContext;
+    const ctx = { config: { mountPath, target: { type: "host" } }, plugins: [], files: [], meta: new Map() } as unknown as PluginContext;
     await plugin.emitArtifacts!.run(ctx);
     return (ctx.compiler?.browserResources.get("auth")?.options as { endpoint: string }).endpoint;
   };
@@ -121,5 +121,103 @@ describe("one sign-in per host app", () => {
 
     expect(() => resolve(vaults, "journal")).toThrow(/vault "journal" sends sign-in to "work", but "work" sends its own to "journal"/);
     expect(() => resolve(vaults, "work")).toThrow(/vault "work" sends sign-in to "journal", but "journal" sends its own to "work"/);
+  });
+});
+
+describe("the permission catalogue", () => {
+  type Declaration = { slug: string; name: string; description: string; defaults?: Record<string, string> };
+  const comment: Declaration = { slug: "guestbook:entries:write", name: "Sign", description: "Add an entry.", defaults: { "signed-in": "allow" } };
+  const remove: Declaration = { slug: "guestbook:entries:delete", name: "Delete any entry", description: "Remove anyone's entry." };
+  const guestbook = (...permissions: Declaration[]) => ({ id: "guestbook", permissions });
+  type Vault = { id: string; type?: string; plugins: unknown[] };
+  /** The catalogue auth's server module receives on `id`, once config resolution knows every vault. */
+  const catalogueOf = (id: string, ...specs: Vault[]) => {
+    const vaults = specs.map(({ id, type = "host", plugins }) => ({ id, mountPath: `/${id}`, target: { type }, plugins }) as unknown as ResolvedConfig);
+    const vault = vaults.find((candidate) => candidate.id === id)!;
+    const plugin = (vault.plugins as NormalizedSvartzPlugin[]).find((candidate) => candidate.id === "auth")!;
+    return (plugin.forVault!({ vault, vaults }).server?.options as { permissions: unknown }).permissions;
+  };
+
+  it("collects what the vault's enabled plugins declare, at build time", () => {
+    const off = { id: "visitors", disabled: true, permissions: [{ slug: "visitors:counts:read", name: "Count", description: "See counts." }] };
+
+    expect(catalogueOf("notes", { id: "notes", type: "cloudflare-workers", plugins: [auth({ providers: { github } }), guestbook(comment, remove), off] }))
+      .toEqual([comment, remove]);
+  });
+
+  it("also collects from the build's final plugins, so a theme preset's plugin can declare permissions", async () => {
+    const plugin = auth({ providers: { github } });
+    // What the build runs: the config's plugins plus one only the theme's preset brings.
+    const ctx = { config: { id: "notes", mountPath: "/notes", target: { type: "cloudflare-workers" }, plugins: [plugin] }, plugins: [plugin, guestbook(comment)], files: [], meta: new Map() } as unknown as PluginContext;
+
+    await plugin.emitArtifacts!.run(ctx);
+
+    expect(ctx.compiler?.serverData.get("auth")).toEqual({ permissions: [comment] });
+  });
+
+  it("fails the build for a malformed declaration that only the build's final plugins carry", async () => {
+    const plugin = auth({ providers: { github } });
+    const ctx = { config: { id: "notes", mountPath: "/notes", target: { type: "cloudflare-workers" }, plugins: [plugin] }, plugins: [plugin, guestbook({ ...comment, slug: "guestbook:entries:sign" })], files: [], meta: new Map() } as unknown as PluginContext;
+
+    expect(() => plugin.emitArtifacts!.run(ctx)).toThrow(/use "namespace:feature:action"/);
+  });
+
+  it("fails a host vault's build when its final plugins declare a permission differently than another host vault's did", async () => {
+    const plugin = auth({ providers: { github } });
+    // Each vault's theme preset brings a guestbook; only the builds see them, and they disagree on a default.
+    const build = (id: string, declaration: Declaration) => plugin.emitArtifacts!.run({
+      config: { id, mountPath: `/${id}`, target: { type: "host" }, plugins: [plugin] }, plugins: [plugin, guestbook(declaration)], files: [], meta: new Map(),
+    } as unknown as PluginContext);
+    await build("journal", { ...remove, defaults: { guest: "deny" } });
+
+    expect(() => build("work", { ...remove, defaults: { guest: "allow" } }))
+      .toThrow(/vault "work" declares "guestbook:entries:delete" differently than vault "journal"/);
+    // A rebuild that declares it alike passes: the vault's last build is what counts.
+    expect(() => build("work", { ...remove, defaults: { guest: "deny" } })).not.toThrow();
+  });
+
+  it("fails a build whose final plugins declare a permission differently than the config's plugins did", () => {
+    // journal's config declares the default; work's theme preset brings the same permission with another.
+    const vaults = [
+      { id: "journal", mountPath: "/journal", target: { type: "host" }, plugins: [auth({ providers: { github } }), guestbook({ ...remove, defaults: { guest: "deny" } })] },
+      { id: "work", mountPath: "/work", target: { type: "host" }, plugins: [auth({ providers: { github } })] },
+    ] as unknown as ResolvedConfig[];
+    const work = vaults[1]!;
+    const resolved = (work.plugins[0] as NormalizedSvartzPlugin).forVault!({ vault: work, vaults }) as NormalizedSvartzPlugin;
+
+    expect(() => resolved.emitArtifacts!.run({
+      config: work, plugins: [resolved, guestbook({ ...remove, defaults: { guest: "allow" } })], files: [], meta: new Map(),
+    } as unknown as PluginContext)).toThrow(/vault "work" builds with "guestbook:entries:delete" declared differently than the config's plugins declare it/);
+  });
+
+  it("gives every host vault one catalogue, since they share accounts and grants", () => {
+    const vaults: Vault[] = [
+      { id: "journal", plugins: [auth({ providers: { github } }), guestbook(comment)] },
+      { id: "work", plugins: [auth({ providers: { github } }), guestbook(comment, remove)] },
+      { id: "blog", type: "cloudflare-workers", plugins: [auth({ providers: { github } })] },
+    ];
+
+    expect(catalogueOf("journal", ...vaults)).toEqual([comment, remove]);
+    expect(catalogueOf("work", ...vaults)).toEqual([comment, remove]);
+    expect(catalogueOf("blog", ...vaults)).toEqual([]);
+  });
+
+  it.each([
+    ["isn't namespace:feature:action", { ...remove, slug: "guestbook:delete" }, /declares permission "guestbook:delete"; use "namespace:feature:action"/],
+    ["has an action other than read, write or delete", { ...remove, slug: "guestbook:entries:purge" }, /declares permission "guestbook:entries:purge"/],
+    ["is in another plugin's namespace", { ...remove, slug: "annotations:comments:delete" }, /a plugin declares only permissions starting "guestbook:"/],
+    ["has no name", { ...remove, name: " " }, /"guestbook:entries:delete" needs a name/],
+    ["has no description", { ...remove, description: "" }, /"guestbook:entries:delete" needs a description/],
+    ["defaults an actor that isn't built in", { ...remove, defaults: { moderators: "allow" } }, /sets a default for "moderators"; defaults go to guest and signed-in/],
+    ["defaults to unset", { ...remove, defaults: { guest: "unset" } }, /defaults guest to "unset"; use "allow" or "deny"/],
+  ])("fails the build for a permission that %s", (_case, declaration, error) => {
+    expect(() => catalogueOf("notes", { id: "notes", plugins: [auth({ providers: { github } }), guestbook(declaration)] })).toThrow(error);
+  });
+
+  it("fails the build when host vaults declare one permission differently", () => {
+    expect(() => catalogueOf("work",
+      { id: "journal", plugins: [auth({ providers: { github } }), guestbook(comment)] },
+      { id: "work", plugins: [auth({ providers: { github } }), guestbook({ ...comment, defaults: { guest: "allow" } })] },
+    )).toThrow(/vault "work" declares "guestbook:entries:write" differently than vault "journal"/);
   });
 });

@@ -1,5 +1,6 @@
 /**
- * The `auth` server plugin and the library other server plugins use to read who is signed in.
+ * The `auth` server plugin and the library other server plugins use to read who is signed in, and to check what they
+ * may do with `can()`.
  *
  * Routes, under `<mount>/_svartz/auth/`:
  * - `GET start/<provider>/?returnTo=<path>` redirects to the provider, holding state and the PKCE verifier in a
@@ -15,8 +16,9 @@
  * that vault's, and `callback` and `handle` answer 404.
  */
 import { CodeChallengeMethod, generateCodeVerifier, generateState, OAuth2Client } from "arctic";
-import type { EnvReference, ServerContext, ServerModuleFactory } from "@svartz/core";
+import type { EnvReference, PermissionDeclaration, ServerContext, ServerModuleFactory } from "@svartz/core";
 import { chooserPage, expiredPage } from "./chooser";
+import { usePermissions } from "./grants";
 import { handleFrom, HANDLE_MAX_LENGTH, isHandle, typedHandle } from "./handle";
 import { isProviderId, PROVIDERS, type Identity, type ProviderId } from "./providers";
 import { seal, SESSION_SECRET_ENV, SESSION_SECRET_MIN_LENGTH, sessionSecret, unseal } from "./seal";
@@ -27,6 +29,8 @@ export type { Identity, ProviderId } from "./providers";
 export type { Account, SignIn, SignedOutReason } from "./session";
 export { ADMIN_ROLE, readAccount, readIdentity, readSignIn } from "./session";
 export { ACCOUNTS_DATABASE_ENV };
+export { can, migrateGrants, type IdentityGrant } from "./grants";
+export type { PermissionTarget } from "./permissions";
 
 /** One provider's OAuth app. The secret is named by environment variable, never inlined. */
 export interface ProviderOptions {
@@ -56,6 +60,14 @@ export interface AuthOptions {
 export interface AuthServerOptions extends AuthOptions {
   /** The callback vault's mount path; absent when this vault runs its own sign-ins. */
   readonly callbackMountPath?: string;
+  /** Every permission the config's plugins declare, across the vaults that share accounts, collected at config resolution. */
+  readonly permissions?: readonly PermissionDeclaration[];
+}
+
+/** What the plugin's build hook records for the server module. */
+export interface AuthServerData {
+  /** Every permission the vault's final plugins declare, a theme preset's included, collected as the build runs. */
+  readonly permissions: readonly PermissionDeclaration[];
 }
 
 const FLOW_COOKIE = "__Host-svartz-oauth";
@@ -228,10 +240,11 @@ async function signOut(request: Request, url: URL, context: ServerContext): Prom
 const ROUTE = /^\/(?:(start|callback)\/([^/]+)|(me)|(sign-out)|(handle))\/$/;
 
 /** The `auth` server module: `server: { module, options }` with {@link AuthOptions}. */
-const authServer: ServerModuleFactory<AuthServerOptions> = (options) => {
+const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefined> = (options, data) => {
   // The plugin is eager, so this runs before the site answers anything: every account read resolves `admin` from
-  // this deployment's config.
+  // this deployment's config, and every `can()` its permission catalogue.
   useAdmins(options.admins ?? []);
+  usePermissions([...options.permissions ?? [], ...data?.permissions ?? []]);
 
   return async (request, context) => {
     const url = new URL(request.url);

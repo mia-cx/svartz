@@ -23,6 +23,17 @@ describe("the annotations plugin", () => {
     });
   });
 
+  it("declares commenting and deleting any comment, which auth collects at build time", () => {
+    const vault = { id: "garden", mountPath: "/garden", target: { type: "cloudflare-workers" }, plugins: [signIn, annotations({ database })] } as unknown as ResolvedConfig;
+
+    const resolved = signIn.forVault!({ vault, vaults: [vault] });
+
+    expect((resolved.server?.options as { permissions: unknown }).permissions).toEqual([
+      { slug: "annotations:comments:write", name: "Comment", description: "Post comments on the passages of a page.", defaults: { "signed-in": "allow" } },
+      { slug: "annotations:comments:delete", name: "Delete any comment", description: "Delete anyone's comments and reactions on a page, not only one's own." },
+    ]);
+  });
+
   it("gives the browser a script that finds the vault's routes, and its stylesheet", async () => {
     const plugin = annotations({ database });
     const ctx = { config: { mountPath: "/garden", target: { type: "cloudflare-workers" } }, files: [], meta: new Map() } as unknown as PluginContext;

@@ -43,6 +43,11 @@ type PluginChangeHookInput =
 
 interface PluginContext {
   readonly config: ResolvedConfig;
+  /**
+   * Every plugin this build runs for the vault: core's, the theme preset's and the config's, merged. `config.plugins`
+   * holds only the config's.
+   */
+  readonly plugins?: readonly NormalizedSvartzPlugin[];
   files: ProcessedFile[];
   artifacts: ArtifactBag;
   index?: Index;
@@ -80,6 +85,27 @@ const STAGE_NAMES = [
 
 type StageName = (typeof STAGE_NAMES)[number];
 
+// --- Permissions (collected by `@svartz/auth`) ---
+
+/** What a permission lets someone do. */
+type PermissionAction = "read" | "write" | "delete";
+
+/** `namespace:feature:action`, where the namespace is the declaring plugin's id: `annotations:comments:delete`. */
+type PermissionSlug = `${string}:${string}:${PermissionAction}`;
+
+/**
+ * A permission a plugin checks with `can()` from `@svartz/auth/server`. `defaults` are the site-wide grants to the
+ * built-in actors (`guest` is everyone, `signed-in` everyone with an account) until a stored grant says otherwise.
+ */
+interface PermissionDeclaration {
+  readonly slug: PermissionSlug;
+  /** Short, for the dashboard: "Delete any comment". */
+  readonly name: string;
+  /** One sentence on what holding it allows. */
+  readonly description: string;
+  readonly defaults?: { readonly guest?: "allow" | "deny"; readonly "signed-in"?: "allow" | "deny" };
+}
+
 // --- Plugin interface (author-facing) ---
 
 interface SvartzPlugin {
@@ -88,6 +114,8 @@ interface SvartzPlugin {
   readonly disabled?: boolean;
   /** Answers requests under `/_svartz/<id>/` at runtime. Needs a server target; the id must be a URL path segment. */
   readonly server?: ServerModuleSpec;
+  /** The permissions this plugin checks, each in its own namespace (`<id>:feature:action`). `auth` collects them at build time. */
+  readonly permissions?: readonly PermissionDeclaration[];
   /**
    * For plugins that span vaults: runs once per vault at config resolution, after every vault resolves, and returns
    * the plugin that vault runs. Throw to fail config resolution, naming the vault.
@@ -124,6 +152,7 @@ interface NormalizedSvartzPlugin {
   readonly contractVersion?: string;
   readonly disabled?: boolean;
   readonly server?: ServerModuleSpec;
+  readonly permissions?: SvartzPlugin["permissions"];
   readonly forVault?: SvartzPlugin["forVault"];
 
   // Lifecycle hooks
@@ -156,6 +185,9 @@ export type {
   PluginHookInput,
   PluginChangeHookInput,
   PluginContext,
+  PermissionAction,
+  PermissionDeclaration,
+  PermissionSlug,
   SiteVaults,
   SvartzPlugin,
   NormalizedSvartzPlugin,

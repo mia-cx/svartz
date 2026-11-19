@@ -404,6 +404,16 @@ describe("@svartz/vite plugin", () => {
     dispose?.();
   });
 
+  it("hands hooks the build's final plugins, which the config's list lacks when a theme preset adds some", async () => {
+    const preset = { id: "theme:guestbook" };
+    resolveRuntimePluginsMock.mockReturnValue([preset]);
+    const plugin = svartz({ config: testConfig, env: {}, mode: "test" });
+
+    await plugin.buildStart?.call({} as never);
+
+    expect(runStagesMock.mock.calls[0]![1]).toMatchObject({ plugins: [preset] });
+  });
+
   it("drops an unused browser resource on the next pipeline run", async () => {
     let run = 0;
     runStagesMock.mockImplementation(async (_plugins: unknown, ctx: { compiler?: { browserResources: Map<string, { id: string; kind: "css"; importId: string }> } }) => {
