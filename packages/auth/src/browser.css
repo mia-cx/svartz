@@ -194,7 +194,7 @@ a.sv-account-page {
 	text-decoration: none;
 }
 
-.sv-account-page svg {
+.sv-account .sv-account-page svg {
 	flex: none;
 	inline-size: 1rem;
 	block-size: 1rem;
@@ -291,28 +291,34 @@ a.sv-account-page {
 	font-size: var(--sv-step--1, 0.875rem);
 }
 
-/* The user page region's buttons come from whichever plugin fills it, and look like the page's own. */
+/*
+ * A plugin's button in the user page region would take the theme's action look, which every `[data-svartz-region]`
+ * child gets; inside `.sv-account` it outranks that and looks like the page's own buttons.
+ */
 .sv-account-button,
-.sv-account-page > button {
+.sv-account .sv-account-page > button {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	gap: var(--sv-space-2, 0.5rem);
 	min-block-size: 2.75rem;
-	padding-inline: var(--sv-space-4, 1rem);
+	padding: 0 var(--sv-space-4, 1rem);
 	border: var(--sv-rule-width, 1px) solid var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
 	border-radius: var(--sv-radius-m, 6px);
 	background: var(--sv-paper, Canvas);
 	color: var(--sv-ink, CanvasText);
 	font: inherit;
 	font-weight: 600;
+	text-transform: none;
 	cursor: pointer;
 	transition: background-color var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out);
 }
 
 .sv-account-button:hover,
-.sv-account-page > button:hover {
+.sv-account .sv-account-page > button:hover {
+	border-color: var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
 	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+	color: var(--sv-ink, CanvasText);
 }
 
 .sv-account-button[data-primary] {
