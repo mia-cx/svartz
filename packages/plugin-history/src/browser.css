@@ -219,7 +219,9 @@
 }
 
 .sv-history-rendered {
+	min-inline-size: 0;
 	padding: var(--sv-space-4, 1rem);
+	overflow-wrap: anywhere;
 	border: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
 	border-radius: var(--sv-radius-m, 6px);
 }

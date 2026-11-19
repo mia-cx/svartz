@@ -1,0 +1,15 @@
+---
+description: Page history reads commits only through submissions' read API, and shows nothing the site doesn't publish
+globs: packages/plugin-history/**, packages/plugin-submissions/src/commits.ts
+alwaysApply: false
+---
+
+# Page history
+
+- History reads commits only through `@svartz/plugin-submissions/commits`: never the `submissions_*` tables with its own SQL, never GitHub with credentials of its own. What it needs from the mirror or GitHub goes into that file.
+- `commitSource(ctx)` reads the vault folder submissions' `emitArtifacts` recorded, so history's `emitArtifacts` runs with `enforce: "post"`.
+- Every GitHub request a reader triggers goes through `get()` in `commits.ts`: it spends the reader's budget (`MAX_GITHUB_READS`) and checks the shared pause first, and pauses the poll too when GitHub says to wait or the allowance reaches the reserve. A request that bypasses it can spend the requests kept for saves.
+- A revision sha reaches GitHub only after `onBranch` (mirror, or `compare/<sha>...<branch>` saying the branch holds it): GitHub serves a fork's commits through the parent repository.
+- A commit names an account only when `submissions_edits` records the save or the App's bot committed it with the trailer. Never from the trailer or the author address alone.
+- Show only what the build published unprotected: history pages for published, unlocked `.md` notes; a summary only when every vault file of the commit is published; no content of a revision whose frontmatter made it a draft, private or password-protected.
+- Commit text is untrusted: escape it, and render revisions through `renderRevision`, which applies the build's sanitizing rules (`@svartz/plugins/content`).

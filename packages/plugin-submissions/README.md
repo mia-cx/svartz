@@ -233,6 +233,8 @@ Deliveries arrive at least once and in any order, so storing one is idempotent a
 
 A delivery is refused, and nothing stored, when its `X-Hub-Signature-256` isn't the HMAC-SHA256 of its body with the webhook secret, or when it is for another repository. Events other than the seven are acknowledged and ignored, as is the App's ping.
 
+Other plugins read the mirror's commits through `@svartz/plugin-submissions/commits`, which asks GitHub for what the mirror lacks with this plugin's credentials and under the poll's pause. [Page history](../../docs/history.md) does.
+
 ### The poll
 
 Webhooks get lost: a deploy was down, or a delivery failed. So when a reader asks how an edit is doing and the mirror hasn't been checked for a minute, the site asks GitHub too, after answering. Nothing polls on a timer.
