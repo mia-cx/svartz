@@ -133,9 +133,9 @@ export const listed = (commit: TestCommit) => ({
   files: commit.files.map((filename) => ({ filename, status: "modified" })),
 });
 
-/** GitHub listing the commits that changed `path`, from `from` back, page `page`. */
-export const historyExchange = (path: string, commits: readonly TestCommit[], { from = "main", page = 1, headers = {} as Record<string, string> } = {}): Exchange => ({
-  request: { method: "GET", url: `${API}/commits?${new URLSearchParams({ sha: from, path, per_page: "100", page: String(page) })}` },
+/** GitHub listing the commits that changed `path`, from `from` back, page `page` of `perPage`. */
+export const historyExchange = (path: string, commits: readonly TestCommit[], { from = "main", page = 1, perPage = 100, headers = {} as Record<string, string> } = {}): Exchange => ({
+  request: { method: "GET", url: `${API}/commits?${new URLSearchParams({ sha: from, path, per_page: String(perPage), page: String(page) })}` },
   authorization: `Bearer ${INSTALLATION_TOKEN}`,
   response: { status: 200, json: commits.map(listed), headers },
 });

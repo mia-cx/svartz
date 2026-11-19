@@ -5,8 +5,8 @@
  *
  * At build time, {@link mirrorsCommits} says whether a vault's submissions plugin keeps the mirror (`sync` set), and
  * {@link commitSource} hands over what reading it takes, for the reader's own server data. At runtime,
- * {@link commitReader} reads the mirror and asks GitHub for what it lacks: commits older than its backfill, and file
- * content at a commit. Every GitHub request goes through the submissions plugin's credentials and honours the pause
+ * {@link commitReader} reads the mirror and asks GitHub for what it can't answer: a file's history in the branch's
+ * order, commits it doesn't hold, and file content at a commit. Every GitHub request goes through the submissions plugin's credentials and honours the pause
  * it shares with the reconcile poll, so reads never spend the requests the poll keeps for saves; each reader makes at
  * most {@link MAX_GITHUB_READS} of them.
  *
@@ -92,22 +92,25 @@ export class CommitsUnavailable extends Error {
 /** Reads one request's worth of commits. Make one per request with {@link commitReader}. */
 export interface CommitReader {
   /**
-   * The commits that changed `path`, newest first, a page at a time. Page 0 is what the mirror holds once it has
-   * backfilled, and each later page is the next {@link GITHUB_PAGE_SIZE} of GitHub's list for the file, without the
-   * commits page 0 showed. Before the backfill, every page is GitHub's. `more` says whether GitHub may hold older ones.
-   * Renames aren't followed: the history of a moved file starts at the move.
+   * The commits that changed `path`, a page of {@link GITHUB_PAGE_SIZE} at a time, in the branch's order: GitHub's
+   * list for the file, which walks the branch's ancestry, with what the mirror knows of each. The mirror can't order
+   * them itself: commit times tie and can be backdated, and push deliveries don't name a commit's parents. `more` says
+   * whether GitHub may hold older ones. Renames aren't followed: the history of a moved file starts at the move.
    */
   history(path: string, page: number): Promise<{ readonly commits: readonly Commit[]; readonly more: boolean }>;
   /**
-   * The commits that changed a vault file, newest first, from the mirror only: those whose files it knows. `before`
-   * is the sha of the last commit of the previous page; `next` is this page's, when there may be more.
+   * The commits that changed a vault file, newest commit time first, from the mirror only: those whose files it
+   * knows. `before` is the sha of the last commit of the previous page; `next` is this page's, when there may be more.
    */
   recent(before?: string): Promise<{ readonly commits: readonly Commit[]; readonly next?: string }>;
   /** Whether `sha` is a commit on the content branch of the repository, never one of a fork's. */
   onBranch(sha: string): Promise<boolean>;
   /** The commit `sha`, when it is on the content branch. */
   commit(sha: string): Promise<Commit | undefined>;
-  /** The latest commit before `sha` that changed `path`; `undefined` too when `sha` isn't on the content branch. */
+  /**
+   * The commit that changed `path` before `sha` did, by `sha`'s ancestry as GitHub's list for the file walks it;
+   * `undefined` too when `sha` isn't on the content branch.
+   */
   previous(path: string, sha: string): Promise<Commit | undefined>;
   /** `path`'s content at commit `sha`; `missing` too when `sha` isn't on the content branch. */
   file(path: string, sha: string): Promise<FileAt>;
@@ -119,8 +122,6 @@ export interface CommitReader {
 export const MAX_GITHUB_READS = 6;
 /** Commits per page of GitHub's list, its most. */
 export const GITHUB_PAGE_SIZE = 100;
-/** Commits page 0 of a file's history shows from the mirror, at most. */
-const MIRROR_PAGE_SIZE = 100;
 /** Commits per page of {@link CommitReader.recent}. */
 export const RECENT_PAGE_SIZE = 50;
 /** File content larger than this isn't read; a note the editor accepts is far smaller. */
@@ -308,34 +309,24 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
       }));
     }
 
-    /** Whether the mirror has backfilled the vault's commits and knows every one's files. */
-    async function backfilled(): Promise<boolean> {
-      const { db, scope } = await mirrorFor();
-      const { results: [row] } = await db.prepare(`SELECT
-          EXISTS (SELECT 1 FROM submissions_etags WHERE scope = ?1 AND path LIKE '/commits?%') AS listed,
-          EXISTS (SELECT 1 FROM submissions_commits WHERE scope = ?1 AND files IS NULL) AS unread`)
-        .bind(scope).all<{ listed: number; unread: number }>();
-      return row?.listed === 1 && row.unread === 0;
-    }
-
-    const touching = "c.files IS NOT NULL AND EXISTS (SELECT 1 FROM json_each(c.files) WHERE value = ?)";
     const newestFirst = "ORDER BY c.committed_at DESC, c.sha DESC";
 
-    /** A page of GitHub's list of the commits that changed `path`, from `from` (a branch or a commit) back. */
+    /**
+     * A page of GitHub's list of the commits that changed `path`, from `from` back: the branch, or a commit known to
+     * be on it. Every commit listed is an ancestor of `from`, so on the branch too.
+     */
     async function githubList(path: string, from: string, page: number, size = GITHUB_PAGE_SIZE): Promise<Commit[]> {
       const query = new URLSearchParams({ sha: from, path: repoPath(path), per_page: String(size), page: String(page) });
       const response = await get(`/commits?${query}`);
-      return response.status === 404 ? [] : listed(list(await response.json()));
+      const commits = response.status === 404 ? [] : await listed(list(await response.json()));
+      for (const { sha } of commits) branches.set(sha, true);
+      return commits;
     }
 
     const reader: CommitReader = {
       async history(path, page) {
-        const ready = await backfilled();
-        const mirrored = ready ? await toCommits(await rows(`${touching} ${newestFirst} LIMIT ?`, repoPath(path), MIRROR_PAGE_SIZE)) : [];
-        if (ready && page === 0) return { commits: mirrored, more: true };
-        const fetched = await githubList(path, await branch(), ready ? page : page + 1);
-        const shown = new Set(mirrored.map(({ sha }) => sha));
-        return { commits: fetched.filter(({ sha }) => !shown.has(sha)), more: fetched.length === GITHUB_PAGE_SIZE };
+        const commits = await githubList(path, await branch(), page + 1);
+        return { commits, more: commits.length === GITHUB_PAGE_SIZE };
       },
 
       async recent(before) {
@@ -380,13 +371,6 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
 
       async previous(path, sha) {
         if (!await reader.onBranch(sha)) return undefined;
-        if (await backfilled()) {
-          const [self] = await rows(`c.sha = ? AND ${touching}`, sha, repoPath(path));
-          if (self) {
-            const [older] = await rows(`${touching} AND (c.committed_at, c.sha) < (?, ?) ${newestFirst} LIMIT 1`, repoPath(path), self.committed_at, self.sha);
-            if (older) return (await toCommits([older]))[0];
-          }
-        }
         // GitHub lists `sha` itself first when it changed the file, then the one before.
         const [first, second] = await githubList(path, sha, 1, 2);
         return first?.sha === sha ? second : first;

@@ -2,9 +2,10 @@
  * The history server module. It answers no routes of its own; it renders three kinds of plugin page in the theme's
  * shell, to anyone who can read the site:
  *
- * - `/-/history/<page>`: the changes to a published page, newest first. `?page=<n>` goes back through older ones.
+ * - `/-/history/<page>`: the changes to a published page, newest first in the branch's ancestry. `?page=<n>` goes back
+ *   through older ones.
  * - `/-/history/<page>?to=<sha>&from=<sha>`: what changed in the page's source between two revisions, and the page
- *   at the newer one, rendered with the build's Markdown steps. Without `from`, the revision before `to`.
+ *   at the newer one, rendered with the build's Markdown steps. Without `from`, the change to the page before `to`.
  * - `/-/changes/`: every change to a published page, newest first. `?before=<sha>` goes back further.
  *
  * Commits come from the submissions plugin's GitHub mirror, and from GitHub through it for what the mirror lacks

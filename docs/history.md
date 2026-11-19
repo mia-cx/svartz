@@ -35,8 +35,8 @@ History needs the submissions plugin on the same vault with [`sync`](../packages
 
 | Page | Shows |
 | --- | --- |
-| `/-/history/<page>` | The page's changes, newest first: when, who, and the summary. Each change links to what it changed; picking any two and **Compare selected** shows the changes between them. |
-| `/-/history/<page>?to=<commit>&from=<commit>` | The changes to the page's source between two revisions, then the page as it read at the newer one, rendered with the build's own Markdown steps (the ones the editor's Split preview runs). Without `from`, the revision before `to`. |
+| `/-/history/<page>` | The page's changes, newest first along the branch: when, who, and the summary. Each change links to what it changed; picking any two and **Compare selected** shows the changes between them. |
+| `/-/history/<page>?to=<commit>&from=<commit>` | The changes to the page's source between two revisions, then the page as it read at the newer one, rendered with the build's own Markdown steps (the ones the editor's Split preview runs). Without `from`, the change to the page that `to` follows in the branch's ancestry. |
 | `/-/changes/` | Every change to a published page, newest first, by day, each with the pages it changed and links to their changes and history. |
 
 `<page>` is the page's path below the vault's mount, so `/wiki/guides/setup/` has its history at `/wiki/-/history/guides/setup/`. Every published Markdown page gets a **History** action beside Copy page and Edit. Nothing adds Recent changes to a theme's navigation; link to `<mount>/-/changes/` where the theme puts its links.
@@ -61,7 +61,9 @@ Which pages are published comes from the last build, so a page added since shows
 
 ## How far back
 
-The mirror holds the latest 100 commits that changed the vault when it backfilled, and every commit since. A page's history starts with what the mirror holds; **Older changes** reads further back from GitHub, 100 changes at a time, up to 1,000. Past that, **Older changes on GitHub** links to the file's history there. Until the mirror's first poll has backfilled and read every commit's files, a page's history comes from GitHub, and opening a history page or Recent changes starts that poll.
+A page's history is GitHub's list of the commits that changed its file, in the order the branch's ancestry gives them, 100 changes at a time; **Older changes** goes back up to 1,000. Past that, **Older changes on GitHub** links to the file's history there. Commit times can tie or be backdated, so neither the list nor the revision a change is compared with follows them.
+
+Who made each change, and its summary, come from the mirror. It holds the latest 100 commits that changed the vault when it backfilled, and every commit since; an older change shows its git author and no summary. Recent changes reads the mirror alone, newest commit time first. Opening a history page or Recent changes starts the mirror's poll when it is stale; its first run backfills.
 
 History follows a file's path: a page that was moved or renamed shows its changes since the move.
 

@@ -54,9 +54,9 @@ function guideCommits(adaId: string): { added: TestCommit; saved: TestCommit; fo
 }
 
 describe("/-/history/<page>", () => {
-  // Proves a page's changes list newest first with authors resolved under the trust rule, from GitHub before the
-  // mirror's backfill, from the mirror after it, and from GitHub again for what is older than the mirror holds.
-  it("lists a page's changes, from GitHub before the backfill and from the mirror after it", async () => {
+  // Proves a page's changes list in GitHub's order with authors resolved under the trust rule and summaries from the
+  // files the mirror knows, a page of GitHub's list at a time.
+  it("lists a page's changes from GitHub's list, with what the mirror knows of each", async () => {
     const site = await createSite();
     const ada = await site.signUp(ADA);
     await site.adaCommits(ada);
@@ -65,35 +65,26 @@ describe("/-/history/<page>", () => {
     const older: TestCommit = { sha: "d".repeat(40), message: "Start the guide", at: -60, author: GRACE, committer: GITHUB_WEB, files: [GUIDE_PATH] };
 
     const github = replayGitHub([firstToken, historyExchange(GUIDE_PATH, [forged, saved, added]), ...backfill([forged, saved, added])], INSTALLATION_TOKEN);
-    const expected = [
+    const first = await site.page(HISTORY);
+    await site.settle();
+    expect(github.pending).toEqual([]);
+    replayGitHub([historyExchange(GUIDE_PATH, [older], { page: 2 })], INSTALLATION_TOKEN);
+    const back = await site.page(`${HISTORY}?page=1`);
+
+    expect(first?.title).toBe("History of Guide");
+    expect(rows(first)).toEqual([
       // Everything git says is Ada's, but the site has no record of making it: shown as its git author.
       "19 Nov 2026, 10:45 UTC Ada Lovelace Fix typo",
       // The site recorded committing it: Ada's account, with the note she wrote as its summary.
       "19 Nov 2026, 10:30 UTC Ada Lovelace @ada Added the time it takes.",
       // It also changed a note the site hides, so its summary stays out.
       "19 Nov 2026, 10:00 UTC Grace Hopper grace on GitHub",
-    ];
-    const before = await site.page(HISTORY);
-    expect(before?.title).toBe("History of Guide");
-    expect(rows(before)).toEqual(expected);
-    await site.settle();
-    expect(github.pending).toEqual([]);
-
-    // Backfilled: the mirror answers without asking GitHub.
-    const mirrored = replayGitHub([], INSTALLATION_TOKEN);
-    const after = await site.page(HISTORY);
-    expect(rows(after)).toEqual(expected);
-    expect(after?.html).toContain(`href="${HISTORY}?page=1"`);
-    await site.settle();
-    expect(mirrored.requests).toEqual([]);
-
-    // Older than the mirror holds: GitHub's list, without what the mirror already showed.
-    replayGitHub([historyExchange(GUIDE_PATH, [forged, saved, added, older])], INSTALLATION_TOKEN);
-    const back = await site.page(`${HISTORY}?page=1`);
+    ]);
+    // Older than the mirror holds, so its files aren't known and its summary stays out.
     expect(rows(back)).toEqual(["19 Nov 2026, 09:00 UTC Grace Hopper grace on GitHub"]);
     expect(back?.html).toContain(`href="${HISTORY}">Newer changes`);
     expect(back?.html).not.toContain("Older changes");
-    for (const page of [before, after, back]) expect(page?.html.toLowerCase()).not.toContain("secret");
+    for (const page of [first, back]) expect(page?.html.toLowerCase()).not.toContain("secret");
   });
 
   // Proves a reader can't make the site spend the requests it keeps for saves: once GitHub says the allowance is at
@@ -150,7 +141,11 @@ describe("/-/history/<page>?to=<sha>", () => {
     await site.page(HISTORY);
     await site.settle();
 
-    replayGitHub([contentExchange(GUIDE_PATH, saved.sha, SAVED), contentExchange(GUIDE_PATH, added.sha, ADDED)], INSTALLATION_TOKEN);
+    replayGitHub([
+      historyExchange(GUIDE_PATH, [saved, added], { from: saved.sha, perPage: 2 }),
+      contentExchange(GUIDE_PATH, saved.sha, SAVED),
+      contentExchange(GUIDE_PATH, added.sha, ADDED),
+    ], INSTALLATION_TOKEN);
     const diff = await site.page(`${HISTORY}?to=${saved.sha}`);
 
     expect(diff?.title).toBe("Changes to Guide");
@@ -222,6 +217,41 @@ describe("/-/changes/", () => {
     ]);
     expect(changes!.html).toContain(`href="${HISTORY}?to=${saved.sha}">changes`);
     expect(changes!.html.toLowerCase()).not.toMatch(/secret|launch/);
+  });
+});
+
+describe("the order of changes", () => {
+  // A parent and its child committed in the same second, the child's sha sorting first.
+  const start: TestCommit = { sha: "5".repeat(40), message: "Start the guide", at: 0, author: GRACE, committer: GITHUB_WEB, files: [GUIDE_PATH] };
+  const parent: TestCommit = { sha: "f".repeat(40), message: "Expand the guide", at: 30, author: GRACE, committer: GITHUB_WEB, files: [GUIDE_PATH] };
+  const child: TestCommit = { sha: "a".repeat(40), message: "Tidy the guide", at: 30, author: GRACE, committer: GITHUB_WEB, files: [GUIDE_PATH] };
+
+  // Proves a page's changes, and the revision each one is compared with, follow the branch's ancestry rather than
+  // commit times, which tie or go backwards.
+  it("follows the branch, not commit times", async () => {
+    const site = await createSite();
+    await site.push([start, parent, child]);
+    replayGitHub([firstToken, historyExchange(GUIDE_PATH, [child, parent, start]), ...backfill([child, parent, start])], INSTALLATION_TOKEN);
+    await site.page(HISTORY);
+    await site.settle();
+
+    replayGitHub([
+      historyExchange(GUIDE_PATH, [child, parent, start]),
+      historyExchange(GUIDE_PATH, [parent, start], { from: parent.sha, perPage: 2 }),
+      contentExchange(GUIDE_PATH, parent.sha, "# Guide\n\nExpanded.\n"),
+      contentExchange(GUIDE_PATH, start.sha, "# Guide\n"),
+    ], INSTALLATION_TOKEN);
+    const history = await site.page(HISTORY);
+    const diff = await site.page(`${HISTORY}?to=${parent.sha}`);
+
+    expect(rows(history)).toEqual([
+      "19 Nov 2026, 10:30 UTC Grace Hopper grace on GitHub Tidy the guide",
+      "19 Nov 2026, 10:30 UTC Grace Hopper grace on GitHub Expand the guide",
+      "19 Nov 2026, 10:00 UTC Grace Hopper grace on GitHub Start the guide",
+    ]);
+    expect(history!.html).toContain(`href="${HISTORY}?from=${parent.sha}&#38;to=${child.sha}"`);
+    expect(history!.html).toContain(`href="${HISTORY}?from=${start.sha}&#38;to=${parent.sha}"`);
+    expect(text(diff!.html)).toContain("From 19 Nov 2026, 10:00 UTC Grace Hopper grace on GitHub Start the guide To 19 Nov 2026, 10:30 UTC Grace Hopper grace on GitHub Expand the guide");
   });
 });
 
