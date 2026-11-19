@@ -5,7 +5,7 @@
  * and the same check runs before every render. A viewer with no panel gets the 404.
  */
 import type { DashboardSection, PageContext, PageResult, PluginPage, ServerContext } from "@svartz/core";
-import { can } from "./grants";
+import { canEachPermission } from "./grants";
 import { escape } from "./html";
 import type { Account } from "./session";
 
@@ -19,12 +19,13 @@ export const dashboardPath = (context: Pick<ServerContext, "base">): string =>
 /** The vault's dashboard sections, with only the panels `viewer` may open, and without sections left empty. */
 export async function openableSections(viewer: Account | null, context: ServerContext): Promise<DashboardSection[]> {
   const sections = await context.dashboard();
-  const target = { vault: context.vault.id };
-  const open = await Promise.all(sections.map(async (section) => {
-    const allowed = await Promise.all(section.panels.map((panel) => can(viewer, panel.permission, target, context.env)));
-    return { ...section, panels: section.panels.filter((_, index) => allowed[index]) };
-  }));
-  return open.filter(({ panels }) => panels.length > 0);
+  // One check for every panel: a view's cost doesn't grow with the panels its plugins add.
+  const permissions = [...new Set(sections.flatMap(({ panels }) => panels.map(({ permission }) => permission)))];
+  const allowed = await canEachPermission(viewer, permissions, { vault: context.vault.id }, context.env);
+  const held = new Set(permissions.filter((_, index) => allowed[index]));
+  return sections
+    .map((section) => ({ ...section, panels: section.panels.filter(({ permission }) => held.has(permission)) }))
+    .filter(({ panels }) => panels.length > 0);
 }
 
 function indexPage(sections: readonly DashboardSection[], root: string): PluginPage {
