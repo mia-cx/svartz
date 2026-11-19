@@ -1,6 +1,7 @@
 import { createServer, type PluginPage } from "@svartz/core";
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { seal } from "../src/seal";
 import { readSignIn } from "../src/server";
 import { sealSession } from "../src/session";
 
@@ -259,6 +260,26 @@ describe("/-/account/", () => {
     expect(shown?.html).toContain('value="-mona lisa-"');
     expect(shown?.html).toContain('role="alert"');
     expect(await reader(request, session)).toMatchObject({ handle: "octocat", name: "The Octocat" });
+  });
+
+  // Proves sign out everywhere also ends the browsers still holding a cookie from before accounts: one already read
+  // ends with the other sessions, and one never read before can't become a new session for the account afterwards.
+  it("signs out cookies from before accounts everywhere, read or not", async () => {
+    const { request } = site(await createDatabase());
+    const laptop = await signUp(request, OCTOCAT, "octocat");
+    const legacy = async () => [`__Host-svartz-session=${await seal(
+      { id: `github:${OCTOCAT.id}`, provider: "github", name: "The Octocat", handle: "octocat" }, SECRET, "session", 30 * 24 * 60 * 60)}`];
+    const read = await legacy();
+    const unread = await legacy();
+    expect(await reader(request, read)).toMatchObject({ handle: "octocat" });
+
+    await post(request, "sign-out-everywhere", laptop);
+
+    expect(await reader(request, read)).toBeNull();
+    expect(await reader(request, unread)).toBeNull();
+    expect(await reader(request, unread)).toBeNull();
+    // Signing in again still works.
+    expect(await reader(request, await signIn(request, OCTOCAT))).toMatchObject({ handle: "octocat" });
   });
 
   // Proves a session reads only while its provider account is still linked to its account. A sign-in with Discord looks

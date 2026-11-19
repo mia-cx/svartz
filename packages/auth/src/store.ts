@@ -109,6 +109,12 @@ const MIGRATIONS: readonly (readonly string[])[] = [
     )`,
     `CREATE INDEX IF NOT EXISTS auth_handles_by_account ON auth_handles (account_id)`,
     `INSERT OR IGNORE INTO auth_handles (handle, account_id, created_at) SELECT handle, id, created_at FROM auth_accounts`,
+    // Accounts that signed out everywhere. A cookie from before accounts, which their sign-out found no session for
+    // because it was never read, becomes no session for them afterwards.
+    `CREATE TABLE IF NOT EXISTS auth_signed_out_everywhere (
+      account_id TEXT PRIMARY KEY REFERENCES auth_accounts (id),
+      signed_out_at TEXT NOT NULL
+    )`,
   ],
 ];
 
@@ -353,7 +359,10 @@ export async function legacySession(db: Database, hash: string, identity: Identi
       await db.batch([
         ...create,
         // The first read to record the cookie wins. A racing read inserts no session and finds the winner's next time round.
-        db.prepare("INSERT OR IGNORE INTO auth_legacy_cookies (hash, session_id, created_at) VALUES (?, ?, ?)").bind(hash, session, at),
+        // Every such cookie predates the account's sign-out everywhere, if it had one, so it records no session then.
+        db.prepare(`INSERT OR IGNORE INTO auth_legacy_cookies (hash, session_id, created_at)
+          SELECT ?1, CASE WHEN EXISTS (SELECT 1 FROM auth_signed_out_everywhere WHERE account_id = ?4) THEN NULL ELSE ?2 END, ?3`)
+          .bind(hash, session, at, account),
         db.prepare(`INSERT INTO auth_sessions (id, account_id, identity_id, created_at, expires_at)
           SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM auth_legacy_cookies WHERE hash = ?6 AND session_id = ?1)`)
           .bind(session, account, identity.id, at, Date.parse(at) + SESSION_MAX_AGE_SECONDS * MS_PER_SECOND, hash),
@@ -458,9 +467,18 @@ export async function unlinkIdentity(db: Database, account: string, identity: st
   return results.length === 0;
 }
 
-/** End every session of `account`, so each of its browsers reads as signed out on its next request. */
+/**
+ * End every session of `account`, so each of its browsers reads as signed out on its next request. A browser still
+ * holding a cookie from before accounts that was never read has no session yet; the account's record here keeps
+ * {@link legacySession} from starting one.
+ */
 export async function endAccountSessions(db: Database, account: string): Promise<void> {
-  await db.prepare("DELETE FROM auth_sessions WHERE account_id = ?").bind(account).run();
+  const at = new Date().toISOString();
+  await db.batch([
+    db.prepare("DELETE FROM auth_sessions WHERE account_id = ?").bind(account),
+    db.prepare(`INSERT INTO auth_signed_out_everywhere (account_id, signed_out_at) VALUES (?, ?)
+      ON CONFLICT (account_id) DO UPDATE SET signed_out_at = excluded.signed_out_at`).bind(account, at),
+  ]);
 }
 
 /**
