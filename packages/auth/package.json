@@ -11,7 +11,7 @@
     "node": "^20.19.0 || >=22.12.0"
   },
   "type": "module",
-  "description": "Reader sign-in for Svartz sites, and the signed-in identity for server plugins",
+  "description": "Reader sign-in and accounts for Svartz sites, and the signed-in account for server plugins",
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -48,6 +48,7 @@
     "@types/node": "^22.0.0",
     "@vitest/browser-playwright": "^4.1.12",
     "@vitest/coverage-v8": "^4.1.12",
+    "miniflare": "^4.20260305.0",
     "playwright": "^1.58.2",
     "tsup": "^8.0.0",
     "typescript": "^5.9.3",

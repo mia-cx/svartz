@@ -1,6 +1,6 @@
 /**
  * Reader sign-in for a vault: `plugins: [auth({ providers: { github: { … } } })]` in `svartz.config.ts`.
- * Server plugins read who is signed in with `readIdentity` from `@svartz/auth/server`.
+ * Server plugins read who is signed in with `readAccount` from `@svartz/auth/server`.
  */
 import { fileURLToPath } from "node:url";
 import { definePlugin, getCompilerContributions, type ResolvedConfig, type NormalizedSvartzPlugin, type SiteVaults, type SvartzPlugin } from "@svartz/core";
@@ -9,6 +9,7 @@ import { isProviderId, PROVIDERS, type ProviderId } from "./providers";
 import type { AuthOptions, AuthServerOptions } from "./server";
 
 export type { Identity, ProviderId } from "./providers";
+export type { Account, SignIn, SignedOutReason } from "./session";
 export type { AuthOptions, ProviderOptions } from "./server";
 export type { SignInConfig } from "./browser";
 
@@ -42,8 +43,20 @@ function validate(options: AuthOptions): ProviderId[] {
   if (options.callbackVault !== undefined && (typeof options.callbackVault !== "string" || !options.callbackVault)) {
     fail("callbackVault must be the id of the vault whose routes run sign-in");
   }
+  const admins = options.admins ?? [];
+  if (!Array.isArray(admins)) fail("admins must be a list of identity ids such as \"github:583231\"");
+  for (const admin of admins) {
+    const [provider = "", id] = typeof admin === "string" ? admin.split(/:(.*)/s) : [];
+    if (!id) fail(`admins lists ${JSON.stringify(admin)}; use identity ids such as "github:583231"`);
+    // Only a provider readers can sign in with ever reaches the account.
+    if (!names.includes(provider)) fail(`admins lists "${admin}", but providers doesn't offer ${provider}`);
+  }
   return names as ProviderId[];
 }
+
+/** The same admins in any order: host vaults share accounts, so they must agree on who administers them. */
+const sameAdmins = (a: readonly string[] = [], b: readonly string[] = []): boolean =>
+  new Set(a).size === new Set(b).size && a.every((admin) => b.includes(admin));
 
 /** The `auth` options a vault runs, or `undefined` when it doesn't enable auth. */
 function authOptionsOf(vault: ResolvedConfig): AuthOptions | undefined {
@@ -64,6 +77,11 @@ function callbackVaultFor(options: AuthOptions, providers: readonly ProviderId[]
     fail(`vault "${vault.id}" sets callbackVault "${named}", but only host vaults share a sign-in; "${vault.id}" runs its own`);
   }
   const host = vaults.filter((candidate) => candidate.target.type === "host" && authOptionsOf(candidate));
+  // Every host vault, not only the callback vault: vaults with separate callback vaults still share accounts.
+  const differs = host.find((candidate) => !sameAdmins(options.admins, authOptionsOf(candidate)!.admins));
+  if (differs) {
+    fail(`vault "${vault.id}" lists different admins than vault "${differs.id}"; host vaults share accounts, so list the same admins on each`);
+  }
   const id = named ?? host[0]!.id;
   const target = vaults.find((candidate) => candidate.id === id);
   if (!target) fail(`vault "${vault.id}" sets callbackVault "${id}", but no vault has that id`);
@@ -84,7 +102,8 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], call
   const serverOptions: AuthServerOptions = callbackMountPath === undefined ? options : { ...options, callbackMountPath };
   return definePlugin(() => ({
     id: AUTH_PLUGIN_ID,
-    server: { module: SERVER_MODULE, options: serverOptions },
+    // Eager, so every plugin that reads accounts sees this deployment's `admins` from its first request on.
+    server: { module: SERVER_MODULE, options: serverOptions, eager: true },
     forVault(site) {
       const target = callbackVaultFor(options, providers, site);
       return target.id === site.vault.id ? authPlugin(options, providers) : authPlugin(options, providers, target.mountPath);

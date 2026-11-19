@@ -1,6 +1,6 @@
 # Reader sign-in
 
-`@svartz/auth` lets readers sign in with Google, Discord, X or GitHub, and lets [server plugins](server-plugins.md) read who is signed in. It runs on Workers and Node with no hosted service: [Arctic](https://arcticjs.dev) handles OAuth, and the session lives in a sealed cookie.
+`@svartz/auth` lets readers sign in with Google, Discord, X or GitHub, and lets [server plugins](server-plugins.md) read who is signed in. It needs no hosted service: [Arctic](https://arcticjs.dev) handles OAuth, and each reader's account and sessions live in the site's own D1 database.
 
 ```ts
 import { defineConfig } from "@svartz/config";
@@ -20,6 +20,7 @@ export default defineConfig({
         github: { clientId: "Iv23liExample", clientSecret: { env: "PRIVATE_GITHUB_CLIENT_SECRET" } },
       },
       privacyNotice: "/privacy/",
+      admins: ["github:583231"],
     })],
   }],
 });
@@ -32,6 +33,23 @@ The vault needs a server target (`cloudflare-workers`, `cloudflare-pages` or `no
 | `providers` | The providers readers may use, in the order the sign-in dialog lists them. Each takes the OAuth app's `clientId` and names its secret with `clientSecret: { env: "NAME" }`. Choose from `google`, `discord`, `x` and `github`. |
 | `privacyNotice` | Optional URL of the site's privacy notice. The sign-in dialog links to it. A site that stores readers' names and avatars owes them one. |
 | `callbackVault` | Optional id of the host vault that runs every sign-in in the app. Defaults to the first host vault that enables auth. See [several vaults](#several-vaults). |
+| `admins` | Optional identity ids, such as `"github:583231"`, whose accounts always hold the `admin` role. See [bootstrap admins](#bootstrap-admins). |
+
+## The accounts database
+
+Bind a D1 database as `SVARTZ_DB`. Auth creates its tables there on the first request that needs them, and upgrades them the same way in later releases; there are no migrations to run. Its tables all start with `auth_`, so other plugins, such as [annotations](annotations.md), can keep theirs in the same database.
+
+```toml
+# wrangler.toml
+[[d1_databases]]
+binding = "SVARTZ_DB"
+database_name = "notes"
+database_id = "<the id `wrangler d1 create notes` printed>"
+```
+
+The binding has a fixed name, like the session secret, because every server plugin reads accounts from it. Under `svartz dev`, Wrangler's local D1 stands in.
+
+Without `SVARTZ_DB`, as on a `node` target, readers still sign in, but nobody has an account: the session cookie holds the provider account itself, there is no handle chooser, and [`readAccount`](#reading-the-signed-in-reader-from-a-plugin) answers `null`.
 
 ## Secrets
 
@@ -106,9 +124,15 @@ An OAuth App takes exactly one callback URL, so it can't serve both staging and 
 
 Sign-in asks GitHub for no scopes: it reads only the public profile.
 
+## First sign-in
+
+The first time someone signs in, they choose a handle: the name they go by across the site, and later the address of their user page. The chooser is prefilled with the provider's username, or with the closest free variant (`octocat-2`) when someone has it. Google accounts have no username, so theirs starts from the display name. Signing in creates the account, links the provider account to it, and returns the reader to the page they started from. Every later sign-in with that provider account reaches the same account without asking.
+
+A handle is 1 to 39 lowercase letters, numbers, hyphens and underscores, starting and ending with a letter or number, and no two accounts share one. The chooser lowercases what the reader types and drops a leading `@`. A reader has 15 minutes to choose; after that they sign in again.
+
 ## What is kept
 
-A signed-in reader is an identity and nothing more:
+Each **account** has an id, its handle, a display name and avatar taken from the provider at first sign-in, and when it was created. Each **identity** is a provider account linked to one account, with the profile it last signed in with:
 
 ```ts
 {
@@ -130,9 +154,29 @@ A signed-in reader is an identity and nothing more:
 
 `name` is always set: the display name, falling back to the handle, or to "Google user" when Google withholds the name. Check `handle`, `avatarUrl` and `profileUrl` before showing them.
 
-The identity is encrypted with AES-GCM into the `__Host-svartz-session` cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`) for 30 days, under a key HKDF derives from `PRIVATE_SVARTZ_SESSION_SECRET`. The provider's access token is used once, to read the profile, and then dropped; it is never stored or sent to the browser. A tampered, expired or wrong-key cookie reads as signed out. There is no server-side session store, so signing out clears the cookie in that browser only.
+The provider's access token is used once, to read the profile, and then dropped; it is never stored or sent to the browser.
+
+## Sessions
+
+Each sign-in starts a **session** in D1 that lasts 30 days. The `__Host-svartz-session` cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`) holds only its id, encrypted with AES-GCM under a key HKDF derives from `PRIVATE_SVARTZ_SESSION_SECRET`. Every read looks the session up, so deleting it signs that browser out on its next request, along with any copy of the cookie. Signing out deletes it. A tampered, expired or wrong-key cookie reads as signed out.
+
+Until the account pages arrive, end sessions with Wrangler. Delete one account's sessions to sign them out everywhere:
+
+```sh
+wrangler d1 execute notes --remote --command "DELETE FROM auth_sessions WHERE account_id = (SELECT id FROM auth_accounts WHERE handle = 'octocat')"
+```
+
+Cookies from before accounts held the identity itself. Each becomes an account and a session the first time a plugin reads it, with the closest free handle to the provider's username, so the upgrade signs nobody out and asks nobody anything. Every later read of that cookie reaches the same session; once that session is deleted or signed out, the old cookie never starts another.
 
 Local development over `http://localhost` works in Chrome and Firefox, which accept `Secure` cookies there.
+
+## Bootstrap admins
+
+`admins` lists identity ids whose accounts always hold the `admin` role, so a fresh site has someone who can grant everything else. The role comes from config, not from the database, so nothing stored there takes it away; to remove an admin, take them off the list and deploy. An account holds the role when any provider account linked to it is listed. Each id's provider must be one the vault offers, or the build fails.
+
+Host vaults share accounts, so every host vault that enables auth must list the same admins, or the build fails.
+
+Auth starts before the site answers any request, so server plugins and a host app's own routes behind `svartzHandle` always read this deployment's list. Code that calls `readAccount` without `svartzHandle` in its hooks sees no admins.
 
 ## Routes
 
@@ -141,11 +185,13 @@ Under `<base><mount>/_svartz/auth/`, where `<base>` is the deployment base path,
 | Route | Does |
 | --- | --- |
 | `GET start/<provider>/?returnTo=<path>` | Redirects to the provider. The OAuth state and PKCE verifier wait in a 10-minute sealed cookie. `returnTo` must be a path on the same site; anything else answers 400. Without it, the reader returns to the vault's home. |
-| `GET callback/<provider>/` | Completes sign-in and redirects to `returnTo`. A reader who declines at the provider returns there, and any session they already had stays as it was. |
-| `GET me/` | The identity, or `null`. |
-| `POST sign-out/` | Clears the session; answers 204. Refused from another origin. |
+| `GET callback/<provider>/` | Completes sign-in and redirects to `returnTo`, or to `handle/` on a first sign-in. A reader who declines at the provider returns there, and any session they already had stays as it was. |
+| `GET handle/` | The handle chooser for a first sign-in. Without one waiting, it says the sign-in expired. |
+| `POST handle/` | Creates the account with the form's `handle` and redirects to `returnTo` signed in. A taken or malformed handle shows the chooser again, answering 422. Refused from another origin. |
+| `GET me/` | The identity the reader signed in with, or `null`. |
+| `POST sign-out/` | Ends the session; answers 204. Refused from another origin. |
 
-Providers the config doesn't list answer 404.
+Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` answers 503.
 
 ## The sign-in dialog
 
@@ -161,15 +207,31 @@ Browser code opens it with `openSignIn(returnTo?)` from `@svartz/auth/browser`. 
 
 ```ts
 import type { ServerModuleFactory } from "@svartz/core";
-import { readIdentity } from "@svartz/auth/server";
+import { readAccount } from "@svartz/auth/server";
 
 const guestbook: ServerModuleFactory = () => async (request, context) => {
-  const reader = await readIdentity(request, context.env);
+  const reader = await readAccount(request, context.env);
   if (!reader) return Response.json({ error: "unauthorized", message: "Sign in to sign the guestbook." }, { status: 401 });
-  return Response.json({ hello: reader.name });
+  return Response.json({ hello: `@${reader.handle}` });
 };
 
 export default guestbook;
 ```
 
-`readIdentity(request, env)` answers the `Identity`, or `null` when nobody is signed in or `PRIVATE_SVARTZ_SESSION_SECRET` is unset. The plugin must be on a vault served from the same origin, since the cookie is.
+`readAccount(request, env)` answers the `Account`, or `null` when nobody is signed in, their session was deleted or expired, or the site binds no `SVARTZ_DB`. `env` is the handler's `context.env`. The plugin must be on a vault served from the same origin, since the cookie is.
+
+```ts
+{
+  id: "0b9f6c1e-…",       // stable and opaque
+  handle: "octocat",
+  name: "The Octocat",
+  avatarUrl: "https://avatars.githubusercontent.com/u/583231",
+  createdAt: "2026-11-19T10:00:00.000Z",
+  roles: ["admin"],       // `admin` for bootstrap admins
+  identity: { id: "github:583231", provider: "github", … }, // the provider account this session used
+}
+```
+
+`readSignIn(request, env)` answers `{ account }`, or `{ account: null, reason }` saying why there is none: `"signed-out"`, or `"no-database"` when the site binds no `SVARTZ_DB`. A plugin that needs accounts can answer the second with a 503 naming the binding.
+
+`readIdentity(request, env)` answers the provider account the reader signed in with, or `null`. It works with or without `SVARTZ_DB`, so plugins written before accounts keep working; new plugins should read the account.
