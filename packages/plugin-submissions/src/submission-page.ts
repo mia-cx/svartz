@@ -231,7 +231,7 @@ export function submissionPage(view: SubmissionView): PluginPage {
 <p class="sv-account-muted svartz-submissions-links">${view.kind === "edit" ? "Edit" : "New page"} · ${links.join(" · ")}</p>
 </div>
 <div class="sv-account-who">
-<p class="sv-account-lead svartz-submissions-stage" data-stage="${view.stage}">${STAGE_TEXT[view.stage]}</p>${followUp}
+<p class="sv-account-lead" data-stage="${view.stage}">${STAGE_TEXT[view.stage]}</p>${followUp}
 </div>
 <section aria-labelledby="svartz-conversation">
 <h2 id="svartz-conversation">Conversation</h2>
