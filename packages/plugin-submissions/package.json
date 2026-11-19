@@ -31,6 +31,10 @@
       "import": "./dist/render.js",
       "types": "./dist/render.d.ts"
     },
+    "./restore": {
+      "import": "./dist/restore.js",
+      "types": "./dist/restore.d.ts"
+    },
     "./browser.css": "./dist/browser.css"
   },
   "scripts": {

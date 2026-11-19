@@ -12,16 +12,13 @@ const MAX_BRANCH_SLUG = 48;
 /** Past this, a GitHub request counts as unanswered and the reader is told to try again. */
 export const GITHUB_TIMEOUT_MS = 10_000;
 
-/** The repository and credentials a submission is written with. */
-export interface GitHubTarget {
+/** A repository, its content branch, and the credentials it is written with: what a direct commit needs. */
+export interface Repository {
   /** `owner/name`. */
   readonly repo: string;
   readonly token: string;
   /** The branch pull requests target; the repository's default branch when unset. */
   readonly branch?: string;
-  readonly labels: readonly string[];
-  /** The commit the site was built from. Edits branch from it, so a page changed since conflicts. */
-  readonly commit: string;
   /**
    * Runs around each request, for reads that keep to the pause the reconcile poll shares: `before` may refuse the
    * request by throwing, and `after` sees GitHub's answer first.
@@ -30,6 +27,13 @@ export interface GitHubTarget {
     readonly before: () => Promise<void>;
     readonly after: (response: Response) => Promise<void>;
   };
+}
+
+/** The repository and credentials a submission is written with. */
+export interface GitHubTarget extends Repository {
+  readonly labels: readonly string[];
+  /** The commit the site was built from. Edits branch from it, so a page changed since conflicts. */
+  readonly commit: string;
 }
 
 /** One reader's edit of a published note, or a new note. */
@@ -51,6 +55,8 @@ export interface Submission {
   readonly note: string;
   /** The signed-in reader who sent it, or `null` when anonymous. */
   readonly submitter: Identity | null;
+  /** The commit's and the pull request's title; `Edit <path>` or `Add <path>` when unset. */
+  readonly title?: string;
 }
 
 interface PullRequest {
@@ -95,7 +101,7 @@ export async function requestGitHub(
   }
 }
 
-async function send(target: GitHubTarget, method: string, path: string, body?: unknown, accept?: string) {
+async function send(target: Repository, method: string, path: string, body?: unknown, accept?: string) {
   await target.pace?.before();
   const response = await requestGitHub(target.token, method, `/repos/${target.repo}${path}`, body, accept);
   await target.pace?.after(response);
@@ -103,7 +109,7 @@ async function send(target: GitHubTarget, method: string, path: string, body?: u
 }
 
 /** The reader-facing error for a GitHub response that failed. */
-async function failure(target: GitHubTarget, response: Response): Promise<SubmissionError> {
+async function failure(target: Repository, response: Response): Promise<SubmissionError> {
   const detail = await response.json().then((body: { message?: unknown }) => body?.message, () => undefined);
   switch (response.status) {
     case 401:
@@ -124,7 +130,7 @@ async function failure(target: GitHubTarget, response: Response): Promise<Submis
   }
 }
 
-async function call<T>(target: GitHubTarget, method: string, path: string, body?: unknown): Promise<T> {
+async function call<T>(target: Repository, method: string, path: string, body?: unknown): Promise<T> {
   const response = await send(target, method, path, body);
   if (!response.ok) throw await failure(target, response);
   return await response.json() as T;
@@ -279,16 +285,16 @@ export async function openSubmission(target: GitHubTarget, submission: Submissio
 
 const unchanged = () => new SubmissionError("unchanged", 422, "Nothing has changed yet. Edit the page, then send it.");
 
-/** `Edit content/guide.md` or `Add content/People/Ada Lovelace.md`: the commit's and the pull request's title. */
-const commitTitle = ({ kind, path }: Submission) => `${kind === "edit" ? "Edit" : "Add"} ${path}`;
+/** `Edit content/guide.md` or `Add content/People/Ada Lovelace.md`, unless the submission names its own title. */
+const commitTitle = ({ kind, path, title }: Submission) => title ?? `${kind === "edit" ? "Edit" : "Add"} ${path}`;
 
 /** The branch submissions target: the configured one, or the repository's default. */
-export async function baseBranch(target: GitHubTarget): Promise<string> {
+export async function baseBranch(target: Repository): Promise<string> {
   return target.branch ?? (await call<{ default_branch: string }>(target, "GET", "")).default_branch;
 }
 
 /** The tree `base` with the submission's note written at its path; answers the new tree's SHA. */
-async function writeTree(target: GitHubTarget, base: string, submission: Submission): Promise<string> {
+async function writeTree(target: Repository, base: string, submission: Submission): Promise<string> {
   const tree = await call<{ sha: string }>(target, "POST", "/git/trees", {
     base_tree: base,
     tree: [{ path: submission.path, mode: "100644", type: "blob", content: submission.markdown }],
@@ -383,7 +389,7 @@ function commitMessage(submission: Submission, attribution: Attribution): string
 }
 
 /** The blob SHA of the file at `path` in commit `ref`; `undefined` when there is none, and `""` for anything but a file. */
-async function blobAt(target: GitHubTarget, path: string, ref: string): Promise<string | undefined> {
+async function blobAt(target: Repository, path: string, ref: string): Promise<string | undefined> {
   const response = await send(target, "GET", `/contents/${encodePath(path)}?ref=${ref}`);
   if (response.status === 404) return undefined;
   if (!response.ok) throw await failure(target, response);
@@ -393,7 +399,7 @@ async function blobAt(target: GitHubTarget, path: string, ref: string): Promise<
 }
 
 /** The latest commit that touched `path` in the history of commit `head`. */
-async function latestCommit(target: GitHubTarget, head: string, path: string): Promise<CommitResult> {
+async function latestCommit(target: Repository, head: string, path: string): Promise<CommitResult> {
   const query = new URLSearchParams({ sha: head, path, per_page: "1" });
   const [latest] = await call<Array<{ sha: string; html_url: string }>>(target, "GET", `/commits?${query}`);
   return latest ? { kind: "commit", url: latest.html_url, sha: latest.sha, made: false } : { kind: "review", reason: "changed" };
@@ -410,12 +416,17 @@ async function latestCommit(target: GitHubTarget, head: string, path: string): P
  * runs again on the new head. When GitHub refuses the move while the head stays put, a rule for the branch refused it,
  * such as one requiring pull requests or signed commits, and the answer is `protected`. A retry whose content the
  * branch already holds, as after a lost answer, answers the latest commit to the file instead of committing again.
+ *
+ * `beforeMove` runs once the commit exists and before the branch moves to it, to record the commit being made (an
+ * audit entry). With it, a branch that moved meanwhile isn't tried again, since the commit recorded would never land:
+ * that answers `branch_busy`.
  */
 export async function commitSubmission(
-  target: GitHubTarget,
+  target: Repository,
   submission: Submission,
   loaded: string | undefined,
   attribution: Attribution,
+  { beforeMove }: { readonly beforeMove?: (commit: { readonly sha: string; readonly url: string }) => Promise<void> } = {},
 ): Promise<CommitResult> {
   const wanted = await blobSha(submission.markdown);
   if (wanted === loaded) throw unchanged();
@@ -431,6 +442,7 @@ export async function commitSubmission(
       console.warn(`[submissions] GitHub refused a commit to ${branch}${typeof detail === "string" ? ` (${detail})` : ""}; opening a pull request instead`);
       return { kind: "review", reason: "protected" };
     }
+    if (refused && beforeMove) throw busy();
     const current = await blobAt(target, submission.path, head);
     // From the head checked: the branch may have moved on since, past someone else's change to the file.
     if (current === wanted) return latestCommit(target, head, submission.path);
@@ -445,13 +457,16 @@ export async function commitSubmission(
       author,
       committer: attribution.committer,
     });
+    await beforeMove?.({ sha: commit.sha, url: commit.html_url });
     const moved = await send(target, "PATCH", ref, { sha: commit.sha, force: false });
     if (moved.ok) return { kind: "commit", url: commit.html_url, sha: commit.sha, made: true };
     if (moved.status !== 422) throw await failure(target, moved);
     refused = { head, response: moved };
   }
-  throw new SubmissionError("branch_busy", 503, "Other edits are being saved right now. Try again in a moment.");
+  throw busy();
 }
+
+const busy = () => new SubmissionError("branch_busy", 503, "Other edits are being saved right now. Try again in a moment.");
 
 /** Whether `name`, an `owner/name` GitHub answered, is `repo`: GitHub's owner and repository names ignore case. */
 export const sameRepository = (name: string | null | undefined, repo: string) => name?.toLowerCase() === repo.toLowerCase();

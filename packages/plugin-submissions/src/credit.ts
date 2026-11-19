@@ -40,14 +40,18 @@ interface Owed {
 /** What to post for one owed save, and what it is settled as afterwards; `undefined` while it waits on its lines. */
 type Settlement = { event?: ReputationEvent; state: "declined" | "done" } | undefined;
 
+/** The ref a landed save's `edit` or `page` event is posted with: its commit, or its pull request. `repo` in lower case. */
+const landedRef = (repo: string, save: Pick<Owed, "kind" | "commit_sha" | "pull_number">) =>
+  save.kind === "commit" ? `submissions:${repo}:commit:${save.commit_sha}` : `submissions:${repo}:pull:${save.pull_number}`;
+
 function settle(row: Owed, repo: string): Settlement {
   const to = { account: row.owner.slice("account:".length) };
   const landed = (ref: string): Settlement => {
     if (row.new_page) return { event: { kind: "page", to, ref }, state: "done" };
     return row.lines === null ? undefined : { event: { kind: "edit", to, ref, lines: row.lines }, state: "done" };
   };
-  if (row.kind === "commit") return row.first ? landed(`submissions:${repo}:commit:${row.commit_sha}`) : { state: "done" };
-  const pull = `submissions:${repo}:pull:${row.pull_number}`;
+  if (row.kind === "commit") return row.first ? landed(landedRef(repo, row)) : { state: "done" };
+  const pull = landedRef(repo, row);
   if (row.merged_at && row.merge_commit) return landed(pull);
   return { event: { kind: "declined", to, ref: `${pull}:declined` }, state: "declined" };
 }
@@ -72,6 +76,34 @@ export async function credit(mirror: Mirror, repo: string, env: Readonly<Record<
     if (settlement.event) await postReputation(env, settlement.event);
     await db.prepare("UPDATE submissions_credits SET state = ? WHERE edit_id = ?").bind(settlement.state, row.id).run();
   }
+}
+
+/**
+ * What landing `commits` (SHAs on the content branch) earns or will earn: for each, the save the site recorded making
+ * it (a direct commit, or the merge of a pull request it opened), the earliest when there are several, as
+ * `MADE_BY_SITE` in `commits.ts` names it. Only a save an account made that reputation owes: an unrecorded commit, a
+ * guest's save or a revert's earns nothing. Each comes with its account and the ref its event is posted with, for
+ * auth's `reverseReputation`. One query.
+ */
+export async function earnings({ db, scope }: Mirror, repo: string, commits: readonly string[]): Promise<Array<{ account: string; ref: string }>> {
+  if (commits.length === 0) return [];
+  const { results } = await db.prepare(`SELECT sha, owner, kind, commit_sha, pull_number, credited FROM (
+      SELECT e.commit_sha AS sha, e.owner, e.kind, e.commit_sha, e.pull_number, e.saved_at, e.id,
+        EXISTS (SELECT 1 FROM submissions_credits k WHERE k.edit_id = e.id) AS credited
+      FROM submissions_edits e WHERE e.scope = ?1 AND e.kind = 'commit' AND e.commit_sha IN (SELECT value FROM json_each(?2))
+      UNION ALL
+      SELECT p.merge_commit, e.owner, e.kind, e.commit_sha, e.pull_number, e.saved_at, e.id,
+        EXISTS (SELECT 1 FROM submissions_credits k WHERE k.edit_id = e.id)
+      FROM submissions_edits e JOIN submissions_pulls p ON p.scope = e.scope AND p.number = e.pull_number
+      WHERE e.scope = ?1 AND e.kind = 'pull-request' AND p.merged_at IS NOT NULL AND p.merge_commit IN (SELECT value FROM json_each(?2))
+    ) ORDER BY saved_at, id`).bind(scope, JSON.stringify(commits))
+    .all<Pick<Owed, "kind" | "commit_sha" | "pull_number"> & { sha: string; owner: string | null; credited: number }>();
+  const first = new Map<string, (typeof results)[number]>();
+  for (const row of results) if (!first.has(row.sha)) first.set(row.sha, row);
+  const lower = repo.toLowerCase();
+  return [...first.values()].flatMap((save) => save.credited && save.owner?.startsWith("account:")
+    ? [{ account: save.owner.slice("account:".length), ref: landedRef(lower, save) }]
+    : []);
 }
 
 /** The lines a commit's `files`, as GitHub's commit API lists them, added and removed inside the vault folder `root`. */

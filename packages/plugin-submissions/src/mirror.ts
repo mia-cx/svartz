@@ -418,17 +418,23 @@ export interface EditRecord {
 
 /**
  * Record a save, and when an account made it, that reputation owes it once it lands. `newPage` says whether it added a
- * page rather than editing one.
+ * page rather than editing one. With `earns: false` reputation owes it nothing, as for a revert, which restores
+ * someone else's work.
  */
-export async function recordEdit({ db, scope }: Mirror, edit: Omit<EditRecord, "liveAt"> & { readonly newPage: boolean }): Promise<void> {
+export async function recordEdit(
+  { db, scope }: Mirror,
+  { earns = true, ...edit }: Omit<EditRecord, "liveAt"> & { readonly newPage: boolean; readonly earns?: boolean },
+): Promise<void> {
   await db.batch([
     db.prepare(`INSERT INTO submissions_edits (id, scope, owner, kind, page, path, commit_sha, pull_number, url, saved_at)
       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) ON CONFLICT (id) DO NOTHING`)
       .bind(edit.id, scope, edit.owner, edit.kind, edit.page, edit.path, edit.commit, edit.pull, edit.url, edit.savedAt),
     // Through the edit row, so a retry under the same id owes what the first save owed, to its owner.
-    db.prepare(`INSERT INTO submissions_credits (edit_id, scope, new_page)
-      SELECT id, scope, ?3 FROM submissions_edits WHERE id = ?1 AND scope = ?2 AND owner LIKE 'account:%'
-      ON CONFLICT (edit_id) DO NOTHING`).bind(edit.id, scope, edit.newPage ? 1 : 0),
+    ...earns
+      ? [db.prepare(`INSERT INTO submissions_credits (edit_id, scope, new_page)
+        SELECT id, scope, ?3 FROM submissions_edits WHERE id = ?1 AND scope = ?2 AND owner LIKE 'account:%'
+        ON CONFLICT (edit_id) DO NOTHING`).bind(edit.id, scope, edit.newPage ? 1 : 0)]
+      : [],
   ]);
 }
 
