@@ -160,8 +160,9 @@ describe("the Recent edits panel", () => {
     await wiki.settle();
     expect(headings(html)).toHaveLength(25);
     expect(wiki.github.requests.slice(compares).filter((request) => request.includes("/compare/"))).toHaveLength(3);
-    // 21 today, one of them for each panel the dashboard may list. One query per commit would add 25.
-    expect(wiki.d1.count).toBeLessThanOrEqual(21);
+    // 15 today: the session, the dashboard's one check for every panel, the panel's own, the page of commits and
+    // their stages, and six for the three compares. One query per commit would add 25, and one per panel four.
+    expect(wiki.d1.count).toBeLessThanOrEqual(17);
   });
 
   // Proves deploy states come from the mirror alone, and a commit turns live once GitHub, asked after the answer, says a later successful build holds it.
