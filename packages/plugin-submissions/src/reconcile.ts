@@ -117,6 +117,12 @@ export async function resumeAt(response: Response, now: number): Promise<number 
   return await rateLimited(response) ? now + POLL_INTERVAL_MS : undefined;
 }
 
+/**
+ * Whether GitHub's `Link` header points to another page of the answer. A commit's files arrive in pages past 300,
+ * and stop at 3,000, so an answer with a next page lists only part of them.
+ */
+export const hasNextPage = (response: Response) => /<[^>]*>;\s*rel="next"/.test(response.headers.get("link") ?? "");
+
 /** A 429, or a 403 whose message says a rate limit was exceeded, as a secondary limit's does, not that access is refused. */
 async function rateLimited(response: Response): Promise<boolean> {
   if (response.status === 429) return true;
@@ -138,9 +144,9 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
   /**
    * GET `path` below the repository, unless the budget is spent or the scope is paused. `conditional` sends the ETag
    * stored for it and answers `undefined` for a 304; call {@link remember} with the answer once it is stored. A 404
-   * answers `null`.
+   * answers `null`. `more` says whether GitHub has another page of it.
    */
-  async function get(path: string, conditional = false): Promise<{ body: unknown; etag: string | null } | null | undefined> {
+  async function get(path: string, conditional = false): Promise<{ body: unknown; etag: string | null; more: boolean } | null | undefined> {
     if (requests >= MAX_REQUESTS || await readPause(mirror) > Date.now()) throw new Stop();
     requests++;
     const [stored] = conditional
@@ -156,7 +162,7 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
       if (resume) throw new Stop();
       throw new Error(`GitHub answered ${response.status} to GET ${path.split("?")[0]}`);
     }
-    return { body: await response.json(), etag: conditional ? response.headers.get("etag") : null };
+    return { body: await response.json(), etag: conditional ? response.headers.get("etag") : null, more: hasNextPage(response) };
   }
 
   async function remember(path: string, etag: string | null) {
@@ -297,17 +303,17 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
     }
   }
 
-  /** The vault files of commits the list gave without them. */
+  /** The vault files of commits the list gave without them; from the first page alone, kept as a part when there are more. */
   async function fillCommitFiles() {
     const bare = await rows<{ sha: string }>("SELECT sha FROM submissions_commits WHERE scope = ? AND files IS NULL ORDER BY committed_at DESC LIMIT ?");
     for (const { sha } of bare) {
       const answer = await get(`/commits/${sha}`);
-      const files = list(object(answer?.body)?.files).flatMap((file) => {
-        const path = text(object(file)?.filename);
-        return path && inVault(path, root) ? [path] : [];
-      });
-      await mirror.db.prepare("UPDATE submissions_commits SET files = ? WHERE scope = ? AND sha = ? AND files IS NULL")
-        .bind(JSON.stringify(files.sort()), mirror.scope, sha).run();
+      // A rename changed its old path too, as a push delivery lists it (removed and added).
+      const files = list(object(answer?.body)?.files).flatMap((file) =>
+        [text(object(file)?.filename), text(object(file)?.previous_filename)].filter((path) => path !== undefined && inVault(path, root)));
+      await mirror.db.prepare("UPDATE submissions_commits SET files = ?, files_complete = ? WHERE scope = ? AND sha = ? AND files IS NULL")
+        // Whole only when GitHub listed the commit's files and had no more: a commit it no longer knows lists none.
+        .bind(JSON.stringify(files.sort()), answer && !answer.more ? 1 : 0, mirror.scope, sha).run();
     }
   }
 }

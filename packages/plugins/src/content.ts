@@ -27,6 +27,15 @@ function attributeName(name: string): string {
   return name;
 }
 
+/**
+ * Whether a browser would run `url` as a script or open it as an HTML document. Before it reads a URL's scheme, a
+ * browser drops the tabs and newlines anywhere in it and the spaces and control characters in front of it.
+ */
+export function runsCode(url: string): boolean {
+  const read = url.replace(/[\t\n\r]/g, "").replace(/^[\u0000- ]+/, "");
+  return /^(?:javascript|vbscript):|^data:\s*(?:text\/html|application\/xhtml\+xml)/i.test(read);
+}
+
 /** `element`'s HTML attributes without event handlers, `srcdoc`, or script and HTML-document URLs. */
 export function safeAttributes(element: Element): Record<string, string | boolean> {
   const result: Record<string, string | boolean> = {};
@@ -36,10 +45,7 @@ export function safeAttributes(element: Element): Record<string, string | boolea
       continue;
     }
     const value = Array.isArray(raw) ? raw.join(" ") : raw;
-    if (
-      ["href", "src", "action", "formAction", "xLinkHref"].includes(key) &&
-      /^\s*(?:javascript|data:text\/html):/i.test(String(value))
-    ) continue;
+    if (["href", "src", "action", "formAction", "xLinkHref"].includes(key) && runsCode(String(value))) continue;
     result[key] = typeof value === "boolean" ? value : String(value);
   }
   return result;
