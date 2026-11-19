@@ -224,7 +224,7 @@ GitHub sends deliveries as `application/json`, which SvelteKit's CSRF check lets
 
 Each vault's rows are its own, keyed by the repository and the vault's folder in it:
 
-- **Commits** on the content branch that change a file in the vault's folder, with those files. A commit's `Svartz-Account` trailer is kept as a claim: anyone writing a commit can add one, so it names the account only on commits the App committed.
+- **Commits** on the content branch that change a file in the vault's folder, with those files. A commit's `Svartz-Account` trailer is kept as a claim: whoever writes a commit writes its trailers, author and committer, so only the site's record of its saves says which account made a commit.
 - **Pull requests** into the content branch, with whether they change a file in the vault's folder, their **reviews**, and the **comments** on their conversation and their diff. A deleted comment stays as an empty tombstone.
 - **Workflow runs** on the content branch, and **deployments** with their latest status and whether any status said it succeeded.
 - Every save the site made, with who made it.

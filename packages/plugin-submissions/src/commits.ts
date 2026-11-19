@@ -21,7 +21,7 @@ import {
   type SvartzPlugin,
 } from "@svartz/core";
 import { MAX_MARKDOWN_BYTES, PLUGIN_ID } from "./api";
-import { appCommitter, appTokens } from "./app";
+import { appTokens } from "./app";
 import { misconfigured } from "./errors";
 import { requestGitHub } from "./github";
 import { isDatabase, migrate, readBranch, scopeOf, type Mirror } from "./mirror";
@@ -59,10 +59,11 @@ export interface Commit {
   /** Its git author, and their GitHub login when GitHub linked the commit to an account. */
   readonly author: { readonly name: string; readonly login: string | null };
   /**
-   * The site account behind it, only when the site can vouch for that: its own record of the save names the account,
-   * or the App's bot committed it with a `Svartz-Account` trailer. `handle` is the one the commit was authored under.
+   * The site account behind it, only when the site's own record says so: a save the site committed as this commit,
+   * or a submission the site opened as a pull request that this commit merged. Git metadata (the author, the
+   * committer, a `Svartz-Account` trailer) is whatever its maker wrote, so it never names an account.
    */
-  readonly account: { readonly id: string; readonly handle: string } | null;
+  readonly account: { readonly id: string } | null;
   /** The vault files it changed, as vault paths; `null` while unknown, as for commits read from GitHub's lists. */
   readonly files: readonly string[] | null;
 }
@@ -122,8 +123,6 @@ export const MAX_FILE_BYTES = MAX_MARKDOWN_BYTES * 2;
 /** File contents a worker keeps: a commit's file never changes. */
 const CACHED_FILES = 64;
 const SHA = /^[0-9a-f]{40}$/;
-/** The address a save the site committed is authored under: `<handle>@users.noreply.<site host>`. */
-const SITE_AUTHOR = /^([a-z0-9_-]+)@users\.noreply\./;
 
 /** The submissions plugin among `plugins` that keeps the mirror: enabled, with a server, and `sync` set. */
 function syncing(plugins: readonly unknown[]): ServerOptions | undefined {
@@ -160,21 +159,33 @@ interface CommitRow {
   sha: string;
   message: string;
   author_name: string;
-  author_email: string;
   author_login: string | null;
-  committer_email: string;
-  trailer_account: string | null;
   committed_at: string;
   url: string;
   files: string | null;
-  /** The account the site's own record of the save names, as `account:<id>`. */
-  recorded: string | null;
 }
 
-/** The commits' columns, and the owner of the earliest save the site recorded as this commit: the one that made it. */
-const COMMIT_COLUMNS = `c.sha, c.message, c.author_name, c.author_email, c.author_login, c.committer_email, c.trailer_account,
-  c.committed_at, c.url, c.files, (SELECT e.owner FROM submissions_edits e WHERE e.scope = c.scope AND e.kind = 'commit'
-    AND e.commit_sha = c.sha ORDER BY e.saved_at LIMIT 1) AS recorded`;
+const COMMIT_COLUMNS = "c.sha, c.message, c.author_name, c.author_login, c.committed_at, c.url, c.files";
+
+/** The site's record of making a commit: who saved it (`account:<id>`, `identity:<id>` or `null`), and how. */
+interface Made {
+  owner: string | null;
+  kind: "commit" | "pull-request";
+}
+
+/**
+ * The saves the site recorded as each of the commits `?2` (a JSON array): a direct commit by its sha, a submission by
+ * its pull request's merge commit, as the mirror knows it from GitHub's signed deliveries. Earliest save first.
+ */
+const MADE_BY_SITE = `SELECT sha, owner, kind FROM (
+    SELECT e.commit_sha AS sha, e.owner, e.kind, e.saved_at FROM submissions_edits e
+      WHERE e.scope = ?1 AND e.kind = 'commit' AND e.commit_sha IN (SELECT value FROM json_each(?2))
+    UNION ALL
+    SELECT p.merge_commit AS sha, e.owner, e.kind, e.saved_at FROM submissions_edits e
+      JOIN submissions_pulls p ON p.scope = e.scope AND p.number = e.pull_number
+      WHERE e.scope = ?1 AND e.kind = 'pull-request' AND p.merged_at IS NOT NULL
+        AND p.merge_commit IN (SELECT value FROM json_each(?2))
+  ) ORDER BY saved_at`;
 
 /** The note a saved edit's message carries between its title and its trailers. */
 function savedNote(message: string): string {
@@ -183,8 +194,8 @@ function savedNote(message: string): string {
 }
 
 /**
- * Reads commits for one vault. The answer makes a {@link CommitReader} per request; installation tokens, the App's
- * bot user and file contents are kept across requests in this worker.
+ * Reads commits for one vault. The answer makes a {@link CommitReader} per request; installation tokens and file
+ * contents are kept across requests in this worker.
  */
 export function commitReader(source: CommitSource): (context: ServerContext) => CommitReader {
   const { repo, root, credentials } = source;
@@ -193,7 +204,6 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
     if (typeof value !== "string" || !value) throw misconfigured(`its server has no ${credentials.token.env} set`);
     return value;
   };
-  const bot = credentials.app ? appCommitter(repo, credentials.app, token) : undefined;
   const files = new Map<string, FileAt>();
   const branches = new Map<string, boolean>();
   const repoPath = (path: string) => (root ? `${root}/${path}` : path);
@@ -203,7 +213,6 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
   return (context) => {
     let reads = 0;
     let mirror: Promise<Mirror> | undefined;
-    let botEmail: Promise<string | undefined> | undefined;
 
     function mirrorFor(): Promise<Mirror> {
       mirror ??= (async () => {
@@ -245,42 +254,27 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
       return name;
     }
 
-    /** The App's bot user's address, which only commits the App made carry as their committer's. */
-    function appBot(): Promise<string | undefined> {
-      botEmail ??= (async () => {
-        if (!bot) return undefined;
-        try {
-          // Two requests on a worker's first look, none after.
-          await spend(2);
-          return (await bot(context.env)).email;
-        } catch {
-          return undefined;
-        }
-      })();
-      return botEmail;
-    }
-
-    /** The account the site vouches for behind `row`, if any. */
-    async function accountOf(row: CommitRow): Promise<Commit["account"]> {
-      const handle = row.author_email.match(SITE_AUTHOR)?.[1];
-      if (!handle) return null;
-      if (row.recorded?.startsWith("account:")) return { id: row.recorded.slice("account:".length), handle };
-      if (row.trailer_account && row.committer_email && row.committer_email === await appBot()) return { id: row.trailer_account, handle };
-      return null;
-    }
-
-    async function toCommit(row: CommitRow): Promise<Commit> {
-      const account = await accountOf(row);
-      const changed = row.files === null ? null : (JSON.parse(row.files) as string[]).map(vaultPath);
-      return {
-        sha: row.sha,
-        url: row.url,
-        committedAt: row.committed_at,
-        summary: account ? savedNote(row.message) : row.message.split("\n", 1)[0]!.trim(),
-        author: { name: row.author_name, login: row.author_login },
-        account,
-        files: changed,
-      };
+    /** `rows` as commits, each with the account the site's records say made it. */
+    async function toCommits(rows: readonly CommitRow[]): Promise<Commit[]> {
+      if (rows.length === 0) return [];
+      const { db, scope } = await mirrorFor();
+      const made = new Map<string, Made>();
+      const { results } = await db.prepare(MADE_BY_SITE).bind(scope, JSON.stringify(rows.map(({ sha }) => sha))).all<Made & { sha: string }>();
+      for (const { sha, ...record } of results) if (!made.has(sha)) made.set(sha, record);
+      return rows.map((row) => {
+        const record = made.get(row.sha);
+        const account = record?.owner?.startsWith("account:") ? { id: record.owner.slice("account:".length) } : null;
+        return {
+          sha: row.sha,
+          url: row.url,
+          committedAt: row.committed_at,
+          // A save's message is the site's own, with the editor's note; a merge commit's is whatever GitHub or its merger wrote.
+          summary: account && record?.kind === "commit" ? savedNote(row.message) : row.message.split("\n", 1)[0]!.trim(),
+          author: { name: row.author_name, login: row.author_login },
+          account,
+          files: row.files === null ? null : (JSON.parse(row.files) as string[]).map(vaultPath),
+        };
+      });
     }
 
     async function rows(where: string, ...values: unknown[]): Promise<CommitRow[]> {
@@ -295,19 +289,15 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
       if (records.length === 0) return [];
       const known = new Map((await rows("c.sha IN (SELECT value FROM json_each(?))", JSON.stringify(records.map(({ sha }) => sha))))
         .map((row) => [row.sha, row]));
-      return Promise.all(records.map((record: CommitRecord) => toCommit(known.get(record.sha) ?? {
+      return toCommits(records.map((record: CommitRecord) => known.get(record.sha) ?? {
         sha: record.sha,
         message: record.message,
         author_name: record.authorName,
-        author_email: record.authorEmail,
         author_login: record.authorLogin,
-        committer_email: record.committerEmail,
-        trailer_account: record.trailerAccount,
         committed_at: record.committedAt,
         url: record.url,
         files: null,
-        recorded: null,
-      })));
+      }));
     }
 
     /** Whether the mirror has backfilled the vault's commits and knows every one's files. */
@@ -333,7 +323,7 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
     const reader: CommitReader = {
       async history(path, page) {
         const ready = await backfilled();
-        const mirrored = ready ? await Promise.all((await rows(`${touching} ${newestFirst} LIMIT ?`, repoPath(path), MIRROR_PAGE_SIZE)).map(toCommit)) : [];
+        const mirrored = ready ? await toCommits(await rows(`${touching} ${newestFirst} LIMIT ?`, repoPath(path), MIRROR_PAGE_SIZE)) : [];
         if (ready && page === 0) return { commits: mirrored, more: true };
         const fetched = await githubList(path, await branch(), ready ? page : page + 1);
         const shown = new Set(mirrored.map(({ sha }) => sha));
@@ -346,7 +336,7 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
         const page = cursor
           ? await rows(`c.files IS NOT NULL AND (c.committed_at, c.sha) < (?, ?) ${newestFirst} LIMIT ?`, cursor.committed_at, cursor.sha, RECENT_PAGE_SIZE)
           : await rows(`c.files IS NOT NULL ${newestFirst} LIMIT ?`, RECENT_PAGE_SIZE);
-        const commits = await Promise.all(page.map(toCommit));
+        const commits = await toCommits(page);
         return { commits, ...(page.length === RECENT_PAGE_SIZE ? { next: page.at(-1)!.sha } : {}) };
       },
 
@@ -367,7 +357,7 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
       async commit(sha) {
         if (!await reader.onBranch(sha)) return undefined;
         const [row] = await rows("c.sha = ?", sha);
-        if (row) return toCommit(row);
+        if (row) return (await toCommits([row]))[0];
         const response = await get(`/commits/${sha}`);
         if (!response.ok) return undefined;
         const body = await response.json();
@@ -386,7 +376,7 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
           const [self] = await rows(`c.sha = ? AND ${touching}`, sha, repoPath(path));
           if (self) {
             const [older] = await rows(`${touching} AND (c.committed_at, c.sha) < (?, ?) ${newestFirst} LIMIT 1`, repoPath(path), self.committed_at, self.sha);
-            if (older) return toCommit(older);
+            if (older) return (await toCommits([older]))[0];
           }
         }
         // GitHub lists `sha` itself first when it changed the file, then the one before.

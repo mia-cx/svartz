@@ -7,14 +7,16 @@ import {
   ADA,
   API,
   backfill,
-  botLookup,
   contentExchange,
   createSite,
+  DIRECT_COMMIT,
   disposeSites,
   firstToken,
   GITHUB_WEB,
+  GRACE as GRACE_SIGN_IN,
   historyExchange,
   INSTALLATION_TOKEN,
+  NOTE,
   replayGitHub,
   rows,
   text,
@@ -32,14 +34,19 @@ const GUIDE_PATH = "content/guide.md";
 const SECRET_PATH = "content/secret.md";
 const GRACE = { name: "Grace Hopper", email: "grace@example.com", login: "grace" };
 
-/** The guide's commits, oldest first: Grace adds it beside a hidden note, Ada saves from the site, someone forges Ada. */
+/**
+ * The guide's commits, oldest first: Grace adds it beside a hidden note; Ada saves from the site, which commits
+ * {@link DIRECT_COMMIT}; someone copies everything git says about Ada's save into a commit of their own.
+ */
 function guideCommits(adaId: string): { added: TestCommit; saved: TestCommit; forged: TestCommit } {
   const ada = { name: "Ada Lovelace", email: "ada@users.noreply.wiki.example" };
+  const trailers = `Co-authored-by: Ada Lovelace <583231+ada@users.noreply.github.com>\nSvartz-Account: ${adaId}`;
   return {
     added: { sha: "a".repeat(40), message: "Add guide and secret plans", at: 0, author: GRACE, committer: GITHUB_WEB, files: [GUIDE_PATH, SECRET_PATH] },
-    saved: { sha: "b".repeat(40), message: `Edit ${GUIDE_PATH}\n\nAdded the time it takes.\n\nSvartz-Account: ${adaId}`, at: 30, author: ada, files: [GUIDE_PATH] },
-    // Anyone can write Ada's address and trailer into a commit; only the App's bot committing it makes it Ada's.
-    forged: { sha: "c".repeat(40), message: `Fix typo\n\nSvartz-Account: ${adaId}`, at: 45, author: ada, committer: GITHUB_WEB, files: [GUIDE_PATH] },
+    // As the site committed it, by the App's bot.
+    saved: { sha: DIRECT_COMMIT, message: `Edit ${GUIDE_PATH}\n\n${NOTE}\n\n${trailers}`, at: 30, author: ada, files: [GUIDE_PATH] },
+    // Ada's address, her trailer, and the App's bot as committer, but the site never made it.
+    forged: { sha: "c".repeat(40), message: `Fix typo\n\nRemoved the forum.\n\n${trailers}`, at: 45, author: ada, files: [GUIDE_PATH] },
   };
 }
 
@@ -48,15 +55,17 @@ describe("/-/history/<page>", () => {
   // mirror's backfill, from the mirror after it, and from GitHub again for what is older than the mirror holds.
   it("lists a page's changes, from GitHub before the backfill and from the mirror after it", async () => {
     const site = await createSite();
-    const { added, saved, forged } = guideCommits(await site.signUp(ADA));
+    const ada = await site.signUp(ADA);
+    await site.adaCommits(ada);
+    const { added, saved, forged } = guideCommits(ada.id);
     await site.push([added, saved, forged]);
     const older: TestCommit = { sha: "d".repeat(40), message: "Start the guide", at: -60, author: GRACE, committer: GITHUB_WEB, files: [GUIDE_PATH] };
 
-    const github = replayGitHub([firstToken, historyExchange(GUIDE_PATH, [forged, saved, added]), ...botLookup, ...backfill([forged, saved, added])], INSTALLATION_TOKEN);
+    const github = replayGitHub([firstToken, historyExchange(GUIDE_PATH, [forged, saved, added]), ...backfill([forged, saved, added])], INSTALLATION_TOKEN);
     const expected = [
-      // Ada's address and trailer, but GitHub's web committer: shown as its git author, never as Ada's account.
+      // Everything git says is Ada's, but the site has no record of making it: shown as its git author.
       "19 Nov 2026, 10:45 UTC Ada Lovelace Fix typo",
-      // Committed by the App's bot: Ada's account, with the note she wrote as its summary.
+      // The site recorded committing it: Ada's account, with the note she wrote as its summary.
       "19 Nov 2026, 10:30 UTC Ada Lovelace @ada Added the time it takes.",
       // It also changed a note the site hides, so its summary stays out.
       "19 Nov 2026, 10:00 UTC Grace Hopper grace on GitHub",
@@ -132,9 +141,9 @@ describe("/-/history/<page>?to=<sha>", () => {
   // Markdown steps, sanitized as the site sanitizes notes.
   it("shows what changed in the source, and the revision rendered and sanitized", async () => {
     const site = await createSite();
-    const { added, saved } = guideCommits(await site.signUp(ADA));
+    const { added, saved } = guideCommits("0b9f6c1e");
     await site.push([added, saved]);
-    replayGitHub([firstToken, historyExchange(GUIDE_PATH, [saved, added]), ...botLookup, ...backfill([saved, added])], INSTALLATION_TOKEN);
+    replayGitHub([firstToken, historyExchange(GUIDE_PATH, [saved, added]), ...backfill([saved, added])], INSTALLATION_TOKEN);
     await site.page(HISTORY);
     await site.settle();
 
@@ -168,9 +177,9 @@ describe("/-/history/<page>?to=<sha>", () => {
   // Proves a revision the build would have hidden shows nothing of its content, though the page is public now.
   it("never shows a revision the build would have hidden", async () => {
     const site = await createSite();
-    const { added, saved } = guideCommits(await site.signUp(ADA));
+    const { added, saved } = guideCommits("0b9f6c1e");
     await site.push([added, saved]);
-    replayGitHub([firstToken, historyExchange(GUIDE_PATH, [saved, added]), ...botLookup, ...backfill([saved, added])], INSTALLATION_TOKEN);
+    replayGitHub([firstToken, historyExchange(GUIDE_PATH, [saved, added]), ...backfill([saved, added])], INSTALLATION_TOKEN);
     await site.page(HISTORY);
     await site.settle();
 
@@ -191,12 +200,12 @@ describe("/-/changes/", () => {
   // the site hides: not a change to it alone, not its name, not the summary of a change that touched it.
   it("lists changes to published pages, and nothing of hidden ones", async () => {
     const site = await createSite();
-    const { added, saved, forged } = guideCommits(await site.signUp(ADA));
+    const ada = await site.signUp(ADA);
+    await site.adaCommits(ada);
+    const { added, saved, forged } = guideCommits(ada.id);
     const hiddenOnly: TestCommit = { sha: "9".repeat(40), message: "Plan the secret launch", at: 50, author: GRACE, committer: GITHUB_WEB, files: [SECRET_PATH] };
     await site.push([added, saved, forged, hiddenOnly]);
-    // The App's slug, with its JWT, before the reader's first installation token.
-    const [app, bot] = botLookup;
-    replayGitHub([app!, firstToken, bot!, ...backfill([hiddenOnly, forged, saved, added])], INSTALLATION_TOKEN);
+    replayGitHub([firstToken, ...backfill([hiddenOnly, forged, saved, added])], INSTALLATION_TOKEN);
 
     const changes = await site.page("/wiki/-/changes/");
     await site.settle();
@@ -210,5 +219,65 @@ describe("/-/changes/", () => {
     ]);
     expect(changes!.html).toContain(`href="${HISTORY}?to=${saved.sha}">changes`);
     expect(changes!.html.toLowerCase()).not.toMatch(/secret|launch/);
+  });
+});
+
+describe("who made a change", () => {
+  // Proves git metadata never names an account: a commit carrying a site save's author address, trailer and
+  // committer, which the site has no record of making, shows as its git author on every page.
+  it("shows a commit that copies a site save as its git author, on every page", async () => {
+    const site = await createSite();
+    const ada = await site.signUp(ADA);
+    await site.adaCommits(ada);
+    const { saved, forged } = guideCommits(ada.id);
+    await site.push([saved, forged]);
+    replayGitHub([firstToken, historyExchange(GUIDE_PATH, [forged, saved]), ...backfill([forged, saved])], INSTALLATION_TOKEN);
+    const history = await site.page(HISTORY);
+    await site.settle();
+    const changes = await site.page("/wiki/-/changes/");
+    replayGitHub([contentExchange(GUIDE_PATH, forged.sha, "# Guide\n"), contentExchange(GUIDE_PATH, saved.sha, "# Guide\n\nAsk on the forum.\n")], INSTALLATION_TOKEN);
+    const diff = await site.page(`${HISTORY}?from=${saved.sha}&to=${forged.sha}`);
+
+    expect(rows(history)).toEqual([
+      "19 Nov 2026, 10:45 UTC Ada Lovelace Fix typo",
+      `19 Nov 2026, 10:30 UTC Ada Lovelace @ada ${NOTE}`,
+    ]);
+    expect(rows(changes)).toEqual([
+      "10:45 UTC Guide (changes, history) Ada Lovelace Fix typo",
+      `10:30 UTC Guide (changes, history) Ada Lovelace @ada ${NOTE}`,
+    ]);
+    expect(text(diff!.html)).toContain(`From 19 Nov 2026, 10:30 UTC Ada Lovelace @ada ${NOTE} To 19 Nov 2026, 10:45 UTC Ada Lovelace Fix typo`);
+  });
+
+  // Proves a submission merged on GitHub is credited to the account that sent it from the site, by its merge commit,
+  // while the commits inside the pull request show as git made them.
+  it("credits a merged submission's merge commit to the account that sent it", async () => {
+    const site = await createSite();
+    const grace = await site.signUp(GRACE_SIGN_IN);
+    await site.graceOpensPullRequest(grace);
+    const inside: TestCommit = {
+      sha: "4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f",
+      message: `Edit ${GUIDE_PATH}\n\n${NOTE}`,
+      at: 0,
+      author: { name: "Grace Hopper", email: "2+grace@users.noreply.github.com", login: "grace" },
+      committer: GITHUB_WEB,
+      files: [GUIDE_PATH],
+    };
+    const merge: TestCommit = {
+      sha: "e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
+      message: "Merge pull request #42 from wikiplace/svartz/submission/edit/wiki-guide\n\nEdit content/guide.md",
+      at: 40,
+      author: { name: "Mia", email: "mia@example.com", login: "mia" },
+      committer: GITHUB_WEB,
+      files: [GUIDE_PATH],
+    };
+    await site.merged(merge.sha);
+    await site.push([inside, merge]);
+    replayGitHub([firstToken, historyExchange(GUIDE_PATH, [merge, inside]), ...backfill([merge, inside])], INSTALLATION_TOKEN);
+
+    expect(rows(await site.page(HISTORY))).toEqual([
+      "19 Nov 2026, 10:40 UTC Grace Hopper @grace Merge pull request #42 from wikiplace/svartz/submission/edit/wiki-guide",
+      `19 Nov 2026, 10:00 UTC Grace Hopper grace on GitHub Edit ${GUIDE_PATH}`,
+    ]);
   });
 });

@@ -45,9 +45,9 @@ The pages render in the theme's shell on every request, like every [plugin page]
 
 ## Who made a change
 
-A change shows the site account that made it only when the site can vouch for that: its own record of the save names the account, or the commit was committed by the submissions plugin's GitHub App and carries a `Svartz-Account` trailer. Anyone can write that trailer, or an account's address, into a commit, so on any other commit the author shows as git names them, with their GitHub login when GitHub linked the commit to an account. An account shows under its current display name and handle.
+A change shows the site account that made it only when the site's own record says so: the submissions plugin records every save, so a save it committed straight to the branch is that account's, and so is the merge commit of a pull request it opened for an account and GitHub merged. Everything git says about a commit (its author, its committer, a `Svartz-Account` trailer) is whatever its maker wrote, so none of it names an account. Every other commit, including the commits inside a merged pull request, shows its author as git names them, with their GitHub login when GitHub linked the commit to an account. An account shows under its current display name and handle.
 
-A save from the site carries the note its editor wrote, which is its summary; any other commit's summary is its message's first line.
+A save the site committed has the note its editor wrote as its summary; any other commit's summary is its message's first line.
 
 ## What stays out
 

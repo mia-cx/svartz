@@ -36,8 +36,8 @@ export interface CommitRecord {
   readonly authorLogin: string | null;
   readonly committerEmail: string;
   /**
-   * The account its {@link ACCOUNT_TRAILER} trailer names. Anyone writing a commit can add one, so it identifies the
-   * account only when the App committed it (`committerEmail` is the App's bot) or `submissions_edits` holds the commit.
+   * The account its {@link ACCOUNT_TRAILER} trailer names: a claim, never proof. Whoever writes a commit writes its
+   * trailers and its committer too; only `submissions_edits` says which account made a commit.
    */
   readonly trailerAccount: string | null;
   readonly committedAt: string;

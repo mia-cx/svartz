@@ -277,7 +277,7 @@ export default guestbook;
 
 `readIdentity(request, env)` answers the provider account the reader signed in with, or `null`. It works with or without `SVARTZ_DB`, so plugins written before accounts keep working; new plugins should read the account.
 
-`findProfile(handle, env)` answers the public profile, `{ handle, name, avatarUrl }`, of the account that holds `handle` now or held it before, or `undefined`. When its `handle` differs from the one asked for, the asked one is old: redirect to the current one.
+`findProfile(handle, env)` answers the public profile, `{ handle, name, avatarUrl }`, of the account that holds `handle` now or held it before, or `undefined`. When its `handle` differs from the one asked for, the asked one is old: redirect to the current one. `findProfileById(id, env)` answers the same for an account's `id`, as a plugin that stored the id finds the account under its current handle.
 
 `userPageLocation()` answers where [user pages](#user-pages) live, such as `{ vault: "notes", folder: "users" }`, so a plugin can find or start an account's page at `<folder>/<handle>` in that vault.
 

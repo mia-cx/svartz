@@ -13,7 +13,7 @@
  * commit that changed one. A revision whose frontmatter hid or protected it shows no content.
  */
 import type { PageContext, PageResult, ServerModuleFactory } from "@svartz/core";
-import { findProfile } from "@svartz/auth/server";
+import { findProfileById } from "@svartz/auth/server";
 import { commitReader, CommitsUnavailable, type Commit, type CommitReader } from "@svartz/plugin-submissions/commits";
 import type { PreviewNote } from "@svartz/plugins/preview";
 import { PLUGIN_ID, type HistoryData } from "./api";
@@ -51,15 +51,16 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
     };
   }
 
-  /** Who made `commit`: the account the site vouches for, under its current handle and name, or its git author. */
+  /** Who made `commit`: the account the site's records name, under its current handle and name, or its git author. */
   function authors(context: PageContext) {
-    const profiles = new Map<string, ReturnType<typeof findProfile>>();
+    const profiles = new Map<string, ReturnType<typeof findProfileById>>();
     return async (commit: Commit): Promise<Author> => {
-      if (!commit.account) return { kind: "github", name: commit.author.name, login: commit.author.login };
-      const { handle } = commit.account;
-      if (!profiles.has(handle)) profiles.set(handle, findProfile(handle, context.env));
-      const profile = await profiles.get(handle);
-      return { kind: "account", name: profile?.name ?? commit.author.name, handle: profile?.handle ?? handle };
+      const id = commit.account?.id;
+      if (id !== undefined && !profiles.has(id)) profiles.set(id, findProfileById(id, context.env));
+      const profile = id === undefined ? undefined : await profiles.get(id);
+      // An account that no longer exists shows as git names the commit.
+      if (!profile) return { kind: "github", name: commit.author.name, login: commit.author.login };
+      return { kind: "account", name: profile.name, handle: profile.handle };
     };
   }
 

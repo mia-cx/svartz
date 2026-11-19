@@ -571,6 +571,13 @@ export async function profileByHandle(db: Database, handle: string): Promise<Pub
   return row && { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } };
 }
 
+/** Account `id`'s public profile; `undefined` when there is no such account. */
+export async function profileById(db: Database, id: string): Promise<PublicProfile | undefined> {
+  const { results: [row] } = await db.prepare("SELECT handle, name, avatar_url FROM auth_accounts WHERE id = ?").bind(id)
+    .all<{ handle: string; name: string; avatar_url: string | null }>();
+  return row && { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } };
+}
+
 /** Sign a cookie from before accounts out for good: its session goes, and the cookie can't start another. */
 export async function forgetLegacyCookie(db: Database, hash: string): Promise<void> {
   await db.batch([

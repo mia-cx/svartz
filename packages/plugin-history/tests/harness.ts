@@ -10,28 +10,48 @@ import type { BuildData, ServerOptions } from "@svartz/plugin-submissions/server
 import { Miniflare } from "miniflare";
 import { vi } from "vitest";
 import type { HistoryData } from "../src/api";
+import { permissions } from "../../plugin-submissions/src/permissions";
 import {
   API,
   APP_BOT,
   APP_ID,
   APP_KEY,
+  blobExchange,
+  branchFor,
+  commitExchanges,
   committerExchanges,
+  DIRECT_COMMIT,
+  editExchanges,
+  GUIDE_SHA,
+  HEAD_COMMIT,
   INSTALLATION_ID,
   INSTALLATION_TOKEN,
+  headExchange,
   REPO,
+  replayGitHub,
+  SUBMISSION_ID,
   tokenExchange,
   type Exchange,
 } from "../../plugin-submissions/tests/github-exchanges";
 
 export { replayGitHub } from "../../plugin-submissions/tests/github-exchanges";
-export { API, INSTALLATION_TOKEN, REPO, type Exchange };
+export { API, DIRECT_COMMIT, INSTALLATION_TOKEN, REPO, type Exchange };
 
 const ORIGIN = "https://wiki.example";
 const AUTH = "/wiki/_svartz/auth";
-const WEBHOOK = "/wiki/_svartz/submissions/github/webhook/";
+const SUBMISSIONS_ROUTES = "/wiki/_svartz/submissions";
+const WEBHOOK = `${SUBMISSIONS_ROUTES}/github/webhook/`;
 const SECRET = "whsec-0123456789abcdef";
 
+/** An admin, so her saves commit straight to `main`. */
 export const ADA: Identity = { id: "github:583231", provider: "github", name: "Ada Lovelace", handle: "ada" };
+/** A signed-in reader, so her saves open pull request #42. */
+export const GRACE: Identity = { id: "github:2", provider: "github", name: "Grace Hopper", handle: "grace" };
+/** The note both save with, and the guide as they save it. */
+export const NOTE = "Added the time it takes.";
+const MARKDOWN = "---\ntitle: Guide\n---\n\n# Guide\n\nSet up the wiki in five minutes.\n";
+/** The repository, as every delivery names it. */
+const REPOSITORY = { id: 712_345, name: "wikiplace.live", full_name: REPO, owner: { login: "wikiplace" }, default_branch: "main" };
 
 /** The published Markdown page every test reads the history of. The vault also holds `secret.md`, which it hides. */
 export const GUIDE = { slug: "guide", path: "guide.md", href: "/wiki/guide/", title: "Guide" };
@@ -76,7 +96,7 @@ export interface TestCommit {
   readonly message: string;
   readonly at: number;
   readonly author: { readonly name: string; readonly email: string; readonly login?: string };
-  /** The App's bot by default. */
+  /** The App's bot by default, as on a save the site committed. */
   readonly committer?: { readonly name: string; readonly email: string };
   /** Repository paths it changed. */
   readonly files: readonly string[];
@@ -129,8 +149,6 @@ export const contentExchange = (path: string, sha: string, markdown: string): Ex
 
 /** The history reader's first GitHub request in a worker: its installation token. */
 export const firstToken = tokenExchange("2099-01-01T00:00:00Z");
-/** Looking up the App's bot user, which says whether the App committed a commit naming an account. */
-export const botLookup = committerExchanges;
 
 /** The reconcile poll's first run, which backfills: every list, `commits` answering the vault's latest commits. */
 export function backfill(commits: readonly TestCommit[]): Exchange[] {
@@ -172,7 +190,11 @@ export async function createSite() {
         id: "auth",
         eager: true,
         load: () => import("@svartz/auth/server"),
-        options: { providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } } },
+        options: {
+          providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
+          admins: [ADA.id],
+          permissions: permissions(false),
+        },
       },
       { id: "submissions", load: () => import("@svartz/plugin-submissions/server"), options: SUBMISSIONS, data: SUBMISSIONS_BUILD },
       { id: "history", pages: ["history", "changes"], load: () => import("../src/server"), data: HISTORY },
@@ -208,29 +230,89 @@ export async function createSite() {
     return result;
   }
 
-  /** Deliver a push of `commits` to `main`, signed with the webhook secret. */
-  async function push(commits: readonly TestCommit[]): Promise<void> {
-    const body = JSON.stringify({
-      ref: "refs/heads/main",
-      commits: commits.map(pushed),
-      head_commit: pushed(commits.at(-1)!),
-      repository: { id: 712_345, name: "wikiplace.live", full_name: REPO, owner: { login: "wikiplace" }, default_branch: "main" },
-      sender: { login: "ada", id: 583_231 },
-    });
+  /** Deliver GitHub's event `event` with `payload`, signed with the webhook secret. */
+  async function deliver(event: string, payload: Record<string, unknown>): Promise<void> {
+    const body = JSON.stringify({ ...payload, repository: REPOSITORY, sender: { login: "ada", id: 583_231 } });
     const response = await request(WEBHOOK, {
       method: "POST",
       body,
       headers: {
         "content-type": "application/json",
-        "x-github-event": "push",
+        "x-github-event": event,
         "x-hub-signature-256": `sha256=${createHmac("sha256", SECRET).update(body).digest("hex")}`,
       },
     });
-    if (response.status !== 204) throw new Error(`the push delivery answered ${response.status}`);
+    if (response.status !== 204) throw new Error(`the ${event} delivery answered ${response.status}`);
   }
 
-  /** Give `person` an account through auth's real sign-in, and answer its id. */
-  async function signUp(person: Identity): Promise<string> {
+  /** Deliver a push of `commits` to `main`. */
+  const push = (commits: readonly TestCommit[]) =>
+    deliver("push", { ref: "refs/heads/main", commits: commits.map(pushed), head_commit: pushed(commits.at(-1)!) });
+
+  /** Deliver pull request #42's merge into `main` as `mergeCommit`. */
+  const merged = (mergeCommit: string) => deliver("pull_request", {
+    action: "closed",
+    number: 42,
+    pull_request: {
+      number: 42,
+      state: "closed",
+      title: "Edit content/guide.md",
+      user: { login: APP_BOT.name, id: 41_898_282, type: "Bot" },
+      html_url: `https://github.com/${REPO}/pull/42`,
+      head: { ref: branchFor("wiki-guide"), sha: "4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f" },
+      base: { ref: "main", sha: HEAD_COMMIT },
+      created_at: "2026-11-19T11:00:00Z",
+      updated_at: "2026-11-19T11:40:00Z",
+      closed_at: "2026-11-19T11:40:00Z",
+      merged_at: "2026-11-19T11:40:00Z",
+      merge_commit_sha: mergeCommit,
+    },
+  });
+
+  /** Save the guide from the site as `cookie`'s account, through the submissions plugin's edit route. */
+  async function save(cookie: string, exchanges: readonly Exchange[], answer: Record<string, unknown>): Promise<void> {
+    const replay = replayGitHub(exchanges, INSTALLATION_TOKEN);
+    const response = await request(`${SUBMISSIONS_ROUTES}/edit/`, {
+      method: "POST",
+      headers: { cookie, origin: ORIGIN },
+      body: JSON.stringify({ submissionId: SUBMISSION_ID, page: GUIDE.href, markdown: MARKDOWN, note: NOTE, sha: GUIDE_SHA }),
+    });
+    const body = await response.json() as Record<string, unknown>;
+    if (response.status !== 201 || replay.pending.length > 0) throw new Error(`the save answered ${response.status}: ${JSON.stringify(body)}`);
+    for (const [key, value] of Object.entries(answer)) if (body[key] !== value) throw new Error(`the save answered ${JSON.stringify(body)}`);
+    vi.unstubAllGlobals();
+  }
+
+  /** Ada, an admin, saves the guide from the site: the site commits {@link DIRECT_COMMIT} to `main` and records it. */
+  const adaCommits = (ada: { id: string; cookie: string }) => save(ada.cookie, [
+    tokenExchange("2099-01-01T00:00:00Z"),
+    ...committerExchanges,
+    headExchange(),
+    blobExchange("content/guide.md", HEAD_COMMIT, GUIDE_SHA),
+    ...commitExchanges({
+      path: "content/guide.md",
+      markdown: MARKDOWN,
+      message: `Edit content/guide.md\n\n${NOTE}\n\nCo-authored-by: Ada Lovelace <583231+ada@users.noreply.github.com>\nSvartz-Account: ${ada.id}`,
+      author: { name: "Ada Lovelace", email: "ada@users.noreply.wiki.example" },
+    }),
+  ], { kind: "commit", sha: DIRECT_COMMIT });
+
+  /** Grace saves the guide from the site: the site opens pull request #42 and records it. */
+  const graceOpensPullRequest = (grace: { cookie: string }) => save(grace.cookie, [
+    tokenExchange("2099-01-01T00:00:00Z"),
+    ...editExchanges({
+      markdown: MARKDOWN,
+      note: NOTE,
+      pageUrl: `${ORIGIN}${GUIDE.href}`,
+      branch: branchFor("wiki-guide"),
+      author: { name: "Grace Hopper", email: "2+grace@users.noreply.github.com" },
+      credit: "by [Grace Hopper](<https://github.com/grace>) (signed in with GitHub)",
+      // `main` is configured, so nothing asks for the default branch, and nothing labels.
+    }).filter(({ request }) => request.url !== API && !request.url.endsWith("/labels")),
+  ], { kind: "pull-request", number: 42 });
+
+  /** Give `person` an account through auth's real sign-in; answer its id and session cookie. */
+  async function signUp(person: Identity): Promise<{ id: string; cookie: string }> {
     const user = { id: Number(person.id.split(":")[1]), login: person.handle, name: person.name };
     vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
       const url = input instanceof Request ? input.url : String(input);
@@ -242,17 +324,17 @@ export async function createSite() {
     const start = await request(`${AUTH}/start/github/`);
     const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
     const callback = await request(`${AUTH}/callback/github/?code=issued-code&state=${state}`, { headers: { cookie: cookies(start).join("; ") } });
-    await request(`${AUTH}/handle/`, {
+    const chosen = await request(`${AUTH}/handle/`, {
       method: "POST",
       headers: { cookie: cookies(callback).join("; "), origin: ORIGIN },
       body: new URLSearchParams({ handle: person.handle! }),
     });
     vi.unstubAllGlobals();
     const { results: [row] } = await db.prepare("SELECT id FROM auth_accounts WHERE handle = ?").bind(person.handle).all();
-    return row!.id as string;
+    return { id: row!.id as string, cookie: cookies(chosen).find((pair) => pair.startsWith("__Host-svartz-session="))! };
   }
 
-  return { page, push, signUp, settle };
+  return { page, push, merged, signUp, adaCommits, graceOpensPullRequest, settle };
 }
 
 /** A page's HTML as the text a reader sees: tags dropped, character references decoded, white space collapsed. */
