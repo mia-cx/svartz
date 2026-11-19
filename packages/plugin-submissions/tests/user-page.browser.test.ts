@@ -17,6 +17,7 @@ const OPTIONS = { endpoint: "/wiki/_svartz/submissions", pages: ["/wiki/guide/"]
 function render(userPage: AccountView["userPage"]) {
   const view: AccountView = {
     account: { id: "a1", handle: "ada", name: "Ada Lovelace", createdAt: "2026-11-01T10:00:00.000Z", roles: [], identity: GITHUB },
+    standing: { score: 0 },
     identities: [GITHUB],
     sessions: [{ id: "s1", identity: GITHUB.id, provider: "github", createdAt: "2026-11-19T10:00:00.000Z" }],
     session: "s1",

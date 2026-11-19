@@ -7,6 +7,8 @@ import { HANDLE_MAX_LENGTH, HANDLE_PROBLEM } from "./handle";
 import { escape } from "./html";
 import { markSvg } from "./marks";
 import { isProviderId, PROVIDERS, type ProviderId } from "./providers";
+import type { Standing } from "./reputation";
+import { standingSection } from "./reputation-page";
 import type { Account } from "./session";
 import type { LinkedIdentity, SessionSummary } from "./store";
 
@@ -63,6 +65,8 @@ export function signedOutPage(providers: readonly ProviderId[], start: (provider
 /** Everything the signed-in page shows, and where its forms post. */
 export interface AccountView {
   readonly account: Account;
+  /** The account's reputation score and next threshold. */
+  readonly standing: Standing;
   readonly identities: readonly LinkedIdentity[];
   readonly sessions: readonly SessionSummary[];
   /** The session this browser reads through. */
@@ -169,7 +173,7 @@ function userPageLink({ userPage }: AccountView): string {
   return `<div class="sv-account-page" data-svartz-region="user-page-actions" data-svartz-user-page="${escape(userPage.missing)}"></div>`;
 }
 
-/** The signed-in page: profile, groups, linked sign-in methods and sessions. */
+/** The signed-in page: reputation, profile, groups, linked sign-in methods and sessions. */
 export function accountPage(view: AccountView): PluginPage {
   const { account } = view;
   const avatar = account.avatarUrl ? `<img class="sv-account-avatar" src="${escape(account.avatarUrl)}" alt="" width="48" height="48">` : "";
@@ -178,6 +182,7 @@ export function accountPage(view: AccountView): PluginPage {
     html: `<div class="sv-account">
 <h1>${TITLE}</h1>
 <div class="sv-account-who">${avatar}<p><span class="sv-account-name">${escape(account.name)}</span> <span class="sv-account-muted">@${escape(account.handle)}</span></p>${userPageLink(view)}</div>
+${standingSection(view.standing)}
 ${profileSection(view)}
 ${view.groups}
 ${signInsSection(view)}

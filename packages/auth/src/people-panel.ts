@@ -19,6 +19,7 @@ import { chainOf, pickedObject, pickerFields } from "./objects";
 import { addMember, createRole, isRoleName, listGrants, listRoles, personByHandle, removeMember, roleExists, searchPeople, setGrant } from "./people";
 import { peoplePage, PEOPLE_TITLE, type Check, type PeopleStatus } from "./people-page";
 import { SITE } from "./permissions";
+import { wasPromoted } from "./reputation";
 import { ADMIN_ROLE, readAccount, readCurrentSession } from "./session";
 import { accountsDatabase } from "./store";
 
@@ -71,7 +72,8 @@ export function peoplePanel({ vaults, paths }: PeopleOptions): DashboardPanel {
         check(query, context, vaults(context)),
       ]);
       return peoplePage({
-        canWrite, catalogue: permissionCatalogue(), grants, roles, groups: groups.map(({ name }) => name), people, check: checked, vaults: vaults(context), paths,
+        canWrite, isAdmin: viewer?.roles.includes(ADMIN_ROLE) ?? false,
+        catalogue: permissionCatalogue(), grants, roles, groups: groups.map(({ name }) => name), people, check: checked, vaults: vaults(context), paths,
         query, here: panelPath(context),
         actions: { grant: `${base}/grant/`, createRole: `${base}/role/`, addMember: `${base}/member/`, removeMember: `${base}/member/remove/` },
       });
@@ -162,6 +164,8 @@ export async function peopleRoute(request: Request, path: string, context: Serve
   if (!person) return back(context, url, "member-unknown", { role, handle }, "roles");
   const fields = { role, handle: person.handle };
   if (action === "member") return back(context, url, await addMember(db, actor, role, person) ? "member-added" : "member-held", fields, "roles");
+  // A role reputation gave stays until an admin takes it, and reputation never gives it back.
+  if (!session.account.roles.includes(ADMIN_ROLE) && await wasPromoted(db, person.id, role)) return back(context, url, "member-promoted", fields, "roles");
   await removeMember(db, actor, role, person);
   return back(context, url, "member-removed", fields, "roles");
 }

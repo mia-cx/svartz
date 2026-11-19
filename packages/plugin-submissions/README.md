@@ -238,7 +238,7 @@ A delivery is refused, and nothing stored, when its `X-Hub-Signature-256` isn't 
 
 Webhooks get lost: a deploy was down, or a delivery failed. So when a reader asks how an edit is doing and the mirror hasn't been checked for a minute, the site asks GitHub too, after answering. Nothing polls on a timer.
 
-The first poll backfills: the latest 100 commits touching the vault, pull requests, comments, runs and deployments. Every poll lists the same, asking with the ETag GitHub last sent, so a list that hasn't changed costs a 304. It then reads what the lists leave out (the statuses of deployments under way; the earlier statuses, read once, of a deployment a delivery showed failed or made `inactive`, where a lost `success` may hide; the statuses of each environment's newest deployment while it stands failed, since a re-run can still make it succeed; which pull requests touch the vault; their reviews, again after any review delivery; commits' files) up to 30 requests in all; the rest waits for the next poll. One poll runs at a time across every worker. When fewer than 100 of GitHub's hourly requests remain, it stops until GitHub's limit resets, keeping the rest for saves. When GitHub says to wait, it waits as GitHub asks: for `Retry-After`, until the reset when the allowance is spent, and a minute for any other rate limit. The compare requests that follow an edit wait out the same pause, and can start it; the poll and the compare requests check it before every request, so a pause one starts stops the other at once.
+The first poll backfills: the latest 100 commits touching the vault, pull requests, comments, runs and deployments. Every poll lists the same, asking with the ETag GitHub last sent, so a list that hasn't changed costs a 304. It then reads what the lists leave out (the statuses of deployments under way; the earlier statuses, read once, of a deployment a delivery showed failed or made `inactive`, where a lost `success` may hide; the statuses of each environment's newest deployment while it stands failed, since a re-run can still make it succeed; which pull requests touch the vault; their reviews, again after any review delivery; commits' files; the lines each landed save changed, for [reputation](#reputation)) up to 30 requests in all; the rest waits for the next poll. One poll runs at a time across every worker. When fewer than 100 of GitHub's hourly requests remain, it stops until GitHub's limit resets, keeping the rest for saves. When GitHub says to wait, it waits as GitHub asks: for `Retry-After`, until the reset when the allowance is spent, and a minute for any other rate limit. The compare requests that follow an edit wait out the same pause, and can start it; the poll and the compare requests check it before every request, so a pause one starts stops the other at once.
 
 ### Following an edit
 
@@ -258,6 +258,17 @@ The browser remembers the last edit saved from each page, and the last new page,
 An edit is live once a run of the workflow (or a deployment to the environment) succeeded at a commit that holds the edit's commit, or its pull request's merge commit. The site never guesses that from times: a run at the edit's own commit holds it, and for any other the server asks GitHub's compare API once and remembers the answer. A deployment counts once any of its statuses said `success`, so one later made `inactive` by a newer deployment still counts; one made `inactive` without succeeding doesn't. A run that is cancelled or skipped says nothing; otherwise the newest run that holds the edit decides building or failed, and a re-run that succeeds makes it live. A success counts however many runs follow it.
 
 Only the reader who saved an edit can ask about it: the account, or without accounts the sign-in, that saved it. A guest's edit is known by its random submission id, which only their browser holds.
+
+### Reputation
+
+With sync, each save an account makes earns that account [reputation](../../docs/auth.md#reputation) once it lands. After each delivery and each poll, the site posts for every save the mirror now shows ended:
+
+- A direct commit lands once its commit is on the content branch; a pull request lands once merged. A landed new page scores 5, and a landed edit 1 + log2 of the lines it changed.
+- A pull request closed without merging scores the declined weight, 0 by default. If it is reopened and merged, it scores as merged too.
+
+"Lines changed" counts the lines the landed commit added and removed in files inside the vault's folder, as GitHub's commit API reports them: the direct commit itself, or the pull request's merge commit. Deliveries don't carry these counts, so the poll reads each landed edit's commit once, and the edit scores after that read.
+
+Only the site's own record of a save names who earns: the commit the site made for it, or the pull request it opened. A commit's trailer, author and committer are whatever its maker wrote, so they count for nothing, and a commit or pull request the site has no save for earns nobody anything, whoever it claims to be from. A save that found its content already on the branch made no commit, so it is not recorded and earns nothing. Saves made before reputation existed, and guests' saves, earn nothing.
 
 ### My submissions
 

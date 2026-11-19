@@ -5,7 +5,8 @@
  *   body with the webhook secret) is checked in constant time before the body is parsed; a delivery without one, with
  *   a wrong one, or for another repository is refused and nothing is stored. Deliveries of the seven mirrored events
  *   are written to the mirror (see `mirror.ts`); `ping`, other events, and deliveries with nothing the mirror keeps
- *   are acknowledged and ignored.
+ *   are acknowledged and ignored. After a stored delivery, and after each poll, reputation for the saves that landed
+ *   is posted (see `credit.ts`).
  * - `GET status/?edit=<submission id>` answers where a saved edit has got to, to the reader who saved it: the account
  *   or identity that saved it, or for a guest's edit whoever holds its random id. It reads the mirror only. When the
  *   mirror is stale, the reconcile poll runs after the answer, as do the ancestry checks the answer still lacks.
@@ -18,6 +19,7 @@
  */
 import type { ServerContext } from "@svartz/core";
 import { SUBMISSION_ID_PATTERN, type StatusResponse } from "./api";
+import { credit } from "./credit";
 import { SubmissionError } from "./errors";
 import { requestGitHub } from "./github";
 import {
@@ -202,7 +204,15 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     // A push to another branch, or outside the vault: nothing to keep, and D1 refuses an empty batch.
     if (statements.length === 0) return new Response(null, { status: 202 });
     await mirror.db.batch(statements);
+    context.waitUntil(settleCredit(mirror, context));
     return new Response(null, { status: 204 });
+  }
+
+  /** Post reputation for what the mirror now shows landed. A failure waits for the next delivery or poll. */
+  async function settleCredit(mirror: Mirror, context: ServerContext): Promise<void> {
+    await credit(mirror, setup.repo, context.env).catch((error: unknown) => {
+      console.error("[submissions] couldn't post reputation for landed edits", error);
+    });
   }
 
   /**
@@ -294,13 +304,11 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     }
   }
 
-  /** Have the reconcile poll read GitHub after the answer, when the mirror is stale; it does nothing otherwise. */
+  /** Run the reconcile poll after the answer, when the mirror is stale, then settle the reputation it shows owed. */
   function refresh(context: ServerContext, mirror: Mirror): void {
     const environment = options.live.environment;
-    context.waitUntil(reconcile(
-      { mirror, repo: setup.repo, root: setup.root, ...(setup.branch ? { branch: setup.branch } : {}), ...(environment ? { environment } : {}) },
-      () => setup.token(context.env),
-    ));
+    const target = { mirror, repo: setup.repo, root: setup.root, ...(setup.branch ? { branch: setup.branch } : {}), ...(environment ? { environment } : {}) };
+    context.waitUntil(reconcile(target, () => setup.token(context.env)).then(() => settleCredit(mirror, context)));
   }
 
   /** Where `edit` has got to, read from the mirror only; GitHub is asked what the mirror lacks after the answer. */
@@ -326,7 +334,7 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
   }
 
   /** Keep a save, so its saver can follow it to live. */
-  async function record(context: ServerContext, edit: Omit<EditRecord, "liveAt">): Promise<void> {
+  async function record(context: ServerContext, edit: Omit<EditRecord, "liveAt"> & { readonly newPage: boolean }): Promise<void> {
     await recordEdit(await mirrorFor(context), edit);
   }
 

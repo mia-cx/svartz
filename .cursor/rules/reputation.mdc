@@ -1,0 +1,17 @@
+---
+description: Reputation ledger — who earns is decided only by the site's own records; every event posts once
+globs: packages/auth/src/reputation*.ts, packages/plugin-submissions/src/credit.ts, packages/plugin-annotations/src/server.ts, packages/plugin-*/src/server.ts
+alwaysApply: false
+---
+
+# Reputation
+
+- Post through `postReputation(env, event)` from `@svartz/auth/server` only. Auth applies the weights, the daily limit and thresholds; plugins never write `auth_reputation` or compute points.
+- `ref` names the event and starts with the plugin id. Make it stable across webhook redeliveries and polls (a commit SHA, a pull request number), never a timestamp, so the same event never scores twice.
+- Credit only the account the site's own records name: `submissions_edits` for saves (the commit it made, the pull request it opened), the server's session for a +1. A commit's `Svartz-Account` trailer, author and committer are git metadata anyone can forge, the bot's noreply address included: never evidence of who earns.
+- Taking points back is a further entry (`agreement` with `agreed: false` settles the pair). The ledger and `auth_reputation_promotions` are append-only by trigger.
+- Post an `agreement` with a `version` your store raises in the same batch as every change, read with `agreed` in one query (annotations: `agreement_versions`). Auth settles the ledger from its own newest stored version in one batch, so a late, stale post changes nothing. Re-reading and re-posting can't fix this: the ledger and a plugin's table may be separate D1 databases.
+- Mark a credit settled only after `postReputation` resolves. A replay scores nothing more but finishes a promotion that failed, so a thrown post must be retried, not skipped.
+- Compare scores with thresholds at the ledger's two decimals (`SCORES` in `reputation.ts`); a raw `SUM` drifts below what the account sees.
+- D1 has no interactive transactions: a limit that must hold under races (kudos per day, the daily limit) lives in the inserting statement's own `WHERE`, not in a read before it.
+- Thresholds only add roles. Never remove a role automatically, and never re-give one recorded in `auth_reputation_promotions`: that is how an admin's removal sticks.

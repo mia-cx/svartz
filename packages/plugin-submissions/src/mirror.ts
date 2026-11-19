@@ -18,6 +18,7 @@
  *   `statuses_read`, the latest status id the poll has seen in a deployment's whole status history.
  * - `submissions_edits`: every save the site made, keyed by its submission id, with who made it.
  * - `submissions_replies`: every comment the site posted on an account's behalf (see `attribution.ts`).
+ * - `submissions_credits`: what reputation still owes for each save an account made (see `credit.ts`).
  *
  * Deliveries arrive at least once and in any order, so every write is idempotent and never moves a record backwards:
  * a pull request by `updated_at`, a run by attempt and progress, a deployment by status id, a comment until deleted.
@@ -209,6 +210,18 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       PRIMARY KEY (scope, kind, id)
     )`,
   ],
+  [
+    // What reputation still owes for each save an account made, as `credit.ts` settles it: `lines` the landed commit
+    // changed in the vault, once read; `state` `declined` once a declined pull request was posted, `done` once settled.
+    `CREATE TABLE IF NOT EXISTS submissions_credits (
+      edit_id TEXT PRIMARY KEY,
+      scope TEXT NOT NULL,
+      new_page INTEGER NOT NULL,
+      lines INTEGER,
+      state TEXT CHECK (state IN ('declined', 'done'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS submissions_credits_by_state ON submissions_credits (scope, state)`,
+  ],
 ];
 
 const migrated = new WeakMap<Database, Promise<void>>();
@@ -379,10 +392,20 @@ export interface EditRecord {
   readonly liveAt: string | null;
 }
 
-export async function recordEdit({ db, scope }: Mirror, edit: Omit<EditRecord, "liveAt">): Promise<void> {
-  await db.prepare(`INSERT INTO submissions_edits (id, scope, owner, kind, page, path, commit_sha, pull_number, url, saved_at)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) ON CONFLICT (id) DO NOTHING`)
-    .bind(edit.id, scope, edit.owner, edit.kind, edit.page, edit.path, edit.commit, edit.pull, edit.url, edit.savedAt).run();
+/**
+ * Record a save, and when an account made it, that reputation owes it once it lands. `newPage` says whether it added a
+ * page rather than editing one.
+ */
+export async function recordEdit({ db, scope }: Mirror, edit: Omit<EditRecord, "liveAt"> & { readonly newPage: boolean }): Promise<void> {
+  await db.batch([
+    db.prepare(`INSERT INTO submissions_edits (id, scope, owner, kind, page, path, commit_sha, pull_number, url, saved_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) ON CONFLICT (id) DO NOTHING`)
+      .bind(edit.id, scope, edit.owner, edit.kind, edit.page, edit.path, edit.commit, edit.pull, edit.url, edit.savedAt),
+    // Through the edit row, so a retry under the same id owes what the first save owed, to its owner.
+    db.prepare(`INSERT INTO submissions_credits (edit_id, scope, new_page)
+      SELECT id, scope, ?3 FROM submissions_edits WHERE id = ?1 AND scope = ?2 AND owner LIKE 'account:%'
+      ON CONFLICT (edit_id) DO NOTHING`).bind(edit.id, scope, edit.newPage ? 1 : 0),
+  ]);
 }
 
 interface EditRow {

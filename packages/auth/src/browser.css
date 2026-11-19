@@ -136,6 +136,15 @@
 	color: var(--sv-text, CanvasText);
 }
 
+/* A user page's reputation, in its page actions: text beside the buttons, not one of them. */
+.sv-reputation {
+	display: inline-flex;
+	align-items: center;
+	color: var(--sv-muted, GrayText);
+	font-family: var(--sv-font-sans, system-ui, sans-serif);
+	font-size: var(--sv-step--1, 0.875rem);
+}
+
 /*
  * The `/-/account/` page, rendered in the theme's shell. Its provider buttons reuse the dialog's `.sv-auth-provider`.
  */

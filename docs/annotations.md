@@ -110,6 +110,8 @@ Each comment's card ends with **+1** and its count, beside the faces and names o
 
 A signed-out reader who presses **+1** gets the sign-in dialog too. When they come back, the comment's card, or the list of comments on passages no longer in the note, opens with their **+1** applied.
 
+On a site with accounts, each **+1** adds to the [reputation](auth.md#reputation) of the comment author's account, half a point by default, and taking it back takes the points back. A person's **+1** counts once however many of their sign-ins agree, and stands while any of them does. Nobody earns from agreeing with their own comment, and a comment whose author's sign-in has no account earns nobody anything.
+
 ### Deleting
 
 A signed-in reader's own comments end with **Delete**. It asks first, "Delete your comment?", with **Cancel** focused so a second Enter can't delete by accident; **Delete comment** deletes it and its **+1**s. The marker, card and highlight go at once, the line's other markers close up, and focus moves to the next marker. While the delete is sent, the confirmation ignores presses. When the site refuses, the card stays open and says why. A comment someone else deleted first goes too.

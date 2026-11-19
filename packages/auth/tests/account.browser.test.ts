@@ -9,6 +9,7 @@ const DISCORD = { id: "discord:80351110224678912", provider: "discord", name: "N
 function render(query = "") {
   const view: AccountView = {
     account: { id: "a1", handle: "octocat", name: "The Octocat", createdAt: "2026-11-01T10:00:00.000Z", roles: [], identity: GITHUB },
+    standing: { score: 12.5, next: { role: "editors", score: 20 } },
     identities: [GITHUB, DISCORD],
     sessions: [
       { id: "s1", identity: GITHUB.id, provider: "github", createdAt: "2026-11-19T10:00:00.000Z" },

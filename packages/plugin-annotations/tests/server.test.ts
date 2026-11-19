@@ -1,5 +1,6 @@
+import type { Identity } from "@svartz/auth";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Database } from "../src/store";
+import type { Database, Statement } from "../src/store";
 import { ADA, ALAN, createDatabase, createSite, ENDPOINT, GRACE, ORIGIN, seed, signIn, type Site } from "./harness";
 
 const disposers: Array<() => Promise<void>> = [];
@@ -115,16 +116,20 @@ describe("the annotations database", () => {
 
     expect(later.status).toBe(200);
     expect(await later.json()).toEqual({ annotations: [], viewer: null });
-    expect(await tables()).toEqual(["agreements", "annotations", "identities", "svartz_annotations_migrations", "write_counts"]);
+    expect(await tables()).toEqual(["agreement_versions", "agreements", "annotations", "identities", "svartz_annotations_migrations", "write_counts"]);
     const { results } = await db.prepare("SELECT version FROM svartz_annotations_migrations ORDER BY version").all();
-    expect(results).toEqual([{ version: 1 }, { version: 2 }]);
+    expect(results).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
   });
 
   it("brings a version 1 database up to date, keeping its comments", async () => {
     const { db, binding } = await database();
     await seed(db, [{ id: "c1", page: "garden", author: ADA, body: "First.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
-    // What a database migrated before write counts existed looks like.
-    await db.batch([db.prepare("DROP TABLE write_counts"), db.prepare("DELETE FROM svartz_annotations_migrations WHERE version = 2")]);
+    // What a database migrated before write counts and agreement versions existed looks like.
+    await db.batch([
+      db.prepare("DROP TABLE write_counts"),
+      db.prepare("DROP TABLE agreement_versions"),
+      db.prepare("DELETE FROM svartz_annotations_migrations WHERE version > 1"),
+    ]);
 
     const site = createSite({ DB: await binding() }, { writesPerHour: 1 });
     const cookie = await signIn(site, ADA);
@@ -135,7 +140,7 @@ describe("the annotations database", () => {
     });
 
     expect(posted.status).toBe(201);
-    expect((await db.prepare("SELECT version FROM svartz_annotations_migrations ORDER BY version").all()).results).toEqual([{ version: 1 }, { version: 2 }]);
+    expect((await db.prepare("SELECT version FROM svartz_annotations_migrations ORDER BY version").all()).results).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
     expect((await db.prepare("SELECT id FROM annotations WHERE id = 'c1'").all()).results).toEqual([{ id: "c1" }]);
   });
 });
@@ -595,5 +600,119 @@ describe("permissions on a site with accounts", () => {
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual({ error: "forbidden", message: "You can't comment on this page." });
     expect((await post("kitchen")).status).toBe(201);
+  });
+});
+
+describe("reputation for +1s", () => {
+  // Proves story 25: on a site with accounts, each person's +1 on a comment gives its author's account reputation once,
+  // taking it back takes the points back, and nobody earns from their own comment, from any of their sign-ins.
+  it("credits a comment's author once per person who agrees, and never for agreeing with oneself", async () => {
+    const { db } = await database();
+    await seed(db, [
+      { id: "c1", page: "garden", author: ADA, body: "Roses first.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" },
+      { id: "c2", page: "garden", author: GRACE, body: "Tulips first.", anchor: anchor("roses", 0), createdAt: "2026-11-03T00:00:00.000Z" },
+    ]);
+    const site = createSite({ DB: db, SVARTZ_DB: db });
+    const ada = await signIn(site, ADA);
+    const alan = await signIn(site, ALAN);
+    const accountOf = async (identity: string) =>
+      (await db.prepare("SELECT account_id FROM auth_identities WHERE id = ?").bind(identity).all<{ account_id: string }>()).results[0]!.account_id;
+    /** Link a second GitHub sign-in to `identity`'s account, and sign in with it. */
+    const secondSignIn = async (identity: Identity, id: number) => {
+      await db.prepare(`INSERT INTO auth_identities (id, account_id, provider, name, handle, created_at, updated_at)
+        VALUES (?, ?, 'github', ?, ?, ?, ?)`).bind(`github:${id}`, await accountOf(identity.id), identity.name, `${identity.handle}-2`, "2026-11-19T00:00:00.000Z", "2026-11-19T00:00:00.000Z").run();
+      return signIn(site, { ...identity, id: `github:${id}`, handle: `${identity.handle}-2` });
+    };
+    const agree = async (cookie: string, comment: string, agreed: boolean) => {
+      const response = await site(`${ENDPOINT}/${comment}/agree/`, { method: "POST", headers: { cookie, origin: ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ agreed }) });
+      expect(response.status).toBe(200);
+    };
+    const score = async () => (await (await site("/notes/_svartz/auth/users/ada/")).json() as { reputation: number }).reputation;
+
+    await agree(alan, "c1", true);
+    await agree(alan, "c1", true);
+    expect(await score()).toBe(0.5);
+    await agree(alan, "c1", false);
+    expect(await score()).toBe(0);
+    await agree(alan, "c1", true);
+    expect(await score()).toBe(0.5);
+
+    // Alan's second sign-in is still Alan: his +1 counts once, and stands while either sign-in agrees.
+    const alanAgain = await secondSignIn(ALAN, 4242);
+    await agree(alanAgain, "c1", true);
+    await agree(alan, "c1", false);
+    expect(await score()).toBe(0.5);
+
+    await agree(ada, "c1", true);
+    await agree(await secondSignIn(ADA, 4343), "c1", true);
+    expect(await score()).toBe(0.5);
+
+    // Grace has no account here, so her comment earns nobody anything.
+    await agree(alan, "c2", true);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM auth_reputation WHERE ref LIKE 'annotations:notes:c2:%'").all()).results).toEqual([{ n: 0 }]);
+  });
+
+  describe("when a reader's +1 races their own changes to it", () => {
+    /**
+     * Alan and Ada signed in, and Ada's comment c1. Each time a request reads whether Alan agrees, outside one of
+     * `changes`, Alan's next change from `changes` runs to the end before the read returns, so the reading request
+     * goes on with a +1 that is no longer stored.
+     */
+    async function racing(changes: boolean[]) {
+      const { db } = await database();
+      await seed(db, [{ id: "c1", page: "garden", author: ADA, body: "Roses first.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
+      let changing = false;
+      const raced = (statement: Statement): Statement => ({
+        bind: (...values) => raced(statement.bind(...values)),
+        run: () => statement.run(),
+        async all<Row>() {
+          const result = await statement.all<Row>();
+          const change = changing ? undefined : changes.shift();
+          if (change === undefined) return result;
+          changing = true;
+          expect((await agree(change)).status).toBe(200);
+          changing = false;
+          return result;
+        },
+      });
+      // The read of whether a reader agrees is the one that matches their sign-ins.
+      const annotations: Database = {
+        prepare: (query) => query.includes("json_each(") ? raced(db.prepare(query)) : db.prepare(query),
+        batch: (statements) => db.batch(statements),
+      };
+      const site = createSite({ DB: annotations, SVARTZ_DB: db });
+      await signIn(site, ADA);
+      const alan = await signIn(site, ALAN);
+      const agree = (agreed: boolean) => site(`${ENDPOINT}/c1/agree/`, { method: "POST", headers: { cookie: alan, origin: ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ agreed }) });
+      const score = async () => (await (await site("/notes/_svartz/auth/users/ada/")).json() as { reputation: number }).reputation;
+      const stored = async () => (await db.prepare("SELECT COUNT(*) AS n FROM agreements").all()).results;
+      return { db, agree, score, stored };
+    }
+
+    // Proves the ledger ends as the +1 is stored however many changes overlap the request that settles it: here three,
+    // each landing while the +1 that started first is between reading and settling.
+    it("leaves no points standing for a +1 no longer stored", async () => {
+      const { agree, score, stored } = await racing([false, true, false]);
+
+      expect((await agree(true)).status).toBe(200);
+
+      expect(await stored()).toEqual([{ n: 0 }]);
+      expect(await score()).toBe(0);
+    });
+
+    // Proves a role is decided only from what the ledger holds after a settled +1: one that was withdrawn while it was
+    // being credited never reaches a threshold, even for a moment.
+    it("gives no role for a +1 withdrawn while it was being credited", async () => {
+      const { db, agree, score } = await racing([false]);
+      await db.batch([
+        db.prepare("INSERT INTO auth_roles (name, created_at) VALUES ('editors', '2026-11-19T00:00:00.000Z')"),
+        db.prepare("INSERT INTO auth_reputation_thresholds (role, score, updated_at) VALUES ('editors', 0.5, '2026-11-19T00:00:00.000Z')"),
+      ]);
+
+      expect((await agree(true)).status).toBe(200);
+
+      expect(await score()).toBe(0);
+      expect((await db.prepare("SELECT role, account_id FROM auth_role_members").all()).results).toEqual([]);
+    });
   });
 });
