@@ -28,7 +28,7 @@ jobs:
 
 For a Svartz vault added to an existing SvelteKit app, keep that app's package-manager setup, cache, lockfile install, and test steps. Replace its build command with the corresponding `svartz:build` script, such as `pnpm svartz:build` or `npm run svartz:build`. That command builds the vault through Svartz while leaving the host's adapter and routes in charge. For a scaffolded site, the build output is `.svartz/vaults/notes/dist`; an existing host writes wherever its adapter is configured to write.
 
-A vault that publishes [previous versions from git](history.md#previous-versions-from-git) needs the repository's full history, so give its checkout step `with: { fetch-depth: 0 }`. A shallow clone fails that build.
+A vault that publishes [previous versions from git](history.md#previous-versions-from-git) needs the repository's full history, so give its checkout step `with: { fetch-depth: 0 }`. A shallow clone fails that build. Keep its [version cache](history.md#building-in-ci) between runs with an `actions/cache` step, or every run compiles every version.
 
 The workflow caches npm's package cache through `setup-node`. It installs dependencies from the lockfile on every run. [GitHub's setup-node guide](https://github.com/actions/setup-node/blob/main/docs/advanced-usage.md#caching-packages-data) documents this cache behavior.
 
