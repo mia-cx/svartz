@@ -47,7 +47,7 @@ describe("the Report action", () => {
 
     const dialog = page.getByRole("dialog", { name: "Report page" });
     await expect.element(dialog).toBeVisible();
-    await expect.element(dialog.getByText("This page")).toBeVisible();
+    await expect.element(dialog.getByText("Garden")).toBeVisible();
     await expect.element(dialog.getByLabelText("What's wrong?")).toHaveFocus();
     await userEvent.keyboard("The intro was replaced with ads.");
     await dialog.getByRole("button", { name: "Send report" }).click();

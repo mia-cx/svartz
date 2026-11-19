@@ -121,7 +121,7 @@
 	min-block-size: 2.25rem;
 }
 
-.sv-moderation-choice input {
+.sv-moderation-dialog .sv-moderation-choice input {
 	inline-size: 1.125rem;
 	block-size: 1.125rem;
 	margin: 0;

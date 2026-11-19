@@ -225,9 +225,11 @@ export function mount(_pathname: string, { mountPath, userPages }: BrowserOption
   let action: HTMLButtonElement | undefined;
   if (note && region) {
     const handle = note.startsWith(`${userPages}/`) ? note.slice(userPages.length + 1) : "";
-    const choices: Choice[] = [{ kind: "page", id: note, label: "This page" }];
-    // A user page is about its account: report either.
-    if (handle && !handle.includes("/")) choices.push({ kind: "account", id: handle, label: `@${handle}'s account` });
+    // A user page is about its account: report either, the page as "This page" beside the account.
+    const account = handle && !handle.includes("/");
+    const title = document.querySelector("h1")?.textContent?.trim();
+    const choices: Choice[] = [{ kind: "page", id: note, label: account || !title ? "This page" : title }];
+    if (account) choices.push({ kind: "account", id: handle, label: `@${handle}'s account` });
     action = element("button", "", icon(FLAG), "Report");
     action.type = "button";
     action.addEventListener("click", () => open(choices, action!));
