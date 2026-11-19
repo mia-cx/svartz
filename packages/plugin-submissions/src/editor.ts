@@ -397,6 +397,11 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
   let loaded: { sha: string; hash: string } | undefined;
   /** Where a save goes for this reader, as the server last said; `null` until it says, or when they can't save. */
   let destination: Destination = null;
+  /**
+   * Whether a new page's destination is being asked for its current title and section. The reader can't send until the
+   * server says: the button would still promise what the last title got, and a save can go live where that went to review.
+   */
+  let asking = false;
   // The fields are locked while sending, so the pull request holds exactly what the reader sees. The panel can't be
   // dismissed then either: the reader would never see the pull request it opens.
   let phase: "editing" | "sending" | "sent" = "editing";
@@ -404,7 +409,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
   let conflict = false;
   /** Whether there is something to submit: a changed source, or a new page with a title and content. */
   const ready = () => {
-    if (!view) return false;
+    if (!view || asking) return false;
     const markdown = view.state.sliceDoc();
     return target.kind === "edit" ? markdown !== original : Boolean(title?.value.trim() && markdown.trim());
   };
@@ -521,11 +526,18 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     clearTimeout(destinationTimer);
     const ask = ++asked;
     const name = title?.value.trim() ?? "";
-    if (!name) return showDestination(null);
+    // The last answer was for another title or section, so it no longer says where this page goes.
+    asking = Boolean(name);
+    showDestination(null);
+    if (phase === "editing") submit.disabled = !ready();
+    if (!name) return;
     destinationTimer = setTimeout(async () => {
       const query = new URLSearchParams({ folder: folder?.value ?? "", title: name });
       const answer = await request<DestinationResponse>(`${endpoint}/destination/?${query}`).catch(() => ({ destination: null }));
-      if (ask === asked && dialog.isConnected) showDestination(answer.destination);
+      if (ask !== asked || !dialog.isConnected) return;
+      asking = false;
+      showDestination(answer.destination);
+      if (phase === "editing") submit.disabled = !ready();
     }, AUTOSAVE_DELAY_MS);
   }
 

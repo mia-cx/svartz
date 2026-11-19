@@ -562,6 +562,28 @@ describe("New page", () => {
       .toBe("/docs/wiki/_svartz/submissions/destination/?folder=People&title=Ada+Lovelace");
   });
 
+  it("can't be sent while it asks where a renamed page goes, so the button never promises review for a save that goes live", async () => {
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => { answer = resolve; });
+    // The first title goes to review; the second commits, but the server takes its time saying so.
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/links/")) return Response.json(LINKS);
+      if (!url.includes("/destination/")) return Response.json({});
+      if (!url.includes("Byron")) return Response.json({ destination: "pull-request" });
+      await held;
+      return Response.json({ destination: "commit" });
+    }));
+    await writeNewPage();
+    const review = page.getByRole("button", { name: "Open pull request" });
+    await expect.element(review).toBeEnabled();
+
+    await page.getByRole("textbox", { name: "Title" }).fill("Ada Byron");
+    await expect.element(review).toBeDisabled();
+
+    answer();
+    await expect.element(page.getByRole("button", { name: "Publish" })).toBeEnabled();
+  });
+
   it("waits for a title and some content before it can be sent", async () => {
     serve(() => Response.json({}));
     unmount = mount("/docs/wiki/guide/", OPTIONS, CONTEXT);
