@@ -2,7 +2,7 @@
   import type { PageData } from './$types';
   import 'virtual:svartz/tailwind-sources.css';
   import { page } from '$app/state';
-  import SvartzRuntimePage from '@svartz/ui/runtime';
+  import { SvartzPluginPage } from '@svartz/ui/runtime';
   let { data }: { data: PageData } = $props();
 </script>
 
@@ -12,4 +12,4 @@
   {/each}
 </svelte:head>
 
-<SvartzRuntimePage pathname={page.url.pathname} pluginPage={data.svartzPage} />
+<SvartzPluginPage pathname={page.url.pathname} page={data.svartzPage} />
