@@ -34,6 +34,7 @@ The vault needs a server target (`cloudflare-workers`, `cloudflare-pages` or `no
 | `privacyNotice` | Optional URL of the site's privacy notice. The sign-in dialog links to it. A site that stores readers' names and avatars owes them one. |
 | `callbackVault` | Optional id of the host vault that runs every sign-in in the app. Defaults to the first host vault that enables auth. See [several vaults](#several-vaults). |
 | `admins` | Optional identity ids, such as `"github:583231"`, whose accounts always hold the `admin` role. See [bootstrap admins](#bootstrap-admins). |
+| `userPages` | Optional folder of the vault that holds [user pages](#user-pages), such as `"people"`. Defaults to `"users"`. |
 
 ## The accounts database
 
@@ -179,6 +180,18 @@ Host vaults share accounts, so every host vault that enables auth must list the 
 
 Auth starts before the site answers any request, so server plugins and a host app's own routes behind `svartzHandle` always read this deployment's list. Code that calls `readAccount` without `svartzHandle` in its hooks sees no admins.
 
+## User pages
+
+Each account has a user page: the note at `users/<handle>` in each vault, such as `users/ada.md`. Its account holds every permission on it, whatever the [grants](#grants) say, so with [submissions](../packages/plugin-submissions/README.md#modes) its owner's edits commit straight to the repository and everyone else's go to review. The override covers the page itself, not pages below it such as `users/ada/drafts`; to give an account a folder of its own, grant it on `folder:<vault>/users/ada/`.
+
+`userPages` names another folder, written as page addresses spell it: lowercase letters, numbers, hyphens and underscores, with `/` between folders, such as `"people"` or `"wiki/people"`. Host vaults share accounts, so every host vault that enables auth must set the same folder, or the build fails.
+
+The [account page](#the-account-page) links the reader's user page. While they have none, a plugin that writes pages can offer to start it there; [submissions](../packages/plugin-submissions/README.md#new-page) offers **Create your page**.
+
+A user page stays where it was written when its owner changes handle: `users/ada` stays at its address, and stays Ada's, since an old handle never passes to another account. To move it to the new handle, its owner sets `slug: lovelace` in its frontmatter and lists `users/ada` under `aliases`, so links to the old address redirect; both addresses are theirs, so the edit commits. The page moves once the site rebuilds.
+
+A handle whose user page already exists is taken, unless the account choosing it held it before: otherwise taking the handle would take a page someone else wrote. The handle chooser suggests the next free one. Which pages exist is read from the last build, so a page added since doesn't count until the site rebuilds.
+
 ## Routes
 
 Under `<base><mount>/_svartz/auth/`, where `<base>` is the deployment base path, if any:
@@ -208,6 +221,7 @@ Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` and
 
 `<base><mount>/-/account/` is a [plugin page](server-plugins.md#plugin-pages) in the theme's shell where readers manage their account. Signed-in readers reach it from the **Account** link in the site actions, and you can link it from anywhere on the site. It needs `SVARTZ_DB` and the session secret; without them it answers 404. A signed-out reader sees a sign-in link per provider, each returning to the page. A signed-in reader can:
 
+- **Open their [user page](#user-pages)** with **Your page**, beside their name. While they have none, the page leaves an empty `data-svartz-region="user-page-actions"` element there, its `data-svartz-user-page` naming the page's vault path, such as `users/ada`; a plugin's browser script that can start the page puts its button in it. A hidden user page gets no link.
 - **Change their display name and handle.** A new handle follows the [handle rules](#first-sign-in). The old one keeps pointing at the account for good: `users/<old>/` redirects to `users/<new>/`, and no other account can take it, though its owner can switch back to it.
 - **Link another provider.** The provider's sign-in comes back to the account that started it, bound to that browser's session: if the reader signs out or switches accounts meanwhile, nothing is linked. A provider account that already belongs to another account is refused, and stays with that account.
 - **Unlink a provider** while another remains. The one this browser signed in with stays linked; sign in another way to unlink it. Unlinking ends every session that provider signed in. Two browsers unlinking an account's last two providers at once leave one linked.
@@ -263,6 +277,8 @@ export default guestbook;
 
 `findProfile(handle, env)` answers the public profile, `{ handle, name, avatarUrl }`, of the account that holds `handle` now or held it before, or `undefined`. When its `handle` differs from the one asked for, the asked one is old: redirect to the current one.
 
+`userPageFolder()` answers the folder of [user pages](#user-pages), such as `"users"`, so a plugin can find or start an account's page at `<folder>/<handle>`.
+
 ## Permissions
 
 Plugins declare what people may do on the site, and check it with `can()`. Admins decide who holds each permission with **grants**, which they set on [the dashboard](#the-dashboard).
@@ -312,7 +328,7 @@ Grants can also name a `group`, which ranks between accounts and roles. Nothing 
 
 A check on a page consults the page, each folder enclosing it, its vault and the site, in that order, and the first of them with a set grant that applies to the reader decides. Within that object, the most specific actor decides: the account, then its roles, then `signed-in`, then `guest`. Between grants of the same rank, `deny` beats `allow`. With nothing set, the answer is no. So a grant on a page beats any grant on the site, and to keep a page closed to guests but open to signed-in readers, set both actors on it.
 
-Two things allow whatever the grants say: the `admin` role, which [bootstrap admins](#bootstrap-admins) hold, and an account's own user page, `users/<handle>` in any vault.
+Two things allow whatever the grants say: the `admin` role, which [bootstrap admins](#bootstrap-admins) hold, and an account's own [user page](#user-pages), `users/<handle>` in any vault.
 
 Grants live in `SVARTZ_DB`, in `auth_grants`. Set them on the dashboard, which records each change in [the audit log](#the-audit-log).
 

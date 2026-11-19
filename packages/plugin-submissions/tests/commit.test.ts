@@ -519,12 +519,12 @@ describe("user pages", () => {
    * `person`'s save of `path` committed straight to the branch, as the account `account` with the handle `handle`: an
    * edit of the guide's source, or a new page where nothing is.
    */
-  const committed = (path: string, person: Identity, account: string, { handle = person.handle!, kind = "edit" as "edit" | "new" } = {}) => [
+  const committed = (path: string, person: Identity, account: string, { handle = person.handle!, kind = "edit" as "edit" | "new", markdown = MARKDOWN } = {}) => [
     ...commitStart,
     blobExchange(path, HEAD, ...kind === "edit" ? [GUIDE_SHA] : []),
     ...commitExchanges({
       path,
-      markdown: MARKDOWN,
+      markdown,
       message: `${kind === "edit" ? "Edit" : "Add"} ${path}\n\n${NOTE}\n\n`
         + `Co-authored-by: ${person.name} <${person.id.split(":")[1]}+${person.handle}@users.noreply.github.com>\nSvartz-Account: ${account}`,
       author: { name: person.name, email: `${handle}@users.noreply.wiki.example` },
@@ -592,9 +592,17 @@ describe("user pages", () => {
       method: "POST", cookie: ada, body: new URLSearchParams({ name: "Ada Lovelace", handle: "lovelace" }),
     });
     expect(renamed.headers.get("location")).toContain("status=saved");
-    const replay = github(committed("content/users/ada.md", ADA, account, { handle: "lovelace" }));
+    // Moving the page to the new handle, with the old address redirecting, claims only addresses that are Ada's.
+    const moved = "---\nslug: lovelace\naliases: [users/ada]\n---\n# Ada Lovelace\n";
+    const replay = github([
+      ...committed("content/users/ada.md", ADA, account, { handle: "lovelace" }),
+      repositoryExchange,
+      headExchange(),
+      ...committed("content/users/ada.md", ADA, account, { handle: "lovelace", markdown: moved }).slice(commitStart.length),
+    ]);
 
     expect(await save(site, { page: "/wiki/users/ada/", sha: GUIDE_SHA }, ada)).toEqual({ status: 201, body: commitAnswer });
+    expect(await save(site, { page: "/wiki/users/ada/", sha: GUIDE_SHA, markdown: moved }, ada)).toEqual({ status: 201, body: commitAnswer });
     expect(replay.pending).toEqual([]);
   });
 });
