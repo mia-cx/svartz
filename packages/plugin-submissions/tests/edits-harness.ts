@@ -104,7 +104,8 @@ export function counting(db: D1) {
   return { database, calls };
 }
 
-export async function createEditsSite() {
+/** A wiki as above; `env` adds to or replaces what its server's environment holds. */
+export async function createEditsSite(env: Readonly<Record<string, unknown>> = {}) {
   const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
   const db = await miniflare.getD1Database("SVARTZ_DB");
   const { database, calls: d1 } = counting(db);
@@ -138,6 +139,7 @@ export async function createEditsSite() {
       SVARTZ_GITHUB_APP_KEY: generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs1", format: "pem" }),
       SVARTZ_GITHUB_WEBHOOK_SECRET: SECRET,
       SVARTZ_DB: database,
+      ...env,
     },
     building: false,
     dev: false,
@@ -408,6 +410,9 @@ export async function seedReviews(site: EditsSite): Promise<void> {
   });
   // The first view of a page that reads the mirror polls GitHub, which reads which files each pull request changes.
   await site.page("mod", REVIEW_PANEL);
+  await site.settle();
+  // Opening each submission reads its pages at the head, as a reviewer's first look would: actions then find them read.
+  for (const { number } of [guide, paris]) await site.page("mod", `${REVIEW_PANEL}${number}/`);
   await site.settle();
 }
 

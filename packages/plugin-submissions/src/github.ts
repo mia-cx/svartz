@@ -22,6 +22,14 @@ export interface GitHubTarget {
   readonly labels: readonly string[];
   /** The commit the site was built from. Edits branch from it, so a page changed since conflicts. */
   readonly commit: string;
+  /**
+   * Runs around each request, for reads that keep to the pause the reconcile poll shares: `before` may refuse the
+   * request by throwing, and `after` sees GitHub's answer first.
+   */
+  readonly pace?: {
+    readonly before: () => Promise<void>;
+    readonly after: (response: Response) => Promise<void>;
+  };
 }
 
 /** One reader's edit of a published note, or a new note. */
@@ -87,8 +95,11 @@ export async function requestGitHub(
   }
 }
 
-function send(target: GitHubTarget, method: string, path: string, body?: unknown, accept?: string) {
-  return requestGitHub(target.token, method, `/repos/${target.repo}${path}`, body, accept);
+async function send(target: GitHubTarget, method: string, path: string, body?: unknown, accept?: string) {
+  await target.pace?.before();
+  const response = await requestGitHub(target.token, method, `/repos/${target.repo}${path}`, body, accept);
+  await target.pace?.after(response);
+  return response;
 }
 
 /** The reader-facing error for a GitHub response that failed. */

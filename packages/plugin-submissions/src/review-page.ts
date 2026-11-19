@@ -92,8 +92,8 @@ export interface ReviewedFile {
   readonly status: string;
   /** GitHub's diff, as hunks; `undefined` when GitHub shows none, as for an image or a very large change. */
   readonly hunks: ReadonlyArray<readonly DiffLine[]> | undefined;
-  /** The page at the submission's head, rendered and sanitized; why not, otherwise; absent for a file that isn't a page. */
-  readonly preview?: { readonly kind: "html"; readonly html: string } | { readonly kind: "unavailable" | "too-large" };
+  /** The page at an open submission's head, rendered and sanitized; absent for a file that isn't a page. */
+  readonly preview?: string;
 }
 
 /** What a review form came back with: `?status=`, and the file a line comment was on. */
@@ -127,7 +127,8 @@ const ACTION_STATUSES: Readonly<Record<string, { error: boolean; text: (retry?: 
 };
 
 function statusLine(status: ActionStatus | undefined): string {
-  const known = status && ACTION_STATUSES[status.code];
+  // An own key only: a code such as `constructor` names nothing here.
+  const known = status && Object.hasOwn(ACTION_STATUSES, status.code) ? ACTION_STATUSES[status.code] : undefined;
   if (!known) return "";
   return `<p class="sv-account-status" role="${known.error ? "alert" : "status"}"${known.error ? " data-error" : ""}>${escape(known.text(status!.retry))}</p>`;
 }
@@ -155,11 +156,15 @@ export interface LineComments {
   readonly head: string;
 }
 
+/** Whether `file` gets a form to comment on its lines. */
+const commentable = (file: ReviewedFile | undefined, comments: LineComments | undefined): comments is LineComments =>
+  comments !== undefined && file?.hunks !== undefined && file.hunks.length > 0;
+
 function fileHtml(file: ReviewedFile, index: number, comments: LineComments | undefined, status: ActionStatus | undefined): string {
   const word = STATUS_WORDS[file.status];
   const moved = file.previous ? ` from <code>${escape(file.previous)}</code>` : "";
   const heading = `<h3><code>${escape(file.shown)}</code>${word ? ` <span class="sv-account-muted">${word}${moved}</span>` : ""}</h3>`;
-  const pick = comments !== undefined && file.hunks !== undefined && file.hunks.length > 0;
+  const pick = commentable(file, comments);
   const table = file.hunks === undefined
     ? "<p class=\"sv-account-muted\">GitHub shows no line changes for this file.</p>"
     : file.hunks.length === 0
@@ -186,9 +191,7 @@ function fileHtml(file: ReviewedFile, index: number, comments: LineComments | un
     ? ""
     : `<details class="svartz-submissions-preview"${file.status === "added" ? " open" : ""}>
   <summary>Preview</summary>
-  ${file.preview.kind === "html"
-    ? `<div class="sv-prose svartz-submissions-rendered">${file.preview.html}</div>`
-    : `<p class="sv-account-muted">${file.preview.kind === "too-large" ? "This page is too large to preview here." : "GitHub isn't answering right now, so this page can't be previewed. Try again in a few minutes."}</p>`}
+  <div class="sv-prose svartz-submissions-rendered">${file.preview}</div>
 </details>`;
   return `<article class="svartz-submissions-file" id="svartz-file-${index}">
 ${heading}
@@ -209,6 +212,8 @@ export function changesSection({ files, hidden, complete, unavailable, comments,
   readonly comments: LineComments | undefined;
   readonly status: ActionStatus | undefined;
 }): string {
+  // A line comment's answer shows by its file's form; once that form is gone, as when the submission closed, here.
+  const loose = status?.file !== undefined && !commentable(files[status.file], comments) ? statusLine(status) : "";
   const body = unavailable
     ? "<p>GitHub isn't answering right now, so the changes can't be shown. Try again in a few minutes.</p>"
     : [
@@ -218,7 +223,7 @@ export function changesSection({ files, hidden, complete, unavailable, comments,
     ].join("\n");
   return `<section class="svartz-submissions-changes" aria-labelledby="svartz-changes">
 <h2 id="svartz-changes">Changes</h2>
-${body}
+${loose}${body}
 </section>`;
 }
 
