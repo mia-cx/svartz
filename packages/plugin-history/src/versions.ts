@@ -30,6 +30,8 @@ export const DISCOVERED = "history:attachments";
 const READ_BATCH = 64;
 /** The shortest commit prefix a version's URL uses. */
 const SHORT_SHA = 7;
+/** The characters of a blob's id that name a deleted attachment's snapshot below a note's versions. */
+const BLOB_ID = 12;
 /** From a version's page back to its note's: `<note>versions/<sha>/`. */
 const TO_NOTE = "../../";
 /** Where a version's body goes in its page's HTML. The page escapes every `<` it is given, so only this can be it. */
@@ -146,8 +148,10 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
     ...[...published].filter((path) => !NOTE_FILE.test(path)).map((path) => `${mountPath}/${path}`),
     ...[...ctx.artifacts.keys()].filter((key) => key.startsWith("assets/")).map((key) => `${mountPath}/${key.slice("assets/".length)}`),
   ]);
-  /** Attachments version pages reference, by vault path, as each is published: from the working tree or from git. */
-  const attachments = new Map<string, { readonly sourcePath: string } | { readonly spec: string }>();
+  /** Attachments still in the vault that version pages reference, by vault path, and where to read each. */
+  const fromTree = new Map<string, string>();
+  /** Attachments gone from the vault that version pages reference, by the artifact key each publishes at, and the blob to read. */
+  const fromGit = new Map<string, string>();
 
   const taken = new Set([...index.routes.all, ...ctx.files.map((file) => `/${file.slug}/`)]);
   const theme = ctx.meta.get("svartz:theme") as SvartzTheme | undefined;
@@ -173,15 +177,22 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
   };
 
   /**
-   * What `version` may reference beyond what the build publishes: the attachments in the tree now, and those only
-   * its commit had, which are read from git as `<commit>:<path>`.
+   * What `version` of the note listing its versions at `list` may reference beyond what the build publishes: the
+   * attachments in the tree now, and those only its commit had. Those are gone from the vault, and may have had other
+   * contents in other versions, so each is published by its blob below the listing, at
+   * `<list>files/<blob>/<name>`: versions that held the same bytes share it, and no version shows another's.
    */
-  const candidatesAt = async ({ commit }: Shown) => {
+  const candidatesAt = async ({ commit }: Shown, list: string) => {
     const gone = (await filesAt(repository.root, commit.sha, repository.prefix))
-      .map((file) => file.slice(repository.prefix.length))
-      .filter((path) => !NOTE_FILE.test(path) && !inTreePaths.has(path) && keepsAttachment(ctx.config, path));
-    const files: ProcessedFile[] = [...inTree, ...gone.map((path) => ({ path, slug: path, content: "" }))];
-    return { files, git: new Map(gone.map((path) => [path, `${commit.sha}:${repository.prefix}${path}`])) };
+      .map(({ path, blob }) => ({ path: path.slice(repository.prefix.length), blob }))
+      .filter(({ path }) => !NOTE_FILE.test(path) && !inTreePaths.has(path) && keepsAttachment(ctx.config, path));
+    const files: ProcessedFile[] = [...inTree, ...gone.map(({ path }) => ({ path, slug: path, content: "" }))];
+    const snapshots = new Map(gone.map(({ path, blob }) => {
+      const at = `files/${blob.slice(0, BLOB_ID)}/${encodeURIComponent(path.slice(path.lastIndexOf("/") + 1))}`;
+      // The listing is below the mount, and an attachment artifact is served at `<mount>/<key below assets/>`.
+      return [path, { blob, url: `../${at}`, key: `assets${list.slice(mountPath.length)}${decodeURIComponent(at)}` }] as const;
+    }));
+    return { files, snapshots };
   };
 
   const linked: string[] = [];
@@ -218,20 +229,23 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
       const before = shown[position + 1];
       const newer = listed[position - 1];
       const older = listed[position + 1];
-      const candidates = await candidatesAt(version);
+      const candidates = await candidatesAt(version, list);
       let compiled;
       try {
-        compiled = await compileNoteVersion(ctx, note, version, { attachments: candidates.files, prefix: TO_NOTE, published: (path) => urls.has(path) });
+        compiled = await compileNoteVersion(ctx, note, version, {
+          attachments: candidates.files,
+          prefix: TO_NOTE,
+          published: (path) => urls.has(path),
+          moved: new Map([...candidates.snapshots].map(([path, { url }]) => [path, url])),
+        });
       } catch (error) {
         throw new Error(`[history] couldn't build the version of "${note.path}" in vault "${vault}" at ${version.commit.sha}`, { cause: error });
       }
-      // The newest version that references an attachment decides its bytes.
       for (const path of compiled.attachments) {
-        if (attachments.has(path)) continue;
-        const spec = candidates.git.get(path);
+        const snapshot = candidates.snapshots.get(path);
         const sourcePath = candidates.files.find((file) => file.path === path)?.sourcePath;
-        if (spec) attachments.set(path, { spec });
-        else if (sourcePath) attachments.set(path, { sourcePath });
+        if (snapshot) fromGit.set(snapshot.key, snapshot.blob);
+        else if (sourcePath) fromTree.set(path, sourcePath);
       }
       const page = versionPage({
         title: note.title,
@@ -247,16 +261,14 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
     linked.push(note.href);
   }
 
-  // Published as the build publishes an attachment: `assets/<vault path>`, served at `<mount>/<vault path>`.
-  const fromGit = [...attachments].flatMap(([path, source]) => ("spec" in source ? [[path, source.spec] as const] : []));
-  const bytes = await readFiles(repository.root, fromGit.map(([, spec]) => spec));
-  const gitBytes = new Map(fromGit.map(([path], index) => [path, bytes[index]]));
-  for (const [path, source] of attachments) {
-    const contents = "spec" in source ? gitBytes.get(path) : await readFile(source.sourcePath);
-    if (!contents) continue;
-    const key = `assets/${path}`;
-    ctx.artifacts.set(key, { key, path: resolve(ctx.config.outDir, "..", "artifacts", key), type: "asset", pluginId: "history", contents });
-  }
+  // Published as the build publishes an attachment: the artifact `assets/<path>` is served at `<mount>/<path>`.
+  const asset = (key: string, contents: Buffer | undefined) => {
+    if (contents) ctx.artifacts.set(key, { key, path: resolve(ctx.config.outDir, "..", "artifacts", key), type: "asset", pluginId: "history", contents });
+  };
+  for (const [path, sourcePath] of fromTree) asset(`assets/${path}`, await readFile(sourcePath));
+  const snapshots = [...fromGit];
+  const bytes = await readFiles(repository.root, snapshots.map(([, blob]) => blob));
+  snapshots.forEach(([key], index) => asset(key, bytes[index]));
 
   ctx.index = { ...index, routes: { ...index.routes, all: [...new Set([...index.routes.all, ...routes])].sort() } };
   return linked;

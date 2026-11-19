@@ -16,6 +16,21 @@ const CONTENT_STAGES = STAGE_NAMES.slice(STAGE_NAMES.indexOf("resolveLinks"), ST
 /** A URL that names a scheme, the site root or a place on the same page stays as written. */
 const ANCHORED = /^(?:[a-z][a-z\d+.-]*:|\/|#)/i;
 
+/** A compiler step's plugin: the function itself, or the first of a `[plugin, options]` pair. */
+const stepOf = (step: unknown): unknown => (Array.isArray(step) ? step[0] : step);
+
+/**
+ * The steps of `added` that `present` lacks. A plugin that registers a step builds it afresh on each run, sometimes
+ * as a new closure, so a step counts as present when its plugin is the same function or has the same source.
+ */
+function missing<Step>(added: readonly Step[], present: readonly Step[]): Step[] {
+  const plugins = present.map(stepOf);
+  return added.filter((step) => {
+    const plugin = stepOf(step);
+    return !plugins.some((other) => other === plugin || (typeof other === "function" && typeof plugin === "function" && String(other) === String(plugin)));
+  });
+}
+
 /** What {@link compileNoteVersion} answers. */
 export interface CompiledNoteVersion {
   /** The version's body as Svelte markup, as a note page's component holds it, taking `contentComponents`. */
@@ -27,15 +42,16 @@ export interface CompiledNoteVersion {
 /**
  * Compiles `markdown`, a version of the published note `note` that sat at `path` in the vault, as the build compiles
  * the note: run `ctx.plugins`' `parseFrontmatter` stage on it alone, then their link, OFM and embed stages on it
- * among the notes and attachments the build publishes, then the compiler steps those stages contributed. The version
- * takes the note's place and route, and links resolve as they do from the note now.
+ * among the notes and attachments the build publishes, embedding them from the build's own sources, then compile it
+ * with the build's compiler steps and any its own content alone needs. The version takes the note's place and route,
+ * and links resolve as they do from the note now.
  *
  * `attachments` are vault files the version may reference beyond the published ones; those it references join the
- * attachments its links resolve against, and are answered: the caller publishes them. `prefix` leads every relative
- * URL in the output, for a page below the note's own URL: `../../` for one two folders down. A relative link or
- * source naming nothing `published` holds, read from the note's URL `note.href`, shows unresolved instead. Call it
- * after `core:index`, from `emitArtifacts`. Browser resources the version's steps add, such as diagrams', join the
- * build's.
+ * attachments its links resolve against, and are answered: the caller publishes them, at their own path or where
+ * `moved` says. `prefix` leads every other relative URL in the output, for a page below the note's own URL: `../../`
+ * for one two folders down. A relative link or source naming nothing `published` holds, read from the note's URL
+ * `note.href`, shows unresolved instead. Call it after `core:index`, from `emitArtifacts`. Browser resources the
+ * version's steps add, such as diagrams', join the build's.
  */
 export async function compileNoteVersion(
   ctx: PluginContext,
@@ -46,6 +62,8 @@ export async function compileNoteVersion(
     readonly prefix: string;
     /** Whether the site publishes a page or file at `pathname`, decoded, below the deployment base. */
     readonly published: (pathname: string) => boolean;
+    /** Attachments the caller publishes somewhere other than their own path, by vault path: the URL, from the page, to link instead. */
+    readonly moved?: ReadonlyMap<string, string>;
   },
 ): Promise<CompiledNoteVersion> {
   const plugins = ctx.plugins ?? [];
@@ -61,7 +79,8 @@ export async function compileNoteVersion(
   const added = candidates.filter(({ path }) => referenced.has(path));
 
   // Every other published file stays a link and embed target. Their bodies were transformed already, and an embed
-  // reads its target's source from `sourceBodies`, so they join empty.
+  // reads its target's source from the build's `sourceBodies`, so they join empty: the build's compiler steps, below,
+  // already hold what their content needed.
   const others = ctx.files
     .filter((other) => other.path !== note.path)
     .map((other) => ({ ...other, content: "", rawLinks: [] }));
@@ -72,26 +91,43 @@ export async function compileNoteVersion(
   const compiling: PluginContext = { config: ctx.config, plugins, files: [file, ...others, ...added], artifacts: new Map(), meta, index: ctx.index };
   await runStages(plugins, compiling, CONTENT_STAGES);
 
+  // The version compiles with the build's own steps, which the build's notes, embed targets included, decided:
+  // math a version only embeds is registered by its target, never by the version's text. The stages that register
+  // steps (GFM, syntax, LaTeX, diagrams) just ran again on the version, into this context's own collection; of those,
+  // only steps the build lacks join, so none is applied twice.
+  const build = getCompilerContributions(ctx);
+  const own = getCompilerContributions(compiling);
+  compiling.compiler = {
+    ...own,
+    remarkPlugins: [...build.remarkPlugins, ...missing(own.remarkPlugins, build.remarkPlugins)],
+    rehypePlugins: [...build.rehypePlugins, ...missing(own.rehypePlugins, build.rehypePlugins)],
+    svxSourceTransforms: [...build.svxSourceTransforms, ...missing(own.svxSourceTransforms, build.svxSourceTransforms)],
+  };
+
   const tree = await renderMarkdownTree(compiling, file.content);
-  // Whether a relative URL, read from the note's own page, names something the site publishes, or an attachment the
-  // caller publishes for this version.
-  const mine = new Set(added.map(({ path }) => `${ctx.config.mountPath ?? ""}/${path.replaceAll("\\", "/")}`));
-  const resolves = (url: string) => {
-    if (ANCHORED.test(url)) return true;
-    const { pathname } = new URL(url, `https://svartz.invalid${note.href}`);
+  // A relative URL, read from the note's own page, as the page shows it: led by `prefix` when it names something the
+  // site publishes or an attachment the caller publishes at its usual path, sent to where the caller moved an
+  // attachment, and `undefined` when it names nothing.
+  const mount = ctx.config.mountPath ?? "";
+  const moved = new Map([...options.moved ?? []].map(([path, url]) => [`${mount}/${path.replaceAll("\\", "/")}`, url]));
+  const mine = new Set(added.map(({ path }) => `${mount}/${path.replaceAll("\\", "/")}`));
+  const shown = (url: string): string | undefined => {
+    if (ANCHORED.test(url)) return url;
+    const { pathname, search, hash } = new URL(url, `https://svartz.invalid${note.href}`);
     let decoded: string;
     try {
       decoded = decodeURIComponent(pathname);
     } catch {
-      return false;
+      return undefined;
     }
-    return mine.has(decoded) || options.published(decoded) || options.published(`${decoded}/`);
+    const elsewhere = moved.get(decoded);
+    if (elsewhere) return `${elsewhere}${search}${hash}`;
+    return mine.has(decoded) || options.published(decoded) || options.published(`${decoded}/`) ? `${options.prefix}${url}` : undefined;
   };
-  const relative = (url: string) => (ANCHORED.test(url) ? url : `${options.prefix}${url}`);
   visit(tree, "element", (node: Element, index, parent) => {
     const href = node.properties.href;
     const src = node.properties.src;
-    const dead = (typeof href === "string" && href && !resolves(href)) || (typeof src === "string" && src && !resolves(src));
+    const dead = (typeof href === "string" && href && !shown(href)) || (typeof src === "string" && src && !shown(src));
     if (dead && parent && index !== undefined) {
       // A version may link what the site no longer publishes, and no edit can fix it now: show it unresolved, as
       // the build shows a link to a missing note, rather than fail the crawl or publish the file.
@@ -105,12 +141,15 @@ export async function compileNoteVersion(
     }
     for (const name of ["href", "src"] as const) {
       const value = node.properties[name];
-      if (typeof value === "string" && value) node.properties[name] = relative(value);
+      if (typeof value === "string" && value) node.properties[name] = shown(value);
     }
     const srcset = node.properties.srcSet;
     if (typeof srcset === "string" && srcset) {
-      node.properties.srcSet = srcset.split(/,\s+/).filter((candidate) => resolves(candidate.trim().split(/\s/)[0]!))
-        .map((candidate) => relative(candidate.trim())).join(", ");
+      node.properties.srcSet = srcset.split(/,\s+/).flatMap((candidate) => {
+        const [url = "", ...descriptor] = candidate.trim().split(/\s+/);
+        const at = shown(url);
+        return at ? [[at, ...descriptor].join(" ")] : [];
+      }).join(", ");
     }
   });
 

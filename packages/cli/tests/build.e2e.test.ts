@@ -289,39 +289,49 @@ describe("svartz CLI", () => {
       const without = await build("[]");
       expect(await build('[history({ source: "git" })]')).toEqual(without);
 
-      // Charts only this version shows: one stays in the vault, one is deleted later, one the vault excludes.
+      // Charts only versions show: one stays in the vault, one is redrawn and then deleted, one the vault excludes.
       await mkdir(resolve(vault, "media"));
       await mkdir(resolve(vault, "private"));
       await writeFile(resolve(vault, "media/chart.svg"), '<svg xmlns="http://www.w3.org/2000/svg">kept</svg>');
-      await writeFile(resolve(vault, "media/gone.svg"), '<svg xmlns="http://www.w3.org/2000/svg">gone</svg>');
+      await writeFile(resolve(vault, "media/gone.svg"), '<svg xmlns="http://www.w3.org/2000/svg">gone-one</svg>');
       await writeFile(resolve(vault, "private/secret.svg"), "<svg>SECRET-EXCLUDED</svg>");
       await post("versions: true\n", "Third wording, $x^2$.\n\n![Kept](../media/chart.svg)\n\n![Gone](../media/gone.svg)\n\n![Excluded](../private/secret.svg)");
       await commit("Publish its versions");
       await writeFile(resolve(vault, "media/draft-only.svg"), "<svg>SECRET-DRAFT</svg>");
       await post("versions: true\ndraft: true\n", "SECRET draft wording.\n\n![Draft](../media/draft-only.svg)");
       await commit("Draft SECRET-SUMMARY");
+      await writeFile(resolve(vault, "media/gone.svg"), '<svg xmlns="http://www.w3.org/2000/svg">gone-two</svg>');
+      await post("versions: true\n", "Fourth wording.\n\n![Gone](../media/gone.svg)");
+      await commit("Redraw it");
       await rm(resolve(vault, "media/gone.svg"));
-      await post("versions: true\n", "Fourth wording.");
+      await post("versions: true\n", "Fifth wording.");
       await commit("Finish it");
       const emitted = await build('[history({ source: "git" })]');
 
-      const [finish, draft, publish, reword, write] = (await execFileAsync("git", ["-C", repo, "log", "--format=%h", "--abbrev=7"])).stdout.trim().split("\n");
+      const [finish, redraw, draft, publish, reword, write] = (await execFileAsync("git", ["-C", repo, "log", "--format=%h", "--abbrev=7"])).stdout.trim().split("\n");
       const listing = emitted.get("/posts/hello/versions/index.html")!;
       expect(listing).toContain("<title>Versions of Hello | Versions</title>");
       expect(listing).toContain('<meta name="robots" content="noindex"');
-      expect([...listing.matchAll(/<a href="([0-9a-f]+\/)"/g)].map(([, href]) => href)).toEqual([finish, publish, reword, write].map((sha) => `${sha}/`));
+      expect([...listing.matchAll(/<a href="([0-9a-f]+\/)"/g)].map(([, href]) => href)).toEqual([finish, redraw, publish, reword, write].map((sha) => `${sha}/`));
       const latest = emitted.get(`/posts/hello/versions/${finish}/index.html`)!;
-      expect(latest).toContain("<del>Third wording, $x^2$.</del>");
-      expect(latest).toContain("<ins>Fourth wording.</ins>");
-      expect(latest).toContain("<p>Fourth wording.</p>");
+      expect(latest).toContain("<del>Fourth wording.</del>");
+      expect(latest).toContain("<ins>Fifth wording.</ins>");
+      expect(latest).toContain("<p>Fifth wording.</p>");
       expect(emitted.has(`/posts/hello/versions/${draft}/index.html`)).toBe(false);
-      // The version with charts renders its math with KaTeX, as the note would, and finds both charts it showed.
+      // The version with charts renders its math with KaTeX, as the note would, and finds the chart still in the vault.
       const charted = emitted.get(`/posts/hello/versions/${publish}/index.html`)!;
       expect(charted).toContain('class="katex"');
       expect(charted).toContain('src="../../../../media/chart.svg"');
-      expect(charted).toContain('src="../../../../media/gone.svg"');
       expect(emitted.get("/media/chart.svg")).toContain("kept");
-      expect(emitted.get("/media/gone.svg")).toContain("gone");
+      // Each version shows the deleted chart as its own commit held it.
+      const gone = (sha: string | undefined) => {
+        const page = `/posts/hello/versions/${sha}/`;
+        const src = /src="([^"]*gone\.svg)"/.exec(emitted.get(`${page}index.html`)!)![1]!;
+        return emitted.get(decodeURIComponent(new URL(src, `https://example.test${page}`).pathname));
+      };
+      expect(gone(publish)).toContain("gone-one");
+      expect(gone(redraw)).toContain("gone-two");
+      expect(emitted.has("/media/gone.svg")).toBe(false);
       expect(emitted.has("/private/secret.svg")).toBe(false);
       expect(emitted.has("/media/draft-only.svg")).toBe(false);
       for (const [path, contents] of emitted) expect(contents, path).not.toMatch(/SECRET|ada@example\.com/);

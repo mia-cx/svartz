@@ -144,30 +144,56 @@ describe("previous versions from git", () => {
     expect(page(`/posts/hello/versions/${shas[0]}/`)).toContain(note);
   });
 
-  // Proves a version's page shows the attachments it referenced, whether the vault still holds the file (and no
-  // note references it now) or the file is gone and is read from git at that version's commit.
-  it("publishes the attachments a shown version references, from the vault or from git", async () => {
+  // Proves a version that embeds another note renders the embed exactly as the note's own page does, math included,
+  // though the version's own text holds no math.
+  it("renders a version's embeds with the build's steps, as the note renders them", async () => {
+    const repo = await repository();
+    await repo.write("posts/other.md", "---\ntitle: Other\n---\n\nA fraction: $\\frac{a}{b}$.\n");
+    await repo.write("posts/hello.md", post("Nothing embedded yet."));
+    await repo.commit("Write them");
+    await repo.write("posts/hello.md", post("![[other]]"));
+    await repo.commit("Embed the other post");
+
+    const { page } = await build(repo.vault);
+
+    const shas = (await exec("git", ["-C", repo.root, "log", "--format=%h", "--abbrev=7"])).stdout.trim().split("\n");
+    const note = page("/posts/hello/")!;
+    expect(note).toContain('class="katex"');
+    expect(page(`/posts/hello/versions/${shas[0]}/`)).toContain(note.replaceAll('"../other/"', '"../../../other/"'));
+  });
+
+  // Proves a version's page shows the attachments it referenced: one the vault still holds (and no note references
+  // now) at its own path, and one gone from the vault as that version's commit held it, so two versions that showed
+  // different contents of it each show their own.
+  it("publishes the attachments a shown version references, each version's own bytes", async () => {
     const repo = await repository();
     await mkdir(join(repo.vault, "media"));
-    await repo.write("media/chart.svg", "<svg>chart</svg>");
-    await repo.write("media/old.svg", "<svg>old</svg>");
-    await repo.write("posts/hello.md", post("![Chart](../media/chart.svg)\n\n![[old.svg]]"));
+    await repo.write("media/kept.svg", "<svg>kept</svg>");
+    await repo.write("media/chart.svg", "<svg>first-chart</svg>");
+    await repo.write("posts/hello.md", post("![Kept](../media/kept.svg)\n\n![[chart.svg]]"));
     await repo.commit("Draw it");
-    await repo.write("media/old.svg", "<svg>old, redrawn</svg>");
-    await repo.commit("Redraw the old chart");
-    await rm(join(repo.vault, "media/old.svg"));
+    await repo.write("media/chart.svg", "<svg>second-chart</svg>");
+    await repo.write("posts/hello.md", post("![Kept](../media/kept.svg)\n\n![[chart.svg]]\n\nRedrawn."));
+    await repo.commit("Redraw it");
+    await rm(join(repo.vault, "media/chart.svg"));
     await repo.write("posts/hello.md", post("No charts any more."));
     await repo.commit("Drop the charts");
 
     const { page, asset } = await build(repo.vault);
 
     const shas = (await exec("git", ["-C", repo.root, "log", "--format=%h", "--abbrev=7"])).stdout.trim().split("\n");
-    const drawn = page(`/posts/hello/versions/${shas[2]}/`)!;
-    expect(drawn).toContain('"src":"../../../../media/chart.svg"');
-    expect(drawn).toContain('"src":"../../../../media/old.svg"');
-    expect(String(asset("media/chart.svg"))).toBe("<svg>chart</svg>");
-    // As the version's commit had it, not as it was redrawn later.
-    expect(String(asset("media/old.svg"))).toBe("<svg>old</svg>");
+    /** The bytes the image `name` on the version page at `pathname` shows, following its URL to the published file. */
+    const shown = (pathname: string, name: string) => {
+      const src = new RegExp(`"src":"([^"]*${name})"`).exec(page(pathname)!)![1]!;
+      return String(asset(decodeURIComponent(new URL(src, `https://example.test${pathname}`).pathname.slice(1))));
+    };
+    for (const sha of [shas[1], shas[2]]) {
+      expect(page(`/posts/hello/versions/${sha}/`)).toContain('"src":"../../../../media/kept.svg"');
+      expect(shown(`/posts/hello/versions/${sha}/`, "kept.svg")).toBe("<svg>kept</svg>");
+    }
+    expect(shown(`/posts/hello/versions/${shas[2]}/`, "chart.svg")).toBe("<svg>first-chart</svg>");
+    expect(shown(`/posts/hello/versions/${shas[1]}/`, "chart.svg")).toBe("<svg>second-chart</svg>");
+    expect(asset("media/chart.svg")).toBeUndefined();
   });
 
   // Proves nothing of a version the build would have hidden shows anywhere: not listed, not as the next version's

@@ -112,12 +112,16 @@ export async function filesChanged(root: string, shas: readonly string[]): Promi
   return files;
 }
 
-/** The paths, in the repository, of every file in the tree of commit `sha` below the folder `prefix`. */
-export async function filesAt(root: string, sha: string, prefix: string): Promise<string[]> {
-  const { stdout } = await exec("git", ["-C", root, "-c", "core.quotePath=false", "ls-tree", "-r", "-z", "--name-only", sha, "--", prefix || "."], {
+/** Every file in the tree of commit `sha` below the folder `prefix`: its path in the repository and its blob's id. */
+export async function filesAt(root: string, sha: string, prefix: string): Promise<{ readonly path: string; readonly blob: string }[]> {
+  const { stdout } = await exec("git", ["-C", root, "-c", "core.quotePath=false", "ls-tree", "-r", "-z", sha, "--", prefix || "."], {
     maxBuffer: MAX_LOG_BYTES,
   });
-  return stdout.split("\0").filter(Boolean);
+  // Each entry is `<mode> <type> <id>\t<path>`.
+  return stdout.split("\0").flatMap((entry) => {
+    const found = /^\d+ blob ([0-9a-f]{40,64})\t(.+)$/s.exec(entry);
+    return found ? [{ blob: found[1]!, path: found[2]! }] : [];
+  });
 }
 
 /**
