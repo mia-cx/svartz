@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  ADA, ALAN, createDatabase, createSite, grant, GRACE, ORIGIN, seedComment, signIn, type Database, type Site, type SiteOptions,
+  accountId, ADA, ALAN, createDatabase, createSite, grant, GRACE, ORIGIN, seedComment, seedSubmission, signIn, SUBMISSIONS, type Database, type Site,
+  type SiteOptions,
 } from "./harness";
 
 const ENDPOINT = "/notes/_svartz/moderation";
@@ -104,6 +105,32 @@ describe("suspending from a report", () => {
     expect(await html(site, REPORTS, alan)).toContain(">Suspend @grace</a>");
     await db.prepare("UPDATE auth_grants SET value = 'deny' WHERE permission = 'moderation:accounts:write'").run();
     expect(await html(site, REPORTS, alan)).not.toContain("Suspend @");
+  });
+
+  // Proves an edit names its account only through the site's record of saving it, never through the commit's trailer.
+  it("offers to suspend whoever the site recorded saving a reported commit or submission, and nobody for a commit it has no record of", async () => {
+    const { db, site, ada, alan } = await moderated();
+    const grace = await accountId(db, "grace");
+    const [recorded, unrecorded] = ["a".repeat(40), "b".repeat(40)];
+    await seedSubmission(db, 0, undefined, { owner: grace, commit: recorded });
+    await seedSubmission(db, 42, undefined, { owner: grace });
+    // A commit anyone could push, whose trailer claims Grace's account.
+    await db.prepare(`INSERT INTO submissions_commits (scope, sha, message, author_name, author_email, committer_email, trailer_account, committed_at, url)
+      VALUES (?, ?, ?, 'Grace Hopper', 'grace@example.test', 'grace@example.test', ?, '2026-11-02T00:00:00.000Z', 'https://example.test')`)
+      .bind(`${SUBMISSIONS.repo}:${SUBMISSIONS.root}`, unrecorded, `Edit garden\n\nSvartz-Account: ${grace}`, grace).run();
+    for (const target of [{ kind: "commit", id: recorded }, { kind: "submission", id: "42" }, { kind: "commit", id: unrecorded }]) {
+      await site.fetch(`${ENDPOINT}/reports/`, {
+        method: "POST", headers: { cookie: ada, origin: ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ target, reason: "Vandalism." }),
+      });
+    }
+
+    const items = (await html(site, REPORTS, alan))!.split('<li class="sv-moderation-report"').slice(1);
+    const about = (text: string) => items.find((item) => item.includes(text));
+    const [commit, submission, forged] = [about(`commit/${recorded}`), about("/pull/42"), about(`commit/${unrecorded}`)];
+    expect(commit).toContain(">Suspend @grace</a>");
+    expect(submission).toContain(">Suspend @grace</a>");
+    expect(forged).toBeDefined();
+    expect(forged).not.toContain("Suspend @");
   });
 });
 

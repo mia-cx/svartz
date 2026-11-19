@@ -97,6 +97,7 @@ describe("the Report action", () => {
     await expect.element(dialog.getByText("Comment by Grace Hopper")).toBeVisible();
     await dialog.getByLabelText("What's wrong?").fill("Spam link.");
     await dialog.getByRole("button", { name: "Send report" }).click();
+    await expect.element(page.getByText("Report sent")).toBeVisible();
     await page.getByRole("button", { name: "Close" }).click();
 
     expect(await commands.storedReports()).toEqual([{ target_kind: "annotation", target_id: "c1", reason: "Spam link." }]);
