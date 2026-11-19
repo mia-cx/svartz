@@ -442,6 +442,7 @@ describe("an account's standing, for plugins", () => {
       handle: "lovelace",
       name: "Ada Lovelace",
       avatarUrl: "https://github.com/ada.png",
+      reputation: 5,
       userPage: "/notes/users/ada/",
       standing: { score: 5, next: { role: "editors", score: 20 } },
     });

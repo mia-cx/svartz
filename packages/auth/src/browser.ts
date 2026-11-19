@@ -5,6 +5,14 @@
 import type { BrowserScriptContext } from "@svartz/core";
 import { PROVIDER_MARKS, type Mark } from "./marks";
 import type { ProviderId } from "./providers";
+import { formatReputation, REPUTATION_BADGE_CLASS, reputationLabel } from "./reputation-badge";
+
+/** An account's reputation as a badge to follow its name, as `reputationBadgeHtml` renders it on the server. */
+export function reputationBadge(score: number): HTMLSpanElement {
+  const badge = element("span", REPUTATION_BADGE_CLASS, element("span", `${REPUTATION_BADGE_CLASS}-label`, "Reputation "), formatReputation(score));
+  badge.title = reputationLabel(score);
+  return badge;
+}
 
 export interface SignInProvider {
   readonly id: ProviderId;
