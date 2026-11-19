@@ -50,6 +50,8 @@ export default defineConfig({
         test: {
           name: "server",
           environment: "node",
+          // Real D1 workflows include Miniflare startup and several sign-ins; allow for parallel workspace tests in CI.
+          testTimeout: 15_000,
           include: ["tests/**/*.test.ts"],
           exclude: ["tests/**/*.browser.test.ts"],
         },

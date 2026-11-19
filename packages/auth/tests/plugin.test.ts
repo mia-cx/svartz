@@ -23,7 +23,7 @@ describe("the auth plugin", () => {
       module: expect.stringMatching(/server\.js$/),
       options: { providers: { github }, privacyNotice: "/privacy/", userPages: "users" },
       eager: true,
-      pages: ["account", "dashboard"],
+      pages: ["account", "dashboard", "groups"],
     });
     expect(ctx.compiler?.browserResources.get("auth")?.options).toEqual({
       // Below the deployment base, which the dialog only learns when it mounts: a host app's comes from SvelteKit.

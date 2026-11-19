@@ -10,7 +10,8 @@
  *   with the commit or the pull request.
  * - `POST new/` with `{ submissionId, folder, title, markdown, note?, turnstileToken? }` does the same for a new note.
  * - With `sync` set, `POST github/webhook/` takes GitHub's deliveries into the mirror, and `GET status/?edit=<id>`
- *   answers where a saved edit has got to (see `sync.ts`). Every save is then recorded for its saver to follow.
+ *   answers where a saved edit has got to (see `sync.ts`). Every save is then recorded for its saver to follow, and
+ *   the dashboard gets the Recent edits panel (`recent-edits.ts`).
  * - `POST close/`, a form post with `number` and `returnTo`, closes submission `number` without merging it, for an
  *   account holding `submissions:reviews:write` on the vault, records it in auth's audit log, and redirects to
  *   `returnTo`. With `sync` only, and only a pull request the site recorded saving for this vault. The moderation
@@ -32,7 +33,7 @@
 import {
   ACCOUNTS_DATABASE_ENV, audit, can, linkedIdentities, readIdentity, readSignIn, userPageLocation, type Account, type Identity,
 } from "@svartz/auth/server";
-import type { ServerContext, ServerModuleFactory } from "@svartz/core";
+import type { ServerContext, ServerHandler, ServerModuleFactory } from "@svartz/core";
 import { alternateRoutes, extractFrontmatter, pathRoute, requestedSlug } from "@svartz/plugins/routes";
 import {
   MAX_MARKDOWN_BYTES,
@@ -65,6 +66,7 @@ import {
 import { createGuard, type GuardOptions } from "./guard";
 import { isDatabase, migrate, savedPull, scopeOf } from "./mirror";
 import { COMMIT, OPEN_PULL_REQUESTS, REVIEW } from "./permissions";
+import { recentEditsPanel } from "./recent-edits";
 import { readBody } from "./request";
 import { createSync, type SyncOptions } from "./sync";
 
@@ -478,7 +480,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
       : [],
   ]);
 
-  return async (request, context) => {
+  const handle: ServerHandler = async (request, context) => {
     const route = handlers.get(new URL(request.url).pathname.slice(context.base.length));
     if (!route) return undefined;
     if (request.method !== route.method) {
@@ -494,6 +496,10 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
       throw error;
     }
   };
+
+  if (!sync) return handle;
+  const recentEdits = recentEditsPanel({ repo: options.repo, vaultRoot: data.vaultRoot, links: data.links, attachments: data.preview.attachments, sync });
+  return { handle, dashboard: { title: "Submissions", panels: [recentEdits] } };
 };
 
 export default submissions;

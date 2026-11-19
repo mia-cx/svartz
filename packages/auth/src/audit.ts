@@ -24,6 +24,17 @@ export function auditStatement(db: Database, { actor, action, target, detail = {
 }
 
 /**
+ * The statement that appends `entry` only when the statement just before it in the batch changed a row, for a change
+ * whose own guard may leave it undone. Its results hold the entry's id when it appended one, and nothing otherwise, so
+ * the batch's last result says whether the change happened.
+ */
+export function auditIfChanged(db: Database, { actor, action, target, detail = {} }: AuditEntry): Statement {
+  return db.prepare(`INSERT INTO auth_audit (at, actor_id, actor_handle, action, target, detail)
+      SELECT ?, ?, ?, ?, ?, ? WHERE changes() > 0 RETURNING id`)
+    .bind(new Date().toISOString(), actor.id, actor.handle, action, target, JSON.stringify(detail));
+}
+
+/**
  * Append `entry` to the audit log. Pass the change itself as `changes`, statements prepared on the same `SVARTZ_DB`
  * binding: they and the entry run as one transaction, so neither lands without the other. For a change kept elsewhere,
  * call this first and make the change only once it resolves. Throws when the site binds no `SVARTZ_DB`, or the write fails.

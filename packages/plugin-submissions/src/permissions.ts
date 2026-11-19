@@ -6,7 +6,7 @@ export const OPEN_PULL_REQUESTS = "submissions:pull-requests:write";
 export const COMMIT = "submissions:commits:write";
 /** Comment on, review, merge and close submissions. Declared for the review slices; nothing checks it yet. */
 export const REVIEW = "submissions:reviews:write";
-/** See other people's submissions on the dashboard. Declared for the dashboard; nothing checks it yet. */
+/** See other people's submissions and edits on the dashboard: it opens the Recent edits panel. */
 export const READ_PULL_REQUESTS = "submissions:pull-requests:read";
 
 /**

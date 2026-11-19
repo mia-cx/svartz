@@ -415,6 +415,59 @@ describe("a direct commit", () => {
   });
 });
 
+describe("a group's trust", () => {
+  const HEDY: Identity = { id: "github:3", provider: "github", name: "Hedy Lamarr", handle: "hedy" };
+  const form = (fields: Record<string, string>) => new URLSearchParams(fields);
+  const directCommit = async (site: Site, person: Identity, path: string) => {
+    const handle = person.handle!;
+    return [
+      blobExchange(path, "3a1f9c0e5b7d2468ace013579bdf2468ace01357", GUIDE_SHA),
+      ...commitExchanges({
+        path,
+        markdown: MARKDOWN,
+        message: `Edit ${path}\n\n${NOTE}\n\nCo-authored-by: ${person.name} <${person.id.split(":")[1]}+${handle}@users.noreply.github.com>\nSvartz-Account: ${await accountId(site, handle)}`,
+        author: { name: person.name, email: `${handle}@users.noreply.wiki.example` },
+      }),
+    ];
+  };
+
+  // Proves stories 21 and 22 end to end: Grace owns the Compilers and Hedy joined them through auth's routes; an admin
+  // granted the group commits on `People/` and linked it to the guide. Hedy's save in `People/` commits, her save of the
+  // guide opens a pull request, and Grace's save of the guide commits by the owner override.
+  it("commits a member's save where the group may commit and an owner's where it is linked, and sends the rest to review", async () => {
+    const site = await createSite({ admins: [ADA.id] });
+    const [ada, grace, hedy] = [await signIn(site, ADA), await signIn(site, GRACE), await signIn(site, HEDY)];
+    const auth = (route: string, cookie: string, fields: Record<string, string>) =>
+      site.request(`${AUTH}/${route}`, { method: "POST", cookie, body: form(fields) });
+    await auth("groups/", grace, { name: "compilers", "display-name": "Compilers" });
+    await auth("groups/compilers/invite/", grace, { handle: "hedy" });
+    await auth("groups/compilers/accept/", hedy, {});
+    await auth("people/grant/", ada, { "actor-type": "group", actor: "compilers", permission: "submissions:commits:write", scope: "vault:wiki", path: "people/", value: "allow" });
+    await auth("groups/link/", ada, { group: "compilers", scope: "vault:wiki", path: "guide" });
+
+    const review = github(editExchanges({
+      markdown: MARKDOWN,
+      note: NOTE,
+      pageUrl: `${ORIGIN}/wiki/guide/`,
+      branch: branchFor("wiki-guide"),
+      author: { name: "Hedy Lamarr", email: "3+hedy@users.noreply.github.com" },
+      credit: "by [Hedy Lamarr](<https://github.com/hedy>) (signed in with GitHub)",
+    }).filter(({ request }) => request.url !== `${API}/issues/42/labels`));
+    expect(await save(site, { page: "/wiki/guide/", sha: GUIDE_SHA }, hedy)).toEqual({
+      status: 201, body: { kind: "pull-request", url: PULL_42.html_url, number: 42 },
+    });
+    expect(review.pending).toEqual([]);
+
+    const member = replayGitHub([...commitStart, ...await directCommit(site, HEDY, "content/People/Ada Lovelace.md")], INSTALLATION_TOKEN);
+    expect(await save(site, { page: "/wiki/people/ada-lovelace/", sha: GUIDE_SHA }, hedy)).toEqual({ status: 201, body: commitAnswer });
+    expect(member.pending).toEqual([]);
+
+    const owner = replayGitHub([repositoryExchange, headExchange(), ...await directCommit(site, GRACE, "content/guide.md")], INSTALLATION_TOKEN);
+    expect(await save(site, { page: "/wiki/guide/", sha: GUIDE_SHA }, grace)).toEqual({ status: 201, body: commitAnswer });
+    expect(owner.pending).toEqual([]);
+  });
+});
+
 describe("a commit's claim on routes", () => {
   const GRACE_PAGE = "/wiki/users/grace/";
   const graceAuthor = { name: "Grace Hopper", email: "2+grace@users.noreply.github.com" };

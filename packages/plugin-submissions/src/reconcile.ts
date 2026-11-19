@@ -302,10 +302,9 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
     const bare = await rows<{ sha: string }>("SELECT sha FROM submissions_commits WHERE scope = ? AND files IS NULL ORDER BY committed_at DESC LIMIT ?");
     for (const { sha } of bare) {
       const answer = await get(`/commits/${sha}`);
-      const files = list(object(answer?.body)?.files).flatMap((file) => {
-        const path = text(object(file)?.filename);
-        return path && inVault(path, root) ? [path] : [];
-      });
+      // A rename changed its old path too, as a push delivery lists it (removed and added).
+      const files = list(object(answer?.body)?.files).flatMap((file) =>
+        [text(object(file)?.filename), text(object(file)?.previous_filename)].filter((path) => path !== undefined && inVault(path, root)));
       await mirror.db.prepare("UPDATE submissions_commits SET files = ? WHERE scope = ? AND sha = ? AND files IS NULL")
         .bind(JSON.stringify(files.sort()), mirror.scope, sha).run();
     }

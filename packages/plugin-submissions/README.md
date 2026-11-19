@@ -137,7 +137,7 @@ The plugin declares four permissions, which admins grant on the site, a vault, a
 | `submissions:pull-requests:write` | Sending an edit or a new page for review | Signed-in readers, and guests when [Turnstile](#turnstile) is on |
 | `submissions:commits:write` | Saving straight to the repository | Admins only |
 | `submissions:reviews:write` | Commenting on, reviewing, merging and closing submissions | Admins only |
-| `submissions:pull-requests:read` | Seeing other people's submissions | Admins only |
+| `submissions:pull-requests:read` | Seeing other people's submissions, and every edit on the dashboard's [Recent edits](#recent-edits) | Admins only |
 
 Admins hold every permission, and each account holds every one on its own [user page](../../docs/auth.md#user-pages), `users/<handle>`, so its owner's edits there commit and everyone else's go to review. Vaults that share accounts must configure Turnstile alike, since the guest default comes from it and is shared.
 
@@ -224,7 +224,7 @@ GitHub sends deliveries as `application/json`, which SvelteKit's CSRF check lets
 
 Each vault's rows are its own, keyed by the repository and the vault's folder in it:
 
-- **Commits** on the content branch that change a file in the vault's folder, with those files. A commit's `Svartz-Account` trailer is kept as a claim: anyone writing a commit can add one, so it names the account only on commits the App committed.
+- **Commits** on the content branch that change a file in the vault's folder, with those files. A commit's `Svartz-Account` trailer is kept as a claim and never trusted: whoever makes a commit chooses its trailer, author and committer, the App's bot address included. A commit is credited to an account only by the site's own record of the save (below).
 - **Pull requests** into the content branch, with whether they change a file in the vault's folder, their **reviews**, and the **comments** on their conversation and their diff. A deleted comment stays as an empty tombstone.
 - **Workflow runs** on the content branch, and **deployments** with their latest status and whether any status said it succeeded.
 - Every save the site made, with who made it.
@@ -257,6 +257,20 @@ The browser remembers the last edit saved from each page, and the last new page,
 An edit is live once a run of the workflow (or a deployment to the environment) succeeded at a commit that holds the edit's commit, or its pull request's merge commit. The site never guesses that from times: a run at the edit's own commit holds it, and for any other the server asks GitHub's compare API once and remembers the answer. A deployment counts once any of its statuses said `success`, so one later made `inactive` by a newer deployment still counts; one made `inactive` without succeeding doesn't. A run that is cancelled or skipped says nothing; otherwise the newest run that holds the edit decides building or failed, and a re-run that succeeds makes it live. A success counts however many runs follow it.
 
 Only the reader who saved an edit can ask about it: the account, or without accounts the sign-in, that saved it. A guest's edit is known by its random submission id, which only their browser holds.
+
+### Recent edits
+
+With `sync`, the [dashboard](../../docs/auth.md#the-dashboard) gets a Submissions section with a **Recent edits** panel, at `<mount>/-/dashboard/submissions/recent-edits/`. It lists every mirrored commit that changed the vault, newest first and 25 to a page, whether the site made it or someone pushed it on GitHub. Each entry shows:
+
+- Its summary, the commit's first line.
+- How far it has got: Not live yet, Building, Live or Build failed, decided as for [an edit](#following-an-edit).
+- The pages it changed, linked, and the site's attachments it changed. A commit that changed many stays one entry, with the rest folded under "N more".
+- Who made it. A site account shows by name and handle only when the site's own record says so: the site committed it for that account, or it is the merge commit of a pull request the site opened for them. A commit's trailer, author and committer are chosen by whoever makes it, so they never name an account; every other commit shows its author as their GitHub user, or by their git name when GitHub links them to none.
+- When, and a link to its diff on GitHub.
+
+The panel names only what the last build published. Every other file, such as a protected, hidden or unpublished note, a file added since that build or one deleted before it, is counted ("1 file the site doesn't publish") but never named. A commit shows its summary only when every file it changed is one the site publishes; any other commit shows its short SHA in place of its summary, since the summary could name what it changed. The same holds while the poll hasn't yet read which files a backfilled commit changed.
+
+Only viewers who hold `submissions:pull-requests:read` on the vault see the panel. It reads the mirror alone, so it answers while GitHub is down; a stale mirror is polled after the answer, as is GitHub's compare API for up to three commits a later build may hold, newest first, so a commit can turn Live on a later view. A page's deploy states come from one batched read of the mirror however many commits it shows, so a full page costs the same few D1 queries as a short one.
 
 ## Guard
 

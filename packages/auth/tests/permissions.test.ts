@@ -108,10 +108,28 @@ describe("resolve", () => {
     ["gives the current holder of a handle no override from someone else's former one", [], ADA, chainOf("users/lovelace"), NOTHING],
     ["allows a group's owner below an object linked to the group, over a deny", [pageDeny], as({ groups: [gardenersOwner] }), CHAIN,
       { value: "allow", decidedBy: { kind: "group-owner", group: "gardeners", object: GARDEN } }],
+    ["allows a group's owner on the linked object itself", [pageDeny], as({ groups: [{ group: "rosarians", owner: true, linked: [ROSES] }] }), CHAIN,
+      { value: "allow", decidedBy: { kind: "group-owner", group: "rosarians", object: ROSES } }],
+    ["names the nearest link when an owner's groups are linked at several levels", [],
+      as({ groups: [{ group: "notetakers", owner: true, linked: [VAULT] }, gardenersOwner] }), CHAIN,
+      { value: "allow", decidedBy: { kind: "group-owner", group: "gardeners", object: GARDEN } }],
     ["gives a group's mere member no override", [pageDeny], as({ groups: [gardenersMember] }), CHAIN, deniedBy(pageDeny)],
+    ["gives no override through a linked group the account only belongs to, though it owns another", [pageDeny],
+      as({ groups: [gardenersMember, { group: "rosarians", owner: true, linked: [] }] }), CHAIN, deniedBy(pageDeny)],
     ["gives a group's owner no override outside its linked objects", [],
       as({ groups: [{ group: "gardeners", owner: true, linked: ["folder:notes/alliances/"] }] }), CHAIN, NOTHING],
   ])("%s", (_case, grants, who, chain, decision, folder = "users") => {
     expect(resolve(grants, who, chain, DELETE, { vault: "notes", folder })).toEqual(decision);
+  });
+
+  it("gives neither owner override for an administrative permission, which only the admin role or a grant gives", () => {
+    const location = { vault: "notes", folder: "users" };
+    const owner = as({ groups: [{ group: "gardeners", owner: true, linked: [GARDEN] }] });
+    const granted = grant("account", "acct-ada", VAULT, "allow");
+
+    expect(resolve([], ADA, objectChain({ vault: "notes", page: "users/ada" }), DELETE, location, true)).toEqual(NOTHING);
+    expect(resolve([], owner, CHAIN, DELETE, location, true)).toEqual(NOTHING);
+    expect(resolve([granted], owner, CHAIN, DELETE, location, true)).toEqual(allowedBy(granted));
+    expect(resolve([], as({ roles: ["admin"] }), CHAIN, DELETE, location, true)).toEqual({ value: "allow", decidedBy: { kind: "admin" } });
   });
 });

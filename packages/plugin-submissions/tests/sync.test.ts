@@ -767,13 +767,14 @@ describe("the reconcile poll", () => {
       { request: { method: "GET", url: `${API}/deployments/7/statuses?per_page=100` }, response: { status: 200, json: [{ ...deploymentStatus().deployment_status, id: 71, state: "inactive" }, deploymentStatus().deployment_status] } },
       { request: { method: "GET", url: `${API}/pulls/42/files?per_page=100&page=1` }, response: { status: 200, json: [{ filename: "content/guide.md", status: "modified" }] } },
       { request: { method: "GET", url: `${API}/pulls/42/reviews?per_page=100` }, response: { status: 200, json: [{ ...reviewDelivery("submitted", "APPROVED").review }] } },
-      { request: { method: "GET", url: `${API}/commits/${DIRECT_COMMIT}` }, response: { status: 200, json: { sha: DIRECT_COMMIT, files: [{ filename: "content/guide.md" }, { filename: "README.md" }] } } },
+      { request: { method: "GET", url: `${API}/commits/${DIRECT_COMMIT}` }, response: { status: 200, json: { sha: DIRECT_COMMIT, files: [{ filename: "content/guide.md", previous_filename: "content/private/draft.md", status: "renamed" }, { filename: "README.md" }] } } },
     ], INSTALLATION_TOKEN);
 
     await status(site, ada);
     expect((await status(site, ada)).body).toMatchObject({ stage: "live" });
     expect(replay.pending).toEqual([]);
-    expect(await site.rows("SELECT sha, files FROM submissions_commits")).toEqual([{ sha: DIRECT_COMMIT, files: '["content/guide.md"]' }]);
+    // A rename counts its old path, which the Recent edits panel then keeps back.
+    expect(await site.rows("SELECT sha, files FROM submissions_commits")).toEqual([{ sha: DIRECT_COMMIT, files: '["content/guide.md","content/private/draft.md"]' }]);
     expect(await site.rows("SELECT number, in_vault, merge_commit FROM submissions_pulls")).toEqual([{ number: 42, in_vault: 1, merge_commit: MERGE_COMMIT }]);
     expect(await site.rows("SELECT id, state FROM submissions_reviews")).toEqual([{ id: 4_000_001, state: "approved" }]);
     expect(await site.rows("SELECT id, pull_number FROM submissions_comments")).toEqual([{ id: 3_000_001, pull_number: 42 }]);
