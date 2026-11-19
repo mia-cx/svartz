@@ -206,15 +206,19 @@ describe("the Submissions panel", () => {
     expect(view).toContain("Plant, or set up?");
   });
 
-  // Proves a line comment's answer still shows once its form is gone, as when the submission closed meanwhile.
-  it("shows a line comment's answer when its file's form is gone", async () => {
+  // Proves a closed submission keeps its diff, reads nothing at its head, which is no open pull request's any more,
+  // and still shows a line comment's answer once that comment's form is gone.
+  it("shows a closed submission's diff and a line comment's answer, reading nothing at its head", async () => {
     const site = await seeded();
     const pull = site.github.pulls.get(guide.number)!;
-    site.github.pulls.set(guide.number, { ...pull, json: { ...pull.json, state: "closed" } });
+    site.github.pulls.set(guide.number, { ...pull, json: { ...pull.json, state: "closed", head: { ...pull.json.head, sha: sha(4747) } } });
+    const asked = site.github.requests.length;
 
     const view = text(await site.page("mod", `${REVIEW_PANEL}${guide.number}/?review=closed&file=0`));
 
     expect(view).toContain("Changes This submission is closed. guide.md");
+    expect(view).toContain("Plant the wiki.");
+    expect(site.github.requests.slice(asked).filter((request) => request.includes("/contents/"))).toEqual([]);
   });
 
   // Proves paging: 25 a page, newest activity first, an Older link while there are more, and a page's D1 cost that

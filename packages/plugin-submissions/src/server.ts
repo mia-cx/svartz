@@ -485,7 +485,10 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     const returnTo = form.get("returnTo") ?? "";
     const back = /^\/(?![/\\])/.test(returnTo) && new URL(returnTo, url.origin).origin === url.origin ? returnTo : home;
     await guard.limit(`review:account:${account.id}`, context.env, "reviews");
-    await review.authorize(account, number, context);
+    await review.authorize(account, number, context).catch((error: unknown) => {
+      // Retargeted or gone, it answers as any number that names no submission of the vault.
+      throw error instanceof SubmissionError && error.code === "not_found" ? noSubmission(options.repo, number) : error;
+    });
     await closeSubmission(await target(context), number, () => audit(context.env, {
       actor: account, action: "submissions:submission:close", target: `submission:${number}`, detail: { repo: options.repo, vault: context.vault.id },
     }));
