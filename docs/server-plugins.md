@@ -107,7 +107,7 @@ Plugin pages are never prerendered, never cached (`Cache-Control: private, no-st
 
 Style plugin pages with a [browser resource](../vaults/docs/guides/create-plugin.md) of `kind: "css"`, using the theme's `--sv-*` tokens so they follow the site's colours in both modes.
 
-The standalone shell renders plugin pages through its `src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/` route, whose param matchers send it only the names plugins claim. A host app needs the same route and matchers: `npx svartz init` adds it, and [host vaults](host-vaults.md#plugin-pages) shows it. A host build whose vault claims pages fails when no route renders them.
+The standalone shell renders plugin pages through its `src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/` route, whose param matchers send it only the names the plugins of the vault at that mount claim. A host app needs the same route and matchers: `npx svartz init` adds it, and [host vaults](host-vaults.md#plugin-pages) shows it. A host build whose vault claims pages fails when no route renders them.
 
 ## Options and secrets
 

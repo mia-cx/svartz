@@ -462,11 +462,13 @@ export default { kit: { adapter: adapter(), prerender: { handleHttpError: ({ sta
       if (new URL(request.url).pathname !== context.base + "/") return undefined;
       return Response.json({ greeting: options.greeting, token: context.env.HELLO_TOKEN ?? null, base: context.base, vault: context.vault.id });
     },
-    page: (request, context) => context.path === "hello/"
+    page: (request, context) => context.path === options.page + "/"
       ? { title: "Hello", html: '<h1 class="hello-page">' + options.greeting + ", " + (context.env.HELLO_TOKEN ?? "nobody") + "</h1>" }
       : undefined,
   });\n`);
   const vaults = ["docs", "wiki"];
+  // Each vault's plugin claims a different page name.
+  const pages: Record<string, string> = { docs: "hello", wiki: "history" };
   for (const id of vaults) {
     await mkdir(path.join(root, id));
     await writeFile(path.join(root, id, "index.md"), `# ${id} home\n\nPrerendered ${id}. [Say hello](/${id}/_svartz/hello/).\n`);
@@ -474,6 +476,8 @@ export default { kit: { adapter: adapter(), prerender: { handleHttpError: ({ sta
     await mkdir(path.join(root, id, "-"));
     await writeFile(path.join(root, id, "-/guide.md"), `# Dash guide\n\nPrerendered ${id} dash guide.\n`);
   }
+  // Only the wiki claims `history`, so the docs may publish a note there.
+  await writeFile(path.join(root, "docs/-/history.md"), "# Dash history\n\nPrerendered docs dash history.\n");
   await writeFile(path.join(root, "svartz.config.ts"), `export default {
     version: "1.0.0",
     vaults: ${JSON.stringify(vaults.map((id) => ({
@@ -482,7 +486,7 @@ export default { kit: { adapter: adapter(), prerender: { handleHttpError: ({ sta
       mountPath: `/${id}`,
       theme: path.join(workspaceRoot, "themes/minimal"),
       target: { type: "host" },
-      plugins: [{ id: "hello", server: { module: path.join(root, "hello.mjs"), options: { greeting: `hi from ${id}` }, pages: ["hello"] } }],
+      plugins: [{ id: "hello", server: { module: path.join(root, "hello.mjs"), options: { greeting: `hi from ${id}`, page: pages[id] }, pages: [pages[id]] } }],
     })))},
   };\n`);
   const build = () => execFileAsync(process.execPath, [
@@ -513,7 +517,7 @@ export default { kit: { adapter: adapter(), prerender: { handleHttpError: ({ sta
       expect(await answer.json()).toEqual({ greeting: `hi from ${id}`, token: "s3cret", base: `/${id}/_svartz/hello`, vault: id });
       expect(await (await fetch(`${origin}/${id}/`)).text()).toContain(`Prerendered ${id}.`);
       // Proves each host vault renders its plugin's page per request, inside that vault's theme shell, uncached.
-      const page = await fetch(`${origin}/${id}/-/hello/`);
+      const page = await fetch(`${origin}/${id}/-/${pages[id]}/`);
       const html = await page.text();
       expect(page.status, stderr).toBe(200);
       expect(page.headers.get("cache-control")).toBe("private, no-store");
@@ -524,6 +528,11 @@ export default { kit: { adapter: adapter(), prerender: { handleHttpError: ({ sta
       const note = await fetch(`${origin}/${id}/-/guide/`);
       expect([note.status, await note.text()]).toEqual([200, expect.stringContaining(`Prerendered ${id} dash guide.`)]);
     }
+    // Proves the matchers pair a mount with its own vault's names: a note under a name only another vault claims is
+    // served as a note, and that name is no page here.
+    const history = await fetch(`${origin}/docs/-/history/`);
+    expect([history.status, await history.text()]).toEqual([200, expect.stringContaining("Prerendered docs dash history.")]);
+    expect((await fetch(`${origin}/wiki/-/hello/`)).status).toBe(404);
     expect((await fetch(`${origin}/_svartz/hello/`)).status).toBe(404);
     expect((await fetch(`${origin}/docs/-/goodbye/`)).status).toBe(404);
   } finally {

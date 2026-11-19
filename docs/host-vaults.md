@@ -96,7 +96,7 @@ export default withSvartzHost(defineConfig({
 
 ### Plugin pages
 
-[Plugin pages](server-plugins.md#plugin-pages), such as auth's `/-/account/`, render through their own route beside the catchall, `src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/`. Its two param matchers let it answer only at the mount of a vault with plugin pages, under a page name a plugin claims. Every other path, a note in a folder named `-` included, reaches the catchall and stays prerendered. `npx svartz init` adds the route and its matchers to an app with a server adapter. It also replaces the `src/routes/[...slug]/-/[...page]/` route it wrote before the matchers existed, unless you changed it. An app that has the route keeps it as it is. A build whose vault claims pages fails when no route in the app renders them.
+[Plugin pages](server-plugins.md#plugin-pages), such as auth's `/-/account/`, render through their own route beside the catchall, `src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/`. Its two param matchers let it answer only at the mount of a vault with plugin pages, under a page name one of that vault's plugins claims. Every other path, a note in a folder named `-` included, reaches the catchall and stays prerendered, even under a name only another vault claims. `npx svartz init` adds the route and its matchers to an app with a server adapter. An app that has the route keeps it as it is. A build whose vault claims pages fails when no route in the app renders them.
 
 The matchers read `virtual:svartz/host`. SvelteKit 3 reads them from `src/params.ts`. During the build it also imports that file in plain Node, only to check the matchers exist; there `import.meta.env` is undefined, so the file skips the virtual module:
 
@@ -108,14 +108,14 @@ import { defineParams } from '@sveltejs/kit/params';
 // `import.meta.env` is undefined and the virtual module can't resolve, so it isn't loaded.
 const host = import.meta.env ? await import('virtual:svartz/host') : undefined;
 
-// Plugin pages answer `<mount>/-/<name>/` only where a plugin claims <name>; every other path stays a note.
+// Plugin pages answer `<mount>/-/<name>/` only where a plugin of the vault at <mount> claims <name>; every other path stays a note.
 export const params = defineParams({
   svartzMount: (param) => (host?.isPluginPageMount(param) ? param : undefined),
   svartzPage: (param) => (host?.isPluginPageName(param) ? param : undefined)
 });
 ```
 
-If your app already has its own `src/params.ts`, add the two matchers to its `defineParams`; init leaves that file and the route alone. SvelteKit 2 reads one file per matcher:
+If your app already has its own `src/params.ts`, add the two matchers to its `defineParams`; init leaves that file and the route alone. Keep both matchers as they are: SvelteKit runs `svartzPage` right after `svartzMount` accepts a mount, and it checks the name against that mount's vault. SvelteKit 2 reads one file per matcher:
 
 ```ts
 // src/params/svartzMount.ts (SvelteKit 2)

@@ -135,7 +135,6 @@ it("adds configuration to an existing Kit app without changing its routes or bui
 });
 
 const PAGE_ROUTE = "src/routes/[...mount=svartzMount]/-/[...page=svartzPage]";
-const PAGE_ROUTE_TEMPLATE = path.resolve(import.meta.dirname, "../template", PAGE_ROUTE);
 
 /**
  * A Kit app for init to integrate, with SvelteKit `kit` installed (2 when unset). Installed, so pnpm's NODE_PATH
@@ -176,32 +175,9 @@ it("adds the plugin page route and its matchers to hosts that can serve it", asy
   await expect(access(path.join(staticHost, PAGE_ROUTE))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
-// Proves init replaces the route it wrote before the matchers, which answered every path with a `-` segment and so
-// hid notes in folders named `-`, but keeps one the host changed, and a SvelteKit 3 host's own params it can't merge into.
-it("upgrades the earlier plugin page route and leaves host-owned routes and params alone", async () => {
-  const earlier = async (root: string) => {
-    for (const name of ["+page.svelte", "+page.ts", "+page.server.ts"]) {
-      await mkdir(path.join(root, "src/routes/[...slug]/-/[...page]"), { recursive: true });
-      await writeFile(path.join(root, "src/routes/[...slug]/-/[...page]", name), await readFile(path.join(PAGE_ROUTE_TEMPLATE, name), "utf8"));
-    }
-  };
-  for (const kit of [2, 3] as const) {
-    const generated = await pageHost(NODE_HOST, kit);
-    await earlier(generated);
-    expect((await initProject({ cwd: generated, install: false, git: false })).kind).toBe("integrated");
-    await expect(access(path.join(generated, "src/routes/[...slug]/-"))).rejects.toMatchObject({ code: "ENOENT" });
-    await access(path.join(generated, PAGE_ROUTE, "+page.ts"));
-    await access(path.join(generated, kit === 3 ? "src/params.ts" : "src/params/svartzPage.ts"));
-    expect((await initProject({ cwd: generated, install: false, git: false })).kind).toBe("already-configured");
-  }
-
-  const changed = await pageHost(NODE_HOST);
-  await earlier(changed);
-  await writeFile(path.join(changed, "src/routes/[...slug]/-/[...page]/+page.svelte"), "<h1>Mine</h1>\n");
-  await initProject({ cwd: changed, install: false, git: false });
-  expect(await readFile(path.join(changed, "src/routes/[...slug]/-/[...page]/+page.svelte"), "utf8")).toBe("<h1>Mine</h1>\n");
-  await expect(access(path.join(changed, PAGE_ROUTE))).rejects.toMatchObject({ code: "ENOENT" });
-
+// Proves init leaves a SvelteKit 3 host's own params alone, since it can't merge the matchers into them, and so adds no
+// route that would fail without them.
+it("leaves a SvelteKit 3 host's own params alone", async () => {
   const ownParams = await pageHost(NODE_HOST, 3);
   const params = "export const params = { locale: { '~standard': { validate: (value) => ({ value }) } } };\n";
   await mkdir(path.join(ownParams, "src"), { recursive: true });

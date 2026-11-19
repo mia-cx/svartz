@@ -6,7 +6,6 @@ import {
   open,
   readFile,
   readdir,
-  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
@@ -164,20 +163,6 @@ const PAGE_ROUTE_FILES = ["+page.svelte", "+page.ts", "+page.server.ts"] as cons
 /** Files only SvelteKit 2 hosts get; a new project runs SvelteKit 3, so its scaffold leaves them out. */
 const KIT2_TEMPLATE_DIRNAME = "sveltekit-2";
 const kit2TemplateRoot = path.join(templateRoot, KIT2_TEMPLATE_DIRNAME);
-
-/**
- * Whether `src/routes/[...slug]/-/` holds the plugin page route init wrote before param matchers, unchanged
- * ("generated"), something the host wrote ("host"), or nothing.
- */
-async function isEarlierPageRoute(directory: string, templates: readonly string[]): Promise<"absent" | "generated" | "host"> {
-  if (!existsSync(directory)) return "absent";
-  const route = path.join(directory, "[...page]");
-  const entries = await readdir(directory);
-  const files = existsSync(route) ? (await readdir(route)).sort() : [];
-  if (entries.length !== 1 || files.join() !== [...PAGE_ROUTE_FILES].sort().join()) return "host";
-  const sources = await Promise.all(PAGE_ROUTE_FILES.map((name) => readFile(path.join(route, name), "utf8")));
-  return sources.every((source, index) => source === templates[index]) ? "generated" : "host";
-}
 
 /**
  * The param matcher files the plugin page route needs that the host lacks, as `[destination, template]` pairs:
@@ -584,15 +569,9 @@ const initProjectEffect = (
       const pageRouteTemplates = yield* operation("read plugin page route templates", () =>
         Promise.all(PAGE_ROUTE_FILES.map((name) => readFile(path.join(templateRoot, pageRoute, name), "utf8"))),
       );
-      // The route before the matchers answered every path with a `-` segment. Replace it where init wrote it unchanged.
-      const earlierPageRoot = path.join(catchallRoot, "-");
-      const earlierPageRoute = yield* operation("inspect earlier plugin page route", () =>
-        isEarlierPageRoute(earlierPageRoot, pageRouteTemplates),
-      );
       const params = yield* operation("inspect host param matchers", () => missingParamMatchers(root));
       const installPageRoute = !existsSync(path.join(root, pageRoute))
         && !`${viteSource}\n${svelteConfigSource}`.includes("@sveltejs/adapter-static")
-        && (earlierPageRoute === "generated" || earlierPageRoute === "absent")
         && params !== undefined;
       const integratedViteSource = integrateViteConfig(
         viteSource,
@@ -679,8 +658,6 @@ const initProjectEffect = (
         }
       }
       if (installPageRoute) {
-        if (earlierPageRoute === "generated")
-          yield* operation("remove earlier plugin page route", () => rm(earlierPageRoot, { recursive: true }));
         for (const [index, name] of PAGE_ROUTE_FILES.entries()) {
           yield* operation(`write plugin page ${name}`, () =>
             writeNewFile(path.join(root, pageRoute, name), pageRouteTemplates[index]!),

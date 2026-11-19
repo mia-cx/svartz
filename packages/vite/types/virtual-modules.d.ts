@@ -101,9 +101,15 @@ declare module "virtual:svartz/host" {
   export function prepareHostVault(pathname: string): Promise<PreparedHostVault | undefined>;
   /** Built CSS assets needed by a direct SSR response for the selected vault. */
   export function hostStylesheets(pathname: string): readonly string[];
-  /** The `svartzMount` param matcher: whether `param` is the mount, without its leading slash, of a vault with plugin pages. */
+  /**
+   * The `svartzMount` param matcher: whether `param` is the mount, without its leading slash, of a vault with plugin
+   * pages. It keeps that vault for {@link isPluginPageName}, which SvelteKit runs next.
+   */
   export function isPluginPageMount(param: string): boolean;
-  /** The `svartzPage` param matcher: whether a plugin claims the first segment of `param`, the path below `/-/`. */
+  /**
+   * The `svartzPage` param matcher: whether a plugin of the vault {@link isPluginPageMount} just accepted claims the
+   * first segment of `param`, the path below `/-/`.
+   */
   export function isPluginPageName(param: string): boolean;
 }
 

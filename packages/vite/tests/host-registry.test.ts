@@ -52,8 +52,9 @@ describe("host registry", () => {
   });
 
   // Proves the plugin page route's matchers, which run on the server and in the browser, claim only `<mount>/-/<name>/`
-  // for a vault with plugin pages and a name one claims: any other path, a note in a folder named `-` included, is a note.
-  it("matches plugin pages only at a mount with pages and under a claimed name", async () => {
+  // where a plugin of that mount's vault claims the name: any other path, a note in a folder named `-` included, and a
+  // name only another vault claims, is a note.
+  it("matches plugin pages only under a name the mount's own vault claims", async () => {
     const root = await mkdtemp(join(tmpdir(), "svartz-host-registry-"));
     try {
       const vaults = [["docs", "/docs", ["account"]], ["blog", "", []], ["wiki", "/team/wiki", ["history"]]] as const;
@@ -67,12 +68,18 @@ describe("host registry", () => {
       const registry = join(root, "runtime.ts");
       await writeFile(registry, createHostRegistrySource(configs));
       const { isPluginPageMount, isPluginPageName } = await import(registry) as Record<string, (param: string) => boolean>;
+      // As SvelteKit runs `[...mount=svartzMount]/-/[...page=svartzPage]`: the page matcher only after the mount matched.
+      const routes = (path: string) => {
+        const [, mount = "", page = ""] = /^(?:(.*)\/)?-\/(.*)$/.exec(path)!;
+        return isPluginPageMount(mount) && isPluginPageName(page);
+      };
 
-      expect(["docs", "team/wiki"].map(isPluginPageMount)).toEqual([true, true]);
+      expect(["docs/-/account", "docs/-/account/settings", "team/wiki/-/history/notes/intro"].map(routes)).toEqual([true, true, true]);
+      // A name another vault claims is a note here.
+      expect(["docs/-/history", "team/wiki/-/account"].map(routes)).toEqual([false, false]);
       // The blog has no plugin pages, so even its root mount routes `/-/…` to notes; nested folders are never mounts.
-      expect(["", "guides", "docs/guides", "team"].map(isPluginPageMount)).toEqual([false, false, false, false]);
-      expect(["account", "account/settings", "history/notes/intro"].map(isPluginPageName)).toEqual([true, true, true]);
-      expect(["guide", "accounts", "", "-/account"].map(isPluginPageName)).toEqual([false, false, false, false]);
+      expect(["-/account", "guides/-/account", "docs/guides/-/account", "team/-/history"].map(routes)).toEqual([false, false, false, false]);
+      expect(["docs/-/guide", "docs/-/accounts", "docs/-/", "docs/-/-/account"].map(routes)).toEqual([false, false, false, false]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
