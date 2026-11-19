@@ -1,6 +1,6 @@
 /**
  * Reader sign-in for a vault: `plugins: [auth({ providers: { github: { … } } })]` in `svartz.config.ts`.
- * Server plugins read who is signed in with `readIdentity` from `@svartz/auth/server`.
+ * Server plugins read who is signed in with `readAccount` from `@svartz/auth/server`.
  */
 import { fileURLToPath } from "node:url";
 import { definePlugin, getCompilerContributions, type ResolvedConfig, type NormalizedSvartzPlugin, type SiteVaults, type SvartzPlugin } from "@svartz/core";
@@ -9,6 +9,7 @@ import { isProviderId, PROVIDERS, type ProviderId } from "./providers";
 import type { AuthOptions, AuthServerOptions } from "./server";
 
 export type { Identity, ProviderId } from "./providers";
+export type { Account, SignIn, SignedOutReason } from "./session";
 export type { AuthOptions, ProviderOptions } from "./server";
 export type { SignInConfig } from "./browser";
 
@@ -42,8 +43,20 @@ function validate(options: AuthOptions): ProviderId[] {
   if (options.callbackVault !== undefined && (typeof options.callbackVault !== "string" || !options.callbackVault)) {
     fail("callbackVault must be the id of the vault whose routes run sign-in");
   }
+  const admins = options.admins ?? [];
+  if (!Array.isArray(admins)) fail("admins must be a list of identity ids such as \"github:583231\"");
+  for (const admin of admins) {
+    const [provider = "", id] = typeof admin === "string" ? admin.split(/:(.*)/s) : [];
+    if (!id) fail(`admins lists ${JSON.stringify(admin)}; use identity ids such as "github:583231"`);
+    // Only a provider readers can sign in with ever reaches the account.
+    if (!names.includes(provider)) fail(`admins lists "${admin}", but providers doesn't offer ${provider}`);
+  }
   return names as ProviderId[];
 }
+
+/** The same admins in any order: host vaults share accounts, so they must agree on who administers them. */
+const sameAdmins = (a: readonly string[] = [], b: readonly string[] = []): boolean =>
+  a.length === b.length && a.every((admin) => b.includes(admin));
 
 /** The `auth` options a vault runs, or `undefined` when it doesn't enable auth. */
 function authOptionsOf(vault: ResolvedConfig): AuthOptions | undefined {
@@ -71,6 +84,9 @@ function callbackVaultFor(options: AuthOptions, providers: readonly ProviderId[]
   if (!targetOptions) fail(`vault "${vault.id}" sets callbackVault "${id}", which must be a host vault that enables auth`);
   const missing = providers.find((provider) => !targetOptions.providers[provider]);
   if (missing) fail(`vault "${vault.id}" offers ${missing}, but its callbackVault "${id}" doesn't list it under providers`);
+  if (!sameAdmins(options.admins, targetOptions.admins)) {
+    fail(`vault "${vault.id}" lists different admins than its callbackVault "${id}"; host vaults share accounts, so list the same admins on each`);
+  }
   // The target forwards nothing itself, or sign-in could bounce between vaults forever (or hop through a chain).
   const targetOwner = targetOptions.callbackVault ?? host[0]!.id;
   if (targetOwner !== target.id) {

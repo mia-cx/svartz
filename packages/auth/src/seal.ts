@@ -11,7 +11,8 @@ export const SESSION_SECRET_ENV = "PRIVATE_SVARTZ_SESSION_SECRET";
 /** Shorter secrets are refused: HKDF stretches entropy, it doesn't create it. */
 export const SESSION_SECRET_MIN_LENGTH = 32;
 
-export type SealPurpose = "session" | "oauth";
+/** `pending` holds a first sign-in while the reader chooses a handle. */
+export type SealPurpose = "session" | "oauth" | "pending";
 
 const IV_BYTES = 12;
 const HKDF_SALT = "svartz-auth";

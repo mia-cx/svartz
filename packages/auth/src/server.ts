@@ -4,19 +4,29 @@
  * Routes, under `<mount>/_svartz/auth/`:
  * - `GET start/<provider>/?returnTo=<path>` redirects to the provider, holding state and the PKCE verifier in a
  *   10-minute sealed cookie.
- * - `GET callback/<provider>/` checks them, reads the profile, seals the identity into a 30-day session cookie and
- *   returns the reader to `returnTo`. Provider tokens are dropped here.
+ * - `GET callback/<provider>/` checks them and reads the profile; provider tokens are dropped here. A provider account
+ *   linked to an account gets a 30-day session and returns to `returnTo`; a new one goes to `handle/` first.
+ * - `GET handle/` asks a first-time reader for a handle; `POST handle/` creates their account and session.
  * - `GET me/` answers the identity, or `null`.
- * - `POST sign-out/` clears the session.
+ * - `POST sign-out/` ends the session.
  *
- * On a vault whose `callbackVault` is another vault, `start` forwards to that vault's, and `callback` answers 404.
+ * Accounts and sessions live in the D1 database bound as `SVARTZ_DB`; without one, the session cookie holds the
+ * identity itself and nobody has an account. On a vault whose `callbackVault` is another vault, `start` forwards to
+ * that vault's, and `callback` and `handle` answer 404.
  */
 import { CodeChallengeMethod, generateCodeVerifier, generateState, OAuth2Client } from "arctic";
 import type { EnvReference, ServerContext, ServerModuleFactory } from "@svartz/core";
+import { chooserPage, expiredPage } from "./chooser";
+import { handleFrom, HANDLE_MAX_LENGTH, isHandle, typedHandle } from "./handle";
 import { isProviderId, PROVIDERS, type Identity, type ProviderId } from "./providers";
 import { seal, SESSION_SECRET_ENV, SESSION_SECRET_MIN_LENGTH, sessionSecret, unseal } from "./seal";
+import { endSession, isIdentity, readCookie, readIdentity, sealSession, SESSION_COOKIE, useAdmins } from "./session";
+import { ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, SESSION_MAX_AGE_SECONDS, startSession, storeAdmins, suggestHandle, type Database } from "./store";
 
 export type { Identity, ProviderId } from "./providers";
+export type { Account, SignIn, SignedOutReason } from "./session";
+export { ADMIN_ROLE, readAccount, readIdentity, readSignIn } from "./session";
+export { ACCOUNTS_DATABASE_ENV };
 
 /** One provider's OAuth app. The secret is named by environment variable, never inlined. */
 export interface ProviderOptions {
@@ -35,6 +45,11 @@ export interface AuthOptions {
    * Default: the first host vault that enables auth. It must list every provider this vault does.
    */
   readonly callbackVault?: string;
+  /**
+   * Identity ids, such as `"github:583231"`, whose accounts always hold the `admin` role. The role comes from this list,
+   * not from the database, so nothing stored there can take it away.
+   */
+  readonly admins?: readonly string[];
 }
 
 /** What the server module receives: the options, plus where sign-in runs when another vault runs it. */
@@ -43,33 +58,18 @@ export interface AuthServerOptions extends AuthOptions {
   readonly callbackMountPath?: string;
 }
 
-// `__Host-` binds each cookie to this origin with `Path=/` and `Secure`, so no subdomain can set or read it.
-const SESSION_COOKIE = "__Host-svartz-session";
 const FLOW_COOKIE = "__Host-svartz-oauth";
-const SESSION_MAX_AGE = 30 * 24 * 60 * 60;
+const PENDING_COOKIE = "__Host-svartz-pending";
 const FLOW_MAX_AGE = 10 * 60;
+/** How long a first-time reader has to choose a handle. */
+const PENDING_MAX_AGE = 15 * 60;
 
-type Env = Readonly<Record<string, unknown>>;
 type Flow = { provider: ProviderId; state: string; verifier: string; returnTo: string };
-
-function readCookie(request: Request, name: string): string | undefined {
-  for (const pair of request.headers.get("cookie")?.split(";") ?? []) {
-    const separator = pair.indexOf("=");
-    if (separator > 0 && pair.slice(0, separator).trim() === name) return pair.slice(separator + 1).trim();
-  }
-  return undefined;
-}
+/** A verified first sign-in, waiting for its handle. */
+type Pending = { identity: Identity; returnTo: string };
 
 function cookie(name: string, value: string, maxAge: number): string {
   return `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`;
-}
-
-function isIdentity(value: unknown): value is Identity {
-  if (!value || typeof value !== "object") return false;
-  const identity = value as Record<string, unknown>;
-  return ["id", "name"].every((key) => typeof identity[key] === "string")
-    && ["handle", "avatarUrl", "profileUrl"].every((key) => identity[key] === undefined || typeof identity[key] === "string")
-    && typeof identity.provider === "string" && isProviderId(identity.provider);
 }
 
 function isFlow(value: unknown): value is Flow {
@@ -78,16 +78,10 @@ function isFlow(value: unknown): value is Flow {
   return ["provider", "state", "verifier", "returnTo"].every((key) => typeof flow[key] === "string");
 }
 
-/**
- * Who sent `request`, from its session cookie, or `null` when nobody is signed in.
- * `env` is the handler's `context.env`. Without a usable `PRIVATE_SVARTZ_SESSION_SECRET` nobody can be signed in, so this
- * answers `null`; the auth routes report the missing secret with a 503.
- */
-export async function readIdentity(request: Request, env: Env): Promise<Identity | null> {
-  const secret = sessionSecret(env);
-  if (!secret) return null;
-  const value = await unseal(readCookie(request, SESSION_COOKIE), secret, "session");
-  return isIdentity(value) ? value : null;
+function isPending(value: unknown): value is Pending {
+  if (!value || typeof value !== "object") return false;
+  const pending = value as Record<string, unknown>;
+  return isIdentity(pending.identity) && typeof pending.returnTo === "string";
 }
 
 function json(body: unknown, status = 200, headers: HeadersInit = {}): Response {
@@ -98,10 +92,11 @@ function failure(status: number, error: string, message: string, headers?: Heade
   return json({ error, message }, status, headers);
 }
 
-function redirect(location: string, cookies: readonly string[]): Response {
+/** 302 after a GET; 303 after a form POST, so the browser follows with a GET. */
+function redirect(location: string, cookies: readonly string[], status: 302 | 303 = 302): Response {
   const headers = new Headers({ location, "cache-control": "no-store" });
   for (const value of cookies) headers.append("set-cookie", value);
-  return new Response(null, { status: 302, headers });
+  return new Response(null, { status, headers });
 }
 
 /** The site root this plugin's vault is mounted at: `context.base` without `/_svartz/auth`. */
@@ -131,6 +126,15 @@ function callbackUrl(url: URL, context: ServerContext, provider: ProviderId): st
   return `${url.origin}${context.base}/callback/${provider}/`;
 }
 
+/** A form POST from another site, or none at all; browsers name the page's origin on every POST. */
+const crossOrigin = (request: Request, url: URL): boolean => {
+  const origin = request.headers.get("origin");
+  return origin !== null && origin !== url.origin;
+};
+
+/** The accounts database, with the deployed `admins` stored in it; `undefined` when none is bound. */
+type Accounts = (env: ServerContext["env"]) => Promise<Database | undefined>;
+
 /** One sign-in step for a configured provider. */
 interface Step {
   readonly request: Request;
@@ -139,6 +143,7 @@ interface Step {
   readonly provider: ProviderId;
   readonly client: OAuth2Client;
   readonly secret: string;
+  readonly accounts: Accounts;
 }
 
 async function start({ url, context, provider, client, secret }: Step): Promise<Response> {
@@ -152,7 +157,7 @@ async function start({ url, context, provider, client, secret }: Step): Promise<
   return redirect(location.href, [cookie(FLOW_COOKIE, flow, FLOW_MAX_AGE)]);
 }
 
-async function callback({ request, url, provider, client, secret }: Step): Promise<Response> {
+async function callback({ request, url, context, provider, client, secret, accounts }: Step): Promise<Response> {
   const flow = await unseal(readCookie(request, FLOW_COOKIE), secret, "oauth");
   const clearFlow = cookie(FLOW_COOKIE, "", 0);
   if (!isFlow(flow) || flow.provider !== provider || flow.state !== url.searchParams.get("state")) {
@@ -173,55 +178,118 @@ async function callback({ request, url, provider, client, secret }: Step): Promi
     console.error(`[svartz:auth] ${label} sign-in failed`, error);
     return failure(502, "provider_failed", `${label} didn't confirm the sign-in. Sign in again.`, { "set-cookie": clearFlow });
   }
-  const session = await seal(identity, secret, "session", SESSION_MAX_AGE);
-  return redirect(flow.returnTo, [clearFlow, cookie(SESSION_COOKIE, session, SESSION_MAX_AGE)]);
+
+  const db = await accounts(context.env);
+  // Without accounts, the cookie holds the identity itself.
+  if (!db) return redirect(flow.returnTo, [clearFlow, cookie(SESSION_COOKIE, await seal(identity, secret, "session", SESSION_MAX_AGE_SECONDS), SESSION_MAX_AGE_SECONDS)]);
+  const sid = await startSession(db, identity);
+  if (sid) return redirect(flow.returnTo, [clearFlow, cookie(SESSION_COOKIE, await sealSession(sid, secret), SESSION_MAX_AGE_SECONDS)]);
+  const pending = await seal({ identity, returnTo: flow.returnTo } satisfies Pending, secret, "pending", PENDING_MAX_AGE);
+  return redirect(`${context.base}/handle/`, [clearFlow, cookie(PENDING_COOKIE, pending, PENDING_MAX_AGE)]);
 }
 
-function signOut(request: Request, url: URL): Response {
-  const origin = request.headers.get("origin");
-  if (origin && origin !== url.origin) return failure(403, "cross_origin", "Sign out from this site.");
+/** The handle chooser for a first sign-in waiting in the pending cookie, and the account it creates. */
+async function chooseHandle(request: Request, url: URL, context: ServerContext, secret: string, db: Database): Promise<Response> {
+  const pending = await unseal(readCookie(request, PENDING_COOKIE), secret, "pending");
+  if (!isPending(pending)) return expiredPage(siteRoot(context));
+  const { identity, returnTo } = pending;
+  const show = (handle: string, error?: string) => chooserPage({
+    siteTitle: typeof context.vault.site.title === "string" ? context.vault.site.title : url.host,
+    providerLabel: PROVIDERS[identity.provider].label,
+    identity,
+    handle,
+    error,
+    action: `${context.base}/handle/`,
+    cancel: returnTo,
+  });
+  if (request.method === "GET") return show(await suggestHandle(db, handleFrom(identity.handle ?? identity.name)));
+
+  if (crossOrigin(request, url)) return failure(403, "cross_origin", "Choose your handle on this site.");
+  const form = await request.formData().catch(() => undefined);
+  const handle = typedHandle(String(form?.get("handle") ?? ""));
+  if (!isHandle(handle)) {
+    return show(handle, `Use up to ${HANDLE_MAX_LENGTH} lowercase letters, numbers, hyphens and underscores, starting and ending with a letter or number.`);
+  }
+  const sid = await createAccount(db, identity, handle);
+  if (sid === "taken") {
+    const free = await suggestHandle(db, handle);
+    return show(free, `@${handle} is taken. @${free} is free, or try another.`);
+  }
+  return redirect(returnTo, [cookie(PENDING_COOKIE, "", 0), cookie(SESSION_COOKIE, await sealSession(sid, secret), SESSION_MAX_AGE_SECONDS)], 303);
+}
+
+async function signOut(request: Request, url: URL, context: ServerContext): Promise<Response> {
+  if (crossOrigin(request, url)) return failure(403, "cross_origin", "Sign out from this site.");
+  await endSession(request, context.env);
   return new Response(null, { status: 204, headers: { "set-cookie": cookie(SESSION_COOKIE, "", 0) } });
 }
 
-const ROUTE = /^\/(?:(start|callback)\/([^/]+)|(me)|(sign-out))\/$/;
+const ROUTE = /^\/(?:(start|callback)\/([^/]+)|(me)|(sign-out)|(handle))\/$/;
 
 /** The `auth` server module: `server: { module, options }` with {@link AuthOptions}. */
-const authServer: ServerModuleFactory<AuthServerOptions> = (options) => async (request, context) => {
-  const url = new URL(request.url);
-  const match = ROUTE.exec(url.pathname.slice(context.base.length));
-  if (!match) return undefined;
-  const [, step, providerName = "", me] = match;
-  const provider = isProviderId(providerName) ? providerName : undefined;
-  const app = provider && options.providers[provider];
-  if (step && !app) return undefined;
+const authServer: ServerModuleFactory<AuthServerOptions> = (options) => {
+  const admins = options.admins ?? [];
+  // From now on this isolate's readers resolve `admin` from config; isolates where auth hasn't started read what the
+  // database holds, which the first request here replaces.
+  useAdmins(admins);
+  const stored = new WeakMap<Database, Promise<void>>();
+  const accounts: Accounts = async (env) => {
+    const db = await accountsDatabase(env);
+    if (!db) return undefined;
+    let ready = stored.get(db);
+    if (!ready) {
+      ready = storeAdmins(db, admins);
+      ready.catch(() => stored.delete(db));
+      stored.set(db, ready);
+    }
+    await ready;
+    return db;
+  };
 
-  const method = step || me ? "GET" : "POST";
-  if (request.method !== method) return failure(405, "method_not_allowed", `Use ${method}.`, { allow: method });
+  return async (request, context) => {
+    const url = new URL(request.url);
+    const match = ROUTE.exec(url.pathname.slice(context.base.length));
+    if (!match) return undefined;
+    const [, step, providerName = "", me, , handle] = match;
+    const provider = isProviderId(providerName) ? providerName : undefined;
+    const app = provider && options.providers[provider];
+    if (step && !app) return undefined;
 
-  // Another vault runs sign-in: providers only know its callback, so start there and come back here.
-  const { callbackMountPath } = options;
-  if (step && callbackMountPath !== undefined) {
-    if (step === "callback") return undefined;
-    const returnTo = url.searchParams.get("returnTo") ?? siteRoot(context);
-    const location = `${baseAt(context, callbackMountPath)}/start/${provider}/?returnTo=${encodeURIComponent(returnTo)}`;
-    return redirect(location, []);
-  }
+    const methods = handle ? ["GET", "POST"] : step || me ? ["GET"] : ["POST"];
+    if (!methods.includes(request.method)) {
+      return failure(405, "method_not_allowed", `Use ${methods.join(" or ")}.`, { allow: methods.join(", ") });
+    }
 
-  const secret = sessionSecret(context.env);
-  if (!secret) {
-    return failure(503, "misconfigured",
-      `Set ${SESSION_SECRET_ENV} to a random value of at least ${SESSION_SECRET_MIN_LENGTH} characters.`);
-  }
-  if (me) return json(await readIdentity(request, context.env));
-  if (!provider || !app) return signOut(request, url);
+    // Another vault runs sign-in: providers only know its callback, so start there and come back here.
+    const { callbackMountPath } = options;
+    if ((step || handle) && callbackMountPath !== undefined) {
+      if (step !== "start") return undefined;
+      const returnTo = url.searchParams.get("returnTo") ?? siteRoot(context);
+      const location = `${baseAt(context, callbackMountPath)}/start/${provider}/?returnTo=${encodeURIComponent(returnTo)}`;
+      return redirect(location, []);
+    }
 
-  const clientSecret = context.env[app.clientSecret.env];
-  if (typeof clientSecret !== "string" || !clientSecret) {
-    return failure(503, "misconfigured", `Set ${app.clientSecret.env} to the ${PROVIDERS[provider].label} OAuth app's client secret.`);
-  }
-  const client = new OAuth2Client(app.clientId, clientSecret, callbackUrl(url, context, provider));
-  const args: Step = { request, url, context, provider, client, secret };
-  return step === "start" ? start(args) : callback(args);
+    const secret = sessionSecret(context.env);
+    if (!secret) {
+      return failure(503, "misconfigured",
+        `Set ${SESSION_SECRET_ENV} to a random value of at least ${SESSION_SECRET_MIN_LENGTH} characters.`);
+    }
+    if (me) return json(await readIdentity(request, context.env));
+    if (handle) {
+      const db = await accounts(context.env);
+      if (!db) return failure(503, "misconfigured", `Bind a D1 database as ${ACCOUNTS_DATABASE_ENV} to give readers accounts.`);
+      return chooseHandle(request, url, context, secret, db);
+    }
+    if (!provider || !app) return signOut(request, url, context);
+
+    const clientSecret = context.env[app.clientSecret.env];
+    if (typeof clientSecret !== "string" || !clientSecret) {
+      return failure(503, "misconfigured", `Set ${app.clientSecret.env} to the ${PROVIDERS[provider].label} OAuth app's client secret.`);
+    }
+    const client = new OAuth2Client(app.clientId, clientSecret, callbackUrl(url, context, provider));
+    const args: Step = { request, url, context, provider, client, secret, accounts };
+    return step === "start" ? start(args) : callback(args);
+  };
 };
 
 export default authServer;

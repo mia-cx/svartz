@@ -25,6 +25,13 @@ describe("the auth plugin", () => {
     expect(() => auth({ providers: { gitlab: github } } as unknown as AuthOptions)).toThrow(/unknown provider "gitlab"/);
   });
 
+  it.each([
+    ["isn't an identity id", "octocat", /admins lists "octocat"; use identity ids such as "github:583231"/],
+    ["names a provider readers can't sign in with", "google:110169484474386276334", /admins lists "google:110169484474386276334", but providers doesn't offer google/],
+  ])("fails the build when an admin %s", (_case, admin, error) => {
+    expect(() => auth({ providers: { github }, admins: [admin] })).toThrow(error);
+  });
+
   it.each(["", "  "])("fails the build when the client secret's variable name is %j", (env) => {
     expect(() => auth({ providers: { github: { ...github, clientSecret: { env } } } })).toThrow(/clientSecret must name its environment variable/);
   });
@@ -87,6 +94,11 @@ describe("one sign-in per host app", () => {
       { id: "journal", plugins: [auth({ providers: { github } })] },
       { id: "work", type: "node", plugins: [auth({ providers: { github }, callbackVault: "journal" })] },
     ], /only host vaults share a sign-in; "work" runs its own/],
+    // Host vaults share accounts, so one list decides who administers them.
+    ["lists other admins", [
+      { id: "journal", plugins: [auth({ providers: { github }, admins: ["github:583231"] })] },
+      { id: "work", plugins: [auth({ providers: { github } })] },
+    ], /vault "work" lists different admins than its callbackVault "journal"/],
   ])("fails config resolution when the callbackVault %s", (_case, vaults, error) => {
     expect(() => resolve(site(...vaults), "work")).toThrow(error);
   });
