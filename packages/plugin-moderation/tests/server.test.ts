@@ -136,6 +136,9 @@ describe("what can be reported", () => {
   it.each([
     ["a published page", { kind: "page", id: "garden" }, 201],
     ["a page the build didn't publish", { kind: "page", id: "secret" }, 404],
+    ["a page named like a property every object has", { kind: "page", id: "constructor" }, 404],
+    ["a page named toString", { kind: "page", id: "toString" }, 404],
+    ["a page named __proto__", { kind: "page", id: "__proto__" }, 404],
     ["a comment", { kind: "annotation", id: "c1" }, 201],
     ["a comment this vault doesn't have", { kind: "annotation", id: "c9" }, 404],
     ["an account", { kind: "account", id: "grace" }, 201],
@@ -309,6 +312,26 @@ describe("the Reports panel", () => {
 
     expect(queue).toContain('<a href="https://github.com/wikiplace/wikiplace.live/pull/42">Pull request #42</a>');
     expect(queue).toContain(`action="/notes/_svartz/submissions/close/"><input type="hidden" name="number" value="42"><input type="hidden" name="returnTo" value="${PANEL}?status=submission-closed#report-${id}">`);
+  });
+
+  // Proves one stored report the panel can't describe never takes the queue down for every moderator.
+  it("lists the whole queue when a stored report names an inherited key or its target can't be read", async () => {
+    const { db, site, ada, alan } = await moderated();
+    await report(site, ada, { kind: "page", id: "garden" });
+    await report(site, ada, { kind: "annotation", id: "c1" });
+    await db.prepare(`INSERT INTO moderation_reports (id, vault, target_kind, target_id, reason, reporter_id, created_at)
+      VALUES ('00000000-0000-4000-8000-000000000000', 'notes', 'page', 'constructor', 'Stored before the check.', 'x', '2026-11-19T00:00:00.000Z')`).run();
+    expect(await panel(site, alan, "?status=constructor")).toContain('<a href="/notes/garden/">Garden</a>');
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    // Annotations' identities table gone: reading the comment throws.
+    await db.prepare("ALTER TABLE identities RENAME TO identities_gone").run();
+
+    const queue = await panel(site, alan);
+
+    expect(queue).toContain('<a href="/notes/garden/">Garden</a>');
+    expect(queue).toContain('constructor <span class="sv-account-muted">(no longer on the site)</span>');
+    expect(queue).toContain("Couldn't show what this report is about.");
+    expect(queue?.match(/<li class="sv-moderation-report"/g)).toHaveLength(3);
   });
 
   it("shows a report whose comment is gone, or whose plugin left the vault, without its actions", async () => {

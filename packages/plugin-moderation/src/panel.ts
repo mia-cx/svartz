@@ -12,7 +12,7 @@ import { PLUGIN_ID } from "./api";
 import { escape } from "./html";
 import { READ_REPORTS } from "./permissions";
 import { listReports, migrate, type Database, type Report } from "./store";
-import type { BuildData } from "./targets";
+import { publishedPage, type BuildData } from "./targets";
 
 /** The panel's id below the plugin's, so it lives at `/-/dashboard/moderation/reports/`. */
 export const PANEL = "reports";
@@ -24,14 +24,14 @@ const SHOWN = 100;
 const HIDE_COMMENTS = "annotations:comments:delete";
 const CLOSE_SUBMISSIONS = "submissions:reviews:write";
 
-/** What a form's `status` tells the moderator after it redirects back here. */
-const STATUSES: Readonly<Record<string, { text: string; error?: true }>> = {
-  resolved: { text: "Report resolved." },
-  dismissed: { text: "Report dismissed." },
-  "already-closed": { text: "Another moderator closed this report first.", error: true },
-  hidden: { text: "Comment hidden." },
-  "submission-closed": { text: "Submission closed." },
-};
+/** What a form's `status` tells the moderator after it redirects back here. A Map: `status` comes from the URL. */
+const STATUSES: ReadonlyMap<string, { text: string; error?: true }> = new Map([
+  ["resolved", { text: "Report resolved." }],
+  ["dismissed", { text: "Report dismissed." }],
+  ["already-closed", { text: "Another moderator closed this report first.", error: true }],
+  ["hidden", { text: "Comment hidden." }],
+  ["submission-closed", { text: "Submission closed." }],
+]);
 
 /** `<base><mount>` from a context of this plugin. */
 const vaultPath = (context: Pick<PageContext, "base">) => context.base.slice(0, -`/_svartz/${PLUGIN_ID}`.length);
@@ -67,7 +67,7 @@ function describer(context: PageContext, data: BuildData, viewer: Account | null
   // Page URLs from the build are below the deployment base.
   const site = root.slice(0, root.length - context.vault.mountPath.length);
   const pageLink = (slug: string) => {
-    const page = data.pages[slug];
+    const page = publishedPage(data, slug);
     return page ? `<a href="${escape(`${site}${page.href}`)}">${escape(page.title)}</a>` : `${escape(slug)} <span class="sv-account-muted">(no longer on the site)</span>`;
   };
   // Asked once, and only when a submission report needs it.
@@ -86,7 +86,7 @@ function describer(context: PageContext, data: BuildData, viewer: Account | null
         if (!profile) return { what: `@${escape(id)} <span class="sv-account-muted">(no account has this handle now)</span>`, actions: [] };
         // Auth says where user pages live; a page at that path in another vault is an ordinary page.
         const userPages = userPageLocation();
-        const userPage = userPages.vault === vault ? data.pages[`${userPages.folder}/${profile.handle}`] : undefined;
+        const userPage = userPages.vault === vault ? publishedPage(data, `${userPages.folder}/${profile.handle}`) : undefined;
         const handle = userPage ? `<a href="${escape(`${site}${userPage.href}`)}">@${escape(profile.handle)}</a>` : `@${escape(profile.handle)}`;
         return { what: `${handle} <span class="sv-account-muted">${escape(profile.name)}</span>`, actions: [] };
       }
@@ -142,8 +142,15 @@ async function reportsPage(request: Request, context: PageContext, data: BuildDa
   const viewer = await readAccount(request, context.env);
   const listed = await listReports(db, context.vault.id, open, SHOWN);
   const describe = describer(context, data, viewer);
-  const items = await Promise.all(listed.reports.map(async (report) => reportItem(report, await describe(report, `report-${report.id}-target`), context)));
-  const status = STATUSES[query.get("status") ?? ""];
+  const items = await Promise.all(listed.reports.map(async (report) => {
+    // One report the panel can't describe still lists, so it can be resolved or dismissed, and never hides the rest.
+    const shown = await describe(report, `report-${report.id}-target`).catch((cause: unknown): Shown => {
+      console.error(`[svartz:moderation] couldn't describe report ${report.id}`, cause);
+      return { what: `<span class="sv-account-muted">Couldn't show what this report is about.</span>`, actions: [] };
+    });
+    return reportItem(report, shown, context);
+  }));
+  const status = STATUSES.get(query.get("status") ?? "");
   const message = status
     ? `<p class="sv-account-status" role="${status.error ? "alert" : "status"}"${status.error ? " data-error" : ""}>${escape(status.text)}</p>`
     : "";

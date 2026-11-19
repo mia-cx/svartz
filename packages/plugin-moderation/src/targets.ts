@@ -32,6 +32,12 @@ const MAX_ID_LENGTH = 1024;
 const COMMIT_SHA = /^[0-9a-f]{40}$/;
 const PULL_NUMBER = /^[1-9]\d{0,9}$/;
 
+/**
+ * Published page `slug`, or `undefined`. Own entries only: `pages` is a plain object, so `constructor`, `toString` and
+ * `__proto__` would otherwise name a page.
+ */
+export const publishedPage = (data: BuildData, slug: string) => Object.hasOwn(data.pages, slug) ? data.pages[slug] : undefined;
+
 const refuse = (status: number, error: string, message: string): Refusal => ({ status, error, message });
 const isKind = (value: unknown): value is TargetKind => TARGET_KINDS.includes(value as TargetKind);
 
@@ -43,7 +49,7 @@ export async function checkTarget(input: unknown, context: ServerContext, data: 
   }
   switch (kind) {
     case "page":
-      return data.pages[id] ? { kind, id } : refuse(404, "not_found", "This page isn't on the site.");
+      return publishedPage(data, id) ? { kind, id } : refuse(404, "not_found", "This page isn't on the site.");
     case "annotation": {
       if (!data.annotations) return refuse(400, "invalid_target", "This site has no comments to report.");
       const comment = await findComment(context.env, data.annotations.database, context.vault.id, id);

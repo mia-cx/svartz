@@ -10,6 +10,7 @@ alwaysApply: false
 - Reading another plugin's data goes through an export of its server entry (`findComment` from `@svartz/plugin-annotations/server`), with the binding name moderation's build read from that plugin's options. Never query another plugin's tables directly.
 - Resolving a report and acting on its target stay separate actions, each audited.
 - Every reportable thing is a button marked `data-svartz-report="<kind>:<id>"` with `data-svartz-report-label`; moderation's browser script answers it by delegation. A plugin adds Report to its own views this way, without importing moderation.
+- Look up a key a reader chose (a target id, a query parameter, a stored report's target) only in a `Map` or behind `Object.hasOwn`. Build data arrives as plain objects, where `constructor`, `toString` and `__proto__` answer for every key. The panel renders a report it can't describe as a plain row, so one bad row never takes the queue down.
 - The panel never renders who reported. Every reader-supplied string (reason, comment body, names) goes through `escape`.
 - User pages live where auth says (`userPageLocation()` on the server, auth's `userPages` option at build time); never hardcode `users/`.
 - Commits and submissions are validated by form only (SHA, number) because moderation doesn't call GitHub; the owning route checks the rest when a moderator acts. Revisit once the submissions mirror lands.
