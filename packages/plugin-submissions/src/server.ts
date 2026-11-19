@@ -13,7 +13,7 @@
  *   answers where a saved edit has got to (see `sync.ts`). Every save is then recorded for its saver to follow.
  *
  * The client never names a file path. Edits must target a note in the build's manifest; a new note goes in one of the
- * manifest's folders, named after its title, and never where a file already is.
+ * manifest's folders, or is the reader's own user page, named after its title, and never where a file already is.
  *
  * Where a save goes is decided here for every request, on the page it writes. Without accounts (no `SVARTZ_DB`), it
  * opens a pull request, as before accounts. With them, it commits when the mode allows commits, a GitHub App is
@@ -25,7 +25,7 @@
  * Every save passes the guard (required sign-in, rate limit, and Turnstile when configured) before any GitHub call, a
  * GitHub App's token exchange included. Failures answer `{ error, message }`.
  */
-import { can, linkedIdentities, readIdentity, readSignIn, type Account, type Identity } from "@svartz/auth/server";
+import { can, linkedIdentities, readIdentity, readSignIn, userPageLocation, type Account, type Identity } from "@svartz/auth/server";
 import type { ServerContext, ServerModuleFactory } from "@svartz/core";
 import { alternateRoutes, extractFrontmatter, pathRoute, requestedSlug } from "@svartz/plugins/routes";
 import {
@@ -212,10 +212,16 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     return true;
   }
 
-  /** A new note's path in the vault, named after its title as in Obsidian. Refuses folders the build didn't publish. */
-  function newNotePath(folder: string, rawTitle: string): string {
-    if (!folders.has(folder)) throw new SubmissionError("not_a_section", 400, "Choose a section from the list.");
+  /**
+   * A new note's path in the vault, named after its title as in Obsidian. Refuses folders the build didn't publish,
+   * except for `account`'s own user page, `<user page folder>/<handle>` in the vault that holds user pages, which it may
+   * start in a folder with no page yet.
+   */
+  function newNotePath(folder: string, rawTitle: string, account: Account | null, vault: string): string {
     const title = rawTitle.trim();
+    const userPages = userPageLocation();
+    const ownUserPage = account !== null && vault === userPages.vault && folder === userPages.folder && title === account.handle;
+    if (!folders.has(folder) && !ownUserPage) throw new SubmissionError("not_a_section", 400, "Choose a section from the list.");
     if (!title) throw invalidTitle("Give the page a title.");
     if (title.length > MAX_TITLE_LENGTH) throw invalidTitle(`Shorten the title to ${MAX_TITLE_LENGTH} characters or fewer.`);
     if (title.startsWith(".") || FORBIDDEN_TITLE_CHARACTERS.test(title)) {
@@ -351,8 +357,8 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
 
   async function destination(request: Request, context: ServerContext): Promise<Response> {
     const query = new URL(request.url).searchParams;
-    const vaultPath = newNotePath(query.get("folder") ?? "", query.get("title") ?? "");
     const reader = await readReader(request, context.env);
+    const vaultPath = newNotePath(query.get("folder") ?? "", query.get("title") ?? "", reader.account, context.vault.id);
     return privateJson({ destination: await destinationFor(reader, pathRoute(vaultPath), context) } satisfies DestinationResponse);
   }
 
@@ -367,7 +373,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
   async function create(request: Request, context: ServerContext): Promise<Response> {
     const { body: { folder, title }, submission, turnstileToken } = await readSubmission(request);
     if (typeof folder !== "string" || typeof title !== "string") throw invalid();
-    const vaultPath = newNotePath(folder, title);
+    const vaultPath = newNotePath(folder, title, (await readReader(request, context.env)).account, context.vault.id);
     const path = data.vaultRoot ? `${data.vaultRoot}/${vaultPath}` : vaultPath;
     const existing = routes.get(pathRoute(vaultPath));
     if (existing) {

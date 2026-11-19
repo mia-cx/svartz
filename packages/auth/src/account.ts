@@ -67,6 +67,11 @@ export interface AccountView {
   readonly sessions: readonly SessionSummary[];
   /** The session this browser reads through. */
   readonly session: string;
+  /**
+   * The account's user page in this vault: its URL, or the vault path (`<folder>/<handle>`, without `.md`) a page that
+   * doesn't exist yet would have. `undefined` for a hidden page, which gets no link.
+   */
+  readonly userPage?: { readonly href: string } | { readonly missing: string };
   /** The providers the site offers, in config order. */
   readonly providers: readonly ProviderId[];
   readonly actions: {
@@ -154,6 +159,16 @@ function sessionsSection({ sessions, session, actions }: AccountView): string {
 </section>`;
 }
 
+/**
+ * A link to the account's user page; or, while it has none, an empty region that a plugin able to create pages fills
+ * with the action that starts it, so the page offers nothing where no plugin can.
+ */
+function userPageLink({ userPage }: AccountView): string {
+  if (!userPage) return "";
+  if ("href" in userPage) return `<a class="sv-account-button sv-account-page" href="${escape(userPage.href)}">Your page</a>`;
+  return `<div class="sv-account-page" data-svartz-region="user-page-actions" data-svartz-user-page="${escape(userPage.missing)}"></div>`;
+}
+
 /** The signed-in page: profile, groups, linked sign-in methods and sessions. */
 export function accountPage(view: AccountView): PluginPage {
   const { account } = view;
@@ -162,7 +177,7 @@ export function accountPage(view: AccountView): PluginPage {
     title: TITLE,
     html: `<div class="sv-account">
 <h1>${TITLE}</h1>
-<div class="sv-account-who">${avatar}<p><span class="sv-account-name">${escape(account.name)}</span> <span class="sv-account-muted">@${escape(account.handle)}</span></p></div>
+<div class="sv-account-who">${avatar}<p><span class="sv-account-name">${escape(account.name)}</span> <span class="sv-account-muted">@${escape(account.handle)}</span></p>${userPageLink(view)}</div>
 ${profileSection(view)}
 ${view.groups}
 ${signInsSection(view)}

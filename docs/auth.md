@@ -34,6 +34,7 @@ The vault needs a server target (`cloudflare-workers`, `cloudflare-pages` or `no
 | `privacyNotice` | Optional URL of the site's privacy notice. The sign-in dialog links to it. A site that stores readers' names and avatars owes them one. |
 | `callbackVault` | Optional id of the host vault that runs every sign-in in the app. Defaults to the first host vault that enables auth. See [several vaults](#several-vaults). |
 | `admins` | Optional identity ids, such as `"github:583231"`, whose accounts always hold the `admin` role. See [bootstrap admins](#bootstrap-admins). |
+| `userPages` | Optional folder of the vault that holds [user pages](#user-pages), such as `"people"`. Defaults to `"users"`. |
 
 ## The accounts database
 
@@ -128,7 +129,7 @@ Sign-in asks GitHub for no scopes: it reads only the public profile.
 
 The first time someone signs in, they choose a handle: the name they go by across the site, and later the address of their user page. The chooser is prefilled with the provider's username, or with the closest free variant (`octocat-2`) when someone has it. Google accounts have no username, so theirs starts from the display name. Signing in creates the account, links the provider account to it, and returns the reader to the page they started from. Every later sign-in with that provider account reaches the same account without asking.
 
-A handle is 1 to 39 lowercase letters, numbers, hyphens and underscores, starting and ending with a letter or number, and no two accounts share one. The chooser lowercases what the reader types and drops a leading `@`. A reader has 15 minutes to choose; after that they sign in again.
+A handle is 1 to 39 lowercase letters, numbers, hyphens and underscores, starting and ending with a letter or number and never with two hyphens in a row, and no two accounts share one. It is never `index` and never ends in `_index`, so it names its [user page](#user-pages)'s address exactly: page addresses collapse a run of hyphens, turn a trailing `_index` into `index`, and give `index` to the folder's own page. A provider username the rules refuse starts the chooser at its `-2` variant, such as `index-2`. The chooser lowercases what the reader types and drops a leading `@`. A reader has 15 minutes to choose; after that they sign in again.
 
 ## What is kept
 
@@ -167,7 +168,7 @@ wrangler d1 execute notes --remote --command "DELETE FROM auth_sessions WHERE ac
   INSERT OR REPLACE INTO auth_signed_out_identities (identity_id, signed_out_at) SELECT i.id, datetime('now') FROM auth_identities i JOIN auth_accounts a ON a.id = i.account_id WHERE a.handle = 'octocat'"
 ```
 
-Cookies from before accounts held the identity itself. Each becomes an account and a session the first time a plugin reads it, with the closest free handle to the provider's username, so the upgrade signs nobody out and asks nobody anything. Every later read of that cookie reaches the same session; once that session is deleted or signed out, the old cookie never starts another. One never read before its account signs out everywhere never becomes a session either, even after its provider account is linked to another account.
+Cookies from before accounts held the identity itself. Each becomes an account and a session the first time a plugin reads it, with the closest free handle to the provider's username, so the upgrade signs nobody out and asks nobody anything. In a host app, a cookie whose provider account has no account yet reads as signed out until the [vault that holds user pages](#user-pages) has answered a request, since only its build says which handles its user pages take. Every later read of that cookie reaches the same session; once that session is deleted or signed out, the old cookie never starts another. One never read before its account signs out everywhere never becomes a session either, even after its provider account is linked to another account.
 
 Local development over `http://localhost` works in Chrome and Firefox, which accept `Secure` cookies there.
 
@@ -178,6 +179,20 @@ Local development over `http://localhost` works in Chrome and Firefox, which acc
 Host vaults share accounts, so every host vault that enables auth must list the same admins, or the build fails.
 
 Auth starts before the site answers any request, so server plugins and a host app's own routes behind `svartzHandle` always read this deployment's list. Code that calls `readAccount` without `svartzHandle` in its hooks sees no admins.
+
+## User pages
+
+Each account has a user page: the note at `users/<handle>` in the vault that runs sign-in, such as `users/ada.md`. Its account holds every permission on it, whatever the [grants](#grants) say, so with [submissions](../packages/plugin-submissions/README.md#modes) its owner's edits commit straight to the repository and everyone else's go to review. The override covers the page itself, not pages below it such as `users/ada/drafts`; to give an account a folder of its own, grant it on `folder:<vault>/users/ada/`.
+
+User pages live in one vault per app. A standalone vault holds its own. In a host app with several vaults, the [callback vault](#several-vaults) holds them all: it runs every sign-in and every handle change, so it alone decides which handles are taken. A `users/<handle>` page in any other host vault is an ordinary page, with no override, and doesn't reserve its handle. A host app whose vaults name different callback vaults has no user pages at all, since no single vault would allocate every handle.
+
+`userPages` names another folder, written as page addresses spell it: lowercase letters, numbers, single hyphens and underscores, with `/` between folders, such as `"people"` or `"wiki/people"`. Host vaults share accounts, so every host vault that enables auth must set the same folder, or the build fails.
+
+The [account page](#the-account-page) links the reader's user page, from every vault's account page. While they have none, a plugin that writes pages can offer to start it on the account page of the vault that holds user pages; [submissions](../packages/plugin-submissions/README.md#new-page) offers **Create your page**.
+
+A user page stays where it was written when its owner changes handle: `users/ada` stays at its address, and stays Ada's, since an old handle never passes to another account. To move it to the new handle, its owner sets `slug: lovelace` in its frontmatter and lists `users/ada` under `aliases`, so links to the old address redirect; both addresses are theirs, so the edit commits. The page moves once the site rebuilds.
+
+A handle whose user page already exists is taken, unless the account choosing it held it before: otherwise taking the handle would take a page someone else wrote. The handle chooser suggests the next free one. Which pages exist is read from the last build of the vault that holds user pages, so a page added since doesn't count until the site rebuilds.
 
 ## Routes
 
@@ -191,7 +206,7 @@ Under `<base><mount>/_svartz/auth/`, where `<base>` is the deployment base path,
 | `POST handle/` | Creates the account with the form's `handle` and redirects to `returnTo` signed in. A taken or malformed handle shows the chooser again, answering 422. Refused from another origin. |
 | `GET me/` | The identity the reader signed in with, or `null`. |
 | `POST sign-out/` | Ends the session; answers 204. Refused from another origin. |
-| `POST account/profile/` | Sets the signed-in account's display name (`name`) and handle (`handle`), then redirects to the account page. |
+| `POST account/profile/?returnTo=<path>` | Sets the signed-in account's display name (`name`) and handle (`handle`), then redirects to `returnTo`, or to the account page without it. Only the callback vault answers it. |
 | `POST account/unlink/` | Unlinks the provider account named by `identity` and ends its sessions, then redirects to the account page. |
 | `POST account/sign-out-everywhere/` | Ends every session of the signed-in account, this one included, then redirects to the account page. |
 | `POST account/link/<provider>/?returnTo=<path>` | Starts linking another provider to the signed-in account. Only the callback vault answers it. |
@@ -216,6 +231,7 @@ Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` and
 
 `<base><mount>/-/account/` is a [plugin page](server-plugins.md#plugin-pages) in the theme's shell where readers manage their account. Signed-in readers reach it from the **Account** link in the site actions, and you can link it from anywhere on the site. It needs `SVARTZ_DB` and the session secret; without them it answers 404. A signed-out reader sees a sign-in link per provider, each returning to the page. A signed-in reader can:
 
+- **Open their [user page](#user-pages)** with **Your page**, beside their name, on any vault's account page. While they have none, the account page of the vault that holds user pages leaves an empty `data-svartz-region="user-page-actions"` element there, its `data-svartz-user-page` naming the page's vault path, such as `users/ada`; a plugin's browser script that can start the page puts its button in it. A hidden user page gets no link.
 - **Change their display name and handle.** A new handle follows the [handle rules](#first-sign-in). The old one keeps pointing at the account for good: `users/<old>/` redirects to `users/<new>/`, and no other account can take it, though its owner can switch back to it.
 - **Create a [group](#groups)**, see the groups they belong to, and accept or decline invitations to others.
 - **Link another provider.** The provider's sign-in comes back to the account that started it, bound to that browser's session: if the reader signs out or switches accounts meanwhile, nothing is linked. A provider account that already belongs to another account is refused, and stays with that account.
@@ -272,6 +288,8 @@ export default guestbook;
 
 `findProfile(handle, env)` answers the public profile, `{ handle, name, avatarUrl }`, of the account that holds `handle` now or held it before, or `undefined`. When its `handle` differs from the one asked for, the asked one is old: redirect to the current one.
 
+`userPageLocation()` answers where [user pages](#user-pages) live, such as `{ vault: "notes", folder: "users" }`, so a plugin can find or start an account's page at `<folder>/<handle>` in that vault.
+
 ## Permissions
 
 Plugins declare what people may do on the site, and check it with `can()`. Admins decide who holds each permission with **grants**, which they set on [the dashboard](#the-dashboard).
@@ -320,7 +338,7 @@ A grant gives one **actor** one permission on one **object**, set to `allow`, `d
 
 A check on a page consults the page, each folder enclosing it, its vault and the site, in that order, and the first of them with a set grant that applies to the reader decides. Within that object, the most specific actor decides: the account, then its groups, then its roles, then `signed-in`, then `guest`. Between grants of the same rank, `deny` beats `allow`. With nothing set, the answer is no. So a grant on a page beats any grant on the site, and to keep a page closed to guests but open to signed-in readers, set both actors on it.
 
-Three things allow whatever the grants say: the `admin` role, which [bootstrap admins](#bootstrap-admins) hold, an account's own user page, `users/<handle>` in any vault, and, for a group's owners, every object a moderator [linked the group](#linking-a-group) to and everything inside it.
+Three things allow whatever the grants say: the `admin` role, which [bootstrap admins](#bootstrap-admins) hold, an account's own [user page](#user-pages), `users/<handle>` in the vault that runs sign-in, and, for a group's owners, every object a moderator [linked the group](#linking-a-group) to and everything inside it.
 
 Grants live in `SVARTZ_DB`, in `auth_grants`. Set them on the dashboard, which records each change in [the audit log](#the-audit-log).
 

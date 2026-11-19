@@ -33,7 +33,7 @@ async function createDatabase(): Promise<Database> {
  * A vault at /notes with auth, as config resolution registers it with the site's catalogue, and a `probe` plugin that
  * answers `can(reader, ?permission, { vault: "notes", page: ?page })`.
  */
-function site(db: Database | undefined, { admins = [] as string[], built = [] as PermissionDeclaration[] } = {}) {
+function site(db: Database | undefined, { admins = [] as string[], built = [] as PermissionDeclaration[], userPages = undefined as string | undefined } = {}) {
   const probe = (): ServerHandler => async (request, context) => {
     const url = new URL(request.url);
     const page = url.searchParams.get("page") ?? undefined;
@@ -48,9 +48,15 @@ function site(db: Database | undefined, { admins = [] as string[], built = [] as
         id: "auth",
         eager: true,
         load: () => import("../src/server"),
-        options: { providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } }, admins, permissions: PERMISSIONS },
+        options: {
+          providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
+          admins,
+          permissions: PERMISSIONS,
+          userPageVault: "notes",
+          ...userPages && { userPages },
+        },
         // What the plugin's build hook collected from the build's final plugins.
-        data: { permissions: built },
+        data: { permissions: built, userPages: {} },
       },
       { id: "probe", load: async () => ({ default: probe }) },
     ],
@@ -160,6 +166,27 @@ describe("can", () => {
     const ada = await signUp(request, 1, "ada");
 
     expect(await ask(request, "guestbook:entries:delete", { cookies: ada, page: "users/ada" })).toBe(true);
+    expect(await ask(request, "guestbook:entries:delete", { cookies: ada, page: "users/grace" })).toBe(false);
+    expect(await ask(request, "guestbook:entries:delete", { cookies: ada, page: "users/ada/drafts" })).toBe(false);
+  });
+
+  it("finds user pages in the folder the auth plugin names", async () => {
+    const request = site(await createDatabase(), { userPages: "people" });
+    const ada = await signUp(request, 1, "ada");
+
+    expect(await ask(request, "guestbook:entries:delete", { cookies: ada, page: "people/ada" })).toBe(true);
+    expect(await ask(request, "guestbook:entries:delete", { cookies: ada, page: "users/ada" })).toBe(false);
+  });
+
+  it("keeps an account's user page its own under a handle it changed from, and gives it no one else's", async () => {
+    const request = site(await createDatabase());
+    const ada = await signUp(request, 1, "ada");
+    await signUp(request, 2, "grace");
+    const renamed = await request(`${AUTH}/account/profile/`, { method: "POST", cookies: ada, body: new URLSearchParams({ name: "Ada", handle: "lovelace" }) });
+    expect(renamed.headers.get("location")).toContain("status=saved");
+
+    expect(await ask(request, "guestbook:entries:delete", { cookies: ada, page: "users/ada" })).toBe(true);
+    expect(await ask(request, "guestbook:entries:delete", { cookies: ada, page: "users/lovelace" })).toBe(true);
     expect(await ask(request, "guestbook:entries:delete", { cookies: ada, page: "users/grace" })).toBe(false);
   });
 

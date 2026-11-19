@@ -42,9 +42,10 @@ export function hashSource(markdown: string): string {
 
 /**
  * Where `target`'s work is kept: by endpoint, so vaults on one site never share an entry, and by page, `new` for new
- * pages. The panel also keys unconfirmed submission ids by it.
+ * pages, or `new <title>` for a new page whose title is given. The panel also keys unconfirmed submission ids by it.
  */
-export const draftSlot = (endpoint: string, target: EditorTarget) => `${endpoint} ${target.kind === "edit" ? target.page : "new"}`;
+export const draftSlot = (endpoint: string, target: EditorTarget) =>
+  `${endpoint} ${target.kind === "edit" ? target.page : target.title === undefined ? "new" : `new ${target.title}`}`;
 
 const DRAFT_KEY = "svartz-submissions:draft:";
 
@@ -57,6 +58,8 @@ export function readDraft(endpoint: string, target: EditorTarget): Draft | undef
     if (!draft || draft.kind !== target.kind || !isText(draft.markdown) || !isText(draft.note) || typeof draft.savedAt !== "number") return undefined;
     if ((draft.resume !== undefined && !isText(draft.resume)) || (draft.sourceHash !== undefined && !isText(draft.sourceHash))) return undefined;
     if (draft.kind === "edit" ? draft.page !== (target.kind === "edit" && target.page) : !isText(draft.folder) || !isText(draft.title)) return undefined;
+    // A given title is the page's: a draft under another can't be sent as it.
+    if (target.kind === "new" && target.title !== undefined && draft.title !== target.title) return undefined;
     return draft as Draft;
   } catch {
     // Storage is blocked or holds something else under the key: there is no draft.

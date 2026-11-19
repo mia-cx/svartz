@@ -22,14 +22,15 @@
  *
  * Accounts and sessions live in the D1 database bound as `SVARTZ_DB`; without one, the session cookie holds the
  * identity itself and nobody has an account. On a vault whose `callbackVault` is another vault, `start` forwards to
- * that vault's, and `callback`, `handle` and `account/link` answer 404.
+ * that vault's, and `callback`, `handle`, `account/profile` and `account/link` answer 404: the callback vault holds the
+ * user pages, so it alone allocates handles.
  */
 import { CodeChallengeMethod, generateCodeVerifier, generateState, OAuth2Client } from "arctic";
 import {
   decodeRoutePath, type EnvReference, type PageRenderer, type PermissionDeclaration, type ServerContext, type ServerHandler,
   type ServerModuleFactory,
 } from "@svartz/core";
-import { accountPage, displayName, signedOutPage, type StatusCode } from "./account";
+import { accountPage, displayName, signedOutPage, type AccountView, type StatusCode } from "./account";
 import { AUTH_PERMISSIONS } from "./auth-permissions";
 import { chooserPage, expiredPage } from "./chooser";
 import { DASHBOARD_PAGE, dashboardPage, openableSections } from "./dashboard";
@@ -41,10 +42,11 @@ import { isProviderId, PROVIDERS, type Identity, type ProviderId } from "./provi
 import { seal, SESSION_SECRET_ENV, SESSION_SECRET_MIN_LENGTH, sessionSecret, unseal } from "./seal";
 import { endSession, isIdentity, readAccount, readCookie, readCurrentSession, readIdentity, sealSession, SESSION_COOKIE, useAdmins } from "./session";
 import {
-  ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, endAccountSessions, hasAccount, linkIdentity, profileByHandle,
-  SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity, updateProfile, type Database,
-  type PublicProfile,
+  ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, endAccountSessions, handlesOf, hasAccount, linkIdentity,
+  profileByHandle, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity, updateProfile,
+  type Database, type PublicProfile,
 } from "./store";
+import { builtUserPages, DEFAULT_USER_PAGE_FOLDER, hasUserPage, useUserPages, userPageLocation, type UserPages } from "./user-pages";
 
 export type { Identity, ProviderId } from "./providers";
 export type { Account, SignIn, SignedOutReason } from "./session";
@@ -55,6 +57,7 @@ export { can, migrateGrants, type IdentityGrant } from "./grants";
 export type { PermissionTarget } from "./permissions";
 export { audit, type AuditEntry } from "./audit";
 export { linkedIdentities } from "./identities";
+export { userPageLocation, type UserPageLocation } from "./user-pages";
 
 /**
  * The public profile of the account that holds or held `handle`, under its current handle; `undefined` when no account
@@ -88,6 +91,12 @@ export interface AuthOptions {
    * not from the database, so nothing stored there can take it away.
    */
   readonly admins?: readonly string[];
+  /**
+   * The folder of user pages, as page slugs spell it. `<folder>/<handle>` in the vault that runs sign-in is the page of
+   * the account with that handle, which it may always edit. Default: `"users"`. Host vaults share accounts, so they
+   * must set the same one.
+   */
+  readonly userPages?: string;
 }
 
 /** What the server module receives: the options, plus where sign-in runs when another vault runs it. */
@@ -98,6 +107,11 @@ export interface AuthServerOptions extends AuthOptions {
   readonly permissions?: readonly PermissionDeclaration[];
   /** The ids of the vaults that share these accounts, for the dashboard's object picker. Default: this vault alone. */
   readonly vaults?: readonly string[];
+  /**
+   * The id of the vault that holds user pages: the one that runs sign-in, set at config resolution. Without it, no
+   * page is a user page.
+   */
+  readonly userPageVault?: string;
 }
 
 /** What the plugin's build hook records for the server module. */
@@ -106,6 +120,8 @@ export interface AuthServerData {
   readonly permissions: readonly PermissionDeclaration[];
   /** The vault's published folders (ending in `/`) and pages, which the dashboard's object picker suggests. */
   readonly paths?: readonly string[];
+  /** The user pages the build found, recorded only on the vault that holds user pages. */
+  readonly userPages?: UserPages;
 }
 
 const FLOW_COOKIE = "__Host-svartz-oauth";
@@ -166,11 +182,15 @@ function sameOriginPath(candidate: string, url: URL): string | undefined {
   return `${target.pathname}${target.search}${target.hash}`;
 }
 
+/** The deployment base, which page URLs from the build are below: `context.base` without the mount and plugin. */
+function deploymentBase(context: ServerContext): string {
+  const plugin = context.base.slice(context.base.lastIndexOf("/_svartz/"));
+  return context.base.slice(0, context.base.length - context.vault.mountPath.length - plugin.length);
+}
+
 /** `context.base` for the same plugin on the vault mounted at `mountPath`. */
 function baseAt(context: ServerContext, mountPath: string): string {
-  const plugin = context.base.slice(context.base.lastIndexOf("/_svartz/"));
-  const deployment = context.base.slice(0, context.base.length - context.vault.mountPath.length - plugin.length);
-  return `${deployment}${mountPath}${plugin}`;
+  return `${deploymentBase(context)}${mountPath}${context.base.slice(context.base.lastIndexOf("/_svartz/"))}`;
 }
 
 /** Every provider returns to this vault's callback. */
@@ -245,8 +265,11 @@ async function callback({ request, url, context, provider, client, secret }: Ste
   return redirect(`${context.base}/handle/`, [clearFlow, cookie(PENDING_COOKIE, pending, PENDING_MAX_AGE)]);
 }
 
-/** The handle chooser for a first sign-in waiting in the pending cookie, and the account it creates. */
-async function chooseHandle(request: Request, url: URL, context: ServerContext, secret: string, db: Database): Promise<Response> {
+/**
+ * The handle chooser for a first sign-in waiting in the pending cookie, and the account it creates. `pages` are the
+ * user pages this vault's build found, whose handles are taken.
+ */
+async function chooseHandle(request: Request, url: URL, context: ServerContext, secret: string, db: Database, pages: UserPages): Promise<Response> {
   const pending = await unseal(readCookie(request, PENDING_COOKIE), secret, "pending");
   if (!isPending(pending)) return expiredPage(siteRoot(context));
   const { identity, returnTo } = pending;
@@ -263,16 +286,17 @@ async function chooseHandle(request: Request, url: URL, context: ServerContext, 
     action: `${context.base}/handle/`,
     cancel: returnTo,
   });
-  if (request.method === "GET") return show(await suggestHandle(db, handleFrom(identity.handle ?? identity.name)));
+  if (request.method === "GET") return show(await suggestHandle(db, handleFrom(identity.handle ?? identity.name), pages));
 
   if (crossOrigin(request, url)) return failure(403, "cross_origin", "Choose your handle on this site.");
   const form = await request.formData().catch(() => undefined);
   const handle = typedHandle(String(form?.get("handle") ?? ""));
   if (!isHandle(handle)) return show(handle, HANDLE_PROBLEM);
-  const sid = await createAccount(db, identity, handle);
+  // A user page nobody holds the handle of would become this account's.
+  const sid = hasUserPage(pages, handle) ? "taken" : await createAccount(db, identity, handle);
   if (sid === "linked") return spent();
   if (sid === "taken") {
-    const free = await suggestHandle(db, handle);
+    const free = await suggestHandle(db, handle, pages);
     return show(free, `@${handle} is taken. @${free} is free, or try another.`);
   }
   return redirect(returnTo, [cookie(PENDING_COOKIE, "", 0), cookie(SESSION_COOKIE, await sealSession(sid, secret), SESSION_MAX_AGE_SECONDS)], 303);
@@ -286,6 +310,23 @@ async function signOut(request: Request, url: URL, context: ServerContext): Prom
 
 /** The account page of the vault at `context`: `<base><mount>/-/account/`. */
 const accountPagePath = (context: ServerContext): string => `${siteRoot(context)}-/account/`;
+
+/**
+ * What the account page at `context` shows of the reader's user page, from `pages`, the user page vault's build: a link
+ * to the page under the current handle, else under one held before, where a handle change left it. While there is
+ * none, room for a plugin to start it, on the vault that holds user pages only, so a page is never started where it
+ * isn't one. Nothing for a hidden page, which the site never links, or before the user page vault has started.
+ */
+function userPageView(pages: UserPages | undefined, current: string, handles: readonly string[], context: ServerContext): AccountView["userPage"] {
+  if (!pages) return undefined;
+  const owned = [current, ...handles].find((handle) => hasUserPage(pages, handle));
+  if (owned !== undefined) {
+    const href = pages[owned];
+    return href ? { href: `${deploymentBase(context)}${href}` } : undefined;
+  }
+  const { vault, folder } = userPageLocation();
+  return vault === context.vault.id ? { missing: `${folder}/${current}` } : undefined;
+}
 
 /** `path` with the account page's `status` query, and the provider or typed values it concerns. */
 function withStatus(path: string, url: URL, status: StatusCode, provider?: ProviderId, typed: Record<string, string> = {}): string {
@@ -305,15 +346,22 @@ interface AccountChange {
   readonly session: NonNullable<Awaited<ReturnType<typeof readCurrentSession>>>;
 }
 
-async function changeProfile({ request, url, context, db, session }: AccountChange): Promise<Response> {
+/**
+ * Change the display name and handle, then go back to `returnTo`, the account page the form was on, which may be
+ * another vault's. `pages` are the user pages this vault's build found.
+ */
+async function changeProfile({ request, url, context, db, session }: AccountChange, pages: UserPages): Promise<Response> {
   const form = await request.formData().catch(() => undefined);
   const typedName = String(form?.get("name") ?? "");
   const handle = typedHandle(String(form?.get("handle") ?? ""));
-  const back = (status: StatusCode) => redirect(withStatus(accountPagePath(context), url, status, undefined,
+  const page = sameOriginPath(url.searchParams.get("returnTo") ?? accountPagePath(context), url) ?? accountPagePath(context);
+  const back = (status: StatusCode) => redirect(withStatus(page, url, status, undefined,
     status === "saved" ? {} : { name: typedName, handle }), [], 303);
   const name = displayName(typedName);
   if (!name) return back("name-invalid");
   if (!isHandle(handle)) return back("handle-invalid");
+  // A user page is its owner's whatever their handle: a handle with a page the account never held isn't free to take.
+  if (hasUserPage(pages, handle) && !(await handlesOf(db, session.account.id)).includes(handle)) return back("handle-taken");
   return back(await updateProfile(db, session.account.id, { name, handle }) === "saved" ? "saved" : "handle-taken");
 }
 
@@ -374,6 +422,11 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
   // this deployment's config, and every `can()` its permission catalogue.
   useAdmins(options.admins ?? []);
   usePermissions([...AUTH_PERMISSIONS, ...options.permissions ?? [], ...data?.permissions ?? []]);
+  // User pages live in the vault that runs sign-in, and only its build records them. Its routes alone allocate
+  // handles, against `pages`, so what they reserve never depends on which vault a request reached first.
+  const runsSignIn = options.callbackMountPath === undefined;
+  const pages: UserPages = data?.userPages ?? {};
+  useUserPages({ vault: options.userPageVault, folder: options.userPages ?? DEFAULT_USER_PAGE_FOLDER }, runsSignIn ? pages : undefined);
   const providers = Object.keys(options.providers).filter(isProviderId);
   /** The OAuth client for a configured provider, or the response explaining why there is none. */
   const clientFor = (provider: ProviderId, url: URL, context: ServerContext): OAuth2Client | Response => {
@@ -387,8 +440,10 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
 
   const accountRoute = async (request: Request, url: URL, context: ServerContext, action: string | undefined, linkTo: string | undefined): Promise<Response | undefined> => {
     const provider = linkTo !== undefined && isProviderId(linkTo) && options.providers[linkTo] ? linkTo : undefined;
-    // Providers only call back to the callback vault, so only it starts a link.
-    if (linkTo !== undefined && (!provider || options.callbackMountPath !== undefined)) return undefined;
+    if (linkTo !== undefined && !provider) return undefined;
+    // Providers only call back to the callback vault, so only it starts a link; it holds the user pages, so only it
+    // changes a handle.
+    if ((provider || action === "profile") && !runsSignIn) return undefined;
     if (request.method !== "POST") return failure(405, "method_not_allowed", "Use POST.", { allow: "POST" });
     // Browsers name the page's origin on every POST: anything else is forged, or from a client that can't be checked.
     if (request.headers.get("origin") !== url.origin) return failure(403, "cross_origin", "Change your account on this site.");
@@ -405,7 +460,7 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
       const client = clientFor(provider, url, context);
       return client instanceof Response ? client : startLink(change, provider, client, secret);
     }
-    if (action === "profile") return changeProfile(change);
+    if (action === "profile") return changeProfile(change, pages);
     if (action === "unlink") return unlink(change);
     return signOutEverywhere(change);
   };
@@ -426,17 +481,20 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
       return signedOutPage(providers, (provider) => `${context.base}/start/${provider}/?returnTo=${encodeURIComponent(here)}`);
     }
     const linkBase = options.callbackMountPath === undefined ? context.base : baseAt(context, options.callbackMountPath);
-    const { identities, sessions } = await signInsOf(db, session.account.id);
+    const [{ identities, sessions }, handles] = await Promise.all([signInsOf(db, session.account.id), handlesOf(db, session.account.id)]);
+    // Another vault's module registered its user pages as it started: every page request passes each host vault first.
+    const userPage = userPageView(runsSignIn ? pages : builtUserPages(), session.account.handle, handles, context);
     return accountPage({
       account: session.account,
       identities,
       sessions,
       session: session.sid,
+      userPage,
       providers,
       query: url.searchParams,
       groups: await accountGroups(db, session.account, context, url.searchParams),
       actions: {
-        profile: `${context.base}/account/profile/`,
+        profile: `${linkBase}/account/profile/?returnTo=${encodeURIComponent(here)}`,
         unlink: `${context.base}/account/unlink/`,
         signOutEverywhere: `${context.base}/account/sign-out-everywhere/`,
         link: (provider) => `${linkBase}/account/link/${provider}/?returnTo=${encodeURIComponent(here)}`,
@@ -491,7 +549,7 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
     if (handle) {
       const db = await accountsDatabase(context.env);
       if (!db) return failure(503, "misconfigured", `Bind a D1 database as ${ACCOUNTS_DATABASE_ENV} to give readers accounts.`);
-      return chooseHandle(request, url, context, secret, db);
+      return chooseHandle(request, url, context, secret, db, pages);
     }
     if (!provider || !app) return signOut(request, url, context);
 

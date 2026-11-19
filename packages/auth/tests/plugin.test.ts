@@ -1,6 +1,7 @@
 import type { NormalizedSvartzPlugin, PluginContext, ResolvedConfig } from "@svartz/core";
 import { describe, expect, it } from "vitest";
 import { auth, type AuthOptions } from "../src/index";
+import type { AuthServerData } from "../src/server";
 
 const github = { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } };
 
@@ -18,7 +19,12 @@ describe("the auth plugin", () => {
       .toEqual(["garden/", "garden/herbs/", "garden/herbs/basil", "garden/roses", "index"]);
     // Eager: plugins that read accounts need this deployment's admins before their own first request. It renders
     // /-/account/ and /-/dashboard/.
-    expect(plugin.server).toEqual({ module: expect.stringMatching(/server\.js$/), options: { providers: { github }, privacyNotice: "/privacy/" }, eager: true, pages: ["account", "dashboard", "groups"] });
+    expect(plugin.server).toEqual({
+      module: expect.stringMatching(/server\.js$/),
+      options: { providers: { github }, privacyNotice: "/privacy/", userPages: "users" },
+      eager: true,
+      pages: ["account", "dashboard", "groups"],
+    });
     expect(ctx.compiler?.browserResources.get("auth")?.options).toEqual({
       // Below the deployment base, which the dialog only learns when it mounts: a host app's comes from SvelteKit.
       endpoint: "/notes/_svartz/auth",
@@ -41,6 +47,47 @@ describe("the auth plugin", () => {
 
   it.each(["", "  "])("fails the build when the client secret's variable name is %j", (env) => {
     expect(() => auth({ providers: { github: { ...github, clientSecret: { env } } } })).toThrow(/clientSecret must name its environment variable/);
+  });
+
+  it.each([
+    ["people", "people"],
+    ["people/", "people"],
+    ["wiki/user_pages", "wiki/user_pages"],
+  ])("keeps user pages in the folder %j names", (userPages, folder) => {
+    expect((auth({ providers: { github }, userPages }).server?.options as AuthOptions).userPages).toBe(folder);
+  });
+
+  // Each would let the override match pages outside one folder, or match no page's slug at all.
+  it.each(["", "/", "/users", "users//x", "../users", "users/..", "./users", "Users", "user pages", "-", "users\\x", "user--pages", 7])(
+    "fails the build for the user page folder %j",
+    (userPages) => {
+      expect(() => auth({ providers: { github }, userPages } as unknown as AuthOptions)).toThrow(/userPages must be a folder of the vault/);
+    },
+  );
+
+  it("records the build's user pages for the server: each page directly in the folder named after a handle", async () => {
+    const config = { id: "notes", mountPath: "/notes", target: { type: "node" }, plugins: [auth({ providers: { github }, userPages: "people" })] } as unknown as ResolvedConfig;
+    const plugin = (config.plugins[0] as NormalizedSvartzPlugin).forVault!({ vault: config, vaults: [config] }) as NormalizedSvartzPlugin;
+    const note = (slug: string, extra = {}) => ({ slug, extension: ".md", ...extra });
+    const ctx = {
+      config,
+      plugins: [plugin],
+      files: [
+        note("people/ada"),
+        note("people/grace", { protection: { group: "staff", hidden: true } }),
+        note("people/ada/notes"),
+        note("people/Bad Handle"),
+        note("people"),
+        note("users/bob"),
+        { slug: "people/photo", extension: ".png" },
+      ],
+      index: { entries: [{ slug: "people/ada", href: "/notes/people/ada/" }] },
+      meta: new Map(),
+    } as unknown as PluginContext;
+
+    await plugin.emitArtifacts!.run(ctx);
+
+    expect((ctx.compiler?.serverData.get("auth") as AuthServerData).userPages).toEqual({ ada: "/notes/people/ada/", grace: null });
   });
 });
 
@@ -69,9 +116,32 @@ describe("one sign-in per host app", () => {
 
     const work = resolve(vaults, "work");
 
-    expect(work.server?.options).toMatchObject({ callbackMountPath: "/journal" });
+    expect(work.server?.options).toMatchObject({ callbackMountPath: "/journal", userPageVault: "journal" });
     expect(await dialogEndpoint(work, "/work")).toBe("/journal/_svartz/auth");
     expect(resolve(vaults, "journal").server?.options).not.toHaveProperty("callbackMountPath");
+    expect(resolve(vaults, "journal").server?.options).toMatchObject({ userPageVault: "journal" });
+  });
+
+  // Proves only the vault that runs sign-in reserves handles: another host vault's build records no user pages.
+  it("records user pages only in the build of the vault that runs sign-in", async () => {
+    const vaults = site(
+      { id: "journal", plugins: [auth({ providers: { github } })] },
+      { id: "work", plugins: [auth({ providers: { github } })] },
+    );
+    const recorded = async (id: string) => {
+      const ctx = {
+        config: vaults.find((vault) => vault.id === id),
+        plugins: [],
+        files: [{ slug: "users/ada", extension: ".md" }],
+        index: { entries: [{ slug: "users/ada", href: `/${id}/users/ada/` }] },
+        meta: new Map(),
+      } as unknown as PluginContext;
+      await resolve(vaults, id).emitArtifacts!.run(ctx);
+      return (ctx.compiler?.serverData.get("auth") as AuthServerData).userPages;
+    };
+
+    expect(await recorded("journal")).toEqual({ ada: "/journal/users/ada/" });
+    expect(await recorded("work")).toBeUndefined();
   });
 
   it("uses the callbackVault a vault names", async () => {
@@ -82,6 +152,23 @@ describe("one sign-in per host app", () => {
 
     expect(resolve(vaults, "work").server?.options).not.toHaveProperty("callbackMountPath");
     expect(await dialogEndpoint(resolve(vaults, "work"), "/work")).toBe("/work/_svartz/auth");
+  });
+
+  it("keeps user pages in the one vault that runs sign-in, and has none when host vaults sign in through different vaults", () => {
+    const shared = site(
+      { id: "journal", plugins: [auth({ providers: { github } })] },
+      { id: "work", plugins: [auth({ providers: { github } })] },
+    );
+    expect(resolve(shared, "journal").server?.options).toMatchObject({ userPageVault: "journal" });
+    expect(resolve(shared, "work").server?.options).toMatchObject({ userPageVault: "journal" });
+
+    // Each callback vault would allocate handles knowing only its own pages, so neither holds user pages.
+    const split = site(
+      { id: "journal", plugins: [auth({ providers: { github } })] },
+      { id: "work", plugins: [auth({ providers: { github }, callbackVault: "work" })] },
+    );
+    expect(resolve(split, "journal").server?.options).not.toHaveProperty("userPageVault");
+    expect(resolve(split, "work").server?.options).not.toHaveProperty("userPageVault");
   });
 
   it.each([
@@ -114,6 +201,11 @@ describe("one sign-in per host app", () => {
       { id: "journal", plugins: [auth({ providers: { github }, admins: ["github:583231"] })] },
       { id: "work", plugins: [auth({ providers: { github }, callbackVault: "work" })] },
     ], /vault "work" lists different admins than vault "journal"/],
+    // A handle is one account's across the app, so its user page is in the same folder everywhere.
+    ["keeps user pages in another folder", [
+      { id: "journal", plugins: [auth({ providers: { github }, userPages: "people" })] },
+      { id: "work", plugins: [auth({ providers: { github } })] },
+    ], /vault "work" keeps user pages in another folder than vault "journal"/],
   ])("fails config resolution when the callbackVault %s", (_case, vaults, error) => {
     expect(() => resolve(site(...vaults), "work")).toThrow(error);
   });

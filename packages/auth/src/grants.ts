@@ -3,10 +3,13 @@
  * declared defaults, to the pure resolver. {@link migrateGrants} moves a plugin's config list onto grants, once.
  */
 import type { PermissionDeclaration, PermissionSlug } from "@svartz/core";
-import { objectChain, resolve, SITE, type Decision, type Grant, type GrantValue, type PermissionTarget, type Principals } from "./permissions";
+import {
+  objectChain, resolve, SITE, userPageHandle, type Decision, type Grant, type GrantValue, type PermissionTarget, type Principals,
+} from "./permissions";
 import { membershipsOf } from "./groups";
 import type { Account } from "./session";
-import { accountsDatabase, type Database } from "./store";
+import { accountsDatabase, handlesOf, type Database } from "./store";
+import { userPageLocation } from "./user-pages";
 
 type Env = Readonly<Record<string, unknown>>;
 
@@ -56,12 +59,19 @@ function withDefaults(stored: readonly Grant[], { slug, defaults = {} }: Permiss
 }
 
 /**
- * Who `account` is to the resolver: itself, its roles (config's `admin` and stored ones), and its groups, read on every
- * check, so a removed member loses the group's grants on their next request.
+ * Who `account` is to the resolver: itself, its roles (config's `admin` and stored ones), its groups, read on every
+ * check, so a removed member loses the group's grants on their next request, and its former handles, loaded only when
+ * `chain` checks a user page under another handle than its current one, the one case they can decide.
  */
-const principalsOf = async (db: Database, account: Pick<Account, "id" | "handle" | "roles"> | null): Promise<Principals> => account
-  ? { account: { id: account.id, handle: account.handle }, roles: account.roles, groups: await membershipsOf(db, account.id) }
-  : { roles: [], groups: [] };
+async function principalsOf(db: Database, account: Pick<Account, "id" | "handle" | "roles"> | null, chain: readonly string[]): Promise<Principals> {
+  if (!account) return { roles: [], groups: [] };
+  const owner = userPageHandle(chain[0], userPageLocation());
+  const [formerHandles, groups] = await Promise.all([
+    owner !== undefined && owner !== account.handle ? handlesOf(db, account.id) : [],
+    membershipsOf(db, account.id),
+  ]);
+  return { account: { id: account.id, handle: account.handle, formerHandles }, roles: account.roles, groups };
+}
 
 /** Every permission the site's plugins declare, in the order they registered. */
 export const permissionCatalogue = (): PermissionDeclaration[] => [...catalogue.values()];
@@ -80,8 +90,8 @@ export interface Explanation extends Decision {
  */
 export async function explain(db: Database, account: Pick<Account, "id" | "handle" | "roles">, permission: PermissionSlug, chain: readonly string[]): Promise<Explanation> {
   const declaration = declared(permission);
-  const [stored, who] = await Promise.all([loadGrants(db, permission, chain), principalsOf(db, account)]);
-  const decision = resolve(withDefaults(stored, declaration), who, chain, permission);
+  const [stored, who] = await Promise.all([loadGrants(db, permission, chain), principalsOf(db, account, chain)]);
+  const decision = resolve(withDefaults(stored, declaration), who, chain, permission, userPageLocation());
   const { decidedBy } = decision;
   return { ...decision, byDefault: decidedBy.kind === "grant" && !stored.includes(decidedBy.grant) };
 }
@@ -99,8 +109,8 @@ export async function can(account: Account | null, permission: PermissionSlug, t
   const db = await accountsDatabase(env);
   if (!db) return false;
   const chain = objectChain(target);
-  const [stored, who] = await Promise.all([loadGrants(db, permission, chain), principalsOf(db, account)]);
-  return resolve(withDefaults(stored, declaration), who, chain, permission).value === "allow";
+  const [stored, who] = await Promise.all([loadGrants(db, permission, chain), principalsOf(db, account, chain)]);
+  return resolve(withDefaults(stored, declaration), who, chain, permission, userPageLocation()).value === "allow";
 }
 
 /** A grant a plugin's config gives an identity, such as a moderator it lists, to move onto that identity's account. */

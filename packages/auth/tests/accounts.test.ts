@@ -173,10 +173,24 @@ describe("signing in with accounts", () => {
     const invalid = await chooseHandle(request, callback, "-octo cat-");
     expect(invalid.status).toBe(422);
     expect(await invalid.text()).toContain("starting and ending with a letter or number");
+    // Page addresses collapse a run of hyphens, so `octo--cat` would name the user page of `octo-cat`; `index` names
+    // the user page folder's own page, and `octo_index` the page of `octoindex`.
+    for (const handle of ["octo--cat", "index", "octo_index"]) {
+      const refused = await chooseHandle(request, callback, handle);
+      expect([refused.status, await refused.text()]).toEqual([422, expect.stringContaining("other than &#34;index&#34; or a name ending in &#34;_index&#34;.")]);
+    }
 
     const chosen = await chooseHandle(request, callback, "@Octo_Cat");
     expect(chosen.status).toBe(303);
     expect((await whoIs(request, cookiesFrom(chosen))).signIn.account.handle).toBe("octo_cat");
+  });
+
+  // Proves the chooser never offers a handle it would refuse: a username that isn't one gets the next free variant.
+  it("suggests a handle the rules accept for a username they refuse", async () => {
+    const request = site(await createDatabase());
+    const callback = await signInWithGitHub(request, { id: 1, login: "Index" });
+
+    expect(await (await request(`${AUTH}/handle/`, { cookies: cookiesFrom(callback) })).text()).toContain('value="index-2"');
   });
 });
 
