@@ -311,7 +311,7 @@ export default guestbook;
 
 `readIdentity(request, env)` answers the provider account the reader signed in with, or `null`, as for a suspended account. It works with or without `SVARTZ_DB`, so plugins written before accounts keep working; new plugins should read the account.
 
-`findProfile(handle, env)` answers the public profile, `{ handle, name, avatarUrl }`, of the account that holds `handle` now or held it before, or `undefined`. When its `handle` differs from the one asked for, the asked one is old: redirect to the current one.
+`findProfile(handle, env)` answers the public profile, `{ handle, name, avatarUrl, reputation }`, of the account that holds `handle` now or held it before, or `undefined`. When its `handle` differs from the one asked for, the asked one is old: redirect to the current one.
 
 `findProfileByIdentity(identity, env)` answers the public profile of the account the provider account `identity`, such as `github:583231`, is linked to, for a plugin that stored who wrote something by their sign-in, or `undefined`.
 
@@ -468,7 +468,17 @@ Each account has a reputation score, which grows as its work lands and others va
 
 The score is the sum of the account's entries in a ledger, `auth_reputation` in `SVARTZ_DB`. The database refuses to change or delete an entry, so nothing rewrites a score's history: taking points back is a further entry. Each entry is for one event, such as one merged pull request, and an event is recorded once however often it is reported, so a repeated webhook delivery or a poll that reads it again changes nothing.
 
-Readers see their score and their next threshold on [the account page](#the-account-page). An account's [user page](#user-pages) shows its score beside the page's actions, such as "Reputation: 12 points", to everyone, and the next threshold to the account itself: "Reputation: 12 points · 20 points for editors". Anyone can read an account's score from `GET users/<handle>/`.
+A score is public. It shows beside the account's name wherever a first-party plugin names it: in page history, Recent changes and contributions, in My submissions, the Submissions and Recent edits panels, on comment cards and in the Reports panel. There it is a compact number, such as `Ada Lovelace 1,234` or `12.5K` past ten thousand, which screen readers read as "Reputation 1,234" and whose tooltip gives it in full. An account's [user page](#user-pages) shows it once more beside the page's actions, such as "Reputation: 12 points", and the account itself also sees its next threshold there and on [the account page](#the-account-page): "Reputation: 12 points · 20 points for editors". Anyone can read an account's score from `GET users/<handle>/`.
+
+A plugin shows the score the same way. Every profile `findProfile`, `findProfiles`, `findProfilesByHandle` and `findProfilesByIdentity` answer carries `reputation`, from the same query, so a list of names costs no more. Render it after the name and a space:
+
+```ts
+import { reputationBadgeHtml } from "@svartz/auth/badge";
+
+const html = `${escape(profile.name)} ${reputationBadgeHtml(profile.reputation)}`;
+```
+
+In the browser, `reputationBadge(score)` from `@svartz/auth/browser` answers the same as an element. Both take their style from `@svartz/auth/browser.css`.
 
 ### Weights
 
