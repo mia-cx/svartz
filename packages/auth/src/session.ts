@@ -4,7 +4,10 @@
  */
 import { isProviderId, type Identity } from "./providers";
 import { canonicalSeal, seal, sessionSecret, unseal } from "./seal";
-import { accountsDatabase, boundDatabase, deleteSession, digest, forgetLegacyCookie, legacySession, migrate, readSession, SESSION_MAX_AGE_SECONDS } from "./store";
+import {
+  accountsDatabase, boundDatabase, deleteSession, digest, forgetLegacyCookie, legacySession, migrate, readSession, SESSION_MAX_AGE_SECONDS,
+  type Suspension,
+} from "./store";
 import { builtUserPages } from "./user-pages";
 
 type Env = Readonly<Record<string, unknown>>;
@@ -40,12 +43,15 @@ export type SignedOutReason =
   /** No session cookie, or one that is tampered, expired, deleted from D1 or signed out. */
   | "signed-out"
   /** Nothing is bound as `SVARTZ_DB`, so the site has no accounts; sign-in still works, identity only. */
-  | "no-database";
+  | "no-database"
+  /** The session is live, but a moderator suspended its account: it reads as a guest until the suspension ends. */
+  | "suspended";
 
-/** The signed-in account, or `null` and the reason there is none. */
+/** The signed-in account, or `null` and the reason there is none; for a suspended account, why and until when. */
 export type SignIn =
-  | { readonly account: Account; readonly reason?: undefined }
-  | { readonly account: null; readonly reason: SignedOutReason };
+  | { readonly account: Account; readonly reason?: undefined; readonly suspension?: undefined }
+  | { readonly account: null; readonly reason: Exclude<SignedOutReason, "suspended">; readonly suspension?: undefined }
+  | { readonly account: null; readonly reason: "suspended"; readonly suspension: Suspension };
 
 /** What the session cookie holds since accounts: a session id, looked up in D1 on every read. */
 interface SessionCookie {
@@ -132,11 +138,13 @@ async function read(request: Request, env: Env): Promise<Reader> {
   const sid = isSessionCookie(cookie.value) ? cookie.value.sid : await legacySession(db, await digest(cookie.raw), cookie.value, builtUserPages());
   const session = sid === undefined ? undefined : await readSession(db, sid);
   if (!session) return SIGNED_OUT;
-  const account: Account = {
-    ...session.account,
-    roles: heldRoles(session.linkedIdentities, session.roles),
-    identity: session.identity,
-  };
+  const roles = heldRoles(session.linkedIdentities, session.roles);
+  // The session stays, so the account is back once the suspension ends. Config's admins are never locked out, even when
+  // config named them after they were suspended.
+  if (session.suspension && !roles.includes(ADMIN_ROLE)) {
+    return { signIn: { account: null, reason: "suspended", suspension: session.suspension }, identity: null };
+  }
+  const account: Account = { ...session.account, roles, identity: session.identity };
   return { signIn: { account }, identity: account.identity, sid };
 }
 
@@ -147,23 +155,25 @@ export async function readCurrentSession(request: Request, env: Env): Promise<{ 
 }
 
 /**
- * The account behind `request`, or `null` and why: signed out, or no accounts database bound. `env` is the handler's
- * `context.env`. A cookie from before accounts becomes an account and a session on its first read here.
+ * The account behind `request`, or `null` and why: signed out, no accounts database bound, or the account suspended,
+ * with the suspension's reason and end. `env` is the handler's `context.env`. A cookie from before accounts becomes an
+ * account and a session on its first read here.
  */
 export async function readSignIn(request: Request, env: Env): Promise<SignIn> {
   return (await read(request, env)).signIn;
 }
 
 /**
- * The account behind `request`, or `null` when nobody is signed in, the session was deleted or expired, or the site
- * binds no `SVARTZ_DB`. {@link readSignIn} says which.
+ * The account behind `request`, or `null` when nobody is signed in, the session was deleted or expired, the account is
+ * suspended, or the site binds no `SVARTZ_DB`. {@link readSignIn} says which.
  */
 export async function readAccount(request: Request, env: Env): Promise<Account | null> {
   return (await read(request, env)).signIn.account;
 }
 
 /**
- * Who sent `request`: the provider account they signed in with, or `null` when nobody is signed in.
+ * Who sent `request`: the provider account they signed in with, or `null` when nobody is signed in or their account is
+ * suspended.
  * `env` is the handler's `context.env`. Without a usable `PRIVATE_SVARTZ_SESSION_SECRET` nobody can be signed in, so this
  * answers `null`; the auth routes report the missing secret with a 503. Plugins that need a person rather than a
  * provider account use {@link readAccount}.

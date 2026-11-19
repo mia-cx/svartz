@@ -227,6 +227,19 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       agreed INTEGER NOT NULL CHECK (agreed IN (0, 1))
     )`,
   ],
+  [
+    // Each account's latest suspension, as `suspensions.ts` describes it: in force while `ends_at` (ms since the epoch)
+    // is in the future, or for good when it is NULL. A new suspension replaces the row; lifting deletes it.
+    `CREATE TABLE IF NOT EXISTS auth_suspensions (
+      account_id TEXT PRIMARY KEY REFERENCES auth_accounts (id),
+      reason TEXT NOT NULL,
+      ends_at INTEGER,
+      suspended_at TEXT NOT NULL
+    )`,
+    // The audit log panel filters by who and by what, newest first.
+    `CREATE INDEX IF NOT EXISTS auth_audit_by_actor ON auth_audit (actor_id, id)`,
+    `CREATE INDEX IF NOT EXISTS auth_audit_by_target ON auth_audit (target, id)`,
+  ],
 ];
 
 const migrated = new WeakMap<Database, Promise<void>>();
@@ -284,12 +297,41 @@ export interface AccountRecord {
   readonly createdAt: string;
 }
 
-/** A live session: its account, the sign-in it used, every identity linked to the account and its stored roles. */
+/** Why an account is suspended, and until when; read by the account itself and by moderators. */
+export interface Suspension {
+  /** What the moderator wrote, for the suspended person to read. */
+  readonly reason: string;
+  /** ISO 8601; absent for a suspension for good. */
+  readonly until?: string;
+  /** ISO 8601. */
+  readonly since: string;
+}
+
+export interface SuspensionRow {
+  reason: string;
+  ends_at: number | null;
+  suspended_at: string;
+}
+
+export const suspensionOf = (row: SuspensionRow): Suspension => ({
+  reason: row.reason,
+  ...row.ends_at !== null && { until: new Date(row.ends_at).toISOString() },
+  since: row.suspended_at,
+});
+
+/** SQL true for a suspension row `alias` still in force at the time bound as `?now`. */
+export const inForce = (alias: string, now: string) => `(${alias}.ends_at IS NULL OR ${alias}.ends_at > ${now})`;
+
+/**
+ * A live session: its account, the sign-in it used, every identity linked to the account, its stored roles, and the
+ * account's suspension while one is in force.
+ */
 export interface SessionRecord {
   readonly account: AccountRecord;
   readonly identity: Identity;
   readonly linkedIdentities: readonly string[];
   readonly roles: readonly string[];
+  readonly suspension?: Suspension;
 }
 
 interface SessionRow {
@@ -322,22 +364,27 @@ export async function digest(text: string): Promise<string> {
 /**
  * Session `id` with its account and sign-in, or `undefined` when it was deleted or has expired, or its provider account
  * no longer belongs to its account. A sign-in looks the account up before inserting the session, so an unlink and a
- * link elsewhere in between can leave a session whose sign-in is now another account's; it never reads.
+ * link elsewhere in between can leave a session whose sign-in is now another account's; it never reads. The account's
+ * suspension is read in the same batch, so a signed-in request still costs one D1 call.
  */
 export async function readSession(db: Database, id: string): Promise<SessionRecord | undefined> {
-  const [sessions, identities, roles] = await db.batch([
+  const now = Date.now();
+  const [sessions, identities, roles, suspensions] = await db.batch([
     db.prepare(`SELECT a.id AS account_id, a.handle AS account_handle, a.name AS account_name,
         a.avatar_url AS account_avatar_url, a.created_at AS account_created_at,
         i.id AS identity_id, i.provider, i.name, i.handle, i.avatar_url, i.profile_url
       FROM auth_sessions s JOIN auth_accounts a ON a.id = s.account_id
         JOIN auth_identities i ON i.id = s.identity_id AND i.account_id = s.account_id
-      WHERE s.id = ? AND s.expires_at > ?`).bind(id, Date.now()),
+      WHERE s.id = ? AND s.expires_at > ?`).bind(id, now),
     db.prepare(`SELECT i.id FROM auth_sessions s JOIN auth_identities i ON i.account_id = s.account_id WHERE s.id = ?`).bind(id),
     db.prepare(`SELECT m.role FROM auth_sessions s JOIN auth_role_members m ON m.account_id = s.account_id
       WHERE s.id = ? ORDER BY m.role`).bind(id),
+    db.prepare(`SELECT p.reason, p.ends_at, p.suspended_at FROM auth_sessions s JOIN auth_suspensions p ON p.account_id = s.account_id
+      WHERE s.id = ?1 AND ${inForce("p", "?2")}`).bind(id, now),
   ]);
   const row = sessions!.results[0] as SessionRow | undefined;
   if (!row) return undefined;
+  const suspension = suspensions!.results[0] as SuspensionRow | undefined;
   return {
     account: {
       id: row.account_id,
@@ -356,6 +403,7 @@ export async function readSession(db: Database, id: string): Promise<SessionReco
     },
     linkedIdentities: (identities!.results as { id: string }[]).map(({ id }) => id),
     roles: (roles!.results as { role: string }[]).map(({ role }) => role),
+    ...suspension && { suspension: suspensionOf(suspension) },
   };
 }
 

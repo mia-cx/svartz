@@ -10,7 +10,7 @@ import { isProviderId, PROVIDERS, type ProviderId } from "./providers";
 import type { Standing } from "./reputation";
 import { standingSection } from "./reputation-page";
 import type { Account } from "./session";
-import type { LinkedIdentity, SessionSummary } from "./store";
+import type { LinkedIdentity, SessionSummary, Suspension } from "./store";
 
 /** The longest display name an account or a group may set. */
 export const NAME_MAX_LENGTH = 100;
@@ -58,6 +58,29 @@ export function signedOutPage(providers: readonly ProviderId[], start: (provider
 <h1>${TITLE}</h1>
 <p class="sv-account-lead">Sign in to manage your account.</p>
 <ul class="sv-auth-providers sv-account-providers">${links.join("")}</ul>
+</div>`,
+  };
+}
+
+/** When a suspension ends, as the site's pages write a moment: in UTC, to the minute. */
+const moment = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
+
+/**
+ * The page for a reader whose account is suspended: why, and until when, as the moderator wrote it but never who they
+ * are, and a way to sign out. `signOut` is the sign-out route, which comes back here.
+ */
+export function suspendedPage({ reason, until }: Suspension, signOut: string): PluginPage {
+  const ends = until ? ` until <time datetime="${escape(until)}">${escape(moment.format(new Date(until)))} UTC</time>` : " for good";
+  return {
+    title: TITLE,
+    html: `<div class="sv-account">
+<h1>${TITLE}</h1>
+<section class="sv-account-status sv-account-suspended" data-error aria-labelledby="sv-account-suspended">
+<h2 id="sv-account-suspended">Your account is suspended${ends}</h2>
+<p class="sv-account-muted">Reason</p>
+<p class="sv-account-reason">${escape(reason)}</p>
+</section>
+<form method="post" action="${escape(signOut)}"><button class="sv-account-button" type="submit">Sign out</button></form>
 </div>`,
   };
 }

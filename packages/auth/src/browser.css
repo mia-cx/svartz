@@ -417,6 +417,30 @@ a.sv-account-page {
 	color: light-dark(oklch(0.45 0.15 var(--sv-hue-red, 25)), oklch(0.8 0.1 var(--sv-hue-red, 25)));
 }
 
+/* A suspended reader's notice: the heading says until when, and the reason reads in the page's own ink. */
+.sv-account .sv-account-suspended {
+	display: grid;
+	gap: var(--sv-space-1, 0.25rem);
+	margin-block-end: var(--sv-space-4, 1rem);
+	padding: var(--sv-space-3, 0.75rem) var(--sv-space-4, 1rem);
+}
+
+.sv-account-suspended h2 {
+	margin: 0 0 var(--sv-space-2, 0.5rem);
+	color: inherit;
+	font-size: var(--sv-step-1, 1.2rem);
+}
+
+.sv-account-suspended p {
+	margin: 0;
+}
+
+.sv-account-reason {
+	color: var(--sv-ink, CanvasText);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
 /*
  * `/-/dashboard/` and its panels. They are `.sv-account` too, so forms, lists and messages look as on the account page.
  */
