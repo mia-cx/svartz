@@ -4,8 +4,8 @@ import type { PreviewNote, PreviewOptions } from "@svartz/plugins/preview";
 /** The plugin's id: its server answers under `<mount>/_svartz/history/`. */
 export const PLUGIN_ID = "history";
 
-/** The page names it claims: `/-/history/<page>` and `/-/changes/`. */
-export const PAGES = ["history", "changes"] as const;
+/** The page names it claims: `/-/history/<page>`, `/-/changes/` and `/-/contributions/<handle>/`. */
+export const PAGES = ["history", "changes", "contributions"] as const;
 
 /** What the build hands the server module: never sent to the browser. */
 export interface HistoryData {
@@ -23,4 +23,9 @@ export interface BrowserOptions {
   readonly mountPath: string;
   /** The routes below the deployment base of every page with a history, such as `/wiki/guides/setup/`. */
   readonly pages: readonly string[];
+  /**
+   * The folder of user pages below the deployment base, such as `/wiki/users/`, when this vault holds them: their
+   * pages get the account's contributions below the note.
+   */
+  readonly userPages?: string;
 }

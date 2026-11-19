@@ -1,6 +1,7 @@
 /*
- * The history pages: page history, the diff between two revisions, and Recent changes, on the theme's tokens so they
- * match every Svartz theme in both colour modes.
+ * The history pages: page history, the diff between two revisions, Recent changes and an account's contributions, and
+ * the contributions section below a user page, on the theme's tokens so they match every Svartz theme in both colour
+ * modes.
  */
 .sv-history {
 	display: grid;
@@ -232,6 +233,44 @@
 	overflow-wrap: anywhere;
 	border: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
 	border-radius: var(--sv-radius-m, 6px);
+}
+
+.sv-history h3 {
+	margin: 0;
+	color: var(--sv-ink, CanvasText);
+	font-size: var(--sv-step-0, 1rem);
+	font-weight: 700;
+	line-height: var(--sv-leading-tight, 1.15);
+}
+
+/* Contributions: below a user page's note, set apart from what its owner wrote. */
+.sv-history-contributions {
+	gap: var(--sv-space-3, 0.75rem);
+	margin-block-start: var(--sv-space-6, 2.5rem);
+	padding-block-start: var(--sv-space-5, 1.5rem);
+	border-block-start: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+}
+
+.sv-history-contributions h3 {
+	margin-block-start: var(--sv-space-2, 0.5rem);
+}
+
+.sv-history-reputation strong {
+	color: var(--sv-ink, CanvasText);
+	font-variant-numeric: tabular-nums;
+}
+
+.sv-history-pages {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sv-space-1, 0.25rem) var(--sv-space-4, 1rem);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.sv-history-pages a {
+	overflow-wrap: anywhere;
 }
 
 .sv-history-hidden {

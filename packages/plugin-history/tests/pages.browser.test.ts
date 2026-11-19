@@ -1,12 +1,12 @@
 import "../src/browser.css";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { mount } from "../src/browser";
 import { diffLines } from "../src/diff";
-import { changesPage, diffPage, historyPage, type Change } from "../src/pages";
+import { changesPage, contributionsPage, contributionsSection, diffPage, historyPage, type Change, type Contributions } from "../src/pages";
 
 const HISTORY = "/wiki/-/history/guide/";
-const ADA = { kind: "account", name: "Ada Lovelace", handle: "ada" } as const;
+const ADA = { kind: "account", name: "Ada Lovelace", handle: "ada", href: "/wiki/users/ada/" } as const;
 const GRACE = { kind: "github", name: "Grace Hopper", login: "grace-hopper-with-a-long-github-login" } as const;
 const CHANGES: Change[] = [
   { sha: "c".repeat(40), at: "2026-11-19T10:45:00Z", author: GRACE, summary: "Fix a typo in the section about setting up a wiki that runs on Cloudflare Workers" },
@@ -28,6 +28,7 @@ const historyHtml = () => historyPage({
 
 afterEach(() => {
   document.body.innerHTML = "";
+  vi.unstubAllGlobals();
 });
 
 /** The page fits `width` without scrolling sideways, and every control is large enough to tap. */
@@ -96,6 +97,96 @@ describe("Recent changes", () => {
       })),
       older: `/wiki/-/changes/?before=${"a".repeat(40)}`,
     }).html);
+  });
+});
+
+/** Ada's contributions, with a long page title and a long summary, as a busy account's would read. */
+const CONTRIBUTIONS: Contributions = {
+  name: "Ada Lovelace",
+  handle: "ada",
+  reputation: { score: 12.5, next: { role: "editors", score: 20 } },
+  changes: CHANGES.map((change) => ({
+    ...change,
+    pages: [{ title: "A page with a rather long title about alliances", page: "/wiki/guide/", diff: `${HISTORY}?to=${change.sha}`, history: HISTORY }],
+  })),
+  pages: [{ title: "A page with a rather long title about alliances", page: "/wiki/guide/" }, { title: "Setup", page: "/wiki/setup/" }],
+};
+
+describe("an account's contributions", () => {
+  it("fits a phone-width screen", async () => {
+    await fitsPhone(contributionsPage({ ...CONTRIBUTIONS, userPage: "/wiki/users/ada/", unavailable: false, older: `/wiki/-/contributions/ada/?before=${"a".repeat(40)}` }).html);
+  });
+});
+
+describe("the contributions section", () => {
+  const PAGES = ["/wiki/guide/", "/wiki/users/ada/"];
+  const OPTIONS = { mountPath: "/wiki", pages: PAGES, userPages: "/wiki/users/" };
+
+  /** A user page as the theme renders it: its note body, then what follows it. */
+  function userPage() {
+    document.body.innerHTML = '<main><article data-svartz-note="users/ada"><p>Hi, I am Ada.</p></article><footer>Previous and next</footer></main>';
+  }
+
+  // Proves a user page shows its account's contributions right after its note, from the server's section for that
+  // page, and loses them with the page.
+  it("shows below a user page's note, and leaves with the page", async () => {
+    userPage();
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      asked.push(url);
+      return new Response(contributionsSection({ ...CONTRIBUTIONS, all: "/docs/wiki/-/contributions/ada/" }), { headers: { "content-type": "text/html" } });
+    });
+
+    const unmount = mount("/docs/wiki/users/ada/", OPTIONS, { base: "/docs" });
+
+    await expect.element(page.getByRole("heading", { name: "Contributions", level: 2 })).toBeVisible();
+    expect(asked).toEqual(["/docs/wiki/_svartz/history/contributions/?page=%2Fwiki%2Fusers%2Fada%2F"]);
+    expect([...document.querySelector("main")!.children].map((child) => child.tagName)).toEqual(["ARTICLE", "SECTION", "FOOTER"]);
+    await expect.element(page.getByRole("link", { name: "All contributions" })).toHaveAttribute("href", "/docs/wiki/-/contributions/ada/");
+    unmount?.();
+    expect(document.querySelector("section")).toBeNull();
+  });
+
+  // Proves the section doesn't depend on the page having a history: a user page in another note format asks for it too.
+  it("asks for a user page that has no history of its own", async () => {
+    userPage();
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      asked.push(url);
+      return new Response(contributionsSection({ ...CONTRIBUTIONS, all: "/wiki/-/contributions/ada/" }), { headers: { "content-type": "text/html" } });
+    });
+
+    const unmount = mount("/wiki/users/ada/", { ...OPTIONS, pages: ["/wiki/guide/"] });
+
+    await expect.element(page.getByRole("heading", { name: "Contributions", level: 2 })).toBeVisible();
+    expect(asked).toEqual(["/wiki/_svartz/history/contributions/?page=%2Fwiki%2Fusers%2Fada%2F"]);
+    unmount?.();
+  });
+
+  // Proves a page outside the user page folder never asks for a section.
+  it("stays off other pages", () => {
+    userPage();
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    mount("/wiki/guide/", OPTIONS);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("fits a phone-width screen", async () => {
+    await fitsPhone(`<article><p>Hi, I am Ada.</p></article>${contributionsSection({ ...CONTRIBUTIONS, all: "/wiki/-/contributions/ada/" })}`);
+  });
+});
+
+describe("the account page's link to contributions", () => {
+  // Proves the account page links the reader's contributions where auth leaves room for it.
+  it("links the signed-in account's contributions", async () => {
+    document.body.innerHTML = '<section><h2>Reputation</h2><p data-svartz-region="account-activity" data-svartz-handle="ada"></p></section>';
+
+    const unmount = mount("/docs/wiki/-/account/", { mountPath: "/wiki", pages: [] }, { base: "/docs" });
+
+    await expect.element(page.getByRole("link", { name: "Your contributions" })).toHaveAttribute("href", "/docs/wiki/-/contributions/ada/");
+    unmount?.();
+    expect(document.querySelector("a")).toBeNull();
   });
 });
 

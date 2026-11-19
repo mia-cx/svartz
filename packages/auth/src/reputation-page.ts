@@ -211,10 +211,11 @@ ${status?.html ?? ""}
 }
 
 /** The account page's Reputation section: the score, and the next role it can earn. */
-export function standingSection({ score, next }: Standing): string {
+export function standingSection({ score, next }: Standing, handle: string): string {
   return `<section class="sv-account-section" aria-labelledby="sv-account-reputation">
 <h2 id="sv-account-reputation">Reputation</h2>
 <p class="sv-account-lead">${escape(pointsText(score))}</p>
 ${next ? `<p class="sv-account-muted">At ${escape(pointsText(next.score))}, you get the ${escape(next.role)} role.</p>` : ""}
+<p class="sv-account-activity" data-svartz-region="account-activity" data-svartz-handle="${escape(handle)}"></p>
 </section>`;
 }

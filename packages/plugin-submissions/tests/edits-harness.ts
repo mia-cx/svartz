@@ -81,7 +81,7 @@ type D1Statement = ReturnType<D1["prepare"]>;
  * `db` as the site gets it, counting its calls in `calls.count` as a Worker invocation's D1 limit does: each query
  * one, and a whole batch one.
  */
-function counting(db: D1) {
+export function counting(db: D1) {
   const calls = { count: 0 };
   const real = new WeakMap<object, D1Statement>();
   const count = <T>(result: T) => (calls.count++, result);

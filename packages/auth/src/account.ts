@@ -182,7 +182,7 @@ export function accountPage(view: AccountView): PluginPage {
     html: `<div class="sv-account">
 <h1>${TITLE}</h1>
 <div class="sv-account-who">${avatar}<p><span class="sv-account-name">${escape(account.name)}</span> <span class="sv-account-muted">@${escape(account.handle)}</span></p>${userPageLink(view)}</div>
-${standingSection(view.standing)}
+${standingSection(view.standing, account.handle)}
 ${profileSection(view)}
 ${view.groups}
 ${signInsSection(view)}
