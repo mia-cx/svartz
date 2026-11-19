@@ -270,7 +270,7 @@ With `sync`, the [dashboard](../../docs/auth.md#the-dashboard) gets a Submission
 
 The panel names only what the last build published. Every other file, such as a protected, hidden or unpublished note, a file added since that build or one deleted before it, is counted ("1 file the site doesn't publish") but never named. A commit shows its summary only when every file it changed is one the site publishes; any other commit shows its short SHA in place of its summary, since the summary could name what it changed. The same holds while the poll hasn't yet read which files a backfilled commit changed.
 
-Only viewers who hold `submissions:pull-requests:read` on the vault see the panel. It reads the mirror alone, so it answers while GitHub is down; a stale mirror is polled after the answer, as is GitHub's compare API for a commit a later build may hold, so a commit can turn Live on the next view.
+Only viewers who hold `submissions:pull-requests:read` on the vault see the panel. It reads the mirror alone, so it answers while GitHub is down; a stale mirror is polled after the answer, as is GitHub's compare API for up to three commits a later build may hold, newest first, so a commit can turn Live on a later view. A page's deploy states come from one batched read of the mirror however many commits it shows, so a full page costs the same few D1 queries as a short one.
 
 ## Guard
 

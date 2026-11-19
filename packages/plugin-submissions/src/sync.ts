@@ -21,18 +21,19 @@ import { SUBMISSION_ID_PATTERN, type StatusResponse } from "./api";
 import { SubmissionError } from "./errors";
 import { requestGitHub } from "./github";
 import {
+  ancestryOf,
   deploymentSignals,
   isDatabase,
   markLive,
   markSucceeded,
   migrate,
-  readAncestry,
   readBranch,
   readEdit,
   readPull,
   recordEdit,
   rereadReviews,
   scopeOf,
+  toSignals,
   workflowSignals,
   writeAncestry,
   writeBranch,
@@ -42,8 +43,11 @@ import {
   writePull,
   writeReview,
   writeRun,
+  type AncestryRow,
   type EditRecord,
   type Mirror,
+  type Signal,
+  type SignalRow,
   type Statement,
 } from "./mirror";
 import { pause, POLL_INTERVAL_MS, readPause, reconcile, resumeAt } from "./reconcile";
@@ -221,7 +225,7 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     const reply = (stage: StatusResponse["stage"]): StatusResponse => ({ stage, ...(pull ? { pull } : {}), commit: commit! });
     if (edit.liveAt) return { status: reply("live"), unchecked: none };
 
-    const { stage, heads } = await deployStage(mirror, commit.sha, landed, setup.branch ?? await readBranch(mirror));
+    const { stage, heads } = (await deployStages(mirror, [{ sha: commit.sha, landed }], setup.branch ?? await readBranch(mirror))).get(commit.sha)!;
     if (stage === "live") {
       await markLive(mirror, edit.id, new Date().toISOString());
       return { status: reply("live"), unchecked: none };
@@ -230,17 +234,33 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
   }
 
   /**
-   * How far commit `sha`, on the branch since `landed`, has got toward live, from the mirror: `committed` until a run
-   * or deployment known to hold it says otherwise. `heads` are the run and deployment heads GitHub hasn't yet said
-   * whether they contain it, newest first. `branch` is the content branch, when known.
+   * How far each of `commits`, on the branch since `landed`, has got toward live, by SHA, from the mirror: `committed`
+   * until a run or deployment known to hold it says otherwise. `heads` are the run and deployment heads GitHub hasn't
+   * yet said whether they contain it, newest first. `branch` is the content branch, when known. However many commits
+   * it weighs, it reads the mirror in one batch, which a Worker's D1 allowance counts as one query.
    */
-  async function deployStage(mirror: Mirror, sha: string, landed: string, branch: string | undefined): Promise<{ stage: DeployStage; heads: string[] }> {
-    const since = new Date(Date.parse(landed) - CLOCK_SKEW_MS).toISOString();
-    const signals = workflow
-      ? branch ? await workflowSignals(mirror, workflow, branch, since, sha) : []
-      : await deploymentSignals(mirror, options.live.environment!, since, sha);
+  async function deployStages(mirror: Mirror, commits: readonly { sha: string; landed: string }[], branch: string | undefined) {
+    const signalsOf = ({ sha, landed }: { sha: string; landed: string }) => {
+      const since = new Date(Date.parse(landed) - CLOCK_SKEW_MS).toISOString();
+      if (!workflow) return deploymentSignals(mirror, options.live.environment!, since, sha);
+      return branch ? workflowSignals(mirror, workflow, branch, since, sha) : undefined;
+    };
+    const queries = commits.map(signalsOf);
+    const [ancestry, ...answers] = await mirror.db.batch([ancestryOf(mirror, commits.map(({ sha }) => sha)), ...queries.flatMap((query) => query ?? [])]);
+    const verdicts = new Map<string, Map<string, boolean>>();
+    for (const { ancestor, descendant, contains } of ancestry!.results as AncestryRow[]) {
+      verdicts.set(ancestor, (verdicts.get(ancestor) ?? new Map()).set(descendant, contains === 1));
+    }
+    let answer = 0;
+    return new Map(commits.map(({ sha }, index) => {
+      const signals = queries[index] ? toSignals(answers[answer++]!.results as SignalRow[]) : [];
+      return [sha, weigh(sha, signals, verdicts.get(sha) ?? new Map())];
+    }));
+  }
+
+  /** Commit `sha`'s stage from its `signals`, given what GitHub said about which heads contain it. */
+  function weigh(sha: string, signals: readonly Signal[], verdicts: ReadonlyMap<string, boolean>): { stage: DeployStage; heads: string[] } {
     const others = [...new Set(signals.map((signal) => signal.sha).filter((head) => head !== sha))];
-    const verdicts = await readAncestry(mirror, sha, others);
     const holding = signals.filter((signal) => signal.sha === sha || verdicts.get(signal.sha) === true);
     if (holding.some(({ outcome }) => outcome === "success")) return { stage: "live", heads: [] };
     // The newest signal holding the commit speaks for it: an older run stuck in the queue doesn't outrank a later failure.
@@ -253,14 +273,15 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
   const asked = new Map<string, number>();
 
   /**
-   * Ask GitHub whether each of `heads` contains `commit`, and remember what it says. Like the poll, it stops at a
-   * pause before each request, and an answer saying to wait (or leaving the allowance at the poll's reserve) pauses both.
+   * Ask GitHub whether each pair's `head` contains its `commit`, and remember what it says: at most
+   * {@link MAX_ANCESTRY_CHECKS} pairs not asked lately, in order. Like the poll, it stops at a pause before each
+   * request, and an answer saying to wait (or leaving the allowance at the poll's reserve) pauses both.
    */
-  async function checkAncestry(mirror: Mirror, token: () => Promise<string>, commit: string, heads: readonly string[]): Promise<void> {
+  async function checkAncestry(mirror: Mirror, token: () => Promise<string>, pairs: readonly { commit: string; head: string }[]): Promise<void> {
     const now = Date.now();
     for (const [pair, at] of asked) if (at <= now - POLL_INTERVAL_MS) asked.delete(pair);
-    const fresh = heads.filter((head) => !asked.has(`${commit}...${head}`)).slice(0, MAX_ANCESTRY_CHECKS);
-    for (const head of fresh) {
+    const fresh = pairs.filter(({ commit, head }) => !asked.has(`${commit}...${head}`)).slice(0, MAX_ANCESTRY_CHECKS);
+    for (const { commit, head } of fresh) {
       if (await readPause(mirror) > Date.now()) return;
       asked.set(`${commit}...${head}`, now);
       const response = await requestGitHub(await token(), "GET", `/repos/${setup.repo}/compare/${commit}...${head}?per_page=1`);
@@ -285,7 +306,9 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
 
     refresh(context, mirror);
     const { status: answer, unchecked } = await editStatus(mirror, edit);
-    if (unchecked.heads.length > 0) context.waitUntil(checkAncestry(mirror, () => setup.token(context.env), unchecked.commit, unchecked.heads));
+    if (unchecked.heads.length > 0) {
+      context.waitUntil(checkAncestry(mirror, () => setup.token(context.env), unchecked.heads.map((head) => ({ commit: unchecked.commit, head }))));
+    }
     return Response.json(answer satisfies StatusResponse, { headers: { "cache-control": "private, no-store" } });
   }
 
@@ -309,20 +332,16 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
   }
 
   /**
-   * Each of `commits`' deploy stage, by SHA, from the mirror. After the answer, GitHub is asked whether the newest
-   * run or deployment head not yet compared contains each commit, so a later read can say live.
+   * Each of `commits`' deploy stage, by SHA, from the mirror in one batch. After the answer, GitHub is asked whether
+   * the newest run or deployment head not yet compared contains each commit, for the first few commits that need it,
+   * so a later read can say live and the request stays within a Worker's allowance however many commits it shows.
    */
   async function stages(context: ServerContext, mirror: Mirror, commits: readonly { sha: string; committedAt: string }[]): Promise<Map<string, DeployStage>> {
     const branch = setup.branch ?? await readBranch(mirror);
-    const found = await Promise.all(commits.map(async ({ sha, committedAt }) => ({ sha, ...await deployStage(mirror, sha, committedAt, branch) })));
-    const unchecked = found.filter(({ heads }) => heads.length > 0);
-    if (unchecked.length > 0) {
-      const token = () => setup.token(context.env);
-      context.waitUntil((async () => {
-        for (const { sha, heads } of unchecked) await checkAncestry(mirror, token, sha, heads.slice(0, 1));
-      })());
-    }
-    return new Map(found.map(({ sha, stage }) => [sha, stage]));
+    const found = await deployStages(mirror, commits.map(({ sha, committedAt }) => ({ sha, landed: committedAt })), branch);
+    const unchecked = [...found].flatMap(([commit, { heads }]) => (heads.length > 0 ? [{ commit, head: heads[0]! }] : []));
+    if (unchecked.length > 0) context.waitUntil(checkAncestry(mirror, () => setup.token(context.env), unchecked));
+    return new Map([...found].map(([sha, { stage }]) => [sha, stage]));
   }
 
   return { webhook, status, record, read, stages };

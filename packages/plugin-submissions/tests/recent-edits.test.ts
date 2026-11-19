@@ -133,6 +133,37 @@ describe("the Recent edits panel", () => {
     expect(await panel(wiki, "ada", `${PANEL}?before=1%20OR%201=1`)).toBeNull();
   });
 
+  // Proves a full page stays well within one Worker invocation's D1 allowance (50 queries on Workers Free, a batch
+  // counting as one), the gate, listing, deploy states and the compares after the answer included, whatever state its
+  // commits are in: the deploy states of every commit cost one batch, not a query or two each.
+  it("renders a full page within a free Worker's D1 allowance", async () => {
+    const wiki = await site();
+    const page = Array.from({ length: 26 }, (_, index) => sha(200 + index));
+    await wiki.push(page.map((id, index) => ({
+      id, message: `Edit ${index + 1}`, at: ago(100 - index),
+      author: { name: "Ada", email: "a@example.org", username: "ada" }, modified: ["content/guide.md"],
+    })));
+    // Runs at some of the page's own commits, each state once, and later builds at commits outside the vault, which
+    // the page's every commit has yet to be compared with.
+    await wiki.run(1, page[1]!, ago(98), "completed", "success");
+    await wiki.run(2, page[2]!, ago(97), "in_progress");
+    await wiki.run(3, page[3]!, ago(96), "completed", "failure");
+    await wiki.run(4, sha(900), ago(3), "completed", "success");
+    await wiki.run(5, sha(901), ago(2), "in_progress");
+    // The first view runs the reconcile poll, which costs the same on any page that reads the mirror; count a view after it.
+    await panel(wiki, "mod");
+    await wiki.settle();
+
+    wiki.d1.count = 0;
+    const compares = wiki.github.requests.length;
+    const html = (await panel(wiki, "mod"))!;
+    await wiki.settle();
+    expect(headings(html)).toHaveLength(25);
+    expect(wiki.github.requests.slice(compares).filter((request) => request.includes("/compare/"))).toHaveLength(3);
+    // 15 today. One query per commit would add 25.
+    expect(wiki.d1.count).toBeLessThanOrEqual(20);
+  });
+
   // Proves deploy states come from the mirror alone, and a commit turns live once GitHub, asked after the answer, says a later successful build holds it.
   it("shows how far each commit has got toward live, without waiting on GitHub", async () => {
     const wiki = await site();

@@ -74,9 +74,40 @@ export interface Pushed {
 /** A hex SHA from a small number, for commits made up in tests. */
 export const sha = (n: number) => n.toString(16).padStart(40, "a");
 
+type D1 = Awaited<ReturnType<Miniflare["getD1Database"]>>;
+type D1Statement = ReturnType<D1["prepare"]>;
+
+/**
+ * `db` as the site gets it, counting its calls in `calls.count` as a Worker invocation's D1 limit does: each query
+ * one, and a whole batch one.
+ */
+function counting(db: D1) {
+  const calls = { count: 0 };
+  const real = new WeakMap<object, D1Statement>();
+  const count = <T>(result: T) => (calls.count++, result);
+  const statement = (prepared: D1Statement): D1Statement => {
+    const wrapped = {
+      bind: (...values: unknown[]) => statement(prepared.bind(...values)),
+      first: (column?: string) => count(column === undefined ? prepared.first() : prepared.first(column)),
+      all: () => count(prepared.all()),
+      run: () => count(prepared.run()),
+      raw: () => count(prepared.raw()),
+    };
+    real.set(wrapped, prepared);
+    return wrapped as unknown as D1Statement;
+  };
+  const database = {
+    prepare: (query: string) => statement(db.prepare(query)),
+    batch: (statements: D1Statement[]) => count(db.batch(statements.map((each) => real.get(each)!))),
+    exec: (query: string) => count(db.exec(query)),
+  };
+  return { database, calls };
+}
+
 export async function createEditsSite() {
   const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
   const db = await miniflare.getD1Database("SVARTZ_DB");
+  const { database, calls: d1 } = counting(db);
   const options: ServerOptions = {
     repo: REPO,
     labels: [],
@@ -106,7 +137,7 @@ export async function createEditsSite() {
       PRIVATE_GITHUB_SECRET: "fake-client-secret",
       SVARTZ_GITHUB_APP_KEY: generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs1", format: "pem" }),
       SVARTZ_GITHUB_WEBHOOK_SECRET: SECRET,
-      SVARTZ_DB: db,
+      SVARTZ_DB: database,
     },
     building: false,
     dev: false,
@@ -210,6 +241,8 @@ export async function createEditsSite() {
   return {
     sessions,
     github,
+    /** The site's D1 calls so far; set `count` to 0 to start counting one request's. */
+    d1,
     deliver,
     push,
     run,
