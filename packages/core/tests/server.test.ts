@@ -182,6 +182,29 @@ describe("server plugin routing", () => {
 
     expect(hello).toHaveBeenCalledTimes(1);
   });
+
+  it("runs an eager plugin's factory before another plugin answers its first request", async () => {
+    const order: string[] = [];
+    const plugin = (id: string) => async () => ({
+      default: () => {
+        order.push(`${id} starts`);
+        return () => {
+          order.push(`${id} answers`);
+          return new Response(id);
+        };
+      },
+    });
+    const handle = createServerHandle({
+      basePath: "", vault,
+      servers: [{ id: "reader", load: plugin("reader") }, { id: "accounts", load: plugin("accounts"), eager: true }],
+    }, { privateEnv: {}, building: false, dev: false });
+    const resolve = vi.fn(async () => new Response("page"));
+
+    await handle({ event: event("/_svartz/reader/"), resolve });
+    await handle({ event: event("/_svartz/reader/"), resolve });
+
+    expect(order).toEqual(["accounts starts", "reader starts", "reader answers", "reader answers"]);
+  });
 });
 
 describe("server plugin loading", () => {

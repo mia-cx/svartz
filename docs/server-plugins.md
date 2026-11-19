@@ -27,6 +27,8 @@ export default defineConfig({
 
 The module's default export is a factory. Svartz calls it once, with the plugin's `options`, on the plugin's first request. It returns the handler, which takes a standard `Request` and returns a `Response`. Returning `undefined` answers 404.
 
+A plugin whose factory sets up something other plugins read sets `server: { module, eager: true }`. Its factory then runs before any of the vault's plugins answers its first request. `@svartz/auth` does this, so every plugin reads accounts with the deployed config.
+
 ```ts
 import type { ServerModuleFactory } from "@svartz/core";
 

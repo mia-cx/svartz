@@ -111,7 +111,8 @@ function createServerRegistrySource(
     const specifier = server.module.startsWith("file:") ? fileURLToPath(server.module) : server.module;
     const options = jsonExpression(server.options);
     const data = jsonExpression(serverData.get(id));
-    return [`  { id: ${JSON.stringify(id)}, load: () => import(${JSON.stringify(specifier)}), options: ${options}, data: ${data} },`];
+    const eager = server.eager ? ", eager: true" : "";
+    return [`  { id: ${JSON.stringify(id)}, load: () => import(${JSON.stringify(specifier)}), options: ${options}, data: ${data}${eager} },`];
   });
   // With no runtime routes the handle passes through, so the server bundle gains nothing else.
   if (servers.length === 0 && Object.keys(markdown).length === 0) return "export const svartzHandle = ({ event, resolve }) => resolve(event);\n";

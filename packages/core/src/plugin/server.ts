@@ -30,6 +30,11 @@ export interface ServerModuleSpec<Options = unknown> {
   readonly module: string;
   /** JSON-serializable. Name secrets with `{ env: "NAME" }`; read them from `context.env` per request. */
   readonly options?: Options;
+  /**
+   * Run this plugin's factory before any of the vault's plugins answers its first request, instead of on this plugin's
+   * own first request. For a plugin whose factory sets up what other plugins read, as `auth`'s does with its admins.
+   */
+  readonly eager?: boolean;
 }
 
 /** Public settings of the vault a server plugin belongs to. */
@@ -71,6 +76,8 @@ export interface ServerRoute {
   readonly options?: unknown;
   /** What the plugin's hooks recorded for its server module during this build. */
   readonly data?: unknown;
+  /** The spec's `eager`: its factory runs before any plugin's first request is answered. */
+  readonly eager?: boolean;
 }
 
 /** What a build knows about its server plugins; `virtual:svartz/server` exports one per vault. */
@@ -216,11 +223,13 @@ function varyRepresentation(response: Response): Response {
 /**
  * Build a SvelteKit `handle` that sends `<basePath>/_svartz/<id>/…` to plugin `<id>` and every other request to `resolve`.
  * Published page GET/HEAD requests that prefer Markdown get a 303 to the page's emitted copy; others resolve HTML.
- * Unknown ids, and handlers answering `undefined`, return 404. Each factory runs once, on its plugin's first request.
+ * Unknown ids, and handlers answering `undefined`, return 404. Each factory runs once: on its plugin's first request,
+ * or for an `eager` plugin before the first request any plugin answers.
  */
 export function createServerHandle(registry: ServerRegistry, runtime: ServerHandleRuntime) {
   const root = `${registry.basePath}/${SERVER_ROUTE_SEGMENT}/`;
   const routes = new Map(registry.servers.map((route) => [route.id, route]));
+  const eager = registry.servers.filter((route) => route.eager);
   const handlers = new Map<string, Promise<ServerHandler>>();
 
   const handlerFor = (route: ServerRoute): Promise<ServerHandler> => {
@@ -268,6 +277,7 @@ export function createServerHandle(registry: ServerRegistry, runtime: ServerHand
     const route = routes.get(id);
     if (!route) return notFound(pathname);
 
+    await Promise.all(eager.map(handlerFor));
     const handler = await handlerFor(route);
     const waitUntilHost = platformWaitUntil(event.platform) ?? runtime.workers;
     const response = await handler(request, {

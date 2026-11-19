@@ -174,7 +174,9 @@ Local development over `http://localhost` works in Chrome and Firefox, which acc
 
 `admins` lists identity ids whose accounts always hold the `admin` role, so a fresh site has someone who can grant everything else. The role comes from config, not from the database, so nothing stored there takes it away; to remove an admin, take them off the list and deploy. An account holds the role when any provider account linked to it is listed. Each id's provider must be one the vault offers, or the build fails.
 
-Host vaults share accounts, so every host vault that enables auth must list the same admins. A server plugin that reads accounts before this deployment's auth routes have answered once uses the list the previous deployment stored in D1.
+Host vaults share accounts, so every host vault that enables auth must list the same admins, or the build fails.
+
+Server plugins always read this deployment's list: auth starts before any plugin answers a request. A host app's own route that calls `readAccount` before any plugin has answered in that worker uses the list auth last stored in D1, which can still be the previous deployment's.
 
 ## Routes
 

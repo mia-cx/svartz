@@ -51,6 +51,8 @@ function site(db: Database | undefined, { admins = [] as string[] } = {}) {
     servers: [
       {
         id: "auth",
+        // As the `auth` plugin registers it.
+        eager: true,
         load: () => import("../src/server"),
         options: { providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } }, admins },
       },
@@ -231,6 +233,16 @@ describe("bootstrap admins", () => {
 
     expect((await whoIs(request, admin)).signIn.account.roles).toEqual(["admin"]);
     expect((await whoIs(request, reader)).signIn.account.roles).toEqual([]);
+  });
+
+  it("lose the role on the next deployment's first request, even when another plugin answers it", async () => {
+    const db = await createDatabase();
+    const admin = await createAccount(site(db, { admins: ["github:583231"] }), OCTOCAT, "octocat");
+
+    // The deployment that removed the admin: its first request goes to the reader plugin, not to an auth route.
+    const redeployed = site(db, { admins: [] });
+
+    expect((await whoIs(redeployed, admin)).signIn.account.roles).toEqual([]);
   });
 });
 

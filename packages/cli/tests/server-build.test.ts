@@ -64,6 +64,11 @@ async function build(target: Record<string, unknown>, { serverPlugin = true, mou
           module: ${JSON.stringify(path.join(root, "plugins/hello.mjs"))},
           options: JSON.parse('{ "greeting": "hi", "token": { "env": "HELLO_TOKEN" }, "__proto__": { "own": true } }'),
         },
+      }, {
+        // Nothing requests this plugin: only \`eager\` runs its factory, which \`hello\` reports having run.
+        id: "setup",
+        disabled: ${!serverPlugin},
+        server: { module: ${JSON.stringify(path.join(root, "plugins/setup.mjs"))}, eager: true },
       }],
     }],
   };\n`);
@@ -103,7 +108,12 @@ beforeAll(async () => {
       base: context.base,
       vault: context.vault.id,
       clientAddress: context.clientAddress,
+      setupRan: globalThis.svartzTestSetupRan === true,
     });
+  };\n`);
+  await writeFile(path.join(root, "plugins/setup.mjs"), `export default () => {
+    globalThis.svartzTestSetupRan = true;
+    return () => undefined;
   };\n`);
 }, BUILD_TIMEOUT);
 
@@ -187,6 +197,8 @@ describe("standalone builds with a server plugin", () => {
           base: "/_svartz/hello",
           vault: "site",
           clientAddress: "127.0.0.1",
+          // The first plugin request of this server, and the eager plugin's factory already ran.
+          setupRan: true,
         });
         const unslashed = await fetch(`${origin}/_svartz/hello?x=1`, { ...post, redirect: "manual" });
         expect([unslashed.status, unslashed.headers.get("location")]).toEqual([308, "/_svartz/hello/?x=1"]);

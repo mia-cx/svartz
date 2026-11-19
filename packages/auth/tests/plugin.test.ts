@@ -12,7 +12,8 @@ describe("the auth plugin", () => {
     await plugin.emitArtifacts!.run(ctx);
 
     expect(plugin.id).toBe("auth");
-    expect(plugin.server).toEqual({ module: expect.stringMatching(/server\.js$/), options: { providers: { github }, privacyNotice: "/privacy/" } });
+    // Eager: plugins that read accounts need this deployment's admins before their own first request.
+    expect(plugin.server).toEqual({ module: expect.stringMatching(/server\.js$/), options: { providers: { github }, privacyNotice: "/privacy/" }, eager: true });
     expect(ctx.compiler?.browserResources.get("auth")?.options).toEqual({
       // Below the deployment base, which the dialog only learns when it mounts: a host app's comes from SvelteKit.
       endpoint: "/notes/_svartz/auth",
@@ -98,6 +99,10 @@ describe("one sign-in per host app", () => {
     ["lists other admins", [
       { id: "journal", plugins: [auth({ providers: { github }, admins: ["github:583231"] })] },
       { id: "work", plugins: [auth({ providers: { github } })] },
+    ], /vault "work" lists different admins than vault "journal"/],
+    ["lists one admin twice where another host vault lists two", [
+      { id: "journal", plugins: [auth({ providers: { github }, admins: ["github:583231", "github:1"] })] },
+      { id: "work", plugins: [auth({ providers: { github }, admins: ["github:583231", "github:583231"] })] },
     ], /vault "work" lists different admins than vault "journal"/],
     ["is its own, with other admins than another host vault", [
       { id: "journal", plugins: [auth({ providers: { github }, admins: ["github:583231"] })] },

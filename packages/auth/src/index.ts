@@ -56,7 +56,7 @@ function validate(options: AuthOptions): ProviderId[] {
 
 /** The same admins in any order: host vaults share accounts, so they must agree on who administers them. */
 const sameAdmins = (a: readonly string[] = [], b: readonly string[] = []): boolean =>
-  a.length === b.length && a.every((admin) => b.includes(admin));
+  new Set(a).size === new Set(b).size && a.every((admin) => b.includes(admin));
 
 /** The `auth` options a vault runs, or `undefined` when it doesn't enable auth. */
 function authOptionsOf(vault: ResolvedConfig): AuthOptions | undefined {
@@ -102,7 +102,8 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], call
   const serverOptions: AuthServerOptions = callbackMountPath === undefined ? options : { ...options, callbackMountPath };
   return definePlugin(() => ({
     id: AUTH_PLUGIN_ID,
-    server: { module: SERVER_MODULE, options: serverOptions },
+    // Eager, so every plugin that reads accounts sees this deployment's `admins` from its first request on.
+    server: { module: SERVER_MODULE, options: serverOptions, eager: true },
     forVault(site) {
       const target = callbackVaultFor(options, providers, site);
       return target.id === site.vault.id ? authPlugin(options, providers) : authPlugin(options, providers, target.mountPath);
