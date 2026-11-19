@@ -234,27 +234,25 @@ const SETTLE_ATTEMPTS = 3;
 
 /**
  * Make the ledger agree with whether `event.from` agrees: the pair's entries alternate, credit then take-back, under
- * refs `<ref>#0`, `<ref>#1`…, so an odd count means credited. A take-back returns exactly what its credit gave, to the
- * account it gave it to. Answers the account whose score changed.
+ * refs `<ref>#0`, `<ref>#1`…, so an odd count means credited. A credit goes to `account`, the event's recipient; a
+ * take-back returns exactly what its credit gave, to the account it gave it to.
  */
-async function settleAgreement(db: Database, event: Extract<ReputationEvent, { kind: "agreement" }>, settings: ReputationSettings): Promise<string | undefined> {
+async function settleAgreement(db: Database, event: Extract<ReputationEvent, { kind: "agreement" }>, settings: ReputationSettings, account: string | undefined): Promise<void> {
   const prefix = `${event.ref}#`;
   for (let attempt = 0; attempt < SETTLE_ATTEMPTS; attempt++) {
     const { results: entries } = await db.prepare(`SELECT account_id, points FROM auth_reputation
       WHERE source = 'agreement' AND substr(ref, 1, ?2) = ?1 ORDER BY id`).bind(prefix, prefix.length).all<{ account_id: string; points: number }>();
     const credited = entries.length % 2 === 1;
-    if (credited === event.agreed) return undefined;
+    if (credited === event.agreed) return;
     const ref = `${prefix}${entries.length}`;
     if (event.agreed) {
-      const account = await recipientOf(db, event.to);
-      if (!account || account === event.from) return undefined;
-      if (await append(db, { account, source: "agreement", ref, points: settings.agreement }, settings.dailyLimit)) return account;
+      if (!account || account === event.from) return;
+      if (await append(db, { account, source: "agreement", ref, points: settings.agreement }, settings.dailyLimit)) return;
     } else {
-      const { account_id: account, points } = entries.at(-1)!;
-      if (await append(db, { account, source: "agreement", ref, points: -points })) return account;
+      const { account_id: credit, points } = entries.at(-1)!;
+      if (await append(db, { account: credit, source: "agreement", ref, points: -points })) return;
     }
   }
-  return undefined;
 }
 
 /** Throw unless `event` is one auth can weigh: a plugin bug, never a reader's input. */
@@ -276,8 +274,8 @@ function pointsFor(event: Exclude<ReputationEvent, { kind: "agreement" }>, setti
 
 /**
  * Record `event` in the ledger, weighed with the site's weights, and give its account any role a threshold now grants.
- * Posting an event again, as a repeated webhook delivery or a poll that reads it again would, changes nothing. An event
- * whose recipient has no account changes nothing either.
+ * Posting an event again, as a repeated webhook delivery or a poll that reads it again would, scores nothing more, and
+ * gives any role the first post failed to give. An event whose recipient has no account changes nothing.
  *
  * Throws when the site binds no `SVARTZ_DB`, or the write fails.
  */
@@ -286,15 +284,14 @@ export async function postReputation(env: Env, event: ReputationEvent): Promise<
   const db = await accountsDatabase(env);
   if (!db) throw new Error(`[svartz:auth] bind a D1 database as ${ACCOUNTS_DATABASE_ENV} to keep reputation`);
   const settings = await readSettings(db);
-  if (event.kind === "agreement") {
-    const changed = await settleAgreement(db, event, settings);
-    if (changed) await promote(db, changed);
-    return;
-  }
   const account = await recipientOf(db, event.to);
-  if (!account) return;
-  const limited = event.kind === "declined" ? undefined : settings.dailyLimit;
-  if (await append(db, { account, source: event.kind, ref: event.ref, points: pointsFor(event, settings) }, limited)) await promote(db, account);
+  if (event.kind === "agreement") await settleAgreement(db, event, settings, account);
+  else if (account) {
+    const limited = event.kind === "declined" ? undefined : settings.dailyLimit;
+    await append(db, { account, source: event.kind, ref: event.ref, points: pointsFor(event, settings) }, limited);
+  }
+  // Also when the event was recorded before: posting it again finishes a promotion that failed after its entry landed.
+  if (account) await promote(db, account);
 }
 
 /** What giving kudos came to. */
@@ -311,7 +308,11 @@ export async function giveKudos(db: Database, giver: AuditEntry["actor"], recipi
   const ref = `${prefix}${recipient.id}:${day.slice(0, 10)}`;
   const { results: [given] } = await db.prepare(`SELECT COUNT(*) AS count, SUM(ref = ?3) AS again FROM auth_reputation
     WHERE source = 'kudos' AND substr(ref, 1, ?2) = ?1 AND at >= ?4`).bind(prefix, prefix.length, ref, day).all<{ count: number; again: number | null }>();
-  if (given?.again) return "already";
+  if (given?.again) {
+    // Giving again finishes a promotion that failed after the first gift landed.
+    await promote(db, recipient.id);
+    return "already";
+  }
   if ((given?.count ?? 0) >= KUDOS_PER_DAY) return "limit";
   const { kudos: points } = await readSettings(db);
   try {

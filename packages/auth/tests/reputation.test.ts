@@ -227,6 +227,35 @@ describe("thresholds", () => {
     expect(text(await tour.page(`${DASHBOARD}auth/people/`, root))).toContain("@ada ada By reputation");
   });
 
+  // Proves a promotion that failed after its points landed is finished by posting the event again, for each kind of
+  // event: a webhook delivered again, a +1 settled again, kudos given again.
+  it("give a role that a failed promotion missed once the event is posted again", async () => {
+    const tour = await site();
+    const root = await signUp(tour, ADMIN, "root");
+    await signUp(tour, 2, "ada");
+    await signUp(tour, 3, "grace");
+    await signUp(tour, 4, "lin");
+    await tour.post("people/role", root, { name: "editors" });
+    await tour.post("reputation/points", root, { edit: "1", page: "5", agreement: "5", kudos: "5", declined: "0", "daily-limit": "100" });
+    await tour.post("reputation/threshold", root, { role: "editors", score: "5" });
+    const ada = await tour.id("ada");
+    const page = () => postReputation(tour.env, { kind: "page", to: { account: ada }, ref: "test:commit:1" });
+    const agreement = () => postReputation(tour.env, { kind: "agreement", to: { identity: "github:3" }, ref: `test:comment-1:${ada}`, from: ada, agreed: true });
+    const kudos = () => tour.post("reputation/kudos", root, { handle: "lin", reason: "Thanks." });
+    await tour.rows("CREATE TRIGGER fail_promotion BEFORE INSERT ON auth_role_members BEGIN SELECT RAISE(ABORT, 'promotion failed'); END");
+    await expect(page()).rejects.toThrow(/promotion failed/);
+    await expect(agreement()).rejects.toThrow(/promotion failed/);
+    await expect(kudos()).rejects.toThrow(/promotion failed/);
+    await tour.rows("DROP TRIGGER fail_promotion");
+
+    await page();
+    await agreement();
+    await kudos();
+
+    expect([await tour.score("ada"), await tour.score("grace"), await tour.score("lin")]).toEqual([5, 5, 5]);
+    expect((await auditLog(tour, "auth:role:promote")).map(({ detail }) => detail.account)).toEqual(["ada", "grace", "lin"]);
+  });
+
   // Proves the panel's bounds: no weight or threshold outside its range, no NaN or infinity, and no threshold for the
   // admin role or a role that doesn't exist; and only someone who may change grants may change any of it.
   it("refuse values out of bounds, the admin role, unknown roles, and anyone who may not change grants", async () => {
