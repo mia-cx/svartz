@@ -176,16 +176,19 @@ function sent(dialog: HTMLDialogElement, prefix: string): void {
  * popover, such as the comment card the opener sits in; they reopen, outermost first, when the dialog closes, and focus
  * goes back to the opener.
  */
-async function openReport(choices: readonly Choice[], opener: HTMLElement, endpoint: string, me: string): Promise<void> {
-  if (document.querySelector("dialog.sv-moderation-dialog[open]")) return;
+async function openReport(choices: readonly Choice[], opener: HTMLElement, endpoint: string, me: string): Promise<HTMLDialogElement | undefined> {
+  const showing = () => document.querySelector("dialog.sv-moderation-dialog[open]") !== null;
+  if (showing()) return undefined;
   const signedIn = await fetch(me, { headers: { accept: "application/json" } })
     .then(async (response) => !response.ok || await response.json() !== null)
     // Unsure: let the server decide, which asks a signed-out reader to sign in.
     .catch(() => true);
   if (!signedIn) {
     openSignIn();
-    return;
+    return undefined;
   }
+  // A second click may have opened one while this asked who's signed in.
+  if (showing()) return undefined;
   const popovers: HTMLElement[] = [];
   for (let node = opener.closest<HTMLElement>(":popover-open"); node; node = node.parentElement?.closest<HTMLElement>(":popover-open") ?? null) {
     popovers.unshift(node);
@@ -198,29 +201,62 @@ async function openReport(choices: readonly Choice[], opener: HTMLElement, endpo
   }, { once: true });
   document.body.append(dialog);
   dialog.showModal();
+  return dialog;
 }
+
+const NOTE = "[data-svartz-note-content], [data-svartz-note]";
+
+/**
+ * The note body `trigger` belongs to: the last one that starts before it. That holds it, or precedes it, as annotations
+ * puts a note's comment cards right after its body.
+ */
+function noteOf(trigger: Element): Element | undefined {
+  let owner: Element | undefined;
+  for (const note of document.querySelectorAll(NOTE)) {
+    if (!(note.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING)) break;
+    owner = note;
+  }
+  return owner;
+}
+
+/** Note bodies an instance was mounted for. An instance without a note leaves their triggers to theirs. */
+const scoped = new Set<Element>();
+/** Clicks an instance answered, so each opens one dialog however many instances listen. */
+const answered = new WeakSet<Event>();
 
 /**
  * Browser script entry: answer `data-svartz-report` buttons, and add **Report** to a note's page actions. The build
  * doesn't know a host app's `paths.base`, so the routes get the deployment base here, from `context`.
+ *
+ * A host page mounts this once per note it shows, each with its vault's options and `context.note`: each instance then
+ * answers only the buttons in or beside its own note, so a report goes to the vault that showed it, and leaves the page
+ * actions, which belong to no one note, alone. On a theme page it answers every button.
  */
-export function mount(_pathname: string, { mountPath, userPages }: BrowserOptions, { base }: BrowserScriptContext = { base: "" }): () => void {
+export function mount(_pathname: string, { mountPath, userPages }: BrowserOptions, { base, note: mountedFor }: BrowserScriptContext = { base: "" }): () => void {
   const home = `${base}${mountPath}`;
   const endpoint = `${home}/_svartz/${PLUGIN_ID}`;
   const me = `${home}/_svartz/auth/me/`;
+  let shown: HTMLDialogElement | undefined;
   const open = (choices: readonly Choice[], opener: HTMLElement) =>
-    void openReport(choices, opener, endpoint, me).catch((cause: unknown) => console.error("[svartz:moderation] couldn't open the report dialog", cause));
+    void openReport(choices, opener, endpoint, me)
+      .then((dialog) => shown = dialog ?? shown)
+      .catch((cause: unknown) => console.error("[svartz:moderation] couldn't open the report dialog", cause));
 
+  if (mountedFor) scoped.add(mountedFor);
   const onClick = (event: MouseEvent) => {
     const trigger = event.target instanceof Element ? event.target.closest<HTMLElement>(TRIGGER) : null;
     const choice = trigger && marked(trigger);
-    if (!trigger || !choice) return;
+    if (!trigger || !choice || answered.has(event)) return;
+    const owner = noteOf(trigger);
+    if (mountedFor ? owner !== mountedFor : owner !== undefined && scoped.has(owner)) return;
+    answered.add(event);
     event.preventDefault();
     open([choice], trigger);
   };
+  // On the document, not the note: annotations' cards sit beside it, and in the top layer once open.
   document.addEventListener("click", onClick);
 
-  const note = document.querySelector<HTMLElement>("[data-svartz-note]")?.dataset.svartzNote;
+  const note = mountedFor ? undefined : document.querySelector<HTMLElement>("[data-svartz-note]")?.dataset.svartzNote;
   const region = document.querySelector('[data-svartz-region="page-actions"]');
   let action: HTMLButtonElement | undefined;
   if (note && region) {
@@ -238,8 +274,9 @@ export function mount(_pathname: string, { mountPath, userPages }: BrowserOption
 
   return () => {
     document.removeEventListener("click", onClick);
+    if (mountedFor) scoped.delete(mountedFor);
     action?.remove();
     // The dialog lives on <body>, outside the page, so client-side navigation alone would leave it open.
-    document.querySelector("dialog.sv-moderation-dialog")?.remove();
+    shown?.remove();
   };
 }

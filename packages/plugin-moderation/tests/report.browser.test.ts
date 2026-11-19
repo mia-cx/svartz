@@ -103,6 +103,28 @@ describe("the Report action", () => {
     await expect.element(page.getByRole("button", { name: "Report comment" })).toHaveFocus();
   });
 
+  // Proves a host page with several notes: one click opens one dialog, from the instance of the note's own vault.
+  it("on a host page with two vaults' notes, answers a comment's Report once, for its own vault", async () => {
+    document.body.innerHTML = `<main><div data-svartz-note-content data-svartz-note="guide"><p>Read the guide.</p></div>
+<div data-svartz-note-content data-svartz-note="garden"><p>roses bloom in June.</p></div></main>`;
+    const [guide, garden] = document.querySelectorAll<HTMLElement>("[data-svartz-note]");
+    cleanups.push(mountSignIn("/app/", { endpoint: "/notes/_svartz/auth", mountPath: "/notes", providers: [{ id: "github", label: "GitHub" }] }));
+    // The docs vault's note comes first, so an instance ignoring its note would answer the garden comment too.
+    cleanups.push(mount("/app/", { mountPath: "/docs", userPages: "users" }, { base: "", note: guide! }));
+    cleanups.push(mount("/app/", OPTIONS, { base: "", note: garden! }));
+    cleanups.push(attach(garden!, { endpoint: "/notes/_svartz/annotations", page: "garden", report: true }));
+    await page.getByRole("button", { name: /Comment by Grace Hopper/ }).click();
+
+    await page.getByRole("button", { name: "Report comment" }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Report comment" });
+    await dialog.getByLabelText("What's wrong?").fill("Spam link.");
+    await dialog.getByRole("button", { name: "Send report" }).click();
+    await expect.element(page.getByText("Report sent")).toBeVisible();
+    expect(document.querySelectorAll("dialog.sv-moderation-dialog")).toHaveLength(1);
+    expect(await commands.storedReports()).toEqual([{ target_kind: "annotation", target_id: "c1", reason: "Spam link." }]);
+  });
+
   it("asks a signed-out reader to sign in first", async () => {
     await commands.signInAs(location.origin, null);
     note("garden");

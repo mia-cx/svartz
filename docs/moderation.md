@@ -25,7 +25,7 @@ Reports need accounts, so the vault needs `auth` with the [accounts database](au
 
 ## Reporting
 
-Every note ends its page actions with **Report**, beside **Copy page** and **Edit**. On a [user page](auth.md#user-pages), `users/<handle>` or in the folder auth's `userPages` names, the dialog asks whether the page or the account is reported. On a vault with [annotations](annotations.md), other people's comments end with **Report** too. The dialog asks what's wrong, up to 1,000 characters, and thanks the reader once the report is in the queue. A signed-out reader gets the sign-in dialog instead and comes back to the page.
+Every note on a theme page ends its page actions with **Report**, beside **Copy page** and **Edit**. A host app page that shows notes with `SvartzNoteContent` has no page actions of its own, so there only comments offer **Report**, each answered for the vault of the note it's on. On a [user page](auth.md#user-pages), `users/<handle>` or in the folder auth's `userPages` names, the dialog asks whether the page or the account is reported. On a vault with [annotations](annotations.md), other people's comments end with **Report** too. The dialog asks what's wrong, up to 1,000 characters, and thanks the reader once the report is in the queue. A signed-out reader gets the sign-in dialog instead and comes back to the page.
 
 Any element marked `data-svartz-report="<kind>:<id>"` opens the same dialog for that target, named by its `data-svartz-report-label`:
 
