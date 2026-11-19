@@ -160,14 +160,14 @@ The provider's access token is used once, to read the profile, and then dropped;
 
 Each sign-in starts a **session** in D1 that lasts 30 days. The `__Host-svartz-session` cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`) holds only its id, encrypted with AES-GCM under a key HKDF derives from `PRIVATE_SVARTZ_SESSION_SECRET`. Every read looks the session up, so deleting it signs that browser out on its next request, along with any copy of the cookie. Signing out deletes it. A tampered, expired or wrong-key cookie reads as signed out.
 
-Readers see their sessions and sign out everywhere on [the account page](#the-account-page). To sign an account out everywhere yourself, delete its sessions with Wrangler, and record the sign-out so no cookie from before accounts starts a new one:
+Readers see their sessions and sign out everywhere on [the account page](#the-account-page). To sign an account out everywhere yourself, delete its sessions with Wrangler, and record its linked provider accounts as signed out so no cookie from before accounts starts a new one:
 
 ```sh
 wrangler d1 execute notes --remote --command "DELETE FROM auth_sessions WHERE account_id = (SELECT id FROM auth_accounts WHERE handle = 'octocat');
-  INSERT OR REPLACE INTO auth_signed_out_everywhere (account_id, signed_out_at) SELECT id, datetime('now') FROM auth_accounts WHERE handle = 'octocat'"
+  INSERT OR REPLACE INTO auth_signed_out_identities (identity_id, signed_out_at) SELECT i.id, datetime('now') FROM auth_identities i JOIN auth_accounts a ON a.id = i.account_id WHERE a.handle = 'octocat'"
 ```
 
-Cookies from before accounts held the identity itself. Each becomes an account and a session the first time a plugin reads it, with the closest free handle to the provider's username, so the upgrade signs nobody out and asks nobody anything. Every later read of that cookie reaches the same session; once that session is deleted or signed out, the old cookie never starts another. One never read before its account signs out everywhere never becomes a session either.
+Cookies from before accounts held the identity itself. Each becomes an account and a session the first time a plugin reads it, with the closest free handle to the provider's username, so the upgrade signs nobody out and asks nobody anything. Every later read of that cookie reaches the same session; once that session is deleted or signed out, the old cookie never starts another. One never read before its account signs out everywhere never becomes a session either, even after its provider account is linked to another account.
 
 Local development over `http://localhost` works in Chrome and Firefox, which accept `Secure` cookies there.
 

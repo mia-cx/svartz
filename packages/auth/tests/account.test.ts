@@ -282,6 +282,26 @@ describe("/-/account/", () => {
     expect(await reader(request, await signIn(request, OCTOCAT))).toMatchObject({ handle: "octocat" });
   });
 
+  // Proves an unread cookie from before accounts stays signed out after sign out everywhere, wherever its provider
+  // account goes next: unlinked from the account and linked to another, it still never becomes a session.
+  it("keeps an unread cookie from before accounts signed out after its provider account moves", async () => {
+    const { request } = site(await createDatabase());
+    const github = await signUp(request, OCTOCAT, "octocat");
+    await link(request, github, NELLY);
+    const unread = [`__Host-svartz-session=${await seal(
+      { id: `discord:${NELLY.id}`, provider: "discord", name: "Nelly", handle: "nelly" }, SECRET, "session", 30 * 24 * 60 * 60)}`];
+
+    await post(request, "sign-out-everywhere", github);
+    const again = await signIn(request, OCTOCAT);
+    await post(request, "unlink", again, { identity: `discord:${NELLY.id}` });
+    const hubot = await signUp(request, HUBOT, "hubot");
+    await link(request, hubot, NELLY);
+
+    expect(await reader(request, unread)).toBeNull();
+    // Signing in with that Discord account still works, on the account that holds it now.
+    expect(await reader(request, await signIn(request, NELLY))).toMatchObject({ handle: "hubot" });
+  });
+
   // Proves a session reads only while its provider account is still linked to its account. A sign-in with Discord looks
   // up Discord's account, then inserts a session for it. When the account unlinks Discord and Discord joins another
   // account in between, that session lands on the first account, which unlinked Discord to keep it out.
