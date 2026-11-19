@@ -117,6 +117,15 @@ describe("the History action", () => {
     expect([...region.children].map((child) => child.textContent)).toEqual(["Edit"]);
   });
 
+  // Proves a page whose address the browser escapes more than the index does still gets its action.
+  it("finds a page whose address escapes a reserved character", async () => {
+    actions();
+    const unmount = mount("/wiki/notes%26tips/", { mountPath: "/wiki", pages: ["/wiki/notes&tips/"] });
+
+    await expect.element(page.getByRole("link", { name: "History" })).toHaveAttribute("href", "/wiki/-/history/notes&tips/");
+    unmount?.();
+  });
+
   // Proves a page without a history, such as a protected one, gets no action.
   it("stays off pages without a history", () => {
     const region = actions();

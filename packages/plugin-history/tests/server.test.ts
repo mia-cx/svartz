@@ -276,6 +276,25 @@ describe("the requests a page view makes", () => {
     expect(github.pending).toEqual([]);
     expect(text(diff!.html)).toContain("The page at 19 Nov 2026, 10:30 UTC Guide Expanded.");
   });
+
+  // Proves a diff says nothing about the earlier revision it couldn't read: GitHub stops answering after the later
+  // one, and the page doesn't claim the note didn't exist before it.
+  it("doesn't call a page new when the earlier revision couldn't be read", async () => {
+    const site = await createSite();
+    const older: TestCommit = { sha: "3".repeat(40), message: "Start the guide", at: 0, author: GRACE, committer: GITHUB_WEB, files: [GUIDE_PATH] };
+    const newer: TestCommit = { sha: "4".repeat(40), message: "Expand the guide", at: 30, author: GRACE, committer: GITHUB_WEB, files: [GUIDE_PATH] };
+    const reset = String(Math.floor(Date.now() / 1000) + 3600);
+    replayGitHub([
+      firstToken,
+      compareExchange(newer.sha), commitExchange(newer, { "x-ratelimit-remaining": "100", "x-ratelimit-reset": reset }),
+    ], INSTALLATION_TOKEN);
+
+    const diff = await site.page(`${HISTORY}?from=${older.sha}&to=${newer.sha}`);
+    await site.settle();
+
+    expect(text(diff!.html)).toContain("GitHub isn't answering right now, so these revisions can't be shown.");
+    expect(text(diff!.html)).not.toContain("The page didn't exist yet.");
+  });
 });
 
 describe("a commit GitHub lists more than a page of files for", () => {

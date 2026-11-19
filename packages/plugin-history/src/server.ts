@@ -123,15 +123,18 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
     let to: Commit | undefined;
     let from: Commit | undefined;
     let comparison: Comparison;
+    // Without a `from`, the page says the note didn't exist before `to`; that is only known once `from` was read.
+    let bothRead = false;
     try {
       to = await reader.commit(toSha);
       if (!to) return undefined;
       from = fromSha === null ? await reader.previous(note.path, to.sha) : await reader.commit(fromSha);
       if (fromSha !== null && !from) return undefined;
+      bothRead = true;
       comparison = await compare(note, from, to, reader, link.deployment);
     } catch (error) {
       if (!(error instanceof CommitsUnavailable)) throw error;
-      if (!to) return page(undefined, { kind: "unavailable" });
+      if (!to || !bothRead) return page(undefined, { kind: "unavailable" });
       comparison = { kind: "unavailable" };
     }
     const [shownTo, shownFrom] = await changesOf(from ? [to, from] : [to], context);
