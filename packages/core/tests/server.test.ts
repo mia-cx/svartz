@@ -296,6 +296,61 @@ describe("plugin pages", () => {
   });
 });
 
+describe("dashboard panels", () => {
+  const pageEvent = (path: string): ServerHandleEvent => ({
+    request: new Request(`https://wiki.test${path}`), url: new URL(`https://wiki.test${path}`), getClientAddress: () => "",
+  });
+  const panel = (id: string, title: string) => ({
+    id, title, permission: `moderation:${id}:read` as const,
+    render: (request: Request, context: PageContext) => ({ title, html: `${request.url} ${context.base} ${context.path}` }),
+  });
+
+  // Proves the dashboard's page lists every plugin's panels in registry order, and renders each in its own plugin's
+  // context, with the path below the panel, whether or not that plugin has started or answers requests itself.
+  it("lists each plugin's panels and renders them in that plugin's context", async () => {
+    const server = createServer({
+      basePath: "/docs", vault,
+      servers: [
+        { id: "auth", pages: ["dashboard"], load: async () => ({ default: () => ({ page: async (request: Request, context: PageContext) => {
+          const sections = await context.dashboard();
+          const reports = sections.find(({ plugin }) => plugin === "moderation")!.panels[1]!;
+          return {
+            title: sections.map(({ plugin, title, panels }) => `${plugin}:${title}:${panels.map(({ id, permission }) => `${id}=${permission}`).join(",")}`).join(" "),
+            html: JSON.stringify(await reports.render(request, "open/")),
+          };
+        } }) }) },
+        { id: "hello", load: async () => ({ default: () => () => new Response("hello") }) },
+        { id: "moderation", load: async () => ({ default: () => ({ dashboard: { title: "Moderation", panels: [panel("audit", "Audit log"), panel("reports", "Reports")] } }) }) },
+      ],
+    }, { privateEnv: {}, building: false, dev: false });
+
+    const page = await server.page(pageEvent("/docs/-/dashboard/"));
+
+    expect(page).toEqual({
+      title: "moderation:Moderation:audit=moderation:audit:read,reports=moderation:reports:read",
+      html: JSON.stringify({ title: "Reports", html: "https://wiki.test/docs/-/dashboard/ /docs/_svartz/moderation open/" }),
+    });
+  });
+
+  // Proves a contribution the dashboard couldn't route fails loudly, naming the plugin and the panel.
+  it("names a plugin whose panels the dashboard couldn't route", async () => {
+    const dashboardOf = (contribution: unknown) => createServer({
+      basePath: "", vault,
+      servers: [
+        { id: "auth", pages: ["dashboard"], load: async () => ({ default: () => ({ page: async (_: Request, context: PageContext) => (await context.dashboard(), undefined) }) }) },
+        { id: "moderation", load: async () => ({ default: () => ({ handle: () => undefined, dashboard: contribution }) }) },
+      ],
+    }, { privateEnv: {}, building: false, dev: false }).page(pageEvent("/-/dashboard/"));
+
+    await expect(dashboardOf({ title: "Moderation", panels: [panel("Reports", "Reports")] }))
+      .rejects.toThrow('plugin "moderation" dashboard panel "Reports" needs an id of lowercase letters, digits and hyphens');
+    await expect(dashboardOf({ title: "Moderation", panels: [panel("reports", "Reports"), panel("reports", "Queue")] }))
+      .rejects.toThrow('plugin "moderation" dashboard lists panel "reports" twice');
+    await expect(dashboardOf({ title: "Moderation", panels: [{ ...panel("reports", "Reports"), permission: "" }] }))
+      .rejects.toThrow('plugin "moderation" dashboard panel "reports" needs the permission that opens it');
+  });
+});
+
 describe("server plugin loading", () => {
   it("retries a server module that failed to load", async () => {
     const load = vi.fn()

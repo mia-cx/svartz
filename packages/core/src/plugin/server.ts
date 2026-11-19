@@ -1,5 +1,6 @@
 import type { MaybePromise } from "../types";
 import { decodeRoutePath } from "../route-path";
+import type { PermissionSlug } from "./types";
 
 /** Path segment under which every server plugin answers: `<base><mount>/_svartz/<plugin-id>/`. */
 export const SERVER_ROUTE_SEGMENT = "_svartz";
@@ -68,6 +69,11 @@ export interface ServerContext {
   readonly base: string;
   /** Keeps work alive after the response: the platform's `waitUntil` on Workers; elsewhere the promise runs on and its failure is logged. */
   waitUntil(promise: Promise<unknown>): void;
+  /**
+   * Every dashboard panel the vault's server plugins contribute, grouped by plugin in registry order. Starts each
+   * plugin's factory that hasn't run yet. It checks no permission: whoever lists or renders a panel decides who may.
+   */
+  dashboard(): Promise<readonly DashboardSection[]>;
 }
 
 /** Answers a request under the plugin's prefix. `undefined` answers 404. */
@@ -96,10 +102,51 @@ export type PageResult = PluginPage | { readonly redirect: string };
  */
 export type PageRenderer = (request: Request, context: PageContext) => MaybePromise<PageResult | undefined>;
 
-/** What a server factory builds when it renders pages: its request handler, if any, and its page renderer. */
+/**
+ * A tool or settings screen a plugin adds to the site's dashboard, at `/-/dashboard/<plugin id>/<panel id>/`. The
+ * dashboard shows it only to viewers who hold `permission` on the vault, and checks that again on every render.
+ */
+export interface DashboardPanel {
+  /** The panel's path segment below its plugin's. Follows the plugin id rules; unique within the plugin. */
+  readonly id: string;
+  /** The link to it on the dashboard, and its page's title: "People & permissions". */
+  readonly title: string;
+  /** What a viewer must hold, on the vault or the whole site, to see and open the panel. */
+  readonly permission: PermissionSlug;
+  /**
+   * Renders a GET of the panel or a path below it, as a page renderer does. `context.path` is the path below the
+   * panel: `""` for the panel itself, or such as `roles/editors/`. Forms post to the plugin's own routes, which check
+   * the permission again: hiding the panel is not the gate.
+   */
+  readonly render: PageRenderer;
+}
+
+/** What a plugin adds to the dashboard: a heading for its panels, and the panels. */
+export interface DashboardContribution {
+  /** Names the plugin on the dashboard, above its panels: "Accounts". */
+  readonly title: string;
+  readonly panels: readonly DashboardPanel[];
+}
+
+/** One plugin's panels, as {@link ServerContext.dashboard} lists them. */
+export interface DashboardSection {
+  /** The plugin's id, which is its path segment below `/-/dashboard/`. */
+  readonly plugin: string;
+  readonly title: string;
+  readonly panels: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly permission: PermissionSlug;
+    /** Renders the panel in its own plugin's context, so its forms post to that plugin. `path` is below the panel. */
+    render(request: Request, path: string): Promise<PageResult | undefined>;
+  }[];
+}
+
+/** What a server factory builds when it renders pages or panels: its request handler, its page renderer and its panels. */
 export interface ServerModule {
   readonly handle?: ServerHandler;
   readonly page?: PageRenderer;
+  readonly dashboard?: DashboardContribution;
 }
 
 /**
@@ -203,12 +250,35 @@ async function loadServerModule(route: ServerRoute): Promise<ServerModule> {
   }
   const built: unknown = module.default(route.options, route.data);
   if (typeof built === "function") return { handle: built as ServerHandler };
-  const { handle, page } = (built ?? {}) as Partial<Record<keyof ServerModule, unknown>>;
+  const { handle, page, dashboard } = (built ?? {}) as Partial<Record<keyof ServerModule, unknown>>;
   if ((typeof handle === "function" || handle === undefined) && (typeof page === "function" || page === undefined)
-    && (handle || page)) {
+    && (handle || page || dashboard)) {
+    if (dashboard !== undefined) checkDashboard(route.id, dashboard);
     return built as ServerModule;
   }
-  throw new Error(`[svartz:server] plugin "${route.id}" server factory must return a handler or { handle, page }`);
+  throw new Error(`[svartz:server] plugin "${route.id}" server factory must return a handler or { handle, page, dashboard }`);
+}
+
+const isText = (value: unknown): value is string => typeof value === "string" && value.trim() !== "";
+
+/** Refuse a contribution the dashboard couldn't list or route, naming the plugin. */
+function checkDashboard(plugin: string, dashboard: unknown): asserts dashboard is DashboardContribution {
+  const fail = (problem: string): never => {
+    throw new Error(`[svartz:server] plugin "${plugin}" dashboard ${problem}`);
+  };
+  const { title, panels } = (dashboard ?? {}) as Partial<Record<keyof DashboardContribution, unknown>>;
+  if (!isText(title)) fail("needs a title");
+  if (!Array.isArray(panels)) fail("needs a list of panels");
+  const ids = new Set<string>();
+  for (const panel of panels as Partial<Record<keyof DashboardPanel, unknown>>[]) {
+    const { id } = panel ?? {};
+    if (typeof id !== "string" || !SERVER_PLUGIN_ID_PATTERN.test(id)) fail(`panel ${JSON.stringify(id)} needs an id of lowercase letters, digits and hyphens`);
+    if (ids.has(id as string)) fail(`lists panel "${id}" twice`);
+    ids.add(id as string);
+    if (!isText(panel.title)) fail(`panel "${id}" needs a title`);
+    if (!isText(panel.permission)) fail(`panel "${id}" needs the permission that opens it`);
+    if (typeof panel.render !== "function") fail(`panel "${id}" needs a render function`);
+  }
 }
 
 /** Explicit media preferences take precedence over the known agent's default representation. */
@@ -310,7 +380,25 @@ export function createServer(registry: ServerRegistry, runtime: ServerHandleRunt
 
   const contextFor = async (event: ServerHandleEvent, id: string): Promise<ServerContext> => {
     const waitUntilHost = platformWaitUntil(event.platform) ?? runtime.workers;
+    const dashboard = async (): Promise<DashboardSection[]> => {
+      const sections = await Promise.all(registry.servers.map(async (route): Promise<DashboardSection | undefined> => {
+        const contribution = (await moduleFor(route)).dashboard;
+        if (!contribution || contribution.panels.length === 0) return undefined;
+        return {
+          plugin: route.id,
+          title: contribution.title,
+          panels: contribution.panels.map(({ id: panel, title, permission, render }) => ({
+            id: panel,
+            title,
+            permission,
+            render: async (request, path) => render(request, { ...await contextFor(event, route.id), path }),
+          })),
+        };
+      }));
+      return sections.filter((section) => section !== undefined);
+    };
     return {
+      dashboard,
       env: runtime.dev
         ? await devEnv(runtime.privateEnv)
         : platformEnv(event.platform) ?? runtime.workers?.env ?? runtime.privateEnv,
