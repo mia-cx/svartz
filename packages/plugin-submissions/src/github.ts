@@ -1,7 +1,7 @@
 /**
  * Every GitHub call: reads a note's source at the build commit, and writes a submission through GitHub's REST and Git
- * Data APIs, as a pull request or as a commit straight to the branch. Uses `fetch` only, so it runs on Workers and
- * Node alike.
+ * Data APIs, as a pull request or as a commit straight to the branch; reads a pull request's state and posts comments
+ * on it. Uses `fetch` only, so it runs on Workers and Node alike.
  */
 import type { Identity, ProviderId } from "@svartz/auth/server";
 import type { ReviewReason } from "./api";
@@ -165,14 +165,14 @@ export function submissionBranch({ kind, page, id }: Pick<Submission, "kind" | "
 }
 
 /** Keep a reader's note from notifying people: `@name` gets an invisible word joiner after the `@`. */
-function quietMentions(text: string): string {
+export function quietMentions(text: string): string {
   return text.replace(/@(?=[\w-])/g, "@⁠");
 }
 
 const PROVIDER_NAMES = { github: "GitHub", google: "Google", discord: "Discord", x: "X" } as const satisfies Record<ProviderId, string>;
 
 /** A reader-chosen name as plain Markdown text: no formatting, links, mentions or line breaks. */
-function markdownText(text: string): string {
+export function markdownText(text: string): string {
   return quietMentions(text.replace(/\s+/g, " ").trim().replace(/[\\`*_{}[\]()<>#+!|~]/g, "\\$&"));
 }
 
@@ -347,7 +347,11 @@ const COMMIT_ATTEMPTS = 3;
 
 /** What {@link commitSubmission} did. */
 export type CommitResult =
-  | { readonly kind: "commit"; readonly url: string; readonly sha: string }
+  /**
+   * The commit that holds the content. `made` says this call wrote it. When the branch already held the content the
+   * call wrote nothing, and the commit answered is whoever's put it there: a retry's own first attempt, or anyone's.
+   */
+  | { readonly kind: "commit"; readonly url: string; readonly sha: string; readonly made: boolean }
   /**
    * Nothing, so the save goes to review: `changed` when the branch's file isn't the one the reader loaded, or a new
    * page's path is taken; `protected` when GitHub's rules for the branch refuse the commit.
@@ -381,7 +385,7 @@ async function blobAt(target: GitHubTarget, path: string, ref: string): Promise<
 async function latestCommit(target: GitHubTarget, head: string, path: string): Promise<CommitResult> {
   const query = new URLSearchParams({ sha: head, path, per_page: "1" });
   const [latest] = await call<Array<{ sha: string; html_url: string }>>(target, "GET", `/commits?${query}`);
-  return latest ? { kind: "commit", url: latest.html_url, sha: latest.sha } : { kind: "review", reason: "changed" };
+  return latest ? { kind: "commit", url: latest.html_url, sha: latest.sha, made: false } : { kind: "review", reason: "changed" };
 }
 
 /**
@@ -431,7 +435,7 @@ export async function commitSubmission(
       committer: attribution.committer,
     });
     const moved = await send(target, "PATCH", ref, { sha: commit.sha, force: false });
-    if (moved.ok) return { kind: "commit", url: commit.html_url, sha: commit.sha };
+    if (moved.ok) return { kind: "commit", url: commit.html_url, sha: commit.sha, made: true };
     if (moved.status !== 422) throw await failure(target, moved);
     refused = { head, response: moved };
   }
@@ -464,4 +468,42 @@ export async function closeSubmission(target: GitHubTarget, number: number, reco
   await record();
   await call(target, "PATCH", `/pulls/${number}`, { state: "closed" });
   return { url: pull.html_url, closed: true };
+}
+
+/** What a follow-up edit needs to know of a pull request, as GitHub says now. */
+export interface PullState {
+  readonly open: boolean;
+  /** The branch it merges from, and the repository that branch is in (`owner/name`). */
+  readonly headRef: string;
+  readonly headRepo: string | null;
+  readonly headSha: string;
+}
+
+/** Pull request `number` as GitHub holds it now; `undefined` when GitHub has none. */
+export async function readPullRequest(target: GitHubTarget, number: number): Promise<PullState | undefined> {
+  const response = await send(target, "GET", `/pulls/${number}`);
+  if (response.status === 404) return undefined;
+  if (!response.ok) throw await failure(target, response);
+  const pull = await response.json() as { state?: unknown; merged?: unknown; head?: { ref?: unknown; sha?: unknown; repo?: { full_name?: unknown } | null } };
+  return {
+    open: pull.state === "open" && pull.merged !== true,
+    headRef: String(pull.head?.ref ?? ""),
+    headRepo: typeof pull.head?.repo?.full_name === "string" ? pull.head.repo.full_name : null,
+    headSha: String(pull.head?.sha ?? ""),
+  };
+}
+
+/**
+ * Post `body` on pull request `number`: on its conversation, or with `thread`, as a reply in the diff comment thread
+ * that the top-level review comment `thread` starts (GitHub takes no reply to a reply). Answers the comment as GitHub
+ * made it, in the shape its webhooks and lists use; 404 `thread_gone` when the thread or pull request is gone.
+ */
+export async function postComment(target: GitHubTarget, number: number, body: string, thread?: number): Promise<unknown> {
+  const path = thread === undefined ? `/issues/${number}/comments` : `/pulls/${number}/comments/${thread}/replies`;
+  const response = await send(target, "POST", path, { body });
+  if (response.status === 404) {
+    throw new SubmissionError("thread_gone", 404, "This conversation is gone on GitHub. Reload the page to see where it stands.");
+  }
+  if (!response.ok) throw await failure(target, response);
+  return response.json();
 }

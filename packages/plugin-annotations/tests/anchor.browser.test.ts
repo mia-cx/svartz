@@ -263,7 +263,9 @@ describe("after a light edit to the passage", () => {
     const began = performance.now();
     const found = locate(text, anchor);
 
-    expect(performance.now() - began).toBeLessThan(150);
+    // Tens of milliseconds on an idle machine. A search that rescans the note for each character takes many seconds,
+    // so one second tells them apart on a loaded CI runner too.
+    expect(performance.now() - began).toBeLessThan(1000);
     expect(found?.start).toBe(start);
   });
 });

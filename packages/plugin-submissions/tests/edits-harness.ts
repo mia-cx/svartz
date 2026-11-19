@@ -125,7 +125,7 @@ export async function createEditsSite() {
         options: {
           providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
           admins: [`github:${GITHUB_IDS.ada}`],
-          permissions: permissions(false),
+          permissions: permissions(false, true),
         },
         data: { permissions: [], paths: [] },
       },

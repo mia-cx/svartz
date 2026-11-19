@@ -10,8 +10,9 @@
  *   with the commit or the pull request.
  * - `POST new/` with `{ submissionId, folder, title, markdown, note?, turnstileToken? }` does the same for a new note.
  * - With `sync` set, `POST github/webhook/` takes GitHub's deliveries into the mirror, and `GET status/?edit=<id>`
- *   answers where a saved edit has got to (see `sync.ts`). Every save is then recorded for its saver to follow, and
- *   the dashboard gets the Recent edits panel (`recent-edits.ts`).
+ *   answers where a saved edit has got to (see `sync.ts`). Every save is then recorded for its saver to follow, on the
+ *   dashboard's My submissions panel too, whose `reply/` and `follow-up/` routes answer a submission's reviews
+ *   (see `my-submissions.ts`), and the dashboard gets the Recent edits panel (`recent-edits.ts`).
  * - `POST close/`, a form post with `number` and `returnTo`, closes submission `number` without merging it, for an
  *   account holding `submissions:reviews:write` on the vault, records it in auth's audit log, and redirects to
  *   `returnTo`. With `sync` only, and only a pull request the site recorded saving for this vault. The moderation
@@ -65,6 +66,7 @@ import {
 } from "./github";
 import { createGuard, type GuardOptions } from "./guard";
 import { isDatabase, migrate, savedPull, scopeOf } from "./mirror";
+import { createMySubmissions } from "./my-submissions";
 import { COMMIT, OPEN_PULL_REQUESTS, REVIEW } from "./permissions";
 import { recentEditsPanel } from "./recent-edits";
 import { readBody } from "./request";
@@ -367,7 +369,12 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
       if (await mayClaim(reader.account, vaultPath, submission.markdown, self, context)) {
         const by = await attribution(reader.account, await committer(context.env), request, context);
         const committed = await commitSubmission(github, full, loaded, by);
-        if (committed.kind === "commit") return saved(committed);
+        if (committed.kind === "commit") {
+          const answer: EditResponse = { kind: "commit", url: committed.url, sha: committed.sha };
+          // The branch already held this content, so the save made no commit. Recording it would name this reader as
+          // the one who made someone else's, and the site's record of a save is what credits a commit to an account.
+          return committed.made ? saved(answer) : Response.json(answer, { status: 201 });
+        }
         review = committed.reason;
       } else {
         review = "route";
@@ -465,6 +472,18 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     return `${context.base.slice(0, -`${context.vault.mountPath}/_svartz/${PLUGIN_ID}`.length)}${route}`;
   }
 
+  const mine = sync && createMySubmissions({
+    repo: options.repo,
+    vaultRoot: data.vaultRoot,
+    links: data.links,
+    sync,
+    guard,
+    github: target,
+    ...(committer ? { committer } : {}),
+    attribution,
+    publicUrl,
+  });
+
   const handlers = new Map<string, { method: string; run: (request: Request, context: ServerContext) => Promise<Response> }>([
     ["/source/", { method: "GET", run: source }],
     ["/destination/", { method: "GET", run: destination }],
@@ -478,6 +497,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
         ["/status/", { method: "GET", run: async (request: Request, context: ServerContext) => sync.status(request, context, ownerOf(await readReader(request, context.env))) }],
       ] as const
       : [],
+    ...mine ? mine.routes : [],
   ]);
 
   const handle: ServerHandler = async (request, context) => {
@@ -497,9 +517,10 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     }
   };
 
-  if (!sync) return handle;
+  // The panels read the mirror, so they come with sync; auth's dashboard shows My submissions to accounts only.
+  if (!sync || !mine) return handle;
   const recentEdits = recentEditsPanel({ repo: options.repo, vaultRoot: data.vaultRoot, links: data.links, attachments: data.preview.attachments, sync });
-  return { handle, dashboard: { title: "Submissions", panels: [recentEdits] } };
+  return { handle, dashboard: { title: "Submissions", panels: [mine.panel, recentEdits] } };
 };
 
 export default submissions;

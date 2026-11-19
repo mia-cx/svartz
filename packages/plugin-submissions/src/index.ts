@@ -277,7 +277,7 @@ export function submissions(options: SubmissionsOptions) {
     id: PLUGIN_ID,
     server: { module: SERVER_MODULE, options: serverOptions },
     // Guests open pull requests by default only behind Turnstile, which the guard drops when sign-in is required.
-    permissions: permissions(guard.turnstile !== undefined),
+    permissions: permissions(guard.turnstile !== undefined, sync !== undefined),
     forVault({ vault }) {
       if (guard.signInRequired) checkVault(vault, "requires sign-in for submissions");
       if (mode === "commit") checkVault(vault, 'uses submissions mode "commit"');

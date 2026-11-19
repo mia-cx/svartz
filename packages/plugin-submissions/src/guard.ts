@@ -92,8 +92,8 @@ function inWords(seconds: number): string {
   return unit("hour", Math.ceil(seconds / 3600));
 }
 
-const rateLimited = (retryAfter: number) =>
-  new SubmissionError("rate_limited", 429, `You've sent too many edits. Try again in ${inWords(retryAfter)}.`, retryAfter);
+const rateLimited = (retryAfter: number, what: string) =>
+  new SubmissionError("rate_limited", 429, `You've sent too many ${what}. Try again in ${inWords(retryAfter)}.`, retryAfter);
 
 const turnstileUnavailable = () =>
   new SubmissionError("turnstile_unavailable", 503, "Couldn't confirm you're human right now. Try again in a moment.");
@@ -121,11 +121,15 @@ async function verifyTurnstile(secret: string, token: string, clientAddress: str
   }
 }
 
-/** Build the guard once per server module; its in-memory window lives as long as the module does. */
+/**
+ * Build the guard once per server module; its in-memory window lives as long as the module does. The guard also
+ * carries `limit(key, env, what)`, the same rate limit for other writes under keys of their own, such as replies.
+ */
 export function createGuard({ signInRequired: required = false, turnstile, rateLimit }: GuardOptions) {
   const countInMemory = memoryWindow(rateLimit);
 
-  async function limit(key: string, env: GuardInput["env"]): Promise<void> {
+  /** Count one write for `key`; past the limit, throw 429 saying the reader sent too many `what`. */
+  async function limit(key: string, env: GuardInput["env"], what = "edits"): Promise<void> {
     const binding = env[RATE_LIMIT_BINDING];
     if (isRateLimitBinding(binding)) {
       // The binding doesn't say when its window resets; its period is at most this one.
@@ -133,15 +137,15 @@ export function createGuard({ signInRequired: required = false, turnstile, rateL
         console.error("[submissions] the rate-limiting binding failed", error);
         throw rateLimitUnavailable();
       });
-      if (!success) throw rateLimited(rateLimit.period);
+      if (!success) throw rateLimited(rateLimit.period, what);
       return;
     }
     const retryAfter = countInMemory(key);
-    if (retryAfter !== undefined) throw rateLimited(retryAfter);
+    if (retryAfter !== undefined) throw rateLimited(retryAfter, what);
   }
 
   /** Resolves when the submission may go ahead; otherwise throws the {@link SubmissionError} to answer. */
-  return async function check({ token, identity, clientAddress, env }: GuardInput): Promise<void> {
+  return Object.assign(async function check({ token, identity, clientAddress, env }: GuardInput): Promise<void> {
     if (!identity && (required || !clientAddress)) throw signInRequired();
     const key = identity ? `identity:${identity.id}` : `ip:${clientAddress}`;
     if (!turnstile || required) return limit(key, env);
@@ -160,5 +164,5 @@ export function createGuard({ signInRequired: required = false, turnstile, rateL
     if (!(await verifyTurnstile(secret, token, clientAddress))) {
       throw new SubmissionError("turnstile_failed", 403, "Couldn't confirm you're human. Finish the check again, then open the pull request.");
     }
-  };
+  }, { limit });
 }
