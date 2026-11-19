@@ -14,8 +14,12 @@
  * A landed new page scores as a page. A landed edit scores by the lines its commit (a pull request's merge commit)
  * added and removed in the vault, as GitHub's commit API counts them, which the poll reads (`fillCreditLines`): until
  * then it waits. Each event's ref names the commit or pull request, so auth records it once however often this runs.
+ *
+ * A save whose commit (a pull request's merge commit) a revert undid (`submissions_undone`) earns nothing: it settles
+ * as a 0-point reversal, so auth never scores its ref. A revert reads GitHub live, so it can undo a merge before the
+ * mirror learns of it, which is why reverting reverses only what the mirror knows and this catches the rest.
  */
-import { postReputation, type ReputationEvent } from "@svartz/auth/server";
+import { postReputation, reverseReputation, type ReputationEvent, type Reversal } from "@svartz/auth/server";
 import type { Mirror } from "./mirror";
 import { integer, inVault, object, text } from "./records";
 
@@ -35,10 +39,15 @@ interface Owed {
   first: number;
   merged_at: string | null;
   merge_commit: string | null;
+  /** 1 when a revert undid the save's commit, or its pull request's merge commit. */
+  undone: number;
 }
 
-/** What to post for one owed save, and what it is settled as afterwards; `undefined` while it waits on its lines. */
-type Settlement = { event?: ReputationEvent; state: "declined" | "done" } | undefined;
+/**
+ * What to post for one owed save, or take back from it, and what it is settled as afterwards; `undefined` while it
+ * waits on its lines.
+ */
+type Settlement = { event?: ReputationEvent; reversal?: Reversal; state: "declined" | "done" } | undefined;
 
 /** The ref a landed save's `edit` or `page` event is posted with: its commit, or its pull request. `repo` in lower case. */
 const landedRef = (repo: string, save: Pick<Owed, "kind" | "commit_sha" | "pull_number">) =>
@@ -47,6 +56,7 @@ const landedRef = (repo: string, save: Pick<Owed, "kind" | "commit_sha" | "pull_
 function settle(row: Owed, repo: string): Settlement {
   const to = { account: row.owner.slice("account:".length) };
   const landed = (ref: string): Settlement => {
+    if (row.undone) return { reversal: { account: to.account, ref }, state: "done" };
     if (row.new_page) return { event: { kind: "page", to, ref }, state: "done" };
     return row.lines === null ? undefined : { event: { kind: "edit", to, ref, lines: row.lines }, state: "done" };
   };
@@ -62,7 +72,9 @@ export async function credit(mirror: Mirror, repo: string, env: Readonly<Record<
   const { results } = await db.prepare(`SELECT e.id, e.owner, e.kind, e.commit_sha, e.pull_number, k.new_page, k.lines, k.state,
       p.merged_at, p.merge_commit,
       NOT EXISTS (SELECT 1 FROM submissions_edits o WHERE o.scope = e.scope AND o.kind = 'commit' AND o.commit_sha = e.commit_sha
-        AND (o.saved_at < e.saved_at OR (o.saved_at = e.saved_at AND o.id < e.id))) AS first
+        AND (o.saved_at < e.saved_at OR (o.saved_at = e.saved_at AND o.id < e.id))) AS first,
+      EXISTS (SELECT 1 FROM submissions_undone u WHERE u.scope = e.scope
+        AND u.sha = CASE e.kind WHEN 'commit' THEN e.commit_sha ELSE p.merge_commit END) AS undone
     FROM submissions_credits k JOIN submissions_edits e ON e.id = k.edit_id
       LEFT JOIN submissions_commits c ON e.kind = 'commit' AND c.scope = e.scope AND c.sha = e.commit_sha
       LEFT JOIN submissions_pulls p ON e.kind = 'pull-request' AND p.scope = e.scope AND p.number = e.pull_number
@@ -74,6 +86,7 @@ export async function credit(mirror: Mirror, repo: string, env: Readonly<Record<
     const settlement = settle(row, repo.toLowerCase());
     if (!settlement) continue;
     if (settlement.event) await postReputation(env, settlement.event);
+    if (settlement.reversal) await reverseReputation(env, [settlement.reversal]);
     await db.prepare("UPDATE submissions_credits SET state = ? WHERE edit_id = ?").bind(settlement.state, row.id).run();
   }
 }

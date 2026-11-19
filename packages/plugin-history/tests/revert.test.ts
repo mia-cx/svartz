@@ -8,10 +8,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { blobSha } from "../../plugin-submissions/src/github";
 import {
   blobExchange,
+  branchFor,
   commitExchanges,
   committerExchanges,
   HEAD_COMMIT,
   headExchange,
+  SUBMISSION_ID,
 } from "../../plugin-submissions/tests/github-exchanges";
 import {
   ADA,
@@ -258,6 +260,80 @@ describe("reverting a page", () => {
     expect(github.pending).toEqual([]);
     expect(await query(site, "SELECT 1 FROM submissions_edits WHERE commit_sha = ?", DIRECT_COMMIT)).toEqual([]);
     expect(await query(site, "SELECT 1 FROM auth_reputation WHERE source = 'reversal'")).toEqual([]);
+  });
+});
+
+describe("reverting a submission the mirror doesn't know merged yet", () => {
+  const MERGE: TestCommit = {
+    sha: "e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
+    message: "Merge pull request #42\n\nEdit content/guide.md",
+    at: 40,
+    author: GIT_AUTHOR,
+    committer: GITHUB_WEB,
+    files: [GUIDE_PATH],
+  };
+  /** Pull request #42, merged as {@link MERGE}, as GitHub's list of pull requests shows it. */
+  const MERGED_PULL = {
+    number: 42,
+    state: "closed",
+    title: "Edit content/guide.md",
+    user: { login: "wikiplace-editor[bot]", id: 41_898_282, type: "Bot" },
+    html_url: `https://github.com/${REPO}/pull/42`,
+    head: { ref: branchFor("wiki-guide"), sha: "4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f" },
+    base: { ref: "main", sha: HEAD_COMMIT },
+    created_at: "2026-11-19T11:00:00Z",
+    updated_at: "2026-11-19T11:40:00Z",
+    closed_at: "2026-11-19T11:40:00Z",
+    merged_at: "2026-11-19T11:40:00Z",
+    merge_commit_sha: MERGE.sha,
+  };
+
+  /** A GitHub whose poll finds #42 merged, its merge commit changing 8 lines of the guide, and nothing else. */
+  const pollingGitHub = () => vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/access_tokens")) return Response.json({ token: INSTALLATION_TOKEN, expires_at: "2099-01-01T00:00:00Z" }, { status: 201 });
+    const path = url.pathname.slice(`/repos/${REPO}`.length);
+    if (path === "/actions/runs") return Response.json({ total_count: 0, workflow_runs: [] });
+    if (path === "/pulls") return Response.json([MERGED_PULL]);
+    if (path === `/commits/${MERGE.sha}`) return Response.json({ sha: MERGE.sha, files: [{ filename: GUIDE_PATH, additions: 6, deletions: 2 }] });
+    return Response.json([]);
+  });
+
+  // Proves a revert takes back a submission it undid even when the mirror learns of the merge only afterwards, by its
+  // delivery or by the poll: GitHub, which history reads live, already listed the merge when the moderator reverted.
+  // Otherwise the submission would earn its 4 points for content already undone.
+  it.each(["delivery", "poll"] as const)("leaves it nothing to earn when its merge arrives by %s after the revert", async (arrives) => {
+    const site = await createSite();
+    const [ada, grace] = [await site.signUp(ADA), await site.signUp(GRACE)];
+    await site.graceOpensPullRequest(grace);
+    const restored = git("a", 0);
+    await site.push([restored, MERGE]);
+    await site.settle();
+
+    const github = replayGitHub([
+      firstToken,
+      historyExchange(GUIDE_PATH, [MERGE, restored]),
+      contentExchange(GUIDE_PATH, restored.sha, RESTORED),
+      contentExchange(GUIDE_PATH, MERGE.sha, VANDALISED),
+      ...committerExchanges,
+      ...await commitAsAda(RESTORED, VANDALISED, revertMessage(restored.sha, ada.id)),
+    ], INSTALLATION_TOKEN);
+    const response = await revert(site, ada.cookie, { revision: restored.sha, head: MERGE.sha, to: MERGE.sha });
+    expect(response.headers.get("location")).toBe(`${HISTORY}?status=reverted`);
+    expect(github.pending).toEqual([]);
+
+    pollingGitHub();
+    if (arrives === "delivery") {
+      await site.merged(MERGE.sha);
+      await site.settle();
+    }
+    // Grace following her edit runs the poll, which counts the merge's lines, and settles reputation after it.
+    await site.request(`/wiki/_svartz/submissions/status/?edit=${SUBMISSION_ID}`, { headers: { cookie: grace.cookie } });
+    await site.settle();
+
+    expect(await query(site, "SELECT merge_commit FROM submissions_pulls WHERE number = 42")).toEqual([{ merge_commit: MERGE.sha }]);
+    expect(await query(site, "SELECT source, ref, points FROM auth_reputation WHERE account_id = ?", grace.id))
+      .toEqual([{ source: "reversal", ref: `submissions:${REPO}:pull:42`, points: 0 }]);
   });
 });
 

@@ -335,7 +335,8 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
       const claimed = writer.claims(note.path, restored.markdown, note.slug);
       if (!claimed || (await canEach(account, REVERT, [...claimed].map((page) => ({ vault, page })), context.env)).includes(false)) return back("route");
       // Read before anything changes: whoever the site's records say made each change since, and what it earned.
-      const owed = await writer.earnings(commits.slice(0, index).map(({ sha }) => sha));
+      const undoes = commits.slice(0, index).map(({ sha }) => sha);
+      const owed = await writer.earnings(undoes);
       const named = `${revision.slice(0, 7)} (${messageDay(commits[index]!.committedAt)})`;
       const result = await writer.restore({
         account,
@@ -343,6 +344,7 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
         page: { href: note.href, path: note.path },
         markdown: restored.markdown,
         current: current.markdown,
+        undoes,
         title: `Revert ${repoPath(note.path)} to ${named}`,
         note: reason ? `Reverted to ${named}: ${reason}` : `Reverted to ${named}.`,
         beforeMove: (commit) => audit(context.env, {

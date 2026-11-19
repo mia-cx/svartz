@@ -246,6 +246,15 @@ const MIGRATIONS: readonly (readonly string[])[] = [
         CASE WHEN r.state IN ('approved', 'changes_requested') THEN r.state WHEN r.state = 'commented' THEN p.verdict END AS decision
       FROM submissions_reviews r LEFT JOIN submissions_posted_reviews p ON p.scope = r.scope AND p.id = r.id`,
   ],
+  [
+    // The commits a revert undid, as GitHub listed them for the page when it reverted. A save whose commit (a pull
+    // request's merge commit) is one of them earns nothing, however late the mirror learns it landed (`credit.ts`).
+    `CREATE TABLE IF NOT EXISTS submissions_undone (
+      scope TEXT NOT NULL,
+      sha TEXT NOT NULL,
+      PRIMARY KEY (scope, sha)
+    )`,
+  ],
 ];
 
 const migrated = new WeakMap<Database, Promise<void>>();
@@ -419,11 +428,15 @@ export interface EditRecord {
 /**
  * Record a save, and when an account made it, that reputation owes it once it lands. `newPage` says whether it added a
  * page rather than editing one. With `earns: false` reputation owes it nothing, as for a revert, which restores
- * someone else's work.
+ * someone else's work. `undoes` names the commits a revert undid, which earn nothing from then on.
  */
 export async function recordEdit(
   { db, scope }: Mirror,
-  { earns = true, ...edit }: Omit<EditRecord, "liveAt"> & { readonly newPage: boolean; readonly earns?: boolean },
+  { earns = true, undoes = [], ...edit }: Omit<EditRecord, "liveAt"> & {
+    readonly newPage: boolean;
+    readonly earns?: boolean;
+    readonly undoes?: readonly string[];
+  },
 ): Promise<void> {
   await db.batch([
     db.prepare(`INSERT INTO submissions_edits (id, scope, owner, kind, page, path, commit_sha, pull_number, url, saved_at)
@@ -434,6 +447,10 @@ export async function recordEdit(
       ? [db.prepare(`INSERT INTO submissions_credits (edit_id, scope, new_page)
         SELECT id, scope, ?3 FROM submissions_edits WHERE id = ?1 AND scope = ?2 AND owner LIKE 'account:%'
         ON CONFLICT (edit_id) DO NOTHING`).bind(edit.id, scope, edit.newPage ? 1 : 0)]
+      : [],
+    ...undoes.length > 0
+      ? [db.prepare(`INSERT INTO submissions_undone (scope, sha) SELECT ?1, value FROM json_each(?2) WHERE true
+        ON CONFLICT (scope, sha) DO NOTHING`).bind(scope, JSON.stringify(undoes))]
       : [],
   ]);
 }

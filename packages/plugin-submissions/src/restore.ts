@@ -4,7 +4,7 @@
  * the App's bot, with the save's trailers, and never over a file that changed since the caller read it. A branch whose
  * rules refuse the commit is never sent a pull request instead. The commit is recorded as the account's save, which
  * history and contributions show as theirs, and which reputation owes nothing: the content is someone else's work.
- * Page history's revert (`@svartz/plugin-history`) uses it.
+ * The commits it undoes are recorded with it, and earn nothing afterwards. Page history's revert (`@svartz/plugin-history`) uses it.
  *
  * It also answers what the saves a restore undoes earned ({@link Restorer.earnings}), as auth's `reverseReputation`
  * takes it, and which pages restored content claims ({@link Restorer.claims}), as a save's commit checks them.
@@ -45,6 +45,12 @@ export interface Restore {
   readonly markdown: string;
   /** The file as the caller read it on the branch: the commit refuses unless the branch still holds it. */
   readonly current: string;
+  /**
+   * The commits it undoes, as GitHub lists them for the page: those after the restored revision, up to `current`'s.
+   * Recorded with the save, so none of them earns reputation afterwards, even one whose landing the mirror learns of
+   * only later, such as a pull request merged a moment before.
+   */
+  readonly undoes: readonly string[];
   /** The commit's title. */
   readonly title: string;
   /** The paragraph after the title, which history shows as the change's summary. */
@@ -105,7 +111,7 @@ export function restorer(source: CommitSource, claimed: RouteClaims, token = sou
         return earnings(await mirrorFor(context), repo, commits);
       },
 
-      async restore({ account, request, page, markdown, current, title, note, beforeMove }) {
+      async restore({ account, request, page, markdown, current, undoes, title, note, beforeMove }) {
         if (!committer) throw new CommitsUnavailable("only a GitHub App commits as an account");
         const path = repoPath(page.path);
         const id = crypto.randomUUID().replaceAll("-", "");
@@ -140,8 +146,10 @@ export function restorer(source: CommitSource, claimed: RouteClaims, token = sou
           savedAt: new Date().toISOString(),
           newPage: false,
           earns: false,
+          undoes,
         })).catch((error: unknown) => {
-          // The commit landed: only the account's name on it is lost, and history shows its git author instead.
+          // The commit landed. Lost are the account's name on it (history shows its git author instead) and what it
+          // undid, so a save the mirror doesn't know landed yet may still earn once it does.
           console.error(`[submissions] restored ${path} as ${sha} but couldn't record it as the account's save`, error);
         });
         return { kind: "commit", sha, url };
