@@ -82,14 +82,22 @@ const json = (status: number, error: string, message: string) =>
  * Two columns of a list of pull requests, for the pull request whose scope and number are the SQL expressions `scope`
  * and `number`: `verdict`, what its reviewers decided, and `comments`, how many comments it has. The verdict counts
  * each reviewer's latest decision, as GitHub does: comments and dismissed reviews decide nothing, and one reviewer's
- * approval doesn't clear another's request for changes.
+ * approval doesn't clear another's request for changes. A verdict the site posted is its account's decision, even
+ * where GitHub holds it as a comment (`submissions_decisions`).
  */
-export const verdictAndComments = (scope: string, number: string) => `(SELECT CASE WHEN MAX(r.state = 'changes_requested') THEN 'changes_requested' WHEN COUNT(*) > 0 THEN 'approved' END
-    FROM submissions_reviews r WHERE r.scope = ${scope} AND r.pull_number = ${number} AND r.state IN ('approved', 'changes_requested')
-      AND NOT EXISTS (SELECT 1 FROM submissions_reviews l WHERE l.scope = r.scope AND l.pull_number = r.pull_number
-        AND l.author_login IS r.author_login AND l.state IN ('approved', 'changes_requested')
-        AND (l.submitted_at > r.submitted_at OR (l.submitted_at = r.submitted_at AND l.id > r.id)))) AS verdict,
+export const verdictAndComments = (scope: string, number: string) => `(SELECT CASE WHEN MAX(d.decision = 'changes_requested') THEN 'changes_requested' WHEN COUNT(*) > 0 THEN 'approved' END
+    FROM submissions_decisions d WHERE d.scope = ${scope} AND d.pull_number = ${number} AND d.decision IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM submissions_decisions l WHERE l.scope = d.scope AND l.pull_number = d.pull_number
+        AND l.reviewer IS d.reviewer AND l.decision IS NOT NULL
+        AND (l.submitted_at > d.submitted_at OR (l.submitted_at = d.submitted_at AND l.id > d.id)))) AS verdict,
   (SELECT COUNT(*) FROM submissions_comments c WHERE c.scope = ${scope} AND c.pull_number = ${number} AND c.deleted = 0) AS comments`;
+
+/**
+ * Whether `body`, as GitHub holds it, is still exactly what the site posted: `header`, then `typed` after a blank line
+ * when there is any. Only then is it shown as the account that wrote it; an edit on GitHub shows as it is.
+ */
+const asPosted = (body: string, header: string | null, typed: string | null): boolean =>
+  header !== null && typed !== null && body === (typed ? attributed(header, typed) : header);
 
 /**
  * Pull request `number`'s conversation from the mirror, in time order, with what the site posted shown as the account
@@ -98,9 +106,13 @@ export const verdictAndComments = (scope: string, number: string) => `(SELECT CA
  */
 export async function conversation(mirror: Mirror, number: number): Promise<{ entries: Entry[]; earlier: boolean }> {
   const [{ results: reviews }, { results: comments }, { results: [count] }] = await Promise.all([
-    mirror.db.prepare(`SELECT state, author_login, body, url, submitted_at FROM submissions_reviews
-      WHERE scope = ? AND pull_number = ? AND submitted_at IS NOT NULL AND state <> 'pending' ORDER BY submitted_at, id`)
-      .bind(mirror.scope, number).all<{ state: string; author_login: string | null; body: string; url: string; submitted_at: string }>(),
+    mirror.db.prepare(`SELECT r.state, r.author_login, r.body, r.url, r.submitted_at, p.name, p.role, p.header, p.body AS typed
+      FROM submissions_reviews r LEFT JOIN submissions_posted_reviews p ON p.scope = r.scope AND p.id = r.id
+      WHERE r.scope = ? AND r.pull_number = ? AND r.submitted_at IS NOT NULL AND r.state <> 'pending' ORDER BY r.submitted_at, r.id`)
+      .bind(mirror.scope, number).all<{
+        state: string; author_login: string | null; body: string; url: string; submitted_at: string;
+        name: string | null; role: string | null; header: string | null; typed: string | null;
+      }>(),
     // A thread's first comment says where it is and takes its replies, so it comes along however old it is.
     mirror.db.prepare(`WITH recent AS (SELECT * FROM submissions_comments WHERE scope = ?1 AND pull_number = ?2 AND deleted = 0
         ORDER BY created_at DESC, id DESC LIMIT ?3)
@@ -122,12 +134,15 @@ export async function conversation(mirror: Mirror, number: number): Promise<{ en
   const timeline: Entry[] = reviews
     // A review that only holds diff comments says nothing of its own; its comments show in their threads.
     .filter(({ state, body }) => state !== "commented" || body.trim())
-    .map(({ state, author_login, body, url, submitted_at }) => ({ kind: "review", author: { login: author_login }, state, body, at: submitted_at, url }));
+    .map((row) => {
+      const ours = asPosted(row.body, row.header, row.typed);
+      const author: Author = ours ? { name: row.name!, role: row.role! } : { login: row.author_login };
+      return { kind: "review", author, state: row.state, body: ours ? row.typed! : row.body, at: row.submitted_at, url: row.url };
+    });
 
   const threads = new Map<number, { path: string | null; line: number | null; comments: Comment[]; open: boolean; at: string }>();
   for (const row of comments) {
-    // Shown as its account only while GitHub holds exactly what the site posted; an edit on GitHub shows as it is.
-    const ours = row.header !== null && row.typed !== null && row.body === attributed(row.header, row.typed);
+    const ours = asPosted(row.body, row.header, row.typed);
     const author: Author = ours ? { name: row.name!, role: row.role! } : { login: row.author_login };
     const shown: Comment = { id: row.id, author, body: ours ? row.typed! : row.body, at: row.created_at, url: row.url };
     if (row.kind === "issue") {

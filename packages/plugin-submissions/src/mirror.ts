@@ -17,7 +17,9 @@
  *   latest status, `succeeded` once any status said `success`, since a later `inactive` doesn't say, and
  *   `statuses_read`, the latest status id the poll has seen in a deployment's whole status history.
  * - `submissions_edits`: every save the site made, keyed by its submission id, with who made it.
- * - `submissions_replies`: every comment the site posted on an account's behalf (see `attribution.ts`).
+ * - `submissions_replies`: every comment the site posted on an account's behalf (see `attribution.ts`), and
+ *   `submissions_posted_reviews` every review, with the verdict the account gave; the view `submissions_decisions`
+ *   reads each review's decision and who made it from both.
  * - `submissions_credits`: what reputation still owes for each save an account made (see `credit.ts`).
  *
  * Deliveries arrive at least once and in any order, so every write is idempotent and never moves a record backwards:
@@ -221,6 +223,28 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       state TEXT CHECK (state IN ('declined', 'done'))
     )`,
     `CREATE INDEX IF NOT EXISTS submissions_credits_by_state ON submissions_credits (scope, state)`,
+  ],
+  [
+    // What the site posted as a review on an account's behalf, by GitHub's review id: the header it wrote, the text
+    // after it, and the verdict the account gave, which GitHub holds only as a comment on a pull request the site opened.
+    `CREATE TABLE IF NOT EXISTS submissions_posted_reviews (
+      scope TEXT NOT NULL,
+      id INTEGER NOT NULL,
+      account TEXT NOT NULL,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      header TEXT NOT NULL,
+      body TEXT NOT NULL,
+      verdict TEXT CHECK (verdict IN ('approved', 'changes_requested')),
+      PRIMARY KEY (scope, id)
+    )`,
+    // Each review's decision and who decided: an account for what the site posted, else the GitHub login. GitHub's
+    // approvals and requests for changes decide; a dismissed one doesn't; a comment decides what the site recorded.
+    `CREATE VIEW IF NOT EXISTS submissions_decisions AS
+      SELECT r.scope, r.pull_number, r.id, r.submitted_at,
+        CASE WHEN p.account IS NOT NULL THEN 'account:' || p.account ELSE 'github:' || r.author_login END AS reviewer,
+        CASE WHEN r.state IN ('approved', 'changes_requested') THEN r.state WHEN r.state = 'commented' THEN p.verdict END AS decision
+      FROM submissions_reviews r LEFT JOIN submissions_posted_reviews p ON p.scope = r.scope AND p.id = r.id`,
   ],
 ];
 
