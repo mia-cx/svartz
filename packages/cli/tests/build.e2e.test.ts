@@ -346,8 +346,12 @@ describe("svartz CLI", () => {
           page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
           await page.goto(`http://127.0.0.1:${address.port}/tags/guides/`);
           await page.getByRole("heading", { level: 1, name: "guides" }).waitFor();
-          await page.getByRole("button", { name: /^Search/ }).click();
-          await page.getByRole("combobox", { name: "Search notes" }).waitFor();
+          // The prerendered button takes a click before hydration gives it its handler, so press until the dialog opens.
+          const search = page.getByRole("combobox", { name: "Search notes" });
+          await expect.poll(async () => {
+            if (!await search.isVisible()) await page.getByRole("button", { name: /^Search/ }).click();
+            return search.isVisible();
+          }, { timeout: 30_000, interval: 500 }).toBe(true);
           expect(errors).toEqual([]);
           await page.goto(`http://127.0.0.1:${address.port}/`);
           await page.locator("pre.svartz-mermaid svg").waitFor({ timeout: 10_000 });
