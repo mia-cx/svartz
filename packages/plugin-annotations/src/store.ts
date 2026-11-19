@@ -269,30 +269,20 @@ export async function setAgreement(db: Database, { vault, annotation, author, ag
   return (answers.at(-1)!.results as AgreementRow[]).map(agreementOf);
 }
 
-/** A reader deleting an annotation: its author, or a moderator, who may delete anyone's. */
-export interface Deletion {
-  readonly vault: string;
-  readonly annotation: string;
-  /** The identity id of who asks. */
-  readonly by: string;
-  readonly moderator: boolean;
+/** Who wrote annotation `annotation` of `vault` (their identity id) and on which page, or `undefined` when it has none. */
+export async function findAnnotation(db: Database, vault: string, annotation: string): Promise<{ author: string; page: string } | undefined> {
+  const { results: [target] } = await db.prepare("SELECT author_id, page FROM annotations WHERE id = ? AND vault = ?")
+    .bind(annotation, vault).all<{ author_id: string; page: string }>();
+  return target && { author: target.author_id, page: target.page };
 }
 
-/**
- * Delete `annotation` and its agreements in one batch, when `by` wrote it or is a moderator. Answers `"missing"` when
- * `vault` has no such annotation, which is also what a retry finds, and `"forbidden"` for anyone else, changing nothing.
- */
-export async function deleteAnnotation(db: Database, { vault, annotation, by, moderator }: Deletion): Promise<"deleted" | "missing" | "forbidden"> {
-  const { results: [target] } = await db.prepare("SELECT author_id FROM annotations WHERE id = ? AND vault = ?")
-    .bind(annotation, vault).all<{ author_id: string }>();
-  if (!target) return "missing";
-  if (target.author_id !== by && !moderator) return "forbidden";
+/** Delete `annotation` of `vault` and its agreements in one batch. Deleting one already gone changes nothing. */
+export async function deleteAnnotation(db: Database, vault: string, annotation: string): Promise<void> {
   // Agreements first and explicitly, rather than trusting the foreign key's cascade to be enforced.
   await db.batch([
-    db.prepare("DELETE FROM agreements WHERE annotation_id = ?").bind(annotation),
+    db.prepare("DELETE FROM agreements WHERE annotation_id = (SELECT id FROM annotations WHERE id = ? AND vault = ?)").bind(annotation, vault),
     db.prepare("DELETE FROM annotations WHERE id = ? AND vault = ?").bind(annotation, vault),
   ]);
-  return "deleted";
 }
 
 /** Every annotation on `page` of `vault`, oldest first, with its author and agreements. */

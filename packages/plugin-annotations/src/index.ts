@@ -5,6 +5,7 @@
 import { fileURLToPath } from "node:url";
 import { definePlugin, getCompilerContributions, type NormalizedSvartzPlugin, type SvartzPlugin } from "@svartz/core";
 import type { MountOptions } from "./browser";
+import { PERMISSIONS } from "./permissions";
 import type { AnnotationsOptions, AnnotationsServerOptions } from "./server";
 
 export type { AnnotationsOptions, Reaction } from "./server";
@@ -73,6 +74,7 @@ export function annotations(options: AnnotationsOptions): NormalizedSvartzPlugin
   const plugin: NormalizedSvartzPlugin = definePlugin(() => ({
     id: ANNOTATIONS_PLUGIN_ID,
     server: { module: SERVER_MODULE, options: serverOptions },
+    permissions: PERMISSIONS,
     forVault({ vault }) {
       checkVault(vault);
       return plugin;

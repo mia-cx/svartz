@@ -8,6 +8,7 @@ import { Miniflare } from "miniflare";
 import type { Identity } from "@svartz/auth";
 import type { SeedComment } from "./data";
 import { DEFAULT_WRITES_PER_HOUR } from "../src/index";
+import { PERMISSIONS } from "../src/permissions";
 import type { AnnotationsServerOptions } from "../src/server";
 import { migrate, type Database } from "../src/store";
 
@@ -57,9 +58,11 @@ export function createSite(env: Record<string, unknown>, { vault = "notes", orig
     vault: { id: vault, mountPath: "/notes", site: { title: "Notes" } },
     servers: [
       {
+        // As config resolution registers it: eager, with the catalogue collected from this vault's plugins.
         id: "auth",
+        eager: true,
         load: () => import("@svartz/auth/server"),
-        options: { providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } } },
+        options: { providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } }, permissions: PERMISSIONS },
       },
       { id: "annotations", load: () => import("../src/server"), options: { ...OPTIONS, moderators, limits: { writesPerHour } } },
     ],
@@ -76,7 +79,8 @@ export function createSite(env: Record<string, unknown>, { vault = "notes", orig
 
 /**
  * Sign `person` in through `auth`'s real start and callback routes, with GitHub stubbed to vouch for them, and answer
- * the `name=value` session cookie a browser would send back.
+ * the `name=value` session cookie a browser would send back. On a site with accounts, a first sign-in chooses the
+ * person's GitHub handle.
  */
 export async function signIn(site: Site, person: Identity): Promise<string> {
   const start = await site(`${AUTH}/start/github/?returnTo=%2Fnotes%2F`);
@@ -92,9 +96,16 @@ export async function signIn(site: Site, person: Identity): Promise<string> {
     return realFetch(input, init);
   };
   try {
-    const callback = await site(`${AUTH}/callback/github/?code=issued-code&state=${state}`, { headers: { cookie: flow } });
-    const session = callback.headers.getSetCookie().map((header) => header.split(";")[0]!).find((pair) => pair.startsWith("__Host-svartz-session="));
-    if (!session) throw new Error(`sign-in answered ${callback.status}: ${await callback.text()}`);
+    let answer = await site(`${AUTH}/callback/github/?code=issued-code&state=${state}`, { headers: { cookie: flow } });
+    const cookie = (name: string) => answer.headers.getSetCookie().map((header) => header.split(";")[0]!).find((pair) => pair.startsWith(`${name}=`) && !pair.endsWith("="));
+    const pending = cookie("__Host-svartz-pending");
+    if (pending) {
+      answer = await site(`${AUTH}/handle/`, {
+        method: "POST", headers: { cookie: pending, origin: ORIGIN }, body: new URLSearchParams({ handle: person.handle ?? person.id.replace(":", "-") }),
+      });
+    }
+    const session = cookie("__Host-svartz-session");
+    if (!session) throw new Error(`sign-in answered ${answer.status}: ${await answer.text()}`);
     return session;
   } finally {
     globalThis.fetch = realFetch;

@@ -513,3 +513,87 @@ describe("DELETE <id>/", () => {
     expect(response.headers.get("allow")).toBe("DELETE");
   });
 });
+
+describe("permissions on a site with accounts", () => {
+  /** Grace's comment on garden, Ada's on kitchen, on a site whose annotations and accounts share one database. */
+  async function seeded() {
+    const created = await database();
+    await seed(created.db, [
+      { id: "c1", page: "garden", author: GRACE, body: "Roses first.", anchor: anchor("roses", 40), createdAt: "2026-11-02T00:00:00.000Z" },
+      { id: "c2", page: "kitchen", author: GRACE, body: "Salt first.", anchor: anchor("salt", 0), createdAt: "2026-11-03T00:00:00.000Z" },
+    ]);
+    return created;
+  }
+  const accounts = (db: Database, moderators: readonly string[] = []) => createSite({ DB: db, SVARTZ_DB: db }, { moderators });
+  const listed = async (site: Site, cookie: string, page = "garden") =>
+    (await (await site(`${ENDPOINT}/?page=${page}`, { headers: { cookie } })).json() as { viewer: unknown }).viewer;
+  const remove = (site: Site, id: string, cookie: string) => site(`${ENDPOINT}/${id}/`, { method: "DELETE", headers: { cookie, origin: ORIGIN } });
+  const grants = async (db: Database) => (await db.prepare("SELECT actor_type, object, permission, value FROM auth_grants").all()).results;
+  const accountOf = async (db: Database, identity: string) =>
+    (await db.prepare("SELECT account_id FROM auth_identities WHERE id = ?").bind(identity).all<{ account_id: string }>()).results[0]!.account_id;
+  const store = (db: Database, actorType: string, actorId: string, object: string, permission: string, value: string) =>
+    db.prepare("INSERT INTO auth_grants (actor_type, actor_id, object, permission, value, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(actorType, actorId, object, permission, value, "2026-11-19T00:00:00.000Z").run();
+
+  it("turns a listed moderator into a grant on the vault once they have an account, and lets the grant decide from then on", async () => {
+    const { db, binding } = await seeded();
+    const site = accounts(db, [ALAN.id]);
+    // Alan has no account yet, so nothing can move.
+    await listed(site, await signIn(site, ADA));
+    expect(await grants(db)).toEqual([]);
+
+    const alan = await signIn(site, ALAN);
+
+    expect(await listed(site, alan)).toEqual({ id: ALAN.id, moderator: true });
+    expect(await grants(db)).toEqual([{ actor_type: "account", object: "vault:notes", permission: "annotations:comments:delete", value: "allow" }]);
+
+    // An admin takes the grant away; the config still lists Alan, in every isolate that starts after.
+    await db.prepare("DELETE FROM auth_grants").run();
+    const later = accounts(await binding(), [ALAN.id]);
+
+    expect(await listed(later, alan)).toEqual({ id: ALAN.id, moderator: false });
+    expect((await remove(later, "c1", alan)).status).toBe(403);
+    expect(await grants(db)).toEqual([]);
+  });
+
+  it("lands a listed moderator's grant once when isolates race to move it", async () => {
+    const { db, binding } = await seeded();
+    const alan = await signIn(accounts(db), ALAN);
+
+    const viewers = await Promise.all(Array.from({ length: 4 }, async () => listed(accounts(await binding(), [ALAN.id]), alan)));
+
+    expect(viewers).toEqual(Array(4).fill({ id: ALAN.id, moderator: true }));
+    expect(await grants(db)).toHaveLength(1);
+    expect((await db.prepare("SELECT identity_id FROM auth_grant_migrations").all()).results).toEqual([{ identity_id: ALAN.id }]);
+  });
+
+  it("lets a grant on one page moderate that page and no other", async () => {
+    const { db } = await seeded();
+    const site = accounts(db);
+    const ada = await signIn(site, ADA);
+    await store(db, "account", await accountOf(db, ADA.id), "page:notes/garden", "annotations:comments:delete", "allow");
+
+    expect(await listed(site, ada, "garden")).toEqual({ id: ADA.id, moderator: true });
+    expect(await listed(site, ada, "kitchen")).toEqual({ id: ADA.id, moderator: false });
+    expect((await remove(site, "c2", ada)).status).toBe(403);
+    expect((await remove(site, "c1", ada)).status).toBe(204);
+  });
+
+  it("lets a grant take commenting away on a page, while every signed-in reader comments elsewhere", async () => {
+    const { db } = await seeded();
+    const site = accounts(db);
+    const ada = await signIn(site, ADA);
+    await store(db, "static", "signed-in", "page:notes/garden", "annotations:comments:write", "deny");
+    const post = (page: string) => site(`${ENDPOINT}/`, {
+      method: "POST",
+      headers: { cookie: ada, origin: ORIGIN, "content-type": "application/json" },
+      body: JSON.stringify({ kind: "comment", page, anchor: anchor("roses", 0), body: "Lovely." }),
+    });
+
+    const refused = await post("garden");
+
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual({ error: "forbidden", message: "You can't comment on this page." });
+    expect((await post("kitchen")).status).toBe(201);
+  });
+});
