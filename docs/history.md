@@ -167,12 +167,12 @@ A version shows its commit author's name, never their email, and the first line 
 
 ### How a version reads
 
-A version is built as the note is: the vault's own plugins parse it, resolve its links, transform its Obsidian syntax and embeds, and compile it with every Markdown step they add (math, syntax highlighting, callouts, diagrams), then the build's sanitizer cleans it. A version identical to the note renders identically. Its links resolve against the notes the site publishes now, as the note's do.
+A version is built as the note is: the vault's own plugins parse it, resolve its links, transform its Obsidian syntax and embeds, and compile it with every Markdown step the build uses (math, syntax highlighting, callouts, diagrams), plus any its own content alone needs, then the build's sanitizer cleans it. A version identical to the note renders identically, notes it embeds included. Its links and embeds resolve against the notes the site publishes now, as the note's do.
 
 A version shows the attachments it referenced, as it referenced them:
 
 - an attachment still in the vault is published, as the build publishes attachments, even when no note references it now;
-- one deleted since is read from git, as the version's commit had it, and published at the path the version links to.
+- one deleted since is read from git, as the version's commit had it, and published below the note's versions at `<note>versions/files/<blob>/<name>`, where `<blob>` starts the file's git blob id. The version links it there, so two versions that showed different contents of the same file each show their own, and versions that showed the same contents share one copy.
 
 The vault's rules still decide: an attachment `exclude` keeps out, or one only password-protected notes use now, is never published, and an attachment only a hidden, draft or protected version referenced is never read. A link or image in a version that names nothing the site publishes, such as a deleted note or an excluded file, shows unresolved, as a link to a missing note does, since no edit can fix an old version.
 
