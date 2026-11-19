@@ -193,11 +193,13 @@ export type ReputationEvent =
   /** A pull request closed without merging. */
   | { readonly kind: "declined"; readonly to: Recipient; readonly ref: string }
   /**
-   * Account `from` now agrees (`agreed`) or no longer agrees with something `to` wrote. `ref` names the pair, such as
-   * the comment and `from`; the agreement scores once while it stands, and taking it back takes the points back with
-   * a further entry. Nobody scores from their own agreement.
+   * Account `from` agrees (`agreed`) or doesn't agree with something `to` wrote, as of `version`. `ref` names the pair,
+   * such as the comment and `from`; the agreement scores once while it stands, and taking it back takes the points back
+   * with a further entry. Nobody scores from their own agreement. `version` orders the pair's changes: it grows with
+   * every change, in the write that makes it, and is read with `agreed` in one read. A post with a lower version than
+   * one already settled changes nothing, so a request that read before a later change can't overwrite it.
    */
-  | { readonly kind: "agreement"; readonly to: Recipient; readonly ref: string; readonly from: string; readonly agreed: boolean };
+  | { readonly kind: "agreement"; readonly to: Recipient; readonly ref: string; readonly from: string; readonly agreed: boolean; readonly version: number };
 
 /** The longest `ref` accepted. */
 const REF_MAX_LENGTH = 512;
@@ -211,48 +213,55 @@ async function recipientOf(db: Database, to: Recipient): Promise<string | undefi
 }
 
 /**
- * Append an entry unless one for `(source, ref)` exists. A positive entry from a {@link LIMITED} source is cut to what is
- * left of the account's daily limit, so it may land as 0. Answers whether it landed.
+ * `points` cut to what is left of `account`'s daily limit `limit` from the {@link LIMITED} sources `sources` (a JSON
+ * array) since `day`, never below 0. Each argument is a placeholder, so the statement that appends reads the day's
+ * total itself, and racing posts can't both spend what is left.
  */
-async function append(db: Database, entry: { account: string; source: string; ref: string; points: number }, dailyLimit?: number): Promise<boolean> {
-  const values = [entry.account, entry.source, entry.ref, rounded(entry.points), new Date().toISOString()];
-  const limited = dailyLimit !== undefined && entry.points > 0;
-  // One statement reads the day's total and appends, so racing posts can't both spend what is left of the limit.
-  const points = limited
-    ? `MAX(0, MIN(?4, ?6 - COALESCE((SELECT SUM(points) FROM auth_reputation WHERE account_id = ?1 AND points > 0 AND at >= ?7
-        AND source IN (SELECT value FROM json_each(?8))), 0)))`
-    : "?4";
-  const { results } = await db.prepare(`INSERT INTO auth_reputation (account_id, source, ref, points, at)
-      SELECT ?1, ?2, ?3, ${points}, ?5 WHERE true ON CONFLICT (source, ref) DO NOTHING RETURNING id`)
-    .bind(...values, ...limited ? [dailyLimit, today(), JSON.stringify(LIMITED)] : [])
-    .all();
-  return results.length > 0;
-}
-
-/** How many entries an agreement settles in at most, when racing settles keep taking the next ref. */
-const SETTLE_ATTEMPTS = 3;
+const limitedPoints = (account: string, points: string, limit: string, day: string, sources: string) =>
+  `MAX(0, MIN(${points}, ${limit} - COALESCE((SELECT SUM(points) FROM auth_reputation WHERE account_id = ${account} AND points > 0
+    AND at >= ${day} AND source IN (SELECT value FROM json_each(${sources}))), 0)))`;
 
 /**
- * Make the ledger agree with whether `event.from` agrees: the pair's entries alternate, credit then take-back, under
- * refs `<ref>#0`, `<ref>#1`…, so an odd count means credited. A credit goes to `account`, the event's recipient; a
- * take-back returns exactly what its credit gave, to the account it gave it to.
+ * Append an entry unless one for `(source, ref)` exists. A positive entry from a {@link LIMITED} source is cut to what is
+ * left of the account's daily limit, so it may land as 0.
+ */
+async function append(db: Database, entry: { account: string; source: string; ref: string; points: number }, dailyLimit?: number): Promise<void> {
+  const values = [entry.account, entry.source, entry.ref, rounded(entry.points), new Date().toISOString()];
+  const limited = dailyLimit !== undefined && entry.points > 0;
+  const points = limited ? limitedPoints("?1", "?4", "?6", "?7", "?8") : "?4";
+  await db.prepare(`INSERT INTO auth_reputation (account_id, source, ref, points, at)
+      SELECT ?1, ?2, ?3, ${points}, ?5 WHERE true ON CONFLICT (source, ref) DO NOTHING`)
+    .bind(...values, ...limited ? [dailyLimit, today(), JSON.stringify(LIMITED)] : [])
+    .run();
+}
+
+/**
+ * Settle `event` in one transaction. It is stored in `auth_reputation_agreements` unless a newer version is, and the
+ * ledger is then made to follow whatever is stored, never `event` itself. The pair's entries alternate, credit then
+ * take-back, under refs `<ref>#0`, `<ref>#1`…, so an odd count means credited. A credit goes to `account`, the
+ * event's recipient, unless that is `event.from`; a take-back returns exactly what its credit gave, to the account it
+ * gave it to.
  */
 async function settleAgreement(db: Database, event: Extract<ReputationEvent, { kind: "agreement" }>, settings: ReputationSettings, account: string | undefined): Promise<void> {
-  const prefix = `${event.ref}#`;
-  for (let attempt = 0; attempt < SETTLE_ATTEMPTS; attempt++) {
-    const { results: entries } = await db.prepare(`SELECT account_id, points FROM auth_reputation
-      WHERE source = 'agreement' AND substr(ref, 1, ?2) = ?1 ORDER BY id`).bind(prefix, prefix.length).all<{ account_id: string; points: number }>();
-    const credited = entries.length % 2 === 1;
-    if (credited === event.agreed) return;
-    const ref = `${prefix}${entries.length}`;
-    if (event.agreed) {
-      if (!account || account === event.from) return;
-      if (await append(db, { account, source: "agreement", ref, points: settings.agreement }, settings.dailyLimit)) return;
-    } else {
-      const { account_id: credit, points } = entries.at(-1)!;
-      if (await append(db, { account: credit, source: "agreement", ref, points: -points })) return;
-    }
-  }
+  const at = new Date().toISOString();
+  const recipient = account === event.from ? undefined : account;
+  // ?1 the event's ref, ?2 its entries' ref prefix; `entries` counts them and `stored` is the settled state.
+  const entries = "(SELECT COUNT(*) AS count FROM auth_reputation WHERE source = 'agreement' AND substr(ref, 1, length(?2)) = ?2)";
+  const stored = "(SELECT agreed FROM auth_reputation_agreements WHERE ref = ?1)";
+  await db.batch([
+    db.prepare(`INSERT INTO auth_reputation_agreements (ref, version, agreed) VALUES (?1, ?2, ?3)
+      ON CONFLICT (ref) DO UPDATE SET version = excluded.version, agreed = excluded.agreed WHERE excluded.version > auth_reputation_agreements.version`)
+      .bind(event.ref, event.version, event.agreed ? 1 : 0),
+    db.prepare(`INSERT INTO auth_reputation (account_id, source, ref, points, at)
+      SELECT ?3, 'agreement', ?2 || n.count, ${limitedPoints("?3", "?4", "?5", "?6", "?7")}, ?8 FROM ${entries} n
+      WHERE ?3 IS NOT NULL AND n.count % 2 = 0 AND ${stored} = 1`)
+      .bind(event.ref, `${event.ref}#`, recipient ?? null, rounded(settings.agreement), settings.dailyLimit, today(), JSON.stringify(LIMITED), at),
+    db.prepare(`INSERT INTO auth_reputation (account_id, source, ref, points, at)
+      SELECT last.account_id, 'agreement', ?2 || n.count, -last.points, ?3 FROM ${entries} n,
+        (SELECT account_id, points FROM auth_reputation WHERE source = 'agreement' AND substr(ref, 1, length(?2)) = ?2 ORDER BY id DESC LIMIT 1) last
+      WHERE n.count % 2 = 1 AND ${stored} = 0`)
+      .bind(event.ref, `${event.ref}#`, at),
+  ]);
 }
 
 /** Throw unless `event` is one auth can weigh: a plugin bug, never a reader's input. */
@@ -262,6 +271,9 @@ function check(event: ReputationEvent): void {
   }
   if (event.kind === "edit" && !(Number.isFinite(event.lines) && event.lines >= 0)) {
     throw new Error("[svartz:auth] an edit's lines must be a finite number of at least 0");
+  }
+  if (event.kind === "agreement" && !(Number.isSafeInteger(event.version) && event.version >= 0)) {
+    throw new Error("[svartz:auth] an agreement's version must be a whole number of at least 0");
   }
   if (!["edit", "page", "declined", "agreement"].includes(event.kind)) throw new Error(`[svartz:auth] unknown reputation event "${String((event as { kind: unknown }).kind)}"`);
 }
@@ -290,7 +302,8 @@ export async function postReputation(env: Env, event: ReputationEvent): Promise<
     const limited = event.kind === "declined" ? undefined : settings.dailyLimit;
     await append(db, { account, source: event.kind, ref: event.ref, points: pointsFor(event, settings) }, limited);
   }
-  // Also when the event was recorded before: posting it again finishes a promotion that failed after its entry landed.
+  // Decided from the ledger as just written, and also when the event was recorded before: posting it again finishes a
+  // promotion that failed after its entry landed.
   if (account) await promote(db, account);
 }
 

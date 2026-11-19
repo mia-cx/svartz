@@ -120,26 +120,28 @@ describe("the reputation ledger", () => {
     await expect(tour.rows("UPDATE auth_reputation SET points = 1000")).rejects.toThrow(/append-only/);
   });
 
-  // Proves story 25's rules: a +1 scores once while it stands, taking it back takes back what it gave, and nobody
-  // scores from their own agreement.
-  it("credits an agreement while it stands, and never one's own", async () => {
+  // Proves story 25's rules: a +1 scores once while it stands, taking it back takes back what it gave, nobody scores
+  // from their own agreement, and a change read before a later one, posted late, changes nothing.
+  it("credits an agreement while it stands, never one's own, and never from a stale read", async () => {
     const tour = await site();
     await signUp(tour, ADMIN, "root");
     await signUp(tour, 2, "ada");
     await signUp(tour, 3, "grace");
     const [ada, grace] = [await tour.id("ada"), await tour.id("grace")];
-    const agree = (from: string, agreed: boolean) =>
-      postReputation(tour.env, { kind: "agreement", to: { identity: "github:2" }, ref: `test:comment-1:${from}`, from, agreed });
+    const agree = (from: string, agreed: boolean, version: number) =>
+      postReputation(tour.env, { kind: "agreement", to: { identity: "github:2" }, ref: `test:comment-1:${from}`, from, agreed, version });
 
-    await agree(grace, true);
-    await agree(grace, true);
+    await agree(grace, true, 1);
+    await agree(grace, true, 1);
     expect(await tour.score("ada")).toBe(0.5);
-    await agree(grace, false);
-    await agree(grace, false);
+    await agree(grace, false, 2);
+    await agree(grace, false, 3);
     expect(await tour.score("ada")).toBe(0);
-    await agree(grace, true);
+    await agree(grace, true, 4);
     expect(await tour.score("ada")).toBe(0.5);
-    await agree(ada, true);
+    await agree(grace, false, 2);
+    expect(await tour.score("ada")).toBe(0.5);
+    await agree(ada, true, 1);
     expect(await tour.score("ada")).toBe(0.5);
   });
 
@@ -240,7 +242,7 @@ describe("thresholds", () => {
     await tour.post("reputation/threshold", root, { role: "editors", score: "5" });
     const ada = await tour.id("ada");
     const page = () => postReputation(tour.env, { kind: "page", to: { account: ada }, ref: "test:commit:1" });
-    const agreement = () => postReputation(tour.env, { kind: "agreement", to: { identity: "github:3" }, ref: `test:comment-1:${ada}`, from: ada, agreed: true });
+    const agreement = () => postReputation(tour.env, { kind: "agreement", to: { identity: "github:3" }, ref: `test:comment-1:${ada}`, from: ada, agreed: true, version: 1 });
     const kudos = () => tour.post("reputation/kudos", root, { handle: "lin", reason: "Thanks." });
     await tour.rows("CREATE TRIGGER fail_promotion BEFORE INSERT ON auth_role_members BEGIN SELECT RAISE(ABORT, 'promotion failed'); END");
     await expect(page()).rejects.toThrow(/promotion failed/);

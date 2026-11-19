@@ -21,7 +21,7 @@ import { can, linkedIdentities, migrateGrants, postReputation, readIdentity, rea
 import { CONTEXT_LENGTH, type Anchor } from "./anchor";
 import { COMMENT_MAX_LENGTH, QUOTE_MAX_LENGTH } from "./limits";
 import { DELETE_COMMENTS, WRITE_COMMENTS } from "./permissions";
-import { agreesAs, createComment, deleteAnnotation, findAnnotation, listPage, migrate, setAgreement, spendWrite, type Database } from "./store";
+import { createComment, deleteAnnotation, findAnnotation, listPage, migrate, readAgreement, setAgreement, spendWrite, type Database } from "./store";
 
 /** One of the site's drawn reactions. */
 export interface Reaction {
@@ -283,34 +283,24 @@ async function agree(request: Request, url: URL, context: ServerContext, options
   return json({ agreed: input.agreed, agreements });
 }
 
-/** How often one +1 settles its reputation at most, while racing requests keep changing it. */
-const SETTLE_ATTEMPTS = 3;
-
 /**
  * Give the comment's author reputation for `account`'s +1, or take it back, as whether any sign-in linked to `account`
  * agrees with it now. One account scores a comment once, however many of its sign-ins +1 it, and auth credits nobody
- * for agreeing with their own comment, from any of their sign-ins.
- *
- * A racing request can change the +1 between reading it and settling it, so this reads it again after each settlement
- * and settles again until the two match: whichever request settles last leaves the ledger as the +1 is stored.
+ * for agreeing with their own comment, from any of their sign-ins. The comment's agreement version goes with it, so a
+ * request that read the +1 before a racing change settles nothing over that change.
  */
 async function creditAgreement(db: Database, context: ServerContext, annotation: string, account: Account): Promise<void> {
-  const target = await findAnnotation(db, context.vault.id, annotation);
-  if (!target) return;
   const identities = (await linkedIdentities(account, context.env)).map(({ id }) => id);
-  let agreed = await agreesAs(db, annotation, identities);
-  for (let attempt = 0; attempt < SETTLE_ATTEMPTS; attempt++) {
-    await postReputation(context.env, {
-      kind: "agreement",
-      to: { identity: target.author },
-      ref: `annotations:${context.vault.id}:${annotation}:${account.id}`,
-      from: account.id,
-      agreed,
-    });
-    const now = await agreesAs(db, annotation, identities);
-    if (now === agreed) return;
-    agreed = now;
-  }
+  const agreement = await readAgreement(db, context.vault.id, annotation, identities);
+  if (!agreement) return;
+  await postReputation(context.env, {
+    kind: "agreement",
+    to: { identity: agreement.author },
+    ref: `annotations:${context.vault.id}:${annotation}:${account.id}`,
+    from: account.id,
+    agreed: agreement.agreed,
+    version: agreement.version,
+  });
 }
 
 /**

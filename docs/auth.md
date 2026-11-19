@@ -486,7 +486,7 @@ await postReputation(context.env, { kind: "page", to: { account: account.id }, r
 | `edit` | `lines` | An edit landed, changing `lines` lines (added plus removed). |
 | `page` | | A new page landed. |
 | `declined` | | A pull request closed without merging. |
-| `agreement` | `from`, `agreed` | Account `from` now agrees (`true`) or no longer agrees with what `to` wrote. `ref` names the pair; the agreement scores once while it stands, and when it is taken back, the same points are taken back. Nobody scores from their own. Read `agreed` from your store, and read it again after posting: when it changed meanwhile, post again, so the ledger ends as the agreement is stored. |
+| `agreement` | `from`, `agreed`, `version` | Account `from` agrees (`true`) or doesn't agree with what `to` wrote. `ref` names the pair; the agreement scores once while it stands, and when it is taken back, the same points are taken back. Nobody scores from their own. `version` orders the pair's changes: raise it in the same write as every change, and read it with `agreed` in one read. Auth keeps the newest version it was posted and settles the ledger to that, so a post read before a later change, however late it arrives, changes nothing. |
 
 Post only what your server knows happened, for the account your own records name: never an account a request or a commit claims. `postReputation` throws when the site binds no `SVARTZ_DB`, or the write fails.
 

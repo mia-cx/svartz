@@ -219,6 +219,13 @@ const MIGRATIONS: readonly (readonly string[])[] = [
     )`,
     `CREATE TRIGGER IF NOT EXISTS auth_reputation_promotions_no_delete BEFORE DELETE ON auth_reputation_promotions
       BEGIN SELECT RAISE(ABORT, 'auth_reputation_promotions is append-only'); END`,
+    // Each agreement's newest settled state, by its event's ref: the ledger's entries for it follow `agreed`, and a
+    // post with a lower `version`, read before a later change, never replaces it.
+    `CREATE TABLE IF NOT EXISTS auth_reputation_agreements (
+      ref TEXT PRIMARY KEY,
+      version INTEGER NOT NULL,
+      agreed INTEGER NOT NULL CHECK (agreed IN (0, 1))
+    )`,
   ],
 ];
 
