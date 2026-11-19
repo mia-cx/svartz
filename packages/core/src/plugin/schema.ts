@@ -41,6 +41,7 @@ const PluginSchema = Schema.Struct({
   permissions: Schema.optional(Schema.Array(Schema.Unknown)),
   forVault: Schema.optional(FnSchema),
   options: Schema.optional(Schema.Unknown),
+  reads: Schema.optional(Schema.Array(Schema.String)),
   buildStart: Schema.optional(HookInputSchema),
   configResolved: Schema.optional(HookInputSchema),
   buildEnd: Schema.optional(HookInputSchema),
@@ -69,6 +70,7 @@ const KNOWN_KEYS = new Set<string>([
   "permissions",
   "forVault",
   "options",
+  "reads",
   ...STAGE_NAMES,
   "handleChange",
 ]);

@@ -196,6 +196,19 @@ describe("optional content formats", () => {
     expect(await renderMarkdown(suppressed, markdown)).not.toContain("A Published Example");
   });
 
+  // Proves every note a build compiles reads the bibliography: rehype-citation resolves its paths in place, so the
+  // second note used to look for it below the vault twice over.
+  it("renders citations in every note of a build, not only the first", async () => {
+    const root = await mkdtemp(join(tmpdir(), "svartz-citations-"));
+    roots.push(root);
+    await writeFile(join(root, "bibliography.bib"), "@article{doe2020,\n  author = {Doe, Jane},\n  title = {A Published Example},\n  year = {2020}\n}\n");
+    const ctx = context(root, "Research [@doe2020].");
+    citations({ bibliographyFile: "bibliography.bib" }).transformGfm!.run(ctx);
+
+    expect(await renderMarkdown(ctx, "Research [@doe2020].")).toContain("A Published Example");
+    expect(await renderMarkdown(ctx, "More research [@doe2020].")).toContain("A Published Example");
+  });
+
   it("fails clearly when a configured citation bibliography is missing", () => {
     const ctx = context("/missing-vault", "Research [@doe2020]");
     expect(() => citations().transformGfm!.run(ctx)).toThrow("Citation bibliography not found");

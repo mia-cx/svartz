@@ -136,6 +136,12 @@ interface SvartzPlugin {
    * outside, and the version cache of `@svartz/plugin-history` compiles versions again when this changes.
    */
   readonly options?: unknown;
+  /**
+   * Files the plugin's hooks read while building, such as a bibliography, each a path from the vault's folder or an
+   * absolute one. `options` holds their paths; the version cache of `@svartz/plugin-history` also reads their
+   * contents, and compiles versions again when one changes.
+   */
+  readonly reads?: readonly string[];
 
   // Lifecycle hooks
   buildStart?: PluginHookInput;
@@ -170,6 +176,7 @@ interface NormalizedSvartzPlugin {
   readonly permissions?: SvartzPlugin["permissions"];
   readonly forVault?: SvartzPlugin["forVault"];
   readonly options?: SvartzPlugin["options"];
+  readonly reads?: SvartzPlugin["reads"];
 
   // Lifecycle hooks
   buildStart?: PluginHook;

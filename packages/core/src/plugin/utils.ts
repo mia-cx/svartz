@@ -37,6 +37,7 @@ function legacyWarnUnknownKeys(plugin: SvartzPlugin): void {
     "permissions",
     "forVault",
     "options",
+    "reads",
     ...STAGE_NAMES,
     "handleChange",
   ]);
@@ -163,6 +164,7 @@ function normalizePlugin(plugin: SvartzPlugin): NormalizedSvartzPlugin {
     ...(plugin.permissions !== undefined && { permissions: plugin.permissions }),
     ...(plugin.forVault !== undefined && { forVault: plugin.forVault }),
     ...(plugin.options !== undefined && { options: plugin.options }),
+    ...(plugin.reads !== undefined && { reads: plugin.reads }),
 
     // Lifecycle hooks
     buildStart: normalizeHook(plugin.buildStart, plugin.id, "buildStart"),

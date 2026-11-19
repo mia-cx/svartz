@@ -72,6 +72,14 @@ export async function buildFingerprint(ctx: PluginContext, extra: unknown): Prom
     // The plugins the build runs, Svartz's defaults and the theme's presets included, which `config` lacks: their
     // hooks by source, and the `options` each was made from, since values a hook closes over don't show in its source.
     plugins: (ctx.plugins ?? []).map((plugin) => ({ ...plugin })),
+    // The files they read while compiling, such as a bibliography, by content: their paths alone are in `plugins`.
+    reads: await Promise.all((ctx.plugins ?? []).flatMap(({ reads = [] }) => reads).map(async (path) => {
+      try {
+        return [path, hash(await readFile(resolve(ctx.config.path, path)))];
+      } catch {
+        return [path, "unreadable"];
+      }
+    })),
     compiler: { remark: compiler.remarkPlugins, rehype: compiler.rehypePlugins, svx: compiler.svxSourceTransforms },
     roamMedia: ctx.meta.get("svartz:roamMedia") === true,
     extra,
