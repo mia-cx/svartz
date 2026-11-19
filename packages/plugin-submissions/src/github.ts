@@ -326,7 +326,7 @@ async function createPull(target: GitHubTarget, submission: Submission, branch: 
 
 /** Who a direct commit is by: the account behind the save, and its linked GitHub account when it has one. */
 export interface Attribution {
-  /** The account's stable id, recorded in the {@link ACCOUNT_TRAILER} so history maps the commit back to it. */
+  /** The account's stable id, written in the {@link ACCOUNT_TRAILER} for people reading the commit on GitHub. */
   readonly accountId: string;
   /** The account's display name. */
   readonly name: string;

@@ -23,6 +23,10 @@
       "import": "./dist/browser.js",
       "types": "./dist/browser.d.ts"
     },
+    "./commits": {
+      "import": "./dist/commits.js",
+      "types": "./dist/commits.d.ts"
+    },
     "./browser.css": "./dist/browser.css"
   },
   "scripts": {
