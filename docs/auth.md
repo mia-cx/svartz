@@ -241,7 +241,7 @@ Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` and
 - **Create a [group](#groups)**, see the groups they belong to, and accept or decline invitations to others.
 - **Link another provider.** The provider's sign-in comes back to the account that started it, bound to that browser's session: if the reader signs out or switches accounts meanwhile, nothing is linked. A provider account that already belongs to another account is refused, and stays with that account.
 - **Unlink a provider** while another remains. The one this browser signed in with stays linked; sign in another way to unlink it. Unlinking ends every session that provider signed in. Two browsers unlinking an account's last two providers at once leave one linked.
-- **See their [reputation](#reputation)**: their score, and the score at which they get the next role a threshold gives.
+- **See their [reputation](#reputation)**: their score, and the score at which they get the next role a threshold gives. Below it, an empty `data-svartz-region="account-activity"` element, its `data-svartz-handle` naming the account's handle, holds links plugins' browser scripts add to the account's activity, such as [history](history.md#contributions)'s **Your contributions**.
 - **See their sessions**: the provider each signed in with, when, and which is this browser.
 - **Sign out everywhere.** Every session of the account ends, this browser's included, so each reads as signed out on its next request.
 
@@ -297,6 +297,10 @@ export default guestbook;
 `findProfiles(ids, env)` answers the public profiles of the accounts with those ids, as a `Map` by id, for a plugin that stored an account's id. Ids no account has are left out, and the map is empty without `SVARTZ_DB`. Show the handle and name; never show the id.
 
 `userPageLocation()` answers where [user pages](#user-pages) live, such as `{ vault: "notes", folder: "users" }`, so a plugin can find or start an account's page at `<folder>/<handle>` in that vault.
+
+`userPageOf(handle)` answers the URL, below the deployment base, of the user page at `<folder>/<handle>`, such as `/notes/users/ada/`, or `undefined` when there is none, it's hidden, or the vault that holds user pages hasn't started yet.
+
+`findStanding(handle, env)` answers the account that holds `handle` now or held it before, for a page about it: its public profile under its current handle, its `id`, its `userPage` under any handle it has held, and its `standing`, `{ score, next }`, where `next` is the lowest threshold above its score whose role it doesn't hold. It answers `undefined` when no account ever held `handle`, or without `SVARTZ_DB`. Show `next` only to the account itself, as its user page and account page do, and never show the `id`.
 
 ## Permissions
 

@@ -5,12 +5,17 @@
  */
 import { createHmac } from "node:crypto";
 import type { Identity } from "@svartz/auth";
+import { postReputation } from "@svartz/auth/server";
 import { createServer, type PluginPage } from "@svartz/core";
 import type { BuildData, ServerOptions } from "@svartz/plugin-submissions/server";
 import { Miniflare } from "miniflare";
 import { vi } from "vitest";
 import type { HistoryData } from "../src/api";
+import { createRole } from "../../auth/src/people";
+import { setThreshold } from "../../auth/src/reputation";
+import { migrate, recordEdit, scopeOf, type Database as MirrorDatabase } from "../../plugin-submissions/src/mirror";
 import { permissions } from "../../plugin-submissions/src/permissions";
+import { counting } from "../../plugin-submissions/tests/edits-harness";
 import {
   API,
   APP_BOT,
@@ -55,6 +60,12 @@ const REPOSITORY = { id: 712_345, name: "wikiplace.live", full_name: REPO, owner
 
 /** The published Markdown page every test reads the history of. The vault also holds `secret.md`, which it hides. */
 export const GUIDE = { slug: "guide", path: "guide.md", href: "/wiki/guide/", title: "Guide" };
+/** A second published page, `setup.md`. */
+export const SETUP = { slug: "setup", path: "setup.md", href: "/wiki/setup/", title: "Setup" };
+/** Ada's user page, in the vault's `users/` folder. */
+export const ADA_PAGE = { slug: "users/ada", path: "users/ada.md", href: "/wiki/users/ada/", title: "Ada Lovelace" };
+/** Grace's user page, written as SVX: published, with no revision history of its own. */
+export const GRACE_PAGE = { slug: "users/grace", path: "users/grace.svx", href: "/wiki/users/grace/", title: "Grace Hopper" };
 
 const HISTORY: HistoryData = {
   source: {
@@ -64,7 +75,7 @@ const HISTORY: HistoryData = {
     credentials: { app: { id: APP_ID, privateKey: { env: "SVARTZ_GITHUB_APP_KEY" }, installation: INSTALLATION_ID } },
     database: { env: "SVARTZ_DB" },
   },
-  notes: [GUIDE],
+  notes: [GUIDE, SETUP, ADA_PAGE, GRACE_PAGE],
   preview: { linkResolution: "shallowest", mountPath: "/wiki", tagsRoute: "tags", attachments: [], sharedNames: [] },
 };
 
@@ -89,6 +100,10 @@ const SUBMISSIONS_BUILD: BuildData = {
   links: [{ ...GUIDE, link: "Guide" }],
   preview: HISTORY.preview,
 };
+
+/** A save's commit message as the site writes it: what it changed, the editor's `note`, and the account's trailer. */
+export const siteMessage = (note: string, account: string, path = "content/guide.md") =>
+  `Edit ${path}\n\n${note}\n\nSvartz-Account: ${account}`;
 
 /** A commit, as a test describes it; `at` is minutes past 10:00 on 19 November 2026, UTC. */
 export interface TestCommit {
@@ -204,7 +219,13 @@ export async function createSite({ defaultBranch = false } = {}) {
   const submissions = defaultBranch ? unnamed(SUBMISSIONS) : SUBMISSIONS;
   const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
   disposers.push(() => miniflare.dispose());
-  const db = await miniflare.getD1Database("SVARTZ_DB") as unknown as Database;
+  const { database: counted, calls: d1 } = counting(await miniflare.getD1Database("SVARTZ_DB"));
+  const db = counted as unknown as Database & MirrorDatabase;
+  /**
+   * The user pages the last build found, by handle. Auth reads this same object on every request, so a test adds a
+   * page once its account exists, as a rebuild would: a page that exists first would take the handle.
+   */
+  const userPages: Record<string, string | null> = {};
   const server = createServer({
     basePath: "/wiki",
     vault: { id: "wiki", mountPath: "/wiki", site: { title: "Wiki" } },
@@ -212,15 +233,19 @@ export async function createSite({ defaultBranch = false } = {}) {
       {
         id: "auth",
         eager: true,
+        pages: ["account", "dashboard", "groups"],
         load: () => import("@svartz/auth/server"),
         options: {
           providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
           admins: [ADA.id],
           permissions: permissions(false),
+          userPages: "users",
+          userPageVault: "wiki",
         },
+        data: { permissions: [], paths: [], userPages },
       },
       { id: "submissions", load: () => import("@svartz/plugin-submissions/server"), options: submissions, data: SUBMISSIONS_BUILD },
-      { id: "history", pages: ["history", "changes"], load: () => import("../src/server"), data: history },
+      { id: "history", pages: ["history", "changes", "contributions"], load: () => import("../src/server"), data: history },
     ],
   }, {
     privateEnv: {
@@ -246,11 +271,56 @@ export async function createSite({ defaultBranch = false } = {}) {
   };
   disposers.unshift(settle);
 
-  /** The plugin page at `path`, or `undefined` for the theme's 404. */
-  async function page(path: string): Promise<PluginPage | undefined> {
-    const result = await server.page(event(path));
+  /** The plugin page at `path`, as the reader `init` sends, or `undefined` for the theme's 404. */
+  async function page(path: string, init: RequestInit = {}): Promise<PluginPage | undefined> {
+    const result = await server.page(event(path, init));
     if (result && "redirect" in result) throw new Error(`unexpected redirect to ${result.redirect}`);
     return result;
+  }
+
+  /** Where the plugin page at `path` redirects, or `undefined` when it doesn't. */
+  async function redirectOf(path: string): Promise<string | undefined> {
+    const result = await server.page(event(path));
+    return result && "redirect" in result ? result.redirect : undefined;
+  }
+
+  /**
+   * Record that the site committed each of `shas` for the account `account`, as the submissions plugin records a
+   * direct commit from its save route: many saves without replaying GitHub for each. Push each with a message of
+   * {@link siteMessage}'s form, as the site writes it.
+   */
+  async function recordCommits(account: string, shas: readonly string[]): Promise<void> {
+    const mirror = { db, scope: scopeOf(REPO, "content") };
+    await migrate(db);
+    for (const [index, sha] of shas.entries()) {
+      await recordEdit(mirror, {
+        id: sha.slice(-32),
+        owner: `account:${account}`,
+        kind: "commit",
+        page: GUIDE.href,
+        path: "content/guide.md",
+        commit: sha,
+        pull: null,
+        url: `https://github.com/${REPO}/commit/${sha}`,
+        savedAt: new Date(Date.UTC(2026, 10, 19, 9, 0, index)).toISOString(),
+        newPage: false,
+      });
+    }
+  }
+
+  /** Publish `handle`'s user page at `users/<handle>`, as the next build would find it. */
+  const addUserPage = (handle: string, href: string) => {
+    userPages[handle] = href;
+  };
+
+  /** Give the account `account` a new page's points, through auth's reputation API. */
+  const earnPage = (account: string, ref: string) => postReputation({ SVARTZ_DB: db }, { kind: "page", to: { account }, ref });
+
+  /** Make the role `role`, given at `score` points, as an admin would on the dashboard. */
+  async function threshold(role: string, score: number): Promise<void> {
+    const admin = { id: "test", handle: "test" };
+    await createRole(db as never, admin, role);
+    await setThreshold(db as never, admin, { role, score });
   }
 
   /** Deliver GitHub's event `event` with `payload`, signed with the webhook secret. */
@@ -357,7 +427,10 @@ export async function createSite({ defaultBranch = false } = {}) {
     return { id: row!.id as string, cookie: cookies(chosen).find((pair) => pair.startsWith("__Host-svartz-session="))! };
   }
 
-  return { page, push, merged, signUp, adaCommits, graceOpensPullRequest, settle };
+  return {
+    page, redirectOf, request, push, merged, signUp, adaCommits, graceOpensPullRequest, settle, recordCommits, addUserPage, earnPage,
+    threshold, d1,
+  };
 }
 
 /** A page's HTML as the text a reader sees: tags dropped, character references decoded, white space collapsed. */

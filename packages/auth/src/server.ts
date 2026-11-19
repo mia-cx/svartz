@@ -40,7 +40,7 @@ import { usePermissions } from "./grants";
 import { accountGroups, groupsPage, groupsPanel, groupsRoute } from "./groups-routes";
 import { peoplePanel, peopleRoute } from "./people-panel";
 import { personByHandle } from "./people";
-import { handleScore, standingOf } from "./reputation";
+import { handleScore, standingOf, type Standing } from "./reputation";
 import { kudosPanel, reputationPanel, reputationRoute } from "./reputation-panel";
 import { handleFrom, HANDLE_PROBLEM, isHandle, typedHandle } from "./handle";
 import { isProviderId, PROVIDERS, type Identity, type ProviderId } from "./providers";
@@ -63,7 +63,7 @@ export type { PermissionTarget } from "./permissions";
 export { audit, auditIfChanged, type AuditEntry } from "./audit";
 export { linkedIdentities } from "./identities";
 export { userPageLocation, type UserPageLocation } from "./user-pages";
-export { postReputation, type Recipient, type ReputationEvent } from "./reputation";
+export { postReputation, type Recipient, type ReputationEvent, type Standing, type Threshold } from "./reputation";
 
 /**
  * The public profile of the account that holds or held `handle`, under its current handle; `undefined` when no account
@@ -82,6 +82,51 @@ export async function findProfile(handle: string, env: Readonly<Record<string, u
 export async function findProfiles(ids: readonly string[], env: Readonly<Record<string, unknown>>): Promise<Map<string, PublicProfile>> {
   const db = await accountsDatabase(env);
   return db ? profilesById(db, ids) : new Map();
+}
+
+/**
+ * The URL, below the deployment base, of the user page at `handle`; `undefined` while there is none, for a hidden
+ * one, and until the vault that holds user pages has started.
+ */
+export function userPageOf(handle: string): string | undefined {
+  const pages = builtUserPages();
+  return pages && hasUserPage(pages, handle) ? pages[handle] ?? undefined : undefined;
+}
+
+/** An account as a page about it shows it: who it is, its user page and its reputation. */
+export interface AccountStanding extends PublicProfile {
+  /** The account's id, as {@link Account} and plugins' records name it. Never show it. */
+  readonly id: string;
+  /** Its user page's URL below the deployment base, under any handle it has held, as {@link userPageOf} answers. */
+  readonly userPage?: string;
+  /** Its score, and the next threshold whose role it doesn't hold. Show `next` only to the account itself. */
+  readonly standing: Standing;
+}
+
+/**
+ * The account that holds or held `handle`, under its current handle, with its user page and reputation; `undefined`
+ * when no account ever held it or the site binds no `SVARTZ_DB`.
+ */
+export async function findStanding(handle: string, env: Readonly<Record<string, unknown>>): Promise<AccountStanding | undefined> {
+  const db = await accountsDatabase(env);
+  const { results: [row] } = db
+    ? await db.prepare(`SELECT a.id, a.handle, a.name, a.avatar_url FROM auth_handles h JOIN auth_accounts a ON a.id = h.account_id
+      WHERE h.handle = ?`).bind(handle).all<{ id: string; handle: string; name: string; avatar_url: string | null }>()
+    : { results: [] };
+  if (!db || !row) return undefined;
+  const [handles, standing] = await Promise.all([handlesOf(db, row.id), standingOf(db, row.id)]);
+  const pages = builtUserPages();
+  // As the account page finds it: the current handle's page, else the one a handle change left behind.
+  const owned = pages && [row.handle, ...handles].find((held) => hasUserPage(pages, held));
+  const userPage = owned === undefined ? undefined : userPageOf(owned);
+  return {
+    id: row.id,
+    handle: row.handle,
+    name: row.name,
+    ...row.avatar_url !== null && { avatarUrl: row.avatar_url },
+    ...userPage && { userPage },
+    standing,
+  };
 }
 
 /** One provider's OAuth app. The secret is named by environment variable, never inlined. */

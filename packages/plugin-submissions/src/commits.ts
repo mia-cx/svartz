@@ -103,6 +103,17 @@ export interface CommitReader {
    * knows. `before` is the sha of the last commit of the previous page; `next` is this page's, when there may be more.
    */
   recent(before?: string): Promise<{ readonly commits: readonly Commit[]; readonly next?: string }>;
+  /**
+   * The commits the site's records say the account `account` (its id) made, from the mirror only, as
+   * {@link recent} pages them: `limit` at a time (default {@link RECENT_PAGE_SIZE}), newest commit time first,
+   * `before` the last sha of the previous page. Only those whose files the mirror knows. `files` is every vault file
+   * any of its commits changed, most recently changed first, whichever page is asked for. One D1 batch, then one query.
+   */
+  madeBy(account: string, options?: { readonly before?: string; readonly limit?: number }): Promise<{
+    readonly commits: readonly Commit[];
+    readonly next?: string;
+    readonly files: readonly string[];
+  }>;
   /** Whether `sha` is a commit on the content branch of the repository, never one of a fork's. */
   onBranch(sha: string): Promise<boolean>;
   /** The commit `sha`, when it is on the content branch. */
@@ -191,14 +202,26 @@ interface Made {
  * its pull request's merge commit, as the mirror knows it from GitHub's signed deliveries. Earliest save first.
  */
 const MADE_BY_SITE = `SELECT sha, owner, kind FROM (
-    SELECT e.commit_sha AS sha, e.owner, e.kind, e.saved_at FROM submissions_edits e
+    SELECT e.commit_sha AS sha, e.owner, e.kind, e.saved_at, e.id FROM submissions_edits e
       WHERE e.scope = ?1 AND e.kind = 'commit' AND e.commit_sha IN (SELECT value FROM json_each(?2))
     UNION ALL
-    SELECT p.merge_commit AS sha, e.owner, e.kind, e.saved_at FROM submissions_edits e
+    SELECT p.merge_commit AS sha, e.owner, e.kind, e.saved_at, e.id FROM submissions_edits e
       JOIN submissions_pulls p ON p.scope = e.scope AND p.number = e.pull_number
       WHERE e.scope = ?1 AND e.kind = 'pull-request' AND p.merged_at IS NOT NULL
         AND p.merge_commit IN (SELECT value FROM json_each(?2))
-  ) ORDER BY saved_at`;
+  ) ORDER BY saved_at, id`;
+
+/**
+ * The commits {@link MADE_BY_SITE} credits to `?2` (`account:<id>`): its direct commits, and the merge commits of the
+ * pull requests whose first recorded save is its own. Its parameters are `?1`, the scope, and `?2`.
+ */
+const MADE_BY_ACCOUNT = `SELECT e.commit_sha FROM submissions_edits e
+    WHERE e.scope = ?1 AND e.owner = ?2 AND e.kind = 'commit' AND e.commit_sha IS NOT NULL
+  UNION
+  SELECT p.merge_commit FROM submissions_edits e JOIN submissions_pulls p ON p.scope = e.scope AND p.number = e.pull_number
+    WHERE e.scope = ?1 AND e.owner = ?2 AND e.kind = 'pull-request' AND p.merged_at IS NOT NULL AND p.merge_commit IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM submissions_edits o WHERE o.scope = ?1 AND o.kind = 'pull-request'
+        AND o.pull_number = e.pull_number AND (o.saved_at, o.id) < (e.saved_at, e.id))`;
 
 /** The note a saved edit's message carries between its title and its trailers. */
 function savedNote(message: string): string {
@@ -353,6 +376,27 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
           : await rows(`c.files IS NOT NULL ${newestFirst} LIMIT ?`, RECENT_PAGE_SIZE);
         const commits = await toCommits(page);
         return { commits, ...(page.length === RECENT_PAGE_SIZE ? { next: page.at(-1)!.sha } : {}) };
+      },
+
+      async madeBy(account, { before, limit = RECENT_PAGE_SIZE } = {}) {
+        const { db, scope } = await mirrorFor();
+        const owner = `account:${account}`;
+        // A `before` the mirror doesn't hold compares with NULL, so it answers no commits.
+        const [page, changed] = await db.batch([
+          db.prepare(`SELECT ${COMMIT_COLUMNS} FROM submissions_commits c WHERE c.scope = ?1 AND c.files IS NOT NULL
+              AND c.sha IN (${MADE_BY_ACCOUNT})
+              AND (?3 IS NULL OR (c.committed_at, c.sha) < (SELECT committed_at, sha FROM submissions_commits WHERE scope = ?1 AND sha = ?3))
+            ${newestFirst} LIMIT ?4`).bind(scope, owner, before ?? null, limit),
+          db.prepare(`SELECT j.value AS path FROM submissions_commits c, json_each(c.files) j
+            WHERE c.scope = ?1 AND c.files IS NOT NULL AND c.sha IN (${MADE_BY_ACCOUNT})
+            GROUP BY j.value ORDER BY MAX(c.committed_at) DESC, j.value`).bind(scope, owner),
+        ]) as [{ results: CommitRow[] }, { results: { path: string }[] }];
+        const commits = await toCommits(page.results);
+        return {
+          commits,
+          ...(page.results.length === limit ? { next: page.results.at(-1)!.sha } : {}),
+          files: changed.results.map(({ path }) => vaultPath(path)),
+        };
       },
 
       async onBranch(sha) {

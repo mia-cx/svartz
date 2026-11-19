@@ -1,7 +1,7 @@
 import { createServer, type PermissionDeclaration, type PluginPage, type ServerHandler } from "@svartz/core";
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { can, postReputation, readAccount } from "../src/server";
+import { can, findStanding, postReputation, readAccount, userPageOf } from "../src/server";
 
 const ORIGIN = "https://notes.test";
 const AUTH = "/notes/_svartz/auth";
@@ -381,5 +381,36 @@ describe("a user page's reputation", () => {
     expect(await standing("/notes/users/ada/", ada)).toEqual({ handle: "ada", score: 5, next: { role: "editors", score: 20 } });
     expect(await standing("/notes/users/root/")).toBeNull();
     expect(await standing("/notes/garden/")).toBeNull();
+  });
+});
+
+describe("an account's standing, for plugins", () => {
+  // Proves a plugin finds an account by any handle it has held, under its current one, with the user page it left
+  // under an old handle and its reputation; and the account page leaves plugins room to link the account's activity.
+  it("finds an account by an old handle, with its user page and reputation", async () => {
+    const pages: Record<string, string> = {};
+    const tour = await site({ userPages: pages });
+    const root = await signUp(tour, ADMIN, "root");
+    const ada = await signUp(tour, 2, "ada");
+    await tour.post("people/role", root, { name: "editors" });
+    await tour.post("reputation/threshold", root, { role: "editors", score: "20" });
+    await postReputation(tour.env, { kind: "page", to: { identity: "github:2" }, ref: "test:commit:1" });
+    // Ada wrote her page as ada, the site rebuilt, and she has since become lovelace.
+    pages.ada = "/notes/users/ada/";
+    await tour.post("account/profile", ada, { name: "Ada Lovelace", handle: "lovelace" });
+
+    expect(await findStanding("ada", tour.env)).toEqual({
+      id: await tour.id("lovelace"),
+      handle: "lovelace",
+      name: "Ada Lovelace",
+      avatarUrl: "https://github.com/ada.png",
+      userPage: "/notes/users/ada/",
+      standing: { score: 5, next: { role: "editors", score: 20 } },
+    });
+    expect(await findStanding("nobody", tour.env)).toBeUndefined();
+    expect(await findStanding("ada", {})).toBeUndefined();
+    expect([userPageOf("ada"), userPageOf("lovelace")]).toEqual(["/notes/users/ada/", undefined]);
+    expect((await tour.page("/notes/-/account/", ada))?.html)
+      .toContain('<p class="sv-account-activity" data-svartz-region="account-activity" data-svartz-handle="lovelace"></p>');
   });
 });

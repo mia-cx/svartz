@@ -1,4 +1,5 @@
-import type { NormalizedSvartzPlugin, ResolvedConfig } from "@svartz/core";
+import { auth } from "@svartz/auth";
+import { getCompilerContributions, type NormalizedSvartzPlugin, type PluginContext, type ResolvedConfig } from "@svartz/core";
 import { submissions } from "@svartz/plugin-submissions";
 import { describe, expect, it } from "vitest";
 import { history } from "../src/index";
@@ -26,9 +27,32 @@ describe("the history plugin", () => {
   });
 
   // Proves the pages it claims, which a vault with the mirror resolves.
-  it("claims /-/history/ and /-/changes/ on a vault whose submissions plugin mirrors GitHub", () => {
+  it("claims /-/history/, /-/changes/ and /-/contributions/ on a vault whose submissions plugin mirrors GitHub", () => {
     const plugin = history();
     expect(resolveFor(plugin, [submissions({ repo, app, sync })])).toBe(plugin);
-    expect(plugin.server?.pages).toEqual(["history", "changes"]);
+    expect(plugin.server?.pages).toEqual(["history", "changes", "contributions"]);
+  });
+
+  // Proves user pages get their account's contributions on the vault that holds them, and only there: in a host app,
+  // a `users/` page of another vault is an ordinary page.
+  it("tells the browser where user pages are, on the vault that holds them", async () => {
+    const github = { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } };
+    const vault = (id: string, mountPath: string) => ({
+      id, mountPath, target: { type: "host" }, linkResolution: "shallowest", frontmatter: { aliasesField: "aliases" }, theme: {},
+      plugins: [auth({ providers: { github }, userPages: "people" }), submissions({ repo, app, sync }), history()],
+    }) as unknown as ResolvedConfig;
+    const vaults = [vault("wiki", "/wiki"), vault("blog", "/blog")];
+
+    async function browserOptions(config: ResolvedConfig) {
+      const plugins = (config.plugins as NormalizedSvartzPlugin[]).map((plugin) => plugin.forVault!({ vault: config, vaults }) as NormalizedSvartzPlugin);
+      const ctx = { config, plugins, files: [], index: { entries: [] }, meta: new Map() } as unknown as PluginContext;
+      // What the submissions plugin's own build step records first: where the vault is in the repository.
+      getCompilerContributions(ctx).serverData.set("submissions", { vaultRoot: "content" });
+      await plugins.at(-1)!.emitArtifacts!.run(ctx);
+      return getCompilerContributions(ctx).browserResources.get("history")?.options;
+    }
+
+    expect(await browserOptions(vaults[0]!)).toEqual({ mountPath: "/wiki", pages: [], userPages: "/wiki/people/" });
+    expect(await browserOptions(vaults[1]!)).toEqual({ mountPath: "/blog", pages: [] });
   });
 });
