@@ -127,6 +127,8 @@ Moderators see **Delete** on every comment of a page, and delete it from the pag
 
 Grant `annotations:comments:delete` on the site, a vault, a folder or a page to make someone a moderator there, and deny `annotations:comments:write` to stop someone commenting. A refused comment answers 403 and the composer keeps the draft.
 
+Two holders need no grant, and no deny stops them: admins everywhere, and every account on its own user page, `users/<handle>`, where it may comment and delete anyone's comments.
+
 `moderators` is deprecated. On a site with accounts, each identity it lists becomes a grant of `annotations:comments:delete` on the vault, once: the first time a signed-in reader loads a page's comments or deletes one after that identity has an account. From then on the grant alone decides, so taking someone off the list removes nothing; change or remove their grant instead. Without `SVARTZ_DB`, nobody has an account, so the list decides and every signed-in reader may comment. To find an id for the list, sign in on the site, open `<base><mount>/_svartz/auth/me/`, and copy its `id`:
 
 ```ts
