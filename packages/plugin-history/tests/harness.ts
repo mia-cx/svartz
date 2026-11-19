@@ -11,6 +11,7 @@ import type { BuildData, ServerOptions } from "@svartz/plugin-submissions/server
 import { Miniflare } from "miniflare";
 import { vi } from "vitest";
 import type { HistoryData } from "../src/api";
+import { PERMISSIONS } from "../src/permissions";
 import { createRole } from "../../auth/src/people";
 import { setThreshold } from "../../auth/src/reputation";
 import { migrate, recordEdit, scopeOf, type Database as MirrorDatabase } from "../../plugin-submissions/src/mirror";
@@ -66,6 +67,12 @@ export const SETUP = { slug: "setup", path: "setup.md", href: "/wiki/setup/", ti
 export const ADA_PAGE = { slug: "users/ada", path: "users/ada.md", href: "/wiki/users/ada/", title: "Ada Lovelace" };
 /** Grace's user page, written as SVX: published, with no revision history of its own. */
 export const GRACE_PAGE = { slug: "users/grace", path: "users/grace.svx", href: "/wiki/users/grace/", title: "Grace Hopper" };
+/** A reader who isn't an admin, with a user page in Markdown. */
+export const ALAN: Identity = { id: "github:3", provider: "github", name: "Alan Turing", handle: "alan" };
+export const ALAN_PAGE = { slug: "users/alan", path: "users/alan.md", href: "/wiki/users/alan/", title: "Alan Turing" };
+
+/** The routes the build allocated: the guide's, and a hidden note's. */
+const ROUTES = { guide: { slug: "guide", href: "/wiki/guide/" }, secret: { slug: "secret", href: null } };
 
 const HISTORY: HistoryData = {
   source: {
@@ -75,7 +82,8 @@ const HISTORY: HistoryData = {
     credentials: { app: { id: APP_ID, privateKey: { env: "SVARTZ_GITHUB_APP_KEY" }, installation: INSTALLATION_ID } },
     database: { env: "SVARTZ_DB" },
   },
-  notes: [GUIDE, SETUP, ADA_PAGE, GRACE_PAGE],
+  claims: { routes: ROUTES, aliases: {}, aliasesField: "aliases" },
+  notes: [GUIDE, SETUP, ADA_PAGE, GRACE_PAGE, ALAN_PAGE],
   preview: { linkResolution: "shallowest", mountPath: "/wiki", tagsRoute: "tags", attachments: [], sharedNames: [] },
 };
 
@@ -92,7 +100,7 @@ const SUBMISSIONS: ServerOptions = {
 const SUBMISSIONS_BUILD: BuildData = {
   commit: "7638417db6d59f3c431d3e1f261cc637155684cd",
   pages: { "/wiki/guide/": "content/guide.md" },
-  routes: { guide: { slug: "guide", href: "/wiki/guide/" }, secret: { slug: "secret", href: null } },
+  routes: ROUTES,
   aliases: {},
   aliasesField: "aliases",
   vaultRoot: "content",
@@ -238,7 +246,7 @@ export async function createSite({ defaultBranch = false } = {}) {
         options: {
           providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
           admins: [ADA.id],
-          permissions: permissions(false),
+          permissions: [...permissions(false), ...PERMISSIONS],
           userPages: "users",
           userPageVault: "wiki",
         },
@@ -315,6 +323,12 @@ export async function createSite({ defaultBranch = false } = {}) {
 
   /** Give the account `account` a new page's points, through auth's reputation API. */
   const earnPage = (account: string, ref: string) => postReputation({ SVARTZ_DB: db }, { kind: "page", to: { account }, ref });
+
+  /** Allow the account `handle` `permission` on `object`, such as `page:wiki/guide`, as an admin would on the dashboard. */
+  async function grant(handle: string, permission: string, object: string): Promise<void> {
+    await db.prepare(`INSERT INTO auth_grants (actor_type, actor_id, object, permission, value, updated_at)
+      SELECT 'account', id, ?, ?, 'allow', '2026-11-19T00:00:00.000Z' FROM auth_accounts WHERE handle = ?`).bind(object, permission, handle).all();
+  }
 
   /** Make the role `role`, given at `score` points, as an admin would on the dashboard. */
   async function threshold(role: string, score: number): Promise<void> {
@@ -429,7 +443,7 @@ export async function createSite({ defaultBranch = false } = {}) {
 
   return {
     page, redirectOf, request, push, merged, signUp, adaCommits, graceOpensPullRequest, settle, recordCommits, addUserPage, earnPage,
-    threshold, d1,
+    threshold, grant, db, d1,
   };
 }
 

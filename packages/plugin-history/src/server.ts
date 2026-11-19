@@ -10,9 +10,15 @@
  * - `/-/contributions/<handle>/`: the changes the site's records say an account made, newest first, every published
  *   page they changed, and its reputation. `?before=<sha>` goes back further; an old handle redirects to the current one.
  *
- * Its one route, `GET <mount>/_svartz/history/contributions/?page=<path>`, answers the section a user page shows below
- * its note, as HTML: for the page at `path` below the deployment base, its account's reputation, latest changes and
- * the pages they changed. It answers 404 for any other page, and on a site without accounts.
+ * Its routes, under `<mount>/_svartz/history/`:
+ *
+ * - `GET contributions/?page=<path>` answers the section a user page shows below its note, as HTML: for the page at
+ *   `path` below the deployment base, its account's reputation, latest changes and the pages they changed. It answers
+ *   404 for any other page, and on a site without accounts.
+ * - `POST revert/`, the diff page's form, reverts a page to an earlier revision for an account holding
+ *   `history:reverts:write` on it: one commit through the submissions plugin's commit path, as that account, with an
+ *   audit entry, taking back the reputation the changes since earned (`revertRoute`). The history list links each
+ *   older change to that form, and the diff page offers it for its earlier revision, to viewers who hold the permission.
  *
  * Commits come from the submissions plugin's GitHub mirror, and from GitHub through it for what the mirror lacks
  * (`@svartz/plugin-submissions/commits`). Only what the site publishes shows: pages that are hidden, private or
@@ -21,28 +27,46 @@
  * it shows no content. Only the account itself sees its next reputation threshold.
  */
 import type { PageContext, PageResult, ServerContext, ServerModuleFactory } from "@svartz/core";
-import { findProfiles, findStanding, readAccount, userPageLocation, userPageOf, type AccountStanding } from "@svartz/auth/server";
-import { commitReader, CommitsUnavailable, type Commit, type CommitReader } from "@svartz/plugin-submissions/commits";
+import {
+  audit, can, canEach, findProfiles, findStanding, readAccount, readSignIn, reverseReputation, userPageLocation, userPageOf,
+  type AccountStanding,
+} from "@svartz/auth/server";
+import { commitReader, CommitsUnavailable, sourceToken, type Commit, type CommitReader } from "@svartz/plugin-submissions/commits";
+import { renderRevision, wasPublic } from "@svartz/plugin-submissions/render";
+import { restorer } from "@svartz/plugin-submissions/restore";
 import type { PreviewNote } from "@svartz/plugins/preview";
 import { PLUGIN_ID, type HistoryData } from "./api";
 import { diffLines } from "./diff";
 import {
   changesPage, contributionsPage, contributionsSection, diffPage, historyPage, type Author, type Change, type Comparison,
-  type Contributions, type WikiChange,
+  type Contributions, type RevertForm, type WikiChange,
 } from "./pages";
-import { renderRevision, wasPublic } from "@svartz/plugin-submissions/render";
+import { REVERT } from "./permissions";
 
 /** Pages of a file's history readers may page back through; older ones are on GitHub. */
 export const MAX_HISTORY_PAGE = 10;
+/** The longest reason a revert takes, which its commit message carries. */
+export const MAX_REASON_LENGTH = 500;
+/** Room for a revert's form: three SHAs, a page's route and the longest reason, URL-encoded. */
+const MAX_FORM_BYTES = 16 * 1024;
 /** Changes, and pages they changed, that a user page's section lists; the rest are on the contributions page. */
 const SECTION_CHANGES = 5;
 const SECTION_PAGES = 10;
 const SHA = /^[0-9a-f]{40}$/;
 const PAGE_NUMBER = /^(?:0|[1-9]\d?)$/;
 const CONTRIBUTIONS = /^contributions\/([^/]+)\/$/;
+const revisionDay = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" });
+
+/** A refused form post, as plain text: the reader's browser shows it as the page. */
+const refuse = (status: number, message: string) =>
+  new Response(message, { status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+const redirect = (location: string) => new Response(null, { status: 303, headers: { location, "cache-control": "no-store" } });
 
 const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
-  const read = commitReader(data.source);
+  // One installation token for reading and committing.
+  const token = sourceToken(data.source);
+  const read = commitReader(data.source, token);
+  const restore = restorer(data.source, data.claims, token);
   const notes = new Map(data.notes.filter(({ path }) => /\.md$/i.test(path)).map((note) => [note.href, note]));
   const byPath = new Map(data.notes.filter(({ path }) => /\.md$/i.test(path)).map((note) => [note.path, note]));
   /** Every published, unprotected note by its route, whatever its format. */
@@ -128,7 +152,14 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
     return handle && !handle.includes("/") ? handle : undefined;
   }
 
-  async function listPage(note: PreviewNote, page: number, reader: CommitReader, context: PageContext): Promise<PageResult> {
+  /** Whether `request`'s reader may revert `note`: with a GitHub App to commit, and `history:reverts:write` on the page. */
+  async function mayRevert(request: Request, note: PreviewNote, context: ServerContext): Promise<boolean> {
+    if (!restore.commits) return false;
+    const account = await readAccount(request, context.env);
+    return account !== null && await can(account, REVERT, { vault: context.vault.id, page: note.slug }, context.env);
+  }
+
+  async function listPage(request: Request, note: PreviewNote, page: number, reader: CommitReader, context: PageContext): Promise<PageResult> {
     const link = urls(context);
     let commits: readonly Commit[] = [];
     let more = false;
@@ -142,11 +173,16 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
     reader.refresh();
     const changes = await changesOf(commits, context);
     const github = `https://github.com/${repo}/commits/${encodeURIComponent(branch ?? "HEAD")}/${encodeURI(repoPath(note.path))}`;
+    // Reverting reaches as far back as the newest page of changes, which names the page's head too.
+    const head = page === 0 ? changes[0]?.sha : undefined;
+    const reverts = head !== undefined && await mayRevert(request, note, context);
     return historyPage({
       title: note.title,
       changes,
       unavailable,
+      status: new URL(request.url).searchParams.get("status"),
       previousOf: (index) => changes[index + 1]?.sha,
+      ...reverts && { revertTo: (index: number) => (index === 0 ? undefined : `${link.history(note, { from: changes[index]!.sha, to: head })}#sv-history-revert`) },
       links: {
         page: link.page(note),
         history: link.history(note),
@@ -161,28 +197,61 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
   /** Whether `text`, a revision's content, may show: a file the build would have published unprotected. */
   const visible = (file: Awaited<ReturnType<CommitReader["file"]>>) => file.kind !== "file" || wasPublic(file.markdown);
 
-  /** What changed in `note`'s source from `from` to `to`, and `to` rendered, unless either may not show. */
-  async function compare(note: PreviewNote, from: Commit | undefined, to: Commit, reader: CommitReader, deployment: string): Promise<Comparison> {
+  /**
+   * What changed in `note`'s source from `from` to `to`, and `to` rendered, unless either may not show; and whether
+   * `from` is content a revert may restore: a file the build would have published unprotected.
+   */
+  async function compare(note: PreviewNote, from: Commit | undefined, to: Commit, reader: CommitReader, deployment: string): Promise<{ comparison: Comparison; restorable: boolean }> {
     const after = await reader.file(note.path, to.sha);
     const before = from ? await reader.file(note.path, from.sha) : { kind: "missing" as const };
-    if (!visible(after) || !visible(before)) return { kind: "hidden" };
+    const restorable = before.kind === "file" && wasPublic(before.markdown);
+    const shown = (comparison: Comparison) => ({ comparison, restorable });
+    if (!visible(after) || !visible(before)) return shown({ kind: "hidden" });
     const github = from ? `https://github.com/${repo}/compare/${from.sha}...${to.sha}` : to.url;
-    if (after.kind === "too-large" || before.kind === "too-large") return { kind: "too-large", github };
+    if (after.kind === "too-large" || before.kind === "too-large") return shown({ kind: "too-large", github });
     const hunks = diffLines(before.kind === "file" ? before.markdown : "", after.kind === "file" ? after.markdown : "");
-    if (!hunks) return { kind: "too-large", github };
+    if (!hunks) return shown({ kind: "too-large", github });
     const rendered = after.kind === "file"
       ? await renderRevision(after.markdown, { ...data.preview, notes: data.notes, path: note.path, base: deployment })
       : undefined;
-    return { kind: "diff", hunks, rendered };
+    return shown({ kind: "diff", hunks, rendered });
   }
 
-  async function diff(note: PreviewNote, toSha: string, fromSha: string | null, reader: CommitReader, context: PageContext): Promise<PageResult | undefined> {
+  /**
+   * The form reverting `note` to `from`, read from the newest page of its changes, which names its head: only when
+   * `from` is among them and older than the head. `undefined` too when GitHub can't be asked.
+   */
+  async function revertForm(note: PreviewNote, from: Commit, to: Commit, reader: CommitReader, context: PageContext): Promise<RevertForm | undefined> {
     const link = urls(context);
-    const page = (revisions: Parameters<typeof diffPage>[0]["revisions"], comparison: Comparison) =>
-      diffPage({ title: note.title, revisions, comparison, links: { page: link.page(note), history: link.history(note) } });
+    let commits: readonly Commit[];
+    try {
+      ({ commits } = await reader.history(note.path, 0));
+    } catch (error) {
+      if (!(error instanceof CommitsUnavailable)) throw error;
+      return undefined;
+    }
+    const undone = commits.findIndex(({ sha }) => sha === from.sha);
+    const head = commits[0]?.sha;
+    if (undone < 1 || !head) return undefined;
+    return {
+      action: `${context.base}/revert/`,
+      fields: { page: note.href, revision: from.sha, head, to: to.sha },
+      at: from.committedAt,
+      undone,
+      ...to.sha !== head && { current: `${link.history(note, { from: from.sha, to: head })}#sv-history-revert` },
+      maxReason: MAX_REASON_LENGTH,
+    };
+  }
+
+  async function diff(request: Request, note: PreviewNote, toSha: string, fromSha: string | null, reader: CommitReader, context: PageContext): Promise<PageResult | undefined> {
+    const link = urls(context);
+    const status = new URL(request.url).searchParams.get("revert");
+    const page = (revisions: Parameters<typeof diffPage>[0]["revisions"], comparison: Comparison, revert?: RevertForm) =>
+      diffPage({ title: note.title, revisions, comparison, status, links: { page: link.page(note), history: link.history(note) }, ...revert && { revert } });
     let to: Commit | undefined;
     let from: Commit | undefined;
     let comparison: Comparison;
+    let restorable = false;
     // Without a `from`, the page says the note didn't exist before `to`; that is only known once `from` was read.
     let bothRead = false;
     try {
@@ -191,14 +260,90 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
       from = fromSha === null ? await reader.previous(note.path, to.sha) : await reader.commit(fromSha);
       if (fromSha !== null && !from) return undefined;
       bothRead = true;
-      comparison = await compare(note, from, to, reader, link.deployment);
+      ({ comparison, restorable } = await compare(note, from, to, reader, link.deployment));
     } catch (error) {
       if (!(error instanceof CommitsUnavailable)) throw error;
       if (!to || !bothRead) return page(undefined, { kind: "unavailable" });
       comparison = { kind: "unavailable" };
     }
+    const revert = from && restorable && await mayRevert(request, note, context) ? await revertForm(note, from, to, reader, context) : undefined;
     const [shownTo, shownFrom] = await changesOf(from ? [to, from] : [to], context);
-    return page({ from: shownFrom, to: shownTo! }, comparison);
+    return page({ from: shownFrom, to: shownTo! }, comparison, revert);
+  }
+
+  /** `date` as a commit message names a revision's day: `19 Nov 2026`, in UTC. */
+  const messageDay = (iso: string) => revisionDay.format(new Date(iso));
+
+  /**
+   * `POST revert/`, a form post from a diff page (`page`, `revision`, `head`, `to`, `reason`?): make the page read as it
+   * did at `revision`, one of its latest 100 changes, for an account holding `history:reverts:write` on it and on every
+   * page the restored frontmatter claims. Refused unless `head` is still the page's latest change on GitHub. The audit
+   * entry lands once the commit exists, before the branch moves; then the save is recorded and the reputation the
+   * changes since earned is taken back. Redirects to the history on success, else back to the diff with `?revert=`.
+   */
+  async function revertRoute(request: Request, context: ServerContext): Promise<Response> {
+    const url = new URL(request.url);
+    if (request.headers.get("origin") !== url.origin) return refuse(403, "Revert pages from this site.");
+    const signIn = await readSignIn(request, context.env);
+    if (signIn.reason === "no-database") return refuse(503, "Reverting needs accounts, and this site has none.");
+    const { account } = signIn;
+    if (!account) return refuse(401, "Sign in to revert pages.");
+    if (Number(request.headers.get("content-length")) > MAX_FORM_BYTES) return refuse(413, "This form is too large.");
+    const form = new URLSearchParams(await request.text());
+    const note = notes.get(form.get("page") ?? "");
+    const [revision, head, to] = [form.get("revision") ?? "", form.get("head") ?? "", form.get("to") ?? ""];
+    const reason = (form.get("reason") ?? "").replace(/\s+/g, " ").trim();
+    if (!note) return refuse(404, "This page has no history here.");
+    if (![revision, head, to].every((sha) => SHA.test(sha)) || reason.length > MAX_REASON_LENGTH) return refuse(400, "This form didn't arrive intact. Reload the page and try again.");
+    const vault = context.vault.id;
+    if (!restore.commits || !await can(account, REVERT, { vault, page: note.slug }, context.env)) return refuse(403, "Your account can't revert this page.");
+
+    const link = urls(context);
+    const back = (status: string) => redirect(`${link.history(note, { from: revision, to, revert: status })}#sv-history-revert`);
+    const reader = read(context);
+    const writer = restore.forRequest(context);
+    try {
+      const { commits } = await reader.history(note.path, 0);
+      if (commits[0]?.sha !== head) return back("changed");
+      const index = commits.findIndex(({ sha }) => sha === revision);
+      if (index === 0) return back("unchanged");
+      if (index < 0) return back("too-old");
+      const restored = await reader.file(note.path, revision);
+      const current = await reader.file(note.path, head);
+      if (restored.kind === "missing") return back("missing");
+      if (restored.kind === "too-large" || current.kind !== "file") return back("too-large");
+      if (!wasPublic(restored.markdown)) return back("hidden");
+      if (restored.markdown === current.markdown) return back("unchanged");
+      const claimed = writer.claims(note.path, restored.markdown, note.slug);
+      if (!claimed || (await canEach(account, REVERT, [...claimed].map((page) => ({ vault, page })), context.env)).includes(false)) return back("route");
+      // Read before anything changes: whoever the site's records say made each change since, and what it earned.
+      const owed = await writer.earnings(commits.slice(0, index).map(({ sha }) => sha));
+      const named = `${revision.slice(0, 7)} (${messageDay(commits[index]!.committedAt)})`;
+      const result = await writer.restore({
+        account,
+        request,
+        page: { href: note.href, path: note.path },
+        markdown: restored.markdown,
+        current: current.markdown,
+        title: `Revert ${repoPath(note.path)} to ${named}`,
+        note: reason ? `Reverted to ${named}: ${reason}` : `Reverted to ${named}.`,
+        beforeMove: (commit) => audit(context.env, {
+          actor: account,
+          action: "history:page:revert",
+          target: `page:${vault}/${note.slug}`,
+          detail: { restored: revision, replaced: head, commit: commit.sha, ...reason && { reason } },
+        }),
+      });
+      if (result.kind !== "commit") return back(result.kind);
+      await reverseReputation(context.env, owed).catch((error: unknown) => {
+        // The page is reverted; only the reputation the undone changes earned stays, and the log says which.
+        console.error(`[history] reverted ${note.path} as ${result.sha} but couldn't take back reputation from ${JSON.stringify(owed)}`, error);
+      });
+      return redirect(link.history(note, { status: "reverted" }));
+    } catch (error) {
+      if (!(error instanceof CommitsUnavailable)) throw error;
+      return back("github");
+    }
   }
 
   async function changes(before: string | null, reader: CommitReader, context: PageContext): Promise<PageResult> {
@@ -275,11 +420,19 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
     return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "private, no-store" } });
   }
 
+  const routes = new Map([
+    ["/contributions/", { method: "GET", run: section }],
+    ["/revert/", { method: "POST", run: revertRoute }],
+  ]);
+
   return {
     handle: async (request, context) => {
-      if (new URL(request.url).pathname !== `${context.base}/contributions/`) return undefined;
-      if (request.method !== "GET") return Response.json({ error: "method_not_allowed", message: "Use GET." }, { status: 405, headers: { allow: "GET" } });
-      return section(request, context);
+      const route = routes.get(new URL(request.url).pathname.slice(context.base.length));
+      if (!route) return undefined;
+      if (request.method !== route.method) {
+        return Response.json({ error: "method_not_allowed", message: `Use ${route.method}.` }, { status: 405, headers: { allow: route.method } });
+      }
+      return route.run(request, context);
     },
     page: async (request, context) => {
       const query = new URL(request.url).searchParams;
@@ -302,11 +455,11 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
       if (to !== null) {
         const from = query.get("from");
         if (!SHA.test(to) || (from !== null && !SHA.test(from))) return undefined;
-        return diff(note, to, from, reader, context);
+        return diff(request, note, to, from, reader, context);
       }
       const page = query.get("page") ?? "0";
       if (!PAGE_NUMBER.test(page) || Number(page) > MAX_HISTORY_PAGE) return undefined;
-      return listPage(note, Number(page), reader, context);
+      return listPage(request, note, Number(page), reader, context);
     },
   };
 };

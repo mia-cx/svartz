@@ -7,15 +7,17 @@
  * ```
  *
  * The vault needs the submissions plugin with `sync` set, which makes it a Cloudflare vault. A History action joins
- * Edit beside every page with a history, and each account's user page lists its contributions below the note.
+ * Edit beside every page with a history, and each account's user page lists its contributions below the note. Whoever
+ * holds `history:reverts:write` on a page can revert it to an earlier revision from its history.
  */
 import { fileURLToPath } from "node:url";
 import type { AuthServerOptions } from "@svartz/auth/server";
 import { definePlugin, getCompilerContributions, type NormalizedSvartzPlugin, type PluginContext, type SvartzPlugin } from "@svartz/core";
-import { commitSource, mirrorsCommits } from "@svartz/plugin-submissions/commits";
+import { commitSource, mirrorsCommits, routeClaimsOf } from "@svartz/plugin-submissions/commits";
 import { publishedAttachments, sharedAttachmentNames } from "@svartz/plugins";
 import { alternateNames } from "@svartz/plugins/routes";
 import { PAGES, PLUGIN_ID, type BrowserOptions, type HistoryData } from "./api";
+import { PERMISSIONS } from "./permissions";
 
 export type { BrowserOptions } from "./api";
 
@@ -47,6 +49,7 @@ export function history(): NormalizedSvartzPlugin {
   const plugin: NormalizedSvartzPlugin = definePlugin(() => ({
     id: PLUGIN_ID,
     server: { module: SERVER_MODULE, pages: [...PAGES] },
+    permissions: PERMISSIONS,
     forVault({ vault }) {
       if (!mirrorsCommits(vault.plugins)) fail(needsMirror(vault.id));
       return plugin;
@@ -56,7 +59,8 @@ export function history(): NormalizedSvartzPlugin {
       options: { fatal: true, enforce: "post" },
       run(ctx) {
         const source = commitSource(ctx);
-        if (!source) fail(needsMirror(ctx.config.id));
+        const claims = routeClaimsOf(ctx);
+        if (!source || !claims) fail(needsMirror(ctx.config.id));
         const mountPath = ctx.config.mountPath ?? "";
         const frontmatter = new Map(ctx.files.map((file) => [file.slug, file.frontmatter]));
         // Protected notes stay out, as hidden ones already do: their history isn't the site's to show.
@@ -67,6 +71,7 @@ export function history(): NormalizedSvartzPlugin {
         const compiler = getCompilerContributions(ctx);
         compiler.serverData.set(PLUGIN_ID, {
           source,
+          claims,
           notes,
           preview: {
             linkResolution: ctx.config.linkResolution,

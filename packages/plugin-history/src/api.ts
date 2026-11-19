@@ -1,4 +1,5 @@
 import type { CommitSource } from "@svartz/plugin-submissions/commits";
+import type { RouteClaims } from "@svartz/plugin-submissions/restore";
 import type { PreviewNote, PreviewOptions } from "@svartz/plugins/preview";
 
 /** The plugin's id: its server answers under `<mount>/_svartz/history/`. */
@@ -11,6 +12,8 @@ export const PAGES = ["history", "changes", "contributions"] as const;
 export interface HistoryData {
   /** Where the vault's commits are read from: the submissions plugin's mirror and credentials. */
   readonly source: CommitSource;
+  /** The routes every page holds, hidden ones included, which a reverted page's frontmatter may claim. */
+  readonly claims: RouteClaims;
   /** The published notes, never protected or hidden ones. Links resolve to them; those in Markdown have a history. */
   readonly notes: readonly PreviewNote[];
   /** How the vault resolves links, and the attachments it publishes, to render revisions as the build would. */
