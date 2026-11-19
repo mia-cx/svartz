@@ -80,4 +80,5 @@ it("costs the same D1 calls for a full page of reports as for a handful", async 
   expect(full.html.match(/>Suspend @author\d+</g)).toHaveLength(FULL_PAGE - FULL_PAGE / 20);
   expect(full.html.match(/>Hide comment</g)).toHaveLength(FULL_PAGE * 16 / 20);
   expect(full.html.match(/>Close submission</g)).toHaveLength(FULL_PAGE / 20);
-});
+  // Seeding a hundred reports takes a hundred batches on a real D1, more than the suite's budget on a busy CI runner.
+}, 60_000);

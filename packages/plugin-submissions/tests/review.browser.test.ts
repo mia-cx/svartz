@@ -1,7 +1,7 @@
 import "@svartz/auth/browser.css";
 import "../src/browser.css";
 import type { PageResult } from "@svartz/core";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { commands, page } from "vitest/browser";
 import type { Viewer } from "./edits-harness";
 
@@ -22,6 +22,9 @@ async function open(viewer: Viewer, path: string): Promise<boolean> {
   document.body.innerHTML = `<main>${result.html}</main>`;
   return true;
 }
+
+// The seeded site starts on the first page asked for, which takes longer than one test's budget on a busy CI runner.
+beforeAll(() => commands.editsPage(null, DASHBOARD), 120_000);
 
 afterEach(() => {
   document.body.innerHTML = "";
