@@ -306,27 +306,21 @@ export async function giveKudos(db: Database, giver: AuditEntry["actor"], recipi
   const prefix = `${giver.id}:`;
   const day = today();
   const ref = `${prefix}${recipient.id}:${day.slice(0, 10)}`;
-  const { results: [given] } = await db.prepare(`SELECT COUNT(*) AS count, SUM(ref = ?3) AS again FROM auth_reputation
-    WHERE source = 'kudos' AND substr(ref, 1, ?2) = ?1 AND at >= ?4`).bind(prefix, prefix.length, ref, day).all<{ count: number; again: number | null }>();
-  if (given?.again) {
-    // Giving again finishes a promotion that failed after the first gift landed.
-    await promote(db, recipient.id);
-    return "already";
-  }
-  if ((given?.count ?? 0) >= KUDOS_PER_DAY) return "limit";
+  const at = new Date().toISOString();
   const { kudos: points } = await readSettings(db);
-  try {
-    // No `ON CONFLICT`: a racing kudos for the same pair fails the batch, and with it the audit entry.
-    await db.batch([
-      db.prepare("INSERT INTO auth_reputation (account_id, source, ref, points, at) VALUES (?, 'kudos', ?, ?, ?)")
-        .bind(recipient.id, ref, points, new Date().toISOString()),
-      auditStatement(db, { actor: giver, action: "auth:kudos:give", target: recipient.handle, detail: { reason, points } }),
-    ]);
-  } catch (error) {
-    const { results } = await db.prepare("SELECT 1 FROM auth_reputation WHERE source = 'kudos' AND ref = ?").bind(ref).all();
-    if (results.length > 0) return "already";
-    throw error;
-  }
+  // The insert counts the giver's kudos today itself, so racing gifts can't both pass the limit, and the audit entry
+  // lands only after an insert that changed a row.
+  const [gift] = await db.batch([
+    db.prepare(`INSERT INTO auth_reputation (account_id, source, ref, points, at) SELECT ?1, 'kudos', ?2, ?3, ?4
+      WHERE (SELECT COUNT(*) FROM auth_reputation WHERE source = 'kudos' AND substr(ref, 1, ?6) = ?5 AND at >= ?7) < ?8
+      ON CONFLICT (source, ref) DO NOTHING RETURNING id`).bind(recipient.id, ref, points, at, prefix, prefix.length, day, KUDOS_PER_DAY),
+    db.prepare(`INSERT INTO auth_audit (at, actor_id, actor_handle, action, target, detail)
+      SELECT ?, ?, ?, 'auth:kudos:give', ?, ? WHERE changes() > 0`)
+      .bind(at, giver.id, giver.handle, recipient.handle, JSON.stringify({ reason, points })),
+  ]);
+  // Also after a repeated gift: it finishes a promotion that failed after the first one landed.
   await promote(db, recipient.id);
-  return "given";
+  if (gift!.results.length > 0) return "given";
+  const { results } = await db.prepare("SELECT 1 FROM auth_reputation WHERE source = 'kudos' AND ref = ?").bind(ref).all();
+  return results.length > 0 ? "already" : "limit";
 }

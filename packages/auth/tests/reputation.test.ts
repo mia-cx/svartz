@@ -316,6 +316,48 @@ describe("kudos", () => {
     expect(text(await tour.page(`${DASHBOARD}auth/kudos/`, mod))).toContain("Give an account 5 points for good work.");
     expect(text(await tour.page("/notes/-/account/", ada))).toContain("Reputation 5 points At 20 points, you get the editors role.");
   });
+
+  // Proves the daily limit holds when a moderator's last gifts of the day race: of two sent after nine, one lands.
+  it("lets one of two racing gifts past the ninth of the day", async () => {
+    const d1 = await createDatabase() as unknown as { prepare(query: string): { all(): Promise<unknown> }; batch(statements: unknown[]): Promise<unknown> };
+    // While racing, each read of the weights waits until both requests have read them, so neither writes before both
+    // have read.
+    let race: Array<() => void> | undefined;
+    const inStep = {
+      prepare: (query: string) => {
+        const step = race;
+        if (!step || !query.startsWith("SELECT name, value FROM auth_reputation_settings")) return d1.prepare(query);
+        return {
+          all: async () => {
+            const result = await d1.prepare(query).all();
+            await new Promise<void>((resolve) => {
+              step.push(resolve);
+              if (step.length === 2) step.forEach((go) => go());
+            });
+            return result;
+          },
+        };
+      },
+      batch: (statements: unknown[]) => d1.batch(statements),
+    };
+    const tour = await site({ db: inStep as unknown as Database });
+    const root = await signUp(tour, ADMIN, "root");
+    await signUp(tour, 2, "ada");
+    await signUp(tour, 3, "grace");
+    const [giver, ada, day] = [await tour.id("root"), await tour.id("ada"), new Date().toISOString().slice(0, 10)];
+    for (let gift = 0; gift < 9; gift++) {
+      await tour.rows(`INSERT INTO auth_reputation (account_id, source, ref, points, at) VALUES ('${ada}', 'kudos', '${giver}:earlier-${gift}:${day}', 5, '${new Date().toISOString()}')`);
+    }
+    const statusOf = (response: Response) => new URL(response.headers.get("location")!, ORIGIN).searchParams.get("status");
+
+    race = [];
+    const answers = await Promise.all(["ada", "grace"].map((handle) => tour.post("reputation/kudos", root, { handle, reason: "Thanks." })));
+    race = undefined;
+
+    expect(answers.map(statusOf).sort()).toEqual(["kudos-given", "kudos-limit"]);
+    expect(await tour.rows("SELECT COUNT(*) AS n FROM auth_reputation WHERE source = 'kudos'")).toEqual([{ n: 10 }]);
+    expect(await auditLog(tour, "auth:kudos:give")).toHaveLength(1);
+  });
 });
 
 describe("a user page's reputation", () => {
