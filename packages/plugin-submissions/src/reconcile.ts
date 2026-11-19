@@ -312,7 +312,8 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
       const files = list(object(answer?.body)?.files).flatMap((file) =>
         [text(object(file)?.filename), text(object(file)?.previous_filename)].filter((path) => path !== undefined && inVault(path, root)));
       await mirror.db.prepare("UPDATE submissions_commits SET files = ?, files_complete = ? WHERE scope = ? AND sha = ? AND files IS NULL")
-        .bind(JSON.stringify(files.sort()), answer?.more ? 0 : 1, mirror.scope, sha).run();
+        // Whole only when GitHub listed the commit's files and had no more: a commit it no longer knows lists none.
+        .bind(JSON.stringify(files.sort()), answer && !answer.more ? 1 : 0, mirror.scope, sha).run();
     }
   }
 }

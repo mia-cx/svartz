@@ -132,6 +132,8 @@ export const RECENT_PAGE_SIZE = 50;
 export const MAX_FILE_BYTES = MAX_MARKDOWN_BYTES * 2;
 /** File contents a worker keeps: a commit's file never changes. */
 const CACHED_FILES = 64;
+/** Commits a worker remembers as on the content branch. */
+const CACHED_BRANCH_COMMITS = 1024;
 const SHA = /^[0-9a-f]{40}$/;
 
 /** The submissions plugin among `plugins` that keeps the mirror: enabled, with a server, and `sync` set. */
@@ -216,7 +218,12 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
     return value;
   };
   const files = new Map<string, FileAt>();
-  const branches = new Map<string, boolean>();
+  /** Commits known to be on the content branch. One that is stays on it; one that isn't may land, so it is asked again. */
+  const held = new Set<string>();
+  const hold = (sha: string) => {
+    held.add(sha);
+    if (held.size > CACHED_BRANCH_COMMITS) held.delete(held.values().next().value!);
+  };
   const repoPath = (path: string) => (root ? `${root}/${path}` : path);
   const vaultPath = (path: string) => (root ? path.slice(root.length + 1) : path);
   const encodePath = (path: string) => path.split("/").map(encodeURIComponent).join("/");
@@ -328,7 +335,7 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
       const query = new URLSearchParams({ sha: from, path: repoPath(path), per_page: String(size), page: String(page) });
       const response = await get(`/commits?${query}`);
       const commits = response.status === 404 ? [] : await listed(list(await response.json()));
-      for (const { sha } of commits) branches.set(sha, true);
+      for (const { sha } of commits) hold(sha);
       return commits;
     }
 
@@ -350,15 +357,14 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
 
       async onBranch(sha) {
         if (!SHA.test(sha)) return false;
-        const known = branches.get(sha);
-        if (known !== undefined) return known;
+        if (held.has(sha)) return true;
         // The mirror holds only commits on the content branch.
         if ((await rows("c.sha = ?", sha)).length > 0) return true;
         const response = await get(`/compare/${sha}...${encodeURIComponent(await branch())}?per_page=1`);
         const status = response.ok ? text(object(await response.json())?.status) : undefined;
         // The branch is at or ahead of the commit: it holds it. A fork's commit, or a stranger, is never behind it.
         const holds = status === "ahead" || status === "identical";
-        branches.set(sha, holds);
+        if (holds) hold(sha);
         return holds;
       },
 
@@ -371,10 +377,10 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
         const body = await response.json();
         const [commit] = await listed([body]);
         if (!commit) return undefined;
-        const changed = list(object(body)?.files).flatMap((file) => {
-          const name = text(object(file)?.filename);
-          return name && inVault(name, root) ? [vaultPath(name)] : [];
-        });
+        // A rename changed its old path too, as the mirror records it.
+        const changed = list(object(body)?.files).flatMap((file) =>
+          [text(object(file)?.filename), text(object(file)?.previous_filename)]
+            .flatMap((name) => (name !== undefined && inVault(name, root) ? [vaultPath(name)] : [])));
         return { ...commit, files: changed.sort(), allFiles: !hasNextPage(response) };
       },
 
