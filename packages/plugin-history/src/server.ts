@@ -62,6 +62,24 @@ const refuse = (status: number, message: string) =>
   new Response(message, { status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
 const redirect = (location: string) => new Response(null, { status: 303, headers: { location, "cache-control": "no-store" } });
 
+/** A form post's fields, or `undefined` once its body passes {@link MAX_FORM_BYTES}: the stream is cancelled there. */
+async function formOf(request: Request): Promise<URLSearchParams | undefined> {
+  if (!request.body) return new URLSearchParams();
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  let bytes = 0;
+  for (let read = await reader.read(); !read.done; read = await reader.read()) {
+    bytes += read.value.byteLength;
+    if (bytes > MAX_FORM_BYTES) {
+      await reader.cancel();
+      return undefined;
+    }
+    text += decoder.decode(read.value, { stream: true });
+  }
+  return new URLSearchParams(text + decoder.decode());
+}
+
 const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
   // One installation token for reading and committing.
   const token = sourceToken(data.source);
@@ -288,8 +306,8 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
     if (signIn.reason === "no-database") return refuse(503, "Reverting needs accounts, and this site has none.");
     const { account } = signIn;
     if (!account) return refuse(401, "Sign in to revert pages.");
-    if (Number(request.headers.get("content-length")) > MAX_FORM_BYTES) return refuse(413, "This form is too large.");
-    const form = new URLSearchParams(await request.text());
+    const form = await formOf(request);
+    if (!form) return refuse(413, "This form is too large.");
     const note = notes.get(form.get("page") ?? "");
     const [revision, head, to] = [form.get("revision") ?? "", form.get("head") ?? "", form.get("to") ?? ""];
     const reason = (form.get("reason") ?? "").replace(/\s+/g, " ").trim();
