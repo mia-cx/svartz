@@ -9,8 +9,9 @@
  * checks that again before it reads anything.
  *
  * A file is named only when the site publishes it, as a page or an attachment, so a protected, hidden or unpublished
- * note's path never shows. A commit that changed no published file, or whose files the poll hasn't read yet, shows
- * its short SHA in place of its summary, since the summary could name what the site keeps back.
+ * note's path never shows. A commit shows its summary only when every file it changed is published; one that changed
+ * any other file, or whose files the poll hasn't read yet, shows its short SHA instead, since the summary could name
+ * what the site keeps back.
  */
 import { can, findProfiles, readAccount, type PublicProfile } from "@svartz/auth/server";
 import type { DashboardPanel, PageContext, PluginPage } from "@svartz/core";
@@ -69,10 +70,14 @@ interface Entry {
   readonly stage: DeployStage;
 }
 
-/** The commit's subject line, unless it changed nothing the site publishes or its files aren't known yet. */
+/**
+ * The commit's subject line, only when every file it changed is one the site publishes: the subject could name any
+ * of them. A commit whose files aren't known yet, or that changed one the site keeps back, shows no summary.
+ */
 function summary({ commit, changes }: Entry): string | undefined {
   const subject = commit.message.split("\n", 1)[0]!.trim();
-  return changes && (changes.pages.length > 0 || changes.attachments.length > 0) && subject ? subject : undefined;
+  const allPublished = changes !== null && changes.others === 0 && changes.pages.length + changes.attachments.length > 0;
+  return allPublished && subject ? subject : undefined;
 }
 
 function author({ commit, account }: Entry): string {

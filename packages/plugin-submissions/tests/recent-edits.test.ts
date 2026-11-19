@@ -24,6 +24,8 @@ async function panel(at: EditsSite, viewer: Viewer | null, path = PANEL): Promis
 
 /** Each entry's HTML, newest first. */
 const entries = (html: string) => [...html.matchAll(/<li class="svartz-submissions-edit">([\s\S]*?)<\/li>\n?(?=<li class="svartz-submissions-edit">|<\/ol>)/g)].map(([, body]) => body!);
+/** The entry for commit `id`, by its diff link: the test commits' short SHAs are alike. */
+const entryOf = (html: string, id: string) => entries(html).find((body) => body.includes(`/commit/${id}"`))!;
 /** Each entry's heading: its summary, or its short SHA. */
 const headings = (html: string) => [...html.matchAll(/id="svartz-submissions-edit-\d+">([^<]*)</g)].map(([, text]) => text);
 
@@ -67,7 +69,7 @@ describe("the Recent edits panel", () => {
     const html = (await panel(wiki, "mod"))!;
     const [hidden, many] = entries(html);
 
-    expect(many).toContain("Link every person, place and event");
+    expect(headings(html)[1]).toBe(`Commit ${COMMITS.many.slice(0, 7)}`);
     for (const [title, href] of [["Guide", "/wiki/guide/"], ["Ada Lovelace", "/wiki/people/ada-lovelace/"], ["Expo", "/wiki/events/expo/"]]) {
       expect(many).toContain(`<a href="${href}">${title}</a>`);
     }
@@ -80,6 +82,22 @@ describe("the Recent edits panel", () => {
     expect(hidden).toContain("1 file the site doesn't publish");
     expect(html).not.toContain("secret plans");
     expect(html).not.toContain("private/plans");
+  });
+
+  // Proves a summary shows only when every file the commit changed is published: one published page doesn't let a subject name a private one.
+  it("withholds the summary of a commit that also changed a file the site keeps back", async () => {
+    const wiki = await site();
+    const mixed = sha(11);
+    await wiki.push([{
+      id: mixed, message: "Update private/acquisition-target.md and the guide", at: ago(5),
+      author: { name: "Octocat", email: "octocat@example.org", username: "octocat" },
+      modified: ["content/guide.md", "content/private/acquisition-target.md"],
+    }]);
+    const html = (await panel(wiki, "mod"))!;
+    expect(headings(html)).toEqual([`Commit ${mixed.slice(0, 7)}`]);
+    expect(entries(html)[0]).toContain('<a href="/wiki/guide/">Guide</a>');
+    expect(entries(html)[0]).toContain("1 file the site doesn't publish");
+    expect(html).not.toContain("acquisition-target");
   });
 
   // Proves commit text is shown as text: a message or name can't add markup to the dashboard.
@@ -124,7 +142,7 @@ describe("the Recent edits panel", () => {
     const stage = (heading: string) => entries(html)[headings(html).indexOf(heading)]!.match(/data-stage="\w+">([^<]+)</)![1];
     expect(stage("Edit content/guide.md")).toBe("Live");
     expect(stage("Rewrite the guide")).toBe("Building");
-    expect(stage("Link every person, place and event")).toBe("Build failed");
+    expect(entryOf(html, COMMITS.many)).toContain('data-stage="failed">Build failed<');
     expect(stage("Fix a typo in Setup")).toBe("Not live yet");
     await wiki.settle();
 

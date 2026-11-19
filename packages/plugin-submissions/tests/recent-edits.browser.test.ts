@@ -47,7 +47,8 @@ describe("Recent edits", () => {
     const entries = page.getByRole("listitem").filter({ has: page.getByRole("link", { name: "Diff on GitHub" }) });
     expect(entries.elements().map((entry) => entry.querySelector("p")!.textContent)).toEqual([
       expect.stringMatching(/^Commit [0-9a-f]{7}$/),
-      "Link every person, place and event",
+      // It also changed a note the site doesn't publish, so its summary is kept back.
+      expect.stringMatching(/^Commit [0-9a-f]{7}$/),
       "Rewrite the guide",
       "Fix a typo in Setup",
       "Edit content/Places/Paris.md",
