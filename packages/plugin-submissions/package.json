@@ -27,6 +27,10 @@
       "import": "./dist/commits.js",
       "types": "./dist/commits.d.ts"
     },
+    "./render": {
+      "import": "./dist/render.js",
+      "types": "./dist/render.d.ts"
+    },
     "./browser.css": "./dist/browser.css"
   },
   "scripts": {
@@ -51,10 +55,12 @@
     "@lezer/markdown": "^1.8.1",
     "@svartz/auth": "workspace:*",
     "@svartz/core": "workspace:*",
-    "@svartz/plugins": "workspace:*"
+    "@svartz/plugins": "workspace:*",
+    "hast-util-from-html": "^2.0.3"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/hast": "^3.0.4",
     "@types/node": "^22.0.0",
     "@vitest/browser-playwright": "^4.1.12",
     "miniflare": "^4.20260305.0",

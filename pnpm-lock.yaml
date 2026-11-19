@@ -397,13 +397,7 @@ importers:
       '@svartz/plugins':
         specifier: workspace:*
         version: link:../plugins
-      hast-util-from-html:
-        specifier: ^2.0.3
-        version: 2.0.3
     devDependencies:
-      '@types/hast':
-        specifier: ^3.0.4
-        version: 3.0.4
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.13
@@ -458,10 +452,16 @@ importers:
       '@svartz/plugins':
         specifier: workspace:*
         version: link:../plugins
+      hast-util-from-html:
+        specifier: ^2.0.3
+        version: 2.0.3
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.3.1
         version: 7.3.1(svelte@5.58.0(@typescript-eslint/types@8.73.0))(vite@8.3.8(@types/node@22.19.13)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.97.3)(sass@1.97.3)(tsx@4.21.0)(yaml@2.9.1))
+      '@types/hast':
+        specifier: ^3.0.4
+        version: 3.0.4
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.13
