@@ -56,7 +56,14 @@ export interface SiteOptions {
   readonly pages?: BuildData["pages"];
   /** Identity ids config names admins. */
   readonly admins?: readonly string[];
+  /** Put the history plugin on the vault, with `garden.md` and `users/grace.md` as its Markdown pages. */
+  readonly history?: boolean;
 }
+
+/** What history declares, as auth collects it when history is on the vault. */
+const HISTORY_PERMISSIONS: PermissionDeclaration[] = [
+  { slug: "history:reverts:write", name: "Revert pages", description: "Revert a page.", administrative: true },
+];
 
 /**
  * One vault at /notes with `auth`, `annotations` (comments in `SVARTZ_DB`) and `moderation`, all on `db`, answering
@@ -64,12 +71,13 @@ export interface SiteOptions {
  */
 export function createSite(db: Database, {
   vault = "notes", annotations = true, submissions = true, reportsPerHour = DEFAULT_REPORTS_PER_HOUR, accounts = true, comments = "SVARTZ_DB", pages = PAGES,
-  admins = [],
+  admins = [], history = false,
 }: SiteOptions = {}) {
   const data: BuildData = {
     pages,
     ...annotations && { annotations: { database: comments } },
     ...submissions && { submissions: { repo: SUBMISSIONS.repo, records: { database: "DB", root: SUBMISSIONS.root } } },
+    ...history && { history: { paths: { "garden.md": "garden", "users/grace.md": "users/grace" } } },
   };
   const options: ModerationServerOptions = { limits: { reportsPerHour } };
   const server = createServer({
@@ -80,7 +88,7 @@ export function createSite(db: Database, {
         id: "auth", eager: true, pages: ["account", "dashboard"], load: () => import("@svartz/auth/server"),
         options: {
           providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
-          permissions: [...PERMISSIONS, ...OTHERS],
+          permissions: [...PERMISSIONS, ...OTHERS, ...history ? HISTORY_PERMISSIONS : []],
           admins,
         },
         data: { permissions: [], paths: [] },
@@ -155,6 +163,15 @@ export async function seedSubmission(db: Database, number: number, root: string 
       crypto.randomUUID(), `${SUBMISSIONS.repo}:${root}`, owner === undefined ? null : `account:${owner}`, commit ? "commit" : "pull-request",
       commit ?? null, commit ? null : number, `https://github.com/${SUBMISSIONS.repo}/${commit ? `commit/${commit}` : `pull/${number}`}`,
     ).run();
+}
+
+/** Mirror commit `sha` on the content branch, changing `files` (paths in the vault), as submissions' sync records it. */
+export async function seedCommit(db: Database, sha: string, files: readonly string[]): Promise<void> {
+  await isVaultSubmission({ DB: db }, { database: "DB", repo: SUBMISSIONS.repo, root: SUBMISSIONS.root }, 1);
+  await db.prepare(`INSERT INTO submissions_commits (scope, sha, message, author_name, author_email, committer_email, committed_at, url, files)
+    VALUES (?, ?, 'Edit', 'Grace Hopper', 'grace@example.com', 'noreply@github.com', '2026-11-02T00:00:00Z', ?, ?)`)
+    .bind(`${SUBMISSIONS.repo}:${SUBMISSIONS.root}`, sha, `https://github.com/${SUBMISSIONS.repo}/commit/${sha}`, JSON.stringify(files.map((file) => `${SUBMISSIONS.root}/${file}`)))
+    .run();
 }
 
 /** The id of `handle`'s account, as plugins' records name it. */

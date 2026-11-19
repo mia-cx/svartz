@@ -78,6 +78,27 @@ describe("the moderation plugin", () => {
     });
   });
 
+  // Proves the Reports panel offers Revert only where history can revert: submissions committing through an App. With
+  // a token, history shows no Revert form, so the panel gets no pages to link to it.
+  it.each([
+    ["an App", { app: { id: 1, privateKey: { env: "KEY" } } }, { history: { paths: { "roses.md": "roses" } } }],
+    ["a token", { token: { env: "TOKEN" } }, {}],
+  ])("tells the server history's pages only when submissions commits through %s", async (_case, credentials, data) => {
+    const history = { id: "history", server: { module: "/h.js", options: {} } };
+    const submissions = { id: "submissions", server: { module: "/s.js", options: { repo: "wikiplace/wikiplace.live", ...credentials } } };
+
+    const compiler = await build([history, submissions], [
+      { slug: "roses", title: "Roses", href: "/garden/roses/", path: "roses.md" },
+      { slug: "tags", title: "Tags", href: "/garden/tags/", path: "tags.canvas" },
+    ]);
+
+    expect(compiler.serverData.get("moderation")).toEqual({
+      pages: { roses: { title: "Roses", href: "/garden/roses/" }, tags: { title: "Tags", href: "/garden/tags/" } },
+      submissions: { repo: "wikiplace/wikiplace.live" },
+      ...data,
+    });
+  });
+
   it("names no owning plugin the vault lacks", async () => {
     expect((await build([])).serverData.get("moderation")).toEqual({ pages: {} });
   });

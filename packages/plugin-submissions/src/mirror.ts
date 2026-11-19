@@ -20,7 +20,8 @@
  * - `submissions_replies`: every comment the site posted on an account's behalf (see `attribution.ts`), and
  *   `submissions_posted_reviews` every review, with the verdict the account gave; the view `submissions_decisions`
  *   reads each review's decision and who made it from both.
- * - `submissions_credits`: what reputation still owes for each save an account made (see `credit.ts`).
+ * - `submissions_credits`: what reputation still owes for each save an account made, and whether a revert's reversal
+ *   of it is written (see `credit.ts`); `submissions_undone`: the commits reverts undid.
  *
  * Deliveries arrive at least once and in any order, so every write is idempotent and never moves a record backwards:
  * a pull request by `updated_at`, a run by attempt and progress, a deployment by status id, a comment until deleted.
@@ -246,6 +247,23 @@ const MIGRATIONS: readonly (readonly string[])[] = [
         CASE WHEN r.state IN ('approved', 'changes_requested') THEN r.state WHEN r.state = 'commented' THEN p.verdict END AS decision
       FROM submissions_reviews r LEFT JOIN submissions_posted_reviews p ON p.scope = r.scope AND p.id = r.id`,
   ],
+  [
+    // The commits a revert undid, as GitHub listed them for the page when it reverted. A save whose commit (a pull
+    // request's merge commit) is one of them earns nothing, however late the mirror learns it landed (`credit.ts`).
+    `CREATE TABLE IF NOT EXISTS submissions_undone (
+      scope TEXT NOT NULL,
+      sha TEXT NOT NULL,
+      PRIMARY KEY (scope, sha)
+    )`,
+  ],
+  [
+    // 1 once auth's ledger holds the reversal of a save a revert undid, or nothing was left to take back: until then
+    // `credit.ts` takes it back again on every run, whatever the save's state (see `submissions_undone`).
+    "ALTER TABLE submissions_credits ADD COLUMN reversed INTEGER NOT NULL DEFAULT 0",
+    // How credit finds the saves behind an undone commit: a direct commit's, or a pull request's merge commit's.
+    "CREATE INDEX IF NOT EXISTS submissions_edits_by_commit ON submissions_edits (scope, commit_sha)",
+    "CREATE INDEX IF NOT EXISTS submissions_pulls_by_merge ON submissions_pulls (scope, merge_commit)",
+  ],
 ];
 
 const migrated = new WeakMap<Database, Promise<void>>();
@@ -418,17 +436,31 @@ export interface EditRecord {
 
 /**
  * Record a save, and when an account made it, that reputation owes it once it lands. `newPage` says whether it added a
- * page rather than editing one.
+ * page rather than editing one. With `earns: false` reputation owes it nothing, as for a revert, which restores
+ * someone else's work. `undoes` names the commits a revert undid, which earn nothing from then on.
  */
-export async function recordEdit({ db, scope }: Mirror, edit: Omit<EditRecord, "liveAt"> & { readonly newPage: boolean }): Promise<void> {
+export async function recordEdit(
+  { db, scope }: Mirror,
+  { earns = true, undoes = [], ...edit }: Omit<EditRecord, "liveAt"> & {
+    readonly newPage: boolean;
+    readonly earns?: boolean;
+    readonly undoes?: readonly string[];
+  },
+): Promise<void> {
   await db.batch([
     db.prepare(`INSERT INTO submissions_edits (id, scope, owner, kind, page, path, commit_sha, pull_number, url, saved_at)
       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) ON CONFLICT (id) DO NOTHING`)
       .bind(edit.id, scope, edit.owner, edit.kind, edit.page, edit.path, edit.commit, edit.pull, edit.url, edit.savedAt),
     // Through the edit row, so a retry under the same id owes what the first save owed, to its owner.
-    db.prepare(`INSERT INTO submissions_credits (edit_id, scope, new_page)
-      SELECT id, scope, ?3 FROM submissions_edits WHERE id = ?1 AND scope = ?2 AND owner LIKE 'account:%'
-      ON CONFLICT (edit_id) DO NOTHING`).bind(edit.id, scope, edit.newPage ? 1 : 0),
+    ...earns
+      ? [db.prepare(`INSERT INTO submissions_credits (edit_id, scope, new_page)
+        SELECT id, scope, ?3 FROM submissions_edits WHERE id = ?1 AND scope = ?2 AND owner LIKE 'account:%'
+        ON CONFLICT (edit_id) DO NOTHING`).bind(edit.id, scope, edit.newPage ? 1 : 0)]
+      : [],
+    ...undoes.length > 0
+      ? [db.prepare(`INSERT INTO submissions_undone (scope, sha) SELECT ?1, value FROM json_each(?2) WHERE true
+        ON CONFLICT (scope, sha) DO NOTHING`).bind(scope, JSON.stringify(undoes))]
+      : [],
   ]);
 }
 

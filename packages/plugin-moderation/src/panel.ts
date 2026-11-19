@@ -5,7 +5,9 @@
  * hide a comment, submissions' to close a submission. Each action shows only to a viewer holding the owning plugin's
  * permission, which its route checks again. A report about an account, a comment one wrote, or an edit one saved (a
  * direct commit or a submission, as submissions' records name who saved it) links viewers holding
- * `moderation:accounts:write` to the Suspensions panel's form for that account. Reporters are never shown.
+ * `moderation:accounts:write` to the Suspensions panel's form for that account. With history on the vault, a report
+ * about a commit links viewers holding `history:reverts:write` on a page it changed to that page's diff for the
+ * commit, where history's Revert form is. Reporters are never shown.
  *
  * A view reads what its reports are about in a fixed number of D1 calls, however many it lists: a free Worker gets 50
  * a request, and `tests/panel-cost.test.ts` counts them.
@@ -16,7 +18,7 @@ import {
 } from "@svartz/auth/server";
 import type { DashboardPanel, PageContext, PluginPage } from "@svartz/core";
 import { findComments, type ReportedComment } from "@svartz/plugin-annotations/server";
-import { savedEdits, type SavedEdits } from "@svartz/plugin-submissions/server";
+import { changedFiles, savedEdits, type SavedEdits } from "@svartz/plugin-submissions/server";
 import { escape } from "./html";
 import { panelPath, vaultPath } from "./paths";
 import { READ_REPORTS, WRITE_ACCOUNTS } from "./permissions";
@@ -33,6 +35,7 @@ const SHOWN = 100;
 /** The owning plugins' permissions to act on what was reported. */
 const HIDE_COMMENTS = "annotations:comments:delete";
 const CLOSE_SUBMISSIONS = "submissions:reviews:write";
+const REVERT_PAGES = "history:reverts:write";
 
 /** What a form's `status` tells the moderator after it redirects back here. A Map: `status` comes from the URL. */
 const STATUSES: ReadonlyMap<string, { text: string; error?: true }> = new Map([
@@ -87,6 +90,8 @@ interface Known {
   readonly edits: SavedEdits;
   /** The accounts behind those edits, by id; read only for a viewer who may suspend. */
   readonly editors: ReadonlyMap<string, PublicProfile>;
+  /** For each open reported commit, the slugs of the published pages it changed that the viewer may revert. */
+  readonly reverts: ReadonlyMap<string, readonly string[]>;
   readonly suspends: boolean;
   readonly closes: boolean;
 }
@@ -94,6 +99,7 @@ interface Known {
 const unique = <T>(values: readonly T[]) => [...new Set(values)];
 const NO_EDITS: SavedEdits = { commits: new Map(), pulls: new Map() };
 const NO_PROFILES: ReadonlyMap<string, PublicProfile> = new Map();
+const NO_FILES: ReadonlyMap<string, readonly string[]> = new Map();
 
 /** What `read` answers, or `fallback` when it fails, logged as `source`. */
 async function settle<T, F>(source: string, read: Promise<T>, fallback: F): Promise<T | F> {
@@ -117,26 +123,35 @@ async function lookUp(context: PageContext, data: BuildData, viewer: Account | n
   const commentsDatabase = data.annotations?.database;
   const submissions = data.submissions;
   const asked = { commits: ids("commit", open), pulls: ids("submission", open).map(Number) };
-  const [accounts, comments, edits, suspends, closes] = await Promise.all([
+  const records = submissions?.records && { ...submissions.records, repo: submissions.repo };
+  const [accounts, comments, edits, suspends, closes, changed] = await Promise.all([
     settle("accounts", findProfilesByHandle(ids("account"), env), undefined),
     commentsDatabase === undefined ? new Map<string, ReportedComment>() : settle("comments", findComments(env, commentsDatabase, vault, ids("annotation")), undefined),
-    submissions?.records === undefined ? NO_EDITS : settle("edits", savedEdits(env, { ...submissions.records, repo: submissions.repo }, asked), NO_EDITS),
+    records === undefined ? NO_EDITS : settle("edits", savedEdits(env, records, asked), NO_EDITS),
     open.length > 0 && settle("who may suspend", can(viewer, WRITE_ACCOUNTS, { vault }, env), false),
     asked.pulls.length > 0 && submissions !== undefined && settle("who may close", can(viewer, CLOSE_SUBMISSIONS, { vault }, env), false),
+    // History reverts a page from its diff for a commit, so only the pages a commit changed that history shows count.
+    records === undefined || !data.history || asked.commits.length === 0 ? NO_FILES : settle("commits' pages", changedFiles(env, records, asked.commits), NO_FILES),
   ]);
+  const paths = data.history?.paths ?? {};
+  const pagesOf = (sha: string) => unique((changed.get(sha) ?? []).flatMap((path) => (Object.hasOwn(paths, path) ? [paths[path]!] : [])));
+  const revertible = unique(asked.commits.flatMap(pagesOf));
 
   const openComments = ids("annotation", open).flatMap((id) => comments?.get(id) ?? []);
   // Annotations hides a comment only when it keeps them in the accounts database, beside the audit log.
   const hideable = commentsDatabase === ACCOUNTS_DATABASE_ENV ? openComments.filter((comment) => !comment.hidden) : [];
   const editAccounts = unique([...edits.commits.values(), ...edits.pulls.values()].flatMap((account) => account ?? []));
-  const [hiding, authors, editors] = await Promise.all([
+  const [hiding, authors, editors, reverting] = await Promise.all([
     hideable.length === 0 ? [] : settle("who may hide", canEach(viewer, HIDE_COMMENTS, hideable.map(({ page }) => ({ vault, page })), env), []),
     // Comments name their author by sign-in; the account it's linked to is the one to suspend.
     suspends ? settle("comments' authors", findProfilesByIdentity(unique(openComments.map(({ author }) => author.id)), env), NO_PROFILES) : NO_PROFILES,
     suspends ? settle("edits' accounts", findProfiles(editAccounts, env), NO_PROFILES) : NO_PROFILES,
+    revertible.length === 0 ? [] : settle("who may revert", canEach(viewer, REVERT_PAGES, revertible.map((page) => ({ vault, page })), env), []),
   ]);
   const hides = new Set(hideable.filter((_, index) => hiding[index]).map(({ id }) => id));
-  return { accounts, comments, hides, authors, edits, editors, suspends, closes };
+  const mayRevert = new Set(revertible.filter((_, index) => reverting[index]));
+  const reverts = new Map(asked.commits.map((sha) => [sha, pagesOf(sha).filter((slug) => mayRevert.has(slug))]));
+  return { accounts, comments, hides, authors, edits, editors, reverts, suspends, closes };
 }
 
 /** Says what each report is about, with what this vault knows of it now, and offers the owning plugins' actions. */
@@ -199,13 +214,20 @@ function describer(context: PageContext, data: BuildData, known: Known) {
         if (open) actions.push(...suspendLink(editor(known.edits.pulls.get(number)), report.id, describedBy));
         return { what, actions };
       }
-      case "commit":
+      case "commit": {
+        // Each page the commit changed that the viewer may revert: its diff for the commit, where history's form is.
+        const pages = open ? (known.reverts.get(id) ?? []).flatMap((slug) => publishedPage(data, slug) ?? []) : [];
+        const reverts = pages.map(({ title, href }) => {
+          const diff = `${root}/-/history${href.slice(context.vault.mountPath.length)}?to=${id}#sv-history-revert`;
+          return `<a class="sv-account-button" href="${escape(diff)}" aria-describedby="${describedBy}">${pages.length > 1 ? `Revert ${escape(title)}` : "Revert"}</a>`;
+        });
         return {
           what: data.submissions
             ? `<a href="${escape(`https://github.com/${data.submissions.repo}/commit/${id}`)}">Commit <code>${escape(id.slice(0, 7))}</code></a>`
             : `Commit <code>${escape(id.slice(0, 7))}</code>`,
-          actions: open ? suspendLink(editor(known.edits.commits.get(id)), report.id, describedBy) : [],
+          actions: open ? [...reverts, ...suspendLink(editor(known.edits.commits.get(id)), report.id, describedBy)] : [],
         };
+      }
     }
   };
 }

@@ -8,4 +8,4 @@ import { history } from "@svartz/plugin-history";
 plugins: [auth({ … }), submissions({ repo, app, sync: { … } }), history()]
 ```
 
-Pages: `/-/history/<page>`, `/-/changes/` and `/-/contributions/<handle>/`, in the theme's shell, with a **History** action beside Edit and a Contributions section below each user page. What they show, what stays out, and how far back they go: [docs/history.md](../../docs/history.md).
+Pages: `/-/history/<page>`, `/-/changes/` and `/-/contributions/<handle>/`, in the theme's shell, with a **History** action beside Edit and a Contributions section below each user page. Moderators holding `history:reverts:write` revert a page to an earlier revision from its history. What they show, what stays out, and how far back they go: [docs/history.md](../../docs/history.md).

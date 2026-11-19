@@ -1,7 +1,7 @@
 /**
- * Who made an edit, by the site's own record of saving it, for the moderation plugin's Reports panel. A commit's
- * author, committer and `Svartz-Account` trailer are git metadata anyone can forge, so only `submissions_edits` names
- * an account here.
+ * Who made an edit, by the site's own record of saving it, and which vault files a commit changed, for the moderation
+ * plugin's Reports panel. A commit's author, committer and `Svartz-Account` trailer are git metadata anyone can forge,
+ * so only `submissions_edits` names an account here.
  */
 import type { ServerContext } from "@svartz/core";
 import { isDatabase, migrate, scopeOf } from "./mirror";
@@ -42,4 +42,21 @@ export async function savedEdits(
     if (row.kind === "pull-request" && !found.pulls.has(row.pull_number!)) found.pulls.set(row.pull_number!, account);
   }
   return found;
+}
+
+/**
+ * The vault files each of `commits` (SHAs) changed, as vault paths, for those the mirror of the vault `records`
+ * describes holds with their files. In one query; none when the binding is missing.
+ */
+export async function changedFiles(
+  env: ServerContext["env"], { database, repo, root }: VaultRecords, commits: readonly string[],
+): Promise<ReadonlyMap<string, readonly string[]>> {
+  const db = env[database];
+  if (!isDatabase(db) || commits.length === 0) return new Map();
+  await migrate(db);
+  const { results } = await db.prepare(`SELECT sha, files FROM submissions_commits
+    WHERE scope = ?1 AND files IS NOT NULL AND sha IN (SELECT value FROM json_each(?2))`)
+    .bind(scopeOf(repo, root), JSON.stringify(commits)).all<{ sha: string; files: string }>();
+  const vaultPath = (path: string) => (root ? path.slice(root.length + 1) : path);
+  return new Map(results.map(({ sha, files }) => [sha, (JSON.parse(files) as string[]).map(vaultPath)]));
 }

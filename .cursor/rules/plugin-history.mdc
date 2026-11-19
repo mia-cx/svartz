@@ -1,6 +1,6 @@
 ---
 description: Page history reads commits only through submissions' read API, and shows nothing the site doesn't publish
-globs: packages/plugin-history/**, packages/plugin-submissions/src/commits.ts
+globs: packages/plugin-history/**, packages/plugin-submissions/src/commits.ts, packages/plugin-submissions/src/restore.ts
 alwaysApply: false
 ---
 
@@ -19,3 +19,8 @@ alwaysApply: false
 - An account's next reputation threshold shows only to the account itself (`readAccount(...).id === findStanding(...).id`): thresholds name roles, which only admins otherwise see.
 - A user page's section is server-rendered HTML that the browser script puts after `[data-svartz-note]` (`note.after()`), as annotations does. Never render it into the prerendered note.
 - Seed many saves in tests with `recordCommits` (submissions' `recordEdit` on the real D1) and push commits with `siteMessage`, the form the site writes: a commit-kind save's summary is the note between its title and trailers, empty for a one-line message.
+- Revert writes only through `@svartz/plugin-submissions/restore` (`restorer`), which commits with `commitSubmission` as the account and records the save with `earns: false`. Never a GitHub client of history's own, and never a pull request when the branch refuses: answer `protected`.
+- The revert form carries the head the moderator saw; `revertRoute` compares it with GitHub's list for the file (`reader.history(path, 0)`, which also bounds a revert to the latest 100 changes) and commits over that head's blob. Check permission on the page and, through `restorer.claims` and `canEach`, on every page the restored frontmatter claims, before any write.
+- `restore()` takes `undoes` (GitHub's list for the file, newer than the restored revision), records them with the save, then takes back what their saves earned: the mirror may not know yet that one of them landed.
+- Order: GitHub reads and every refusal, then `restore()` with the audit entry in `beforeMove` (the commit exists, the branch hasn't moved; with the hook `commitSubmission` doesn't retry a moved branch, so one entry names the one commit). Inside it, the record and the take-back each log their failure: a landed commit is never answered as failed, and submissions' `credit()` retries a take-back that failed (see `reputation.mdc`). The route itself never touches reputation.
+- One code path for reverting: the history list links rows to the diff page (`?from=<R>&to=<head>#sv-history-revert`), and moderation's Reports panel links a reported commit's diff; only the diff page renders the form.

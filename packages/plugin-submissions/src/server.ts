@@ -34,10 +34,10 @@
  * GitHub App's token exchange included. Failures answer `{ error, message }`.
  */
 import {
-  ACCOUNTS_DATABASE_ENV, audit, can, linkedIdentities, readIdentity, readSignIn, userPageLocation, type Account, type Identity,
+  ACCOUNTS_DATABASE_ENV, audit, can, readIdentity, readSignIn, userPageLocation, type Account, type Identity,
 } from "@svartz/auth/server";
 import type { ServerContext, ServerHandler, ServerModuleFactory } from "@svartz/core";
-import { alternateRoutes, extractFrontmatter, pathRoute, requestedSlug } from "@svartz/plugins/routes";
+import { pathRoute } from "@svartz/plugins/routes";
 import {
   MAX_MARKDOWN_BYTES,
   MAX_NOTE_LENGTH,
@@ -54,6 +54,8 @@ import {
   type SourceResponse,
 } from "./api";
 import { appCommitter, appTokens, type AppCredentials } from "./app";
+import { routeClaims } from "./claims";
+import { commitAttribution } from "./restore";
 import { misconfigured, SubmissionError } from "./errors";
 import {
   closeSubmission,
@@ -61,9 +63,7 @@ import {
   noSubmission,
   openSubmission,
   readSource,
-  type Attribution,
   type GitHubTarget,
-  type Person,
   type Submission,
 } from "./github";
 import { createGuard, type GuardOptions } from "./guard";
@@ -209,14 +209,13 @@ export async function isVaultSubmission(env: ServerContext["env"], { database, r
   return savedPull({ db, scope: scopeOf(repo, root) }, number);
 }
 
-export { savedEdits, type SavedEdits } from "./saved-edits";
+export { changedFiles, savedEdits, type SavedEdits } from "./saved-edits";
 
 const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, data) => {
   const pages = new Map(Object.entries(data.pages));
   // Every editable page is published, so the links list holds its slug, which permissions are checked on.
   const notes = new Map(data.links.map((link) => [link.href, link]));
   const routes = new Map(Object.entries(data.routes));
-  const aliases = new Map(Object.entries(data.aliases));
   const folders = new Set(data.folders);
   const guard = createGuard(options.guard);
 
@@ -228,29 +227,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     return { path, vaultPath: link.path, slug: link.slug };
   }
 
-  /**
-   * The pages `markdown` at `vaultPath` claims, as permissions name them: every route the note would hold, read as the
-   * build reads it (its slug, from frontmatter or its file name, and each route its aliases ask to redirect from), and
-   * any other page holding one of them, which the note would move or take a redirect from. A route `self`, the page
-   * the file publishes as now, already holds is no new claim. `undefined` for frontmatter the build would refuse,
-   * which claims nothing that can be checked.
-   */
-  function claims(vaultPath: string, markdown: string, self: string | undefined): Set<string> | undefined {
-    let claimed: string[];
-    try {
-      const { frontmatter } = extractFrontmatter(markdown);
-      claimed = [requestedSlug({ path: vaultPath, frontmatter }), ...alternateRoutes(frontmatter, data.aliasesField)];
-    } catch {
-      return undefined;
-    }
-    const objects = new Set<string>();
-    for (const route of claimed) {
-      const holders = [routes.get(route), aliases.get(route)].filter((holder) => holder !== undefined);
-      if (!holders.some(({ slug }) => slug === self)) objects.add(route);
-      for (const { slug } of holders) if (slug !== self) objects.add(slug);
-    }
-    return objects;
-  }
+  const claims = routeClaims(data);
 
   /**
    * Whether `account` may commit `markdown` at `vaultPath` without taking a route it may not commit to: it needs
@@ -328,19 +305,6 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     return null;
   }
 
-  /** The account a commit is authored as, with its linked GitHub account as co-author, and the App that commits it. */
-  async function attribution(account: Account, committedBy: Person, request: Request, context: ServerContext): Promise<Attribution> {
-    const github = (await linkedIdentities(account, context.env)).find(({ provider }) => provider === "github");
-    return {
-      accountId: account.id,
-      name: account.name,
-      handle: account.handle,
-      host: new URL(request.url).hostname,
-      committer: committedBy,
-      ...(github ? { github } : {}),
-    };
-  }
-
   /**
    * Decide where the save goes, on `slug`, the page it writes at `vaultPath`; pass the guard; then commit or open the
    * pull request. `loaded` is the blob SHA the editor loaded, for an edit. A commit that would claim a route the
@@ -390,7 +354,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     if (destination === "commit" && reader.account && committer) {
       const self = submission.kind === "edit" ? slug : undefined;
       if (await mayClaim(reader.account, vaultPath, submission.markdown, self, context)) {
-        const by = await attribution(reader.account, await committer(context.env), request, context);
+        const by = await commitAttribution(reader.account, await committer(context.env), request, context);
         const committed = await commitSubmission(github, full, loaded, by);
         if (committed.kind === "commit") {
           const answer: EditResponse = { kind: "commit", url: committed.url, sha: committed.sha };
@@ -510,7 +474,7 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     guard,
     github: target,
     ...(committer ? { committer } : {}),
-    attribution,
+    attribution: commitAttribution,
     publicUrl,
   });
 

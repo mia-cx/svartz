@@ -36,7 +36,7 @@ async function fitsPhone(html: string, width = 360) {
   await page.viewport(width, 800);
   render(html);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
-  for (const target of document.querySelectorAll<HTMLElement>("button, input")) {
+  for (const target of document.querySelectorAll<HTMLElement>("button, input:not([type=hidden])")) {
     expect(target.getBoundingClientRect().height, target.outerHTML).toBeGreaterThanOrEqual(20);
   }
 }
@@ -84,6 +84,76 @@ describe("the diff between two revisions", () => {
     }).html);
     await expect.element(page.getByRole("row", { name: /Removed Short\./ })).toBeVisible();
     await expect.element(page.getByRole("row", { name: /Added A paragraph/ })).toBeVisible();
+  });
+});
+
+describe("reverting a page", () => {
+  const revertTo = (index: number) => (index === 0 ? undefined : `${HISTORY}?from=${CHANGES[index]!.sha}&to=${CHANGES[0]!.sha}#sv-history-revert`);
+  const diffWithForm = () => diffPage({
+    title: "Guide",
+    revisions: { from: CHANGES[2], to: CHANGES[1]! },
+    comparison: { kind: "diff", hunks: diffLines("# Guide\n\nShort.\n", "# Guide\n\nLonger.\n")!, rendered: "<h1>Guide</h1><p>Longer.</p>" },
+    links: { page: "/wiki/guide/", history: HISTORY },
+    revert: {
+      action: "/wiki/_svartz/history/revert/",
+      fields: { page: "/wiki/guide/", revision: CHANGES[2]!.sha, head: CHANGES[0]!.sha, to: CHANGES[1]!.sha },
+      at: CHANGES[2]!.at,
+      undone: 2,
+      current: `${HISTORY}?from=${CHANGES[2]!.sha}&to=${CHANGES[0]!.sha}#sv-history-revert`,
+      maxReason: 500,
+    },
+  }).html;
+
+  // Proves a moderator reaches the revert form from every change but the newest, which is the page as it reads now.
+  it("links every older change to its revert form", async () => {
+    render(historyPage({
+      title: "Guide",
+      changes: CHANGES,
+      unavailable: false,
+      previousOf: (index) => CHANGES[index + 1]?.sha,
+      revertTo,
+      links: { page: "/wiki/guide/", history: HISTORY, changes: "/wiki/-/changes/" },
+    }).html);
+
+    expect(page.getByRole("link", { name: /^Revert to / }).elements()).toHaveLength(2);
+    await expect.element(page.getByRole("link", { name: "Revert to 18 Nov 2026, 09:00 UTC" })).toHaveAttribute("href", revertTo(2));
+  });
+
+  // Proves the form says what it restores and undoes, and sends the revision, the head the moderator saw and the reason.
+  it("sends the revision, the page's head and the reason from the diff's form", async () => {
+    render(diffWithForm());
+    const form = document.querySelector<HTMLFormElement>("form.sv-history-revert")!;
+    let sent: Record<string, string> | undefined;
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      sent = Object.fromEntries(new FormData(form)) as Record<string, string>;
+    });
+
+    await expect.element(page.getByText("Restore the page as it read at 18 Nov 2026, 09:00 UTC, undoing 2 changes.")).toBeVisible();
+    await userEvent.fill(page.getByRole("textbox", { name: "Reason (optional)" }), "Spam.");
+    await userEvent.click(page.getByRole("button", { name: "Revert to this revision" }));
+
+    expect(sent).toEqual({ page: "/wiki/guide/", revision: CHANGES[2]!.sha, head: CHANGES[0]!.sha, to: CHANGES[1]!.sha, reason: "Spam." });
+  });
+
+  it("fits a phone-width screen", async () => {
+    await fitsPhone(historyPage({
+      title: "Guide",
+      changes: CHANGES,
+      unavailable: false,
+      previousOf: (index) => CHANGES[index + 1]?.sha,
+      revertTo,
+      status: "reverted",
+      links: { page: "/wiki/guide/", history: HISTORY, changes: "/wiki/-/changes/" },
+    }).html);
+    await fitsPhone(diffPage({
+      title: "Guide",
+      revisions: { from: CHANGES[2], to: CHANGES[1]! },
+      comparison: { kind: "hidden" },
+      links: { page: "/wiki/guide/", history: HISTORY },
+      status: "changed",
+    }).html);
+    await fitsPhone(diffWithForm());
   });
 });
 

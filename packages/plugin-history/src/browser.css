@@ -129,6 +129,53 @@
 	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
 }
 
+/* Revert, at the end of a change a moderator may restore. */
+.sv-history-revert-link {
+	flex: none;
+	margin-inline-start: auto;
+	font-size: var(--sv-step--1, 0.875rem);
+	white-space: nowrap;
+}
+
+.sv-history-revert {
+	display: grid;
+	justify-items: start;
+	gap: var(--sv-space-3, 0.75rem);
+}
+
+.sv-history-field {
+	display: grid;
+	gap: var(--sv-space-1, 0.25rem);
+	inline-size: min(100%, 32rem);
+}
+
+.sv-history-field label {
+	color: var(--sv-ink, CanvasText);
+	font-weight: 600;
+}
+
+.sv-history-input {
+	min-block-size: 2.75rem;
+	padding-inline: var(--sv-space-3, 0.75rem);
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
+	border-radius: var(--sv-radius-m, 6px);
+	background: var(--sv-paper, Canvas);
+	color: var(--sv-ink, CanvasText);
+	font: inherit;
+}
+
+/* What a revert came to, above its form or the history it went back to. */
+.sv-history-status {
+	padding: var(--sv-space-3, 0.75rem) var(--sv-space-4, 1rem);
+	border-inline-start: 3px solid var(--sv-accent, Highlight);
+	border-radius: var(--sv-radius-s, 4px);
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+}
+
+.sv-history-status[data-error] {
+	border-inline-start-color: light-dark(oklch(0.55 0.18 var(--sv-hue-red, 25)), oklch(0.7 0.15 var(--sv-hue-red, 25)));
+}
+
 .sv-history-pager {
 	display: flex;
 	flex-wrap: wrap;

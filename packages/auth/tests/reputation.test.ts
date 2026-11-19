@@ -1,7 +1,7 @@
 import { createServer, type PermissionDeclaration, type PluginPage, type ServerHandler } from "@svartz/core";
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { can, findStanding, postReputation, readAccount, userPageOf } from "../src/server";
+import { can, findStanding, postReputation, readAccount, reverseReputation, userPageOf } from "../src/server";
 
 const ORIGIN = "https://notes.test";
 const AUTH = "/notes/_svartz/auth";
@@ -156,6 +156,44 @@ describe("the reputation ledger", () => {
     for (let commit = 0; commit < 5; commit++) await postReputation(tour.env, { kind: "page", to: ada, ref: `test:commit:${commit}` });
 
     expect(await tour.score("ada")).toBe(12);
+  });
+
+  // Proves story 26's ledger side: a reversal takes back exactly what an event earned its account, once however often
+  // it is posted, keeps an event not posted yet from ever scoring, writes nothing for an event that earned that account
+  // nothing, and leaves a role the score gave in place.
+  it("takes back what reverted events earned, once, and never what they didn't", async () => {
+    const tour = await site();
+    const root = await signUp(tour, ADMIN, "root");
+    const ada = await signUp(tour, 2, "ada");
+    await signUp(tour, 3, "grace");
+    await tour.post("people/role", root, { name: "editors" });
+    await tour.post("people/grant", root, { "actor-type": "role", actor: "editors", permission: "guestbook:entries:delete", scope: "site", path: "", value: "allow" });
+    await tour.post("reputation/threshold", root, { role: "editors", score: "9" });
+    const [adaId, graceId] = [await tour.id("ada"), await tour.id("grace")];
+    await postReputation(tour.env, { kind: "edit", to: { account: adaId }, ref: "test:commit:a", lines: 8 });
+    await postReputation(tour.env, { kind: "page", to: { account: adaId }, ref: "test:commit:b" });
+    await postReputation(tour.env, { kind: "page", to: { account: graceId }, ref: "test:commit:c" });
+    expect(await tour.mayDelete(ada)).toBe(true);
+
+    const reversals = [
+      { account: adaId, ref: "test:commit:a" },
+      // Not posted yet: its credit is still owed.
+      { account: adaId, ref: "test:commit:later" },
+      // It credited Grace, not Ada.
+      { account: adaId, ref: "test:commit:c" },
+    ];
+    await reverseReputation(tour.env, reversals);
+    await reverseReputation(tour.env, reversals);
+    await postReputation(tour.env, { kind: "edit", to: { account: adaId }, ref: "test:commit:later", lines: 3 });
+
+    // 4 for the edit and 5 for the page, less the edit's 4.
+    expect(await tour.score("ada")).toBe(5);
+    expect(await tour.score("grace")).toBe(5);
+    expect(await tour.rows("SELECT account_id, ref, points FROM auth_reputation WHERE source = 'reversal' ORDER BY id")).toEqual([
+      { account_id: adaId, ref: "test:commit:a", points: -4 },
+      { account_id: adaId, ref: "test:commit:later", points: 0 },
+    ]);
+    expect(await tour.mayDelete(ada)).toBe(true);
   });
 });
 

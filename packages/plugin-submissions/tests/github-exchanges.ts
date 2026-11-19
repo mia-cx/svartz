@@ -27,12 +27,16 @@ export interface Exchange {
   readonly request: { readonly method: string; readonly url: string; readonly body?: unknown; readonly ifNoneMatch?: string };
   /** The `Authorization` header GitHub expects, or a matcher for it. Default: the token `replayGitHub` was given. */
   readonly authorization?: unknown;
-  /** `hang`: GitHub never answers; the request ends only when its signal aborts. No `json` or `raw`: an empty body. */
+  /**
+   * `hang`: GitHub never answers; the request ends only when its signal aborts. `lost`: GitHub acted on the request,
+   * but its answer never arrived, as when the connection drops. No `json` or `raw`: an empty body.
+   */
   readonly response: {
     readonly status: number;
     readonly json?: unknown;
     readonly raw?: string;
     readonly hang?: true;
+    readonly lost?: true;
     readonly headers?: Readonly<Record<string, string>>;
   };
 }
@@ -159,6 +163,12 @@ export const headExchange = (sha = HEAD_COMMIT): Exchange => ({
   response: { status: 200, json: { ref: "refs/heads/main", object: { sha, type: "commit" } } },
 });
 
+/** GitHub comparing `base` with `head`: `ahead` when `head` holds `base`, `diverged` when it doesn't. */
+export const ancestryExchange = (base: string, head: string, status: "ahead" | "diverged"): Exchange => ({
+  request: { method: "GET", url: `${API}/compare/${base}...${head}?per_page=1` },
+  response: { status: 200, json: { status } },
+});
+
 /** The file at `path` in commit `ref`: its blob `sha`, or GitHub's 404 when there is none. */
 export const blobExchange = (path: string, ref: string, sha?: string): Exchange => ({
   request: { method: "GET", url: `${API}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${ref}` },
@@ -177,8 +187,11 @@ export function commitExchanges({ path, markdown, message, author, head = HEAD_C
   message: string;
   author: { name: string; email: string };
   head?: string;
-  /** GitHub's answer to moving `main`: refused when `main` moved meanwhile, or when a rule for `main` forbids it. */
-  moved?: "ok" | "not-fast-forward" | "protected";
+  /**
+   * GitHub's answer to moving `main`: refused when `main` moved meanwhile, or when a rule for `main` forbids it;
+   * `lost` when no answer arrived, whether or not GitHub moved it.
+   */
+  moved?: "ok" | "not-fast-forward" | "protected" | "lost";
 }): Exchange[] {
   return [
     {
@@ -209,6 +222,7 @@ export function commitExchanges({ path, markdown, message, author, head = HEAD_C
         ok: { status: 200, json: { ref: "refs/heads/main", object: { sha: DIRECT_COMMIT, type: "commit" } } },
         "not-fast-forward": { status: 422, json: { message: "Update is not a fast forward", status: "422" } },
         protected: { status: 422, json: { message: "Repository rule violations found\n\nChanges must be made through a pull request.\n\n", status: "422" } },
+        lost: { status: 0, lost: true },
       }[moved],
     },
   ];
@@ -293,8 +307,9 @@ export function replayGitHub(exchanges: readonly Exchange[], token = TOKEN) {
     if (!next) throw new Error(`GitHub got an unexpected ${request.method} ${request.url}`);
     expect(request).toEqual(next.request);
     expect(authorization).toEqual(next.authorization ?? `Bearer ${token}`);
-    const { status, json, raw, hang, headers: answered = {} } = next.response;
+    const { status, json, raw, hang, lost, headers: answered = {} } = next.response;
     if (hang) return new Promise<Response>((_, reject) => init.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
+    if (lost) throw new TypeError("fetch failed");
     if (raw !== undefined) return new Response(raw, { status, headers: answered });
     return json === undefined ? new Response(null, { status, headers: answered }) : Response.json(json, { status, headers: answered });
   });

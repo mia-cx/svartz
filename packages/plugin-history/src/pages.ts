@@ -54,14 +54,48 @@ export interface HistoryLinks {
   readonly beyond?: string;
 }
 
+/** What a form's outcome says, and whether it is an error; `history` links the page's history in the text. */
+interface Status {
+  readonly text: string;
+  readonly error?: true;
+  readonly history?: true;
+}
+
+/** Revert's outcomes, by the `status` (history) or `revert` (diff) code its route redirects with. A Map: codes come from the URL. */
+const REVERT_STATUSES: ReadonlyMap<string, Status> = new Map([
+  ["reverted", { text: "Page reverted. It shows the restored revision once the site rebuilds." }],
+  ["changed", { text: "The page changed since you opened this. Check its history, then revert again.", error: true, history: true }],
+  ["unchanged", { text: "The page already reads as it did at this revision, so nothing changed.", error: true }],
+  ["protected", { text: "The repository's rules don't let the site commit to this branch, so the page can't be reverted here.", error: true }],
+  ["hidden", { text: "This revision wasn't public, so it can't be restored.", error: true }],
+  ["route", { text: "This revision would take the address of a page you can't revert, so it can't be restored here.", error: true }],
+  ["too-old", { text: "Only a page's latest 100 changes can be reverted here.", error: true }],
+  ["missing", { text: "The page didn't exist at this revision.", error: true }],
+  ["too-large", { text: "This revision is too large to restore here.", error: true }],
+  ["busy", { text: "Other edits are being saved right now. Try again in a moment.", error: true }],
+  ["github", { text: "GitHub isn't answering right now. Try again in a few minutes.", error: true }],
+]);
+
+/** The message for revert's outcome `code`, linking `history` where it says to check it; `""` for no known code. */
+function revertStatus(code: string | null, history: string): string {
+  const status = code === null ? undefined : REVERT_STATUSES.get(code);
+  if (!status) return "";
+  const text = status.history ? escape(status.text).replace("its history", `<a href="${escape(history)}">its history</a>`) : escape(status.text);
+  return `<p class="sv-history-status" role="${status.error ? "alert" : "status"}"${status.error ? " data-error" : ""}>${text}</p>`;
+}
+
 /** A page's history: each change, newest first, with radio pairs to compare any two. */
 export function historyPage(
-  { title, changes, links, previousOf, unavailable }: {
+  { title, changes, links, previousOf, revertTo, status, unavailable }: {
     readonly title: string;
     readonly changes: readonly Change[];
     readonly links: HistoryLinks;
     /** The change before the one at `index` in this list, which its link diffs against. */
     readonly previousOf: (index: number) => string | undefined;
+    /** Where reverting to the change at `index` starts, for a viewer who may revert it. */
+    readonly revertTo?: (index: number) => string | undefined;
+    /** The outcome of a revert, as its route redirected here. */
+    readonly status?: string | null;
     /** GitHub couldn't be asked for this page's changes. */
     readonly unavailable: boolean;
   },
@@ -70,9 +104,11 @@ export function historyPage(
     const before = previousOf(index);
     const diff = `${links.history}?${new URLSearchParams({ ...(before ? { from: before } : {}), to: change.sha })}`;
     const label = plainWhen(change.at);
+    const revert = revertTo?.(index);
     return `<li class="sv-history-row">
 <span class="sv-history-pick"><input type="radio" name="from" value="${escape(change.sha)}" aria-label="Compare from ${escape(label)}"${index === 1 ? " checked" : ""}><input type="radio" name="to" value="${escape(change.sha)}" aria-label="Compare to ${escape(label)}"${index === 0 ? " checked" : ""}></span>
 <span class="sv-history-what"><a href="${escape(diff)}">${when(change.at)}</a> ${author(change.author)} ${summary(change.summary)}</span>
+${revert ? `<a class="sv-history-revert-link" href="${escape(revert)}" aria-label="${escape(`Revert to ${label}`)}">Revert to this</a>` : ""}
 </li>`;
   });
   const compare = changes.length > 1;
@@ -92,6 +128,7 @@ ${compare ? `<div><button class="sv-history-button" type="submit">Compare select
     title: `History of ${title}`,
     html: `<div class="sv-history">
 <h1>${heading}</h1>
+${revertStatus(status ?? null, links.history)}
 ${list}
 ${pager.length ? `<nav class="sv-history-pager" aria-label="More changes">${pager.join("")}</nav>` : ""}
 <p><a href="${escape(links.changes)}">Recent changes</a></p>
@@ -120,14 +157,50 @@ function hunkRows(hunks: readonly Hunk[]): string {
   }).join("");
 }
 
+/** The form that reverts a page to a diff's earlier revision, posting `fields` to `action`. */
+export interface RevertForm {
+  readonly action: string;
+  readonly fields: Readonly<Record<string, string>>;
+  /** When the revision it restores was made. */
+  readonly at: string;
+  /** The changes reverting undoes: every one since the revision. */
+  readonly undone: number;
+  /** The diff from the revision to the page now, when this diff ends earlier. */
+  readonly current?: string;
+  readonly maxReason: number;
+}
+
+const changeCount = (count: number) => (count === 1 ? "1 change" : `${count} changes`);
+
+/** The Revert section: `form`'s fields and button, and `status`, a revert's outcome; `""` without either. */
+function revertSection(form: RevertForm | undefined, status: string): string {
+  if (!form && !status) return "";
+  const fields = form
+    ? `<form class="sv-history-revert" method="post" action="${escape(form.action)}">
+<p>Restore the page as it read at ${when(form.at)}, undoing ${escape(changeCount(form.undone))}.${form.current ? ` <a href="${escape(form.current)}">Compare that revision with the page now</a>` : ""}</p>
+${Object.entries(form.fields).map(([name, value]) => `<input type="hidden" name="${escape(name)}" value="${escape(value)}">`).join("")}
+<div class="sv-history-field"><label for="sv-history-reason">Reason <span class="sv-history-muted">(optional)</span></label><input class="sv-history-input" id="sv-history-reason" name="reason" maxlength="${form.maxReason}" autocomplete="off"></div>
+<div><button class="sv-history-button" type="submit">Revert to this revision</button></div>
+</form>`
+    : "";
+  return `<section class="sv-history-section" aria-labelledby="sv-history-revert">
+<h2 id="sv-history-revert">Revert</h2>
+${status}${fields}
+</section>`;
+}
+
 /** The changes between two revisions of a page. */
 export function diffPage(
-  { title, revisions, comparison, links }: {
+  { title, revisions, comparison, links, revert, status }: {
     readonly title: string;
     /** The two revisions, `from` absent when `to` added the page; `undefined` when they couldn't be read. */
     readonly revisions: { readonly from: Change | undefined; readonly to: Change } | undefined;
     readonly comparison: Comparison;
     readonly links: Pick<HistoryLinks, "page" | "history">;
+    /** The form reverting to `from`, for a viewer who may. */
+    readonly revert?: RevertForm;
+    /** The outcome of a revert, as its route redirected here. */
+    readonly status?: string | null;
   },
 ): PluginPage {
   const revision = (label: string, change: Change | undefined) => `<div class="sv-history-revision">
@@ -163,6 +236,7 @@ ${comparison.rendered === undefined || !to ? "" : `<section class="sv-history-se
     html: `<div class="sv-history">
 <h1>Changes to <a href="${escape(links.page)}">${escape(title)}</a></h1>
 ${revisions ? `<dl class="sv-history-revisions">${revision("From", revisions.from)}${revision("To", revisions.to)}</dl>` : ""}
+${revertSection(revert, revertStatus(status ?? null, links.history))}
 ${body}
 <p><a href="${escape(links.history)}">History of ${escape(title)}</a></p>
 </div>`,

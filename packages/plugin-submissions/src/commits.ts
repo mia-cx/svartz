@@ -27,6 +27,7 @@ import { requestGitHub } from "./github";
 import { isDatabase, migrate, readBranch, scopeOf, type Mirror } from "./mirror";
 import { hasNextPage, pause, readPause, reconcile, resumeAt } from "./reconcile";
 import { inVault, list, listedCommit, object, text, type CommitRecord } from "./records";
+import type { RouteClaims } from "./claims";
 import type { BuildData, Credentials, ServerOptions } from "./server";
 
 /** What reading a vault's commits takes: JSON, for the reader's server data. Holds no secret, only where they are. */
@@ -183,6 +184,16 @@ export function commitSource(ctx: PluginContext): CommitSource | undefined {
   };
 }
 
+/**
+ * The routes the vault's pages hold, hidden and protected ones included, which a page's frontmatter can claim: what
+ * `@svartz/plugin-submissions/restore` checks a restored revision against. From `emitArtifacts` with `enforce: "post"`,
+ * as {@link commitSource}; `undefined` without the submissions plugin.
+ */
+export function routeClaimsOf(ctx: PluginContext): RouteClaims | undefined {
+  const data = getCompilerContributions(ctx).serverData.get(PLUGIN_ID) as BuildData | undefined;
+  return data && { routes: data.routes, aliases: data.aliases, aliasesField: data.aliasesField };
+}
+
 interface CommitRow {
   sha: string;
   message: string;
@@ -234,17 +245,21 @@ function savedNote(message: string): string {
   return paragraphs.slice(1, -1).join("\n\n").trim();
 }
 
-/**
- * Reads commits for one vault. The answer makes a {@link CommitReader} per request; installation tokens and file
- * contents are kept across requests in this worker.
- */
-export function commitReader(source: CommitSource): (context: ServerContext) => CommitReader {
-  const { repo, root, credentials } = source;
-  const token = credentials.app ? appTokens(repo, credentials.app) : async (env: ServerContext["env"]) => {
+/** The token `source`'s credentials authenticate with: the configured one, or the App's installation token, kept. */
+export function sourceToken({ repo, credentials }: CommitSource): (env: ServerContext["env"]) => Promise<string> {
+  return credentials.app ? appTokens(repo, credentials.app) : async (env) => {
     const value = env[credentials.token.env];
     if (typeof value !== "string" || !value) throw misconfigured(`its server has no ${credentials.token.env} set`);
     return value;
   };
+}
+
+/**
+ * Reads commits for one vault. The answer makes a {@link CommitReader} per request; installation tokens and file
+ * contents are kept across requests in this worker. Pass `token` to share one {@link sourceToken} with a writer.
+ */
+export function commitReader(source: CommitSource, token = sourceToken(source)): (context: ServerContext) => CommitReader {
+  const { repo, root } = source;
   const files = new Map<string, FileAt>();
   /** Commits known to be on the content branch. One that is stays on it; one that isn't may land, so it is asked again. */
   const held = new Set<string>();

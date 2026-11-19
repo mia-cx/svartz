@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { accountId, ADA, ALAN, counting, createDatabase, createSite, grant, seedSubmission, signIn, type Database } from "./harness";
+import { accountId, ADA, ALAN, counting, createDatabase, createSite, grant, seedCommit, seedSubmission, signIn, type Database } from "./harness";
 
 const REPORTS = "/notes/-/dashboard/moderation/reports/";
 /** What a free Worker gets per request. */
@@ -39,10 +39,11 @@ it("costs the same D1 calls for a full page of reports as for a handful", async 
   const { db, dispose } = await createDatabase();
   disposers.push(dispose);
   const { database, calls } = counting(db);
-  const site = createSite(database);
+  const site = createSite(database, { history: true });
   await signIn(site, ADA);
   const alan = await signIn(site, ALAN);
-  for (const permission of ["moderation:reports:read", "moderation:accounts:write", "annotations:comments:delete", "submissions:reviews:write"]) {
+  const permissions = ["moderation:reports:read", "moderation:accounts:write", "annotations:comments:delete", "submissions:reviews:write", "history:reverts:write"];
+  for (const permission of permissions) {
     await grant(db, "alan", permission);
   }
   // Migrates annotations' and moderation's schemas.
@@ -54,7 +55,10 @@ it("costs the same D1 calls for a full page of reports as for a handful", async 
   async function fill(from: number, to: number) {
     for (let n = from; n < to; n++) {
       const kind = n % 20 < 4 ? ["account", "page", "commit", "submission"][n % 20]! : "annotation";
-      if (kind === "commit") await seedSubmission(db, n, undefined, { owner: `account-${n}`, commit: sha(n) });
+      if (kind === "commit") {
+        await seedSubmission(db, n, undefined, { owner: `account-${n}`, commit: sha(n) });
+        await seedCommit(db, sha(n), [n % 40 < 20 ? "garden.md" : "users/grace.md"]);
+      }
       if (kind === "submission") await seedSubmission(db, n, undefined, { owner: `account-${n}` });
       const target = { account: `author${n}`, page: `p${n}`, commit: sha(n), submission: String(n), annotation: `c${n}` }[kind];
       await db.batch([...author(db, n), report(db, ada, n, kind, target)]);
@@ -76,9 +80,11 @@ it("costs the same D1 calls for a full page of reports as for a handful", async 
   expect(full.count).toBeLessThan(D1_CALLS_PER_REQUEST / 2);
   expect(full.html.match(/class="sv-moderation-report"/g)).toHaveLength(FULL_PAGE);
   expect(full.html).not.toContain("Couldn't show");
-  // Every report but the pages' names an account to suspend; every comment can be hidden, every submission closed.
+  // Every report but the pages' names an account to suspend; every comment can be hidden, every submission closed, and
+  // every commit reverted.
   expect(full.html.match(/>Suspend @author\d+</g)).toHaveLength(FULL_PAGE - FULL_PAGE / 20);
   expect(full.html.match(/>Hide comment</g)).toHaveLength(FULL_PAGE * 16 / 20);
   expect(full.html.match(/>Close submission</g)).toHaveLength(FULL_PAGE / 20);
+  expect(full.html.match(/>Revert</g)).toHaveLength(FULL_PAGE / 20);
   // Seeding a hundred reports takes a hundred batches on a real D1, more than the suite's budget on a busy CI runner.
 }, 60_000);
