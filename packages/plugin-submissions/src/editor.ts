@@ -10,6 +10,9 @@
  * the reader writes is kept as a {@link Draft} while they write it; the panel offers it back when it next opens on the
  * same page, warning when the page's source has changed since. When the server asks for sign-in, the panel marks the draft to resume and opens `@svartz/auth`'s sign-in
  * dialog; signing in returns the reader to the page, and the panel reopens with the draft at once.
+ *
+ * On a site that tracks edits, the line saying what became of a save then follows it through review, the build and
+ * live, and the panel reopened on the same page says how the reader's last edit is doing above everything else.
  */
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
@@ -25,9 +28,11 @@ import {
   type EditResponse,
   type ErrorResponse,
   type NewPageRequest,
+  type EditStage,
   type SourceResponse,
+  type StatusResponse,
 } from "./api";
-import { draftSlot, hashSource, readDraft, storeDraft, type Draft } from "./draft";
+import { draftSlot, hashSource, readDraft, readSavedEdit, storeDraft, storeSavedEdit, type Draft } from "./draft";
 import { livePreview } from "./live-preview";
 import type { Preview, PreviewSource } from "./preview";
 import { wikilinkCompletion } from "./wikilinks";
@@ -51,6 +56,8 @@ export interface EditorInput {
   readonly opener: HTMLElement;
   /** Show the Turnstile challenge with this site key, and send its token with the submission. */
   readonly turnstileSiteKey?: string;
+  /** Follow a saved edit to live, and show the last one's progress when the panel reopens. */
+  readonly tracked?: boolean;
 }
 
 /**
@@ -113,6 +120,30 @@ const DESTINATIONS = {
   "pull-request": { idle: "Open pull request", sending: "Opening pull request…", hint: "Goes to review before it goes live." },
 } as const;
 
+/** How often an open panel asks how a saved edit is doing. */
+const FOLLOW_INTERVAL_MS = 10_000;
+
+/** What the panel says about a saved edit at each stage; `noun` is `edit` or `page`. */
+function stageText({ stage, pull }: StatusResponse, noun: string): string {
+  switch (stage) {
+    case "open":
+      return `Your ${noun} is waiting for review as pull request #${pull?.number}.`;
+    case "closed":
+      return `Pull request #${pull?.number} was closed without merging.`;
+    case "committed":
+      return pull ? `Pull request #${pull.number} was merged. Your ${noun} goes live once the site rebuilds.` : `Your ${noun} goes live once the site rebuilds.`;
+    case "building":
+      return `The site is rebuilding with your ${noun}.`;
+    case "live":
+      return `Your ${noun} is live.`;
+    case "failed":
+      return `The site's rebuild failed, so your ${noun} isn't live yet.`;
+  }
+}
+
+/** Stages after which nothing more happens to an edit. */
+const FINAL_STAGES: ReadonlySet<EditStage> = new Set(["live", "closed"]);
+
 /**
  * Git's null object id, which no file has: sent in place of the loaded source's SHA when the panel holds a draft
  * written against another source, so a save that would commit opens a pull request instead.
@@ -169,7 +200,8 @@ const panel = (target: EditorTarget, offered: readonly Mode[]) => `
     <h2 id="svartz-submissions-title">${target.kind === "edit" ? "Edit page" : "New page"}</h2>${modeSwitch(offered)}
     <button type="button" class="sv-icon-button" data-close aria-label="Close editor">${CLOSE_ICON}</button>
   </header>
-  <form class="svartz-submissions-form" data-kind="${target.kind}" novalidate>${target.kind === "new" ? NEW_PAGE_FIELDS : ""}
+  <form class="svartz-submissions-form" data-kind="${target.kind}" novalidate>
+    <div class="svartz-submissions-followed" role="status" hidden></div>${target.kind === "new" ? NEW_PAGE_FIELDS : ""}
     <div class="svartz-submissions-editor">
       <div class="svartz-submissions-tabs" role="tablist" aria-label="Split view" hidden>
         <button type="button" role="tab" id="svartz-submissions-write-tab" aria-controls="svartz-submissions-source">Write</button>
@@ -243,7 +275,7 @@ function query<E extends Element>(root: ParentNode, selector: string): E {
 }
 
 /** Open the panel on `target`. Returns a function that closes it without asking, for navigation cleanup. */
-export function openEditor({ target, endpoint, base, mountContent, pathname, opener, turnstileSiteKey }: EditorInput): () => void {
+export function openEditor({ target, endpoint, base, mountContent, pathname, opener, turnstileSiteKey, tracked }: EditorInput): () => void {
   const offered = (Object.keys(MODES) as Mode[]).filter((mode) => mode !== "split" || mountContent);
   const dialog = document.createElement("dialog");
   dialog.className = "svartz-submissions";
@@ -257,6 +289,62 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
   const submit = query<HTMLButtonElement>(dialog, '[type="submit"]');
   const hint = query<HTMLElement>(dialog, ".svartz-submissions-destination");
   const challenge = query<HTMLElement>(dialog, ".svartz-submissions-turnstile");
+  /** The last saved edit's progress, when the panel reopens on its page. */
+  const lastEdit = query<HTMLElement>(dialog, ".svartz-submissions-followed");
+  const noun = target.kind === "edit" ? "edit" : "page";
+  /** The saved edit being followed, and when it is next asked about. */
+  let followed: string | undefined;
+  let followTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * Ask how saved edit `id` is doing, after `delay` and then every {@link FOLLOW_INTERVAL_MS} while the panel is open
+   * and the page shows, handing each answer to `show`, until it reaches a final stage. Following another edit stops it.
+   */
+  function follow(id: string, show: (status: StatusResponse) => void, delay = FOLLOW_INTERVAL_MS) {
+    clearTimeout(followTimer);
+    followed = id;
+    const current = () => followed === id && dialog.isConnected;
+    const ask = async () => {
+      if (!current()) return;
+      if (document.visibilityState === "visible") {
+        try {
+          const status = await request<StatusResponse>(`${endpoint}/status/?edit=${id}`);
+          if (!current()) return;
+          show(status);
+          if (FINAL_STAGES.has(status.stage)) {
+            // Seen to its end, so the next panel has nothing to show.
+            if (readSavedEdit(endpoint, target)?.id === id) storeSavedEdit(endpoint, target, undefined);
+            return;
+          }
+        } catch (failure) {
+          // The site has no record of it for this reader: there is nothing to follow. Other failures ask again later.
+          if ((failure as ServerError).code === "not_found") {
+            if (readSavedEdit(endpoint, target)?.id === id) storeSavedEdit(endpoint, target, undefined);
+            return;
+          }
+        }
+      }
+      if (current()) followTimer = setTimeout(ask, FOLLOW_INTERVAL_MS);
+    };
+    followTimer = setTimeout(ask, delay);
+  }
+
+  const previous = tracked ? readSavedEdit(endpoint, target) : undefined;
+  if (previous) {
+    let shown: EditStage | undefined;
+    follow(previous.id, (status) => {
+      if (status.stage === shown) return;
+      shown = status.stage;
+      const link = Object.assign(document.createElement("a"), {
+        href: previous.url,
+        textContent: previous.number === undefined ? "View commit" : `View pull request #${previous.number}`,
+        rel: "noopener",
+        target: "_blank",
+      });
+      lastEdit.replaceChildren(Object.assign(document.createElement("p"), { textContent: stageText(status, `last ${noun}`) }), link);
+      lastEdit.hidden = false;
+    }, 0);
+  }
   const closers = dialog.querySelectorAll<HTMLButtonElement>("[data-close]");
   const title = dialog.querySelector<HTMLInputElement>('input[name="title"]');
   const folder = dialog.querySelector<HTMLSelectElement>('select[name="folder"]');
@@ -476,6 +564,8 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     if (keep) save();
     clearTimeout(autosave);
     clearTimeout(destinationTimer);
+    clearTimeout(followTimer);
+    followed = undefined;
     window.removeEventListener("pagehide", save);
     phone.removeEventListener("change", arrange);
     void preview?.then((shown) => shown?.destroy());
@@ -651,7 +741,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
       phase = "sent";
       challenge.hidden = true;
       holdOpen(false);
-      showSaved(saved);
+      showSaved(saved, submissionId);
     } catch (cause) {
       // Navigation closed the panel mid-send: the refusal belongs to a page the reader left, so it opens no sign-in
       // and saves no draft. The unconfirmed id stays for the next panel's retry.
@@ -669,8 +759,11 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     }
   });
 
-  /** What became of the save, in place of the buttons: the commit, the pull request, or why it went to review. */
-  function showSaved(saved: EditResponse) {
+  /**
+   * What became of the save, in place of the buttons: the commit, the pull request, or why it went to review. On a site
+   * that tracks edits, the line then follows submission `id` to live.
+   */
+  function showSaved(saved: EditResponse, id: string) {
     query<HTMLElement>(dialog, ".svartz-submissions-note").hidden = true;
     const edit = target.kind === "edit";
     const why = {
@@ -700,6 +793,16 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     done.dataset.close = "";
     actions.replaceChildren(status, link, done);
     link.focus();
+    if (!tracked) return;
+    // This edit is now the one to follow, here and when the panel next opens on the page.
+    lastEdit.hidden = true;
+    storeSavedEdit(endpoint, target, { id, url: saved.url, ...(saved.kind === "pull-request" ? { number: saved.number } : {}), savedAt: Date.now() });
+    let shown: EditStage = saved.kind === "commit" ? "committed" : "open";
+    follow(id, (answer) => {
+      if (answer.stage === shown) return;
+      shown = answer.stage;
+      status.textContent = stageText(answer, noun);
+    });
   }
 
   /** CodeMirror on `markdown`, replacing the loading status. */

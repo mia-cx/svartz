@@ -30,7 +30,7 @@ The site must be built from a git checkout of that repository, and the commit it
 
 With a GitHub App, pull requests come from `<app name>[bot]` rather than from the token's owner, and no one's personal token sits on the server.
 
-1. [Register a GitHub App](https://github.com/settings/apps/new) (under an organization: its **Settings → Developer settings → GitHub Apps**). It needs no callback or webhook: untick **Webhook → Active**.
+1. [Register a GitHub App](https://github.com/settings/apps/new) (under an organization: its **Settings → Developer settings → GitHub Apps**). It needs no callback. Without [GitHub sync](#github-sync) it needs no webhook either: untick **Webhook → Active**.
 2. Under **Repository permissions**, set **Contents** and **Pull requests** to *Read and write*. **Metadata** stays *Read-only*, as GitHub requires.
 3. Create the App, note its **App ID** (or **Client ID**), and under **Private keys** generate a key. GitHub downloads it as a `.pem` file.
 4. **Install App** on the account that owns the repository, for that repository.
@@ -55,6 +55,7 @@ The server signs a short-lived token with the key, finds the App's installation 
 | `token` | `{ env: "SVARTZ_GITHUB_TOKEN" }` | The server environment variable that holds the token. |
 | `app` | none | `{ id, privateKey: { env: "NAME" }, installation? }`: open pull requests as a [GitHub App](#github-app) instead of with `token`. Set one or the other. Commits need an App. |
 | `mode` | `"permission"` | Which saves commit straight to the branch: `"permission"`, `"commit"` or `"pull-request"`. See [Modes](#modes). |
+| `sync` | none | `{ database: { env: "NAME" }, webhookSecret: { env: "NAME" }, live }`: mirror the repository's activity and show editors their edit going live. See [GitHub sync](#github-sync). |
 | `signIn.required` | `false` | Only signed-in readers may submit. See [Sign-in](#sign-in). |
 | `guard.turnstile` | none | `{ siteKey, secret: { env: "NAME" } }`: the editor shows a [Turnstile](#turnstile) challenge and the server verifies it. Skipped when sign-in is required. |
 | `guard.rateLimit` | `{ limit: 10, period: 3600 }` | Submissions allowed per `period` seconds, per signed-in reader or per IP. See [Rate limit](#rate-limit). |
@@ -176,6 +177,85 @@ The trailers are always the message's last paragraph, and names lose line breaks
 
 The site shows the edit once the deploy that includes the commit finishes.
 
+## GitHub sync
+
+With `sync`, the site keeps a mirror of the repository's activity in D1, filled by the GitHub App's webhooks, and the editor follows each saved edit until it is live. The mirror is what the moderator dashboard, history and user pages read.
+
+```ts
+submissions({
+  repo: "wikiplace/wikiplace.live",
+  app: { id: 1234567, privateKey: { env: "SVARTZ_GITHUB_APP_KEY" } },
+  sync: {
+    database: { env: "SVARTZ_DB" },
+    webhookSecret: { env: "SVARTZ_GITHUB_WEBHOOK_SECRET" },
+    live: { workflow: "deploy.yml" },
+  },
+})
+```
+
+| Option | |
+| --- | --- |
+| `database` | The D1 binding the mirror lives in. It may be the database [accounts](../../docs/auth.md) use, `SVARTZ_DB`: every table the plugin makes starts `submissions_`. |
+| `webhookSecret` | The server environment variable holding the App's webhook secret. |
+| `live` | What "live" means: `{ workflow: "deploy.yml" }`, a successful run of that file in `.github/workflows/` on the content branch, or `{ environment: "production" }`, a successful deployment to that environment. |
+
+Sync needs D1, so the vault deploys to `cloudflare-workers` or `cloudflare-pages`; on `node` it fails the build.
+
+### Set up
+
+1. In the App's settings, under **Webhook**, tick **Active**, set **Webhook URL** to `https://<site><base><mount>/_svartz/submissions/github/webhook/` (with the trailing slash: GitHub doesn't follow the redirect a missing one gets), and set a **Webhook secret**, a long random string.
+2. Under **Repository permissions**, set:
+   - **Contents**: *Read and write*
+   - **Pull requests**: *Read and write*
+   - **Actions**: *Read-only*
+   - **Deployments**: *Read-only*
+   - **Metadata**: *Read-only*, as GitHub requires
+3. Under **Subscribe to events**, tick **Push**, **Pull request**, **Pull request review**, **Pull request review comment**, **Issue comment**, **Workflow run** and **Deployment status**.
+4. Set the secret on the server: `wrangler secret put SVARTZ_GITHUB_WEBHOOK_SECRET`.
+5. Bind the D1 database in `wrangler.jsonc`, as for [accounts](../../docs/auth.md).
+
+GitHub asks the owner of each installation to accept new permissions; until they do, the poll can't read runs or deployments. With `token` instead of `app`, give the token the same permissions and add a repository webhook (**Settings → Webhooks**) with the same URL, secret, content type `application/json` and events.
+
+GitHub sends deliveries as `application/json`, which SvelteKit's CSRF check lets through, so a site needs no `csrf.trustedOrigins` for them.
+
+### What the mirror holds
+
+Each vault's rows are its own, keyed by the repository and the vault's folder in it:
+
+- **Commits** on the content branch that change a file in the vault's folder, with those files. A commit's `Svartz-Account` trailer is kept as a claim: anyone writing a commit can add one, so it names the account only on commits the App committed.
+- **Pull requests** into the content branch, with whether they change a file in the vault's folder, their **reviews**, and the **comments** on their conversation and their diff. A deleted comment stays as an empty tombstone.
+- **Workflow runs** on the content branch, and **deployments** with their latest status and whether any status said it succeeded.
+- Every save the site made, with who made it.
+
+Deliveries arrive at least once and in any order, so storing one is idempotent and never moves a record backwards: a pull request keeps its latest update, a run its latest attempt and step, a deployment its latest status, and a comment stays deleted.
+
+A delivery is refused, and nothing stored, when its `X-Hub-Signature-256` isn't the HMAC-SHA256 of its body with the webhook secret, or when it is for another repository. Events other than the seven are acknowledged and ignored, as is the App's ping.
+
+### The poll
+
+Webhooks get lost: a deploy was down, or a delivery failed. So when a reader asks how an edit is doing and the mirror hasn't been checked for a minute, the site asks GitHub too, after answering. Nothing polls on a timer.
+
+The first poll backfills: the latest 100 commits touching the vault, pull requests, comments, runs and deployments. Every poll lists the same, asking with the ETag GitHub last sent, so a list that hasn't changed costs a 304. It then reads what the lists leave out (the statuses of deployments under way; the earlier statuses, read once, of a deployment a delivery showed failed or made `inactive`, where a lost `success` may hide; the statuses of each environment's newest deployment while it stands failed, since a re-run can still make it succeed; which pull requests touch the vault; their reviews, again after any review delivery; commits' files) up to 30 requests in all; the rest waits for the next poll. One poll runs at a time across every worker. When fewer than 100 of GitHub's hourly requests remain, it stops until GitHub's limit resets, keeping the rest for saves. When GitHub says to wait, it waits as GitHub asks: for `Retry-After`, until the reset when the allowance is spent, and a minute for any other rate limit. The compare requests that follow an edit wait out the same pause, and can start it; the poll and the compare requests check it before every request, so a pause one starts stops the other at once.
+
+### Following an edit
+
+After a save, the editor's line follows the edit while the panel is open:
+
+| Stage | The editor says |
+| --- | --- |
+| Pull request open | "Opened pull request #42." |
+| Closed without merging | "Pull request #42 was closed without merging." |
+| Committed, or merged | "Published. It goes live once the site rebuilds.", or "Pull request #42 was merged. Your edit goes live once the site rebuilds." |
+| Building | "The site is rebuilding with your edit." |
+| Live | "Your edit is live." |
+| Build failed | "The site's rebuild failed, so your edit isn't live yet." |
+
+The browser remembers the last edit saved from each page, and the last new page, for 30 days. When the reader opens the editor there again, its progress shows above everything else, such as "The site is rebuilding with your last edit.", with a link to the commit or pull request, until they have seen it live or closed.
+
+An edit is live once a run of the workflow (or a deployment to the environment) succeeded at a commit that holds the edit's commit, or its pull request's merge commit. The site never guesses that from times: a run at the edit's own commit holds it, and for any other the server asks GitHub's compare API once and remembers the answer. A deployment counts once any of its statuses said `success`, so one later made `inactive` by a newer deployment still counts; one made `inactive` without succeeding doesn't. A run that is cancelled or skipped says nothing; otherwise the newest run that holds the edit decides building or failed, and a re-run that succeeds makes it live. A success counts however many runs follow it.
+
+Only the reader who saved an edit can ask about it: the account, or without accounts the sign-in, that saved it. A guest's edit is known by its random submission id, which only their browser holds.
+
 ## Guard
 
 Every edit and new page passes the guard before the server calls GitHub.
@@ -223,5 +303,7 @@ The plugin answers under `<base><mount>/_svartz/submissions/`. Failures answer `
 | `GET links/` | `{ "notes": [{ "link", "title", "slug", "path", "href", "aliases"? }], "linkResolution", "mountPath", "tagsRoute", "attachments" }`: the published notes the editor suggests after `[[` and the Split preview links to, from the build's index, with how the vault resolves and routes links. `link` is what goes between the brackets. `attachments` holds the vault paths of the attachments the site publishes, which public notes reference; a file only protected notes use stays out. |
 | `POST edit/` with `{ "submissionId", "page", "markdown", "note"?, "sha"?, "turnstileToken"? }` | 201 `{ "kind": "pull-request", "url", "number", "reason"? }` of the pull request, new or opened by an earlier attempt with the same `submissionId`, or `{ "kind": "commit", "url", "sha" }` of the commit. `sha` is `source/`'s, and a save that would commit without it is refused with 400. 401 `sign_in_required` when the reader is anonymous and sign-in is required, their address isn't visible, or guests may not save; 403 `not_allowed` when their account may not, and when Turnstile is missing or refused; 429 with `retryAfter` past the rate limit; 503 when Cloudflare, the rate limiter or GitHub can't be reached. |
 | `POST new/` with `{ "submissionId", "folder", "title", "markdown", "note"?, "turnstileToken"? }` | As `edit/`. Also 400 `not_a_section` or `invalid_title`, and 409 `exists` when the title is taken, with `existing` set to the clashing page's public URL unless that page is hidden. |
+| `GET status/?edit=<submissionId>` | With [sync](#github-sync): `{ "stage", "pull"?: { "number", "url" }, "commit"?: { "sha", "url" } }`, where `stage` is `open`, `closed`, `committed`, `building`, `live` or `failed`. 401 `sign_in_required` when the edit was saved signed in and the reader isn't; 404 `not_found` for an edit the site has no record of, or someone else's. |
+| `POST github/webhook/` | With [sync](#github-sync): GitHub's deliveries. 204 once stored, 202 for a delivery with nothing the mirror keeps, 401 `bad_signature`, 403 `other_repository`, 413 past 5 MB. |
 
 `page` is the note's URL path below the deployment base, as it appears in the site's index. `folder` is a section's path inside the vault, `""` for its top level. `submissionId` is 32 lowercase hex digits the client picks at random and repeats on every retry of the same submission.

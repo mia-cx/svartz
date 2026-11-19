@@ -1576,3 +1576,88 @@ describe("Rich text", () => {
     await expect.element(page.getByRole("radio", { name: "Rich text" })).toBeChecked();
   });
 });
+
+describe("following a saved edit", () => {
+  const COMMIT = "c0ffee5b2dbb2f1c4e7d3e4a5b9f0c1d2e3f4a5b";
+  const COMMIT_URL = `https://github.com/acme/wiki/commit/${COMMIT}`;
+  const TRACKED = { ...OPTIONS, tracked: true as const };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * The site's server, which commits a save and answers `status/` with each of `stages` in turn, the last one from
+   * then on. Answers the status requests it got in `asked`.
+   */
+  function serveStages(stages: string[]) {
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/source/")) return Response.json({ markdown: SOURCE, sha: SOURCE_SHA, destination: "commit" });
+      if (url.includes("/links/")) return Response.json(LINKS);
+      if (url.includes("/status/")) {
+        asked.push(url);
+        return Response.json({ stage: stages.length > 1 ? stages.shift() : stages[0], commit: { sha: COMMIT, url: COMMIT_URL } });
+      }
+      return Response.json({ kind: "commit", url: COMMIT_URL, sha: COMMIT }, { status: 201 });
+    }));
+    return asked;
+  }
+
+  it("follows a published edit through the site's rebuild until it is live", async () => {
+    const asked = serveStages(["building", "failed", "building", "live"]);
+    await openEditor(TRACKED);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await page.getByRole("button", { name: "Publish" }).click();
+    const said = page.getByRole("status");
+    await expect.element(said).toHaveTextContent("Published. It goes live once the site rebuilds.");
+    expect(asked).toEqual([]);
+
+    for (const sentence of [
+      "The site is rebuilding with your edit.",
+      "The site's rebuild failed, so your edit isn't live yet.",
+      "The site is rebuilding with your edit.",
+      "Your edit is live.",
+    ]) {
+      await vi.advanceTimersByTimeAsync(10_000);
+      await expect.element(said).toHaveTextContent(sentence);
+    }
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(asked).toEqual(Array(4).fill(expect.stringMatching(/^\/docs\/wiki\/_svartz\/submissions\/status\/\?edit=[0-9a-f]{32}$/)));
+    await expect.element(page.getByRole("link", { name: "View commit" })).toHaveAttribute("href", COMMIT_URL);
+  });
+
+  it("says how the reader's last edit is doing when they open the editor again, until they have seen it live", async () => {
+    serveStages(["building", "live"]);
+    await openEditor(TRACKED);
+    await page.getByRole("button", { name: "Publish" }).click();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect.element(page.getByText("The site is rebuilding with your last edit.")).toBeVisible();
+    await expect.element(page.getByRole("link", { name: "View commit" })).toHaveAttribute("href", COMMIT_URL);
+    await page.getByRole("button", { name: "Close editor" }).click();
+
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect.element(page.getByText("Your last edit is live.")).toBeVisible();
+    await page.getByRole("button", { name: "Close editor" }).click();
+
+    // Seen live, it isn't shown again.
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toBeVisible();
+    await expect.element(page.getByText("your last edit", { exact: false })).not.toBeInTheDocument();
+  });
+
+  it("follows nothing on a site that doesn't track edits", async () => {
+    const asked = serveStages(["live"]);
+    await openEditor();
+    await page.getByRole("button", { name: "Publish" }).click();
+    await expect.element(page.getByRole("status")).toHaveTextContent("Published. It goes live once the site rebuilds.");
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect.element(page.getByRole("textbox", { name: "Page source" })).toBeVisible();
+
+    expect(asked).toEqual([]);
+  });
+});

@@ -107,6 +107,24 @@ export type EditResponse =
   /** The save committed `sha` to the branch; the site shows it once the next deploy finishes. */
   | { readonly kind: "commit"; readonly url: string; readonly sha: string };
 
+/**
+ * Where a saved edit has got to:
+ * - `open`: its pull request waits for review. `closed`: it was closed without merging.
+ * - `committed`: it is on the branch, as a commit or a merged pull request, and no build holding it has started.
+ * - `building`: the run or deployment that means live holds it and hasn't finished.
+ * - `live`: one that holds it succeeded. `failed`: the latest one that holds it failed.
+ */
+export type EditStage = "open" | "closed" | "committed" | "building" | "live" | "failed";
+
+/** `GET <endpoint>/status/?edit=<submission id>` answers this, to the reader who saved the edit. */
+export interface StatusResponse {
+  readonly stage: EditStage;
+  /** The pull request the edit opened, if it opened one. */
+  readonly pull?: { readonly number: number; readonly url: string };
+  /** The commit that put the edit on the branch: the direct commit, or the pull request's merge commit. */
+  readonly commit?: { readonly sha: string; readonly url: string };
+}
+
 /** Every failure answers with this JSON body; `message` is written for the reader. */
 export interface ErrorResponse {
   readonly error: string;
@@ -127,4 +145,6 @@ export interface BrowserOptions {
   readonly folders: readonly string[];
   /** The Turnstile site key, when the editor must show the widget. */
   readonly turnstileSiteKey?: string;
+  /** Whether the server tracks saved edits, so the editor can follow one to live through `status/`. */
+  readonly tracked?: true;
 }

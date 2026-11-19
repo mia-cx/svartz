@@ -9,6 +9,8 @@
  * - `POST edit/` with `{ submissionId, page, markdown, note?, sha?, turnstileToken? }` saves an edit and answers 201
  *   with the commit or the pull request.
  * - `POST new/` with `{ submissionId, folder, title, markdown, note?, turnstileToken? }` does the same for a new note.
+ * - With `sync` set, `POST github/webhook/` takes GitHub's deliveries into the mirror, and `GET status/?edit=<id>`
+ *   answers where a saved edit has got to (see `sync.ts`). Every save is then recorded for its saver to follow.
  *
  * The client never names a file path. Edits must target a note in the build's manifest; a new note goes in one of the
  * manifest's folders, named after its title, and never where a file already is.
@@ -54,6 +56,8 @@ import {
 } from "./github";
 import { createGuard, type GuardOptions } from "./guard";
 import { COMMIT, OPEN_PULL_REQUESTS } from "./permissions";
+import { readBody } from "./request";
+import { createSync, type SyncOptions } from "./sync";
 
 /**
  * Which saves may commit. `permission` commits for whoever holds `submissions:commits:write` on the page and opens a
@@ -73,6 +77,8 @@ export type ServerOptions = Credentials & {
   readonly labels: readonly string[];
   readonly guard: GuardOptions;
   readonly mode: Mode;
+  /** Mirror GitHub and follow saved edits to live. */
+  readonly sync?: SyncOptions;
 };
 
 /** The page holding a route: its slug, which permissions are checked on, and its URL below the deployment base, `null` when hidden. */
@@ -129,36 +135,20 @@ async function readReader(request: Request, env: ServerContext["env"]): Promise<
   return { accounts: true, account: signIn.account, identity: signIn.account?.identity ?? null };
 }
 
+/** Who owns what `reader` saves: their account, or without accounts their sign-in; `null` for a guest. */
+const ownerOf = ({ account, identity }: Reader) =>
+  account ? `account:${account.id}` : identity ? `identity:${identity.id}` : null;
+
 /** JSON that depends on who asks, so no cache keeps it for anyone else. */
 const privateJson = (body: unknown) => Response.json(body, { headers: { "cache-control": "private, no-store" } });
-
-/**
- * The body as text, read chunk by chunk: past `MAX_REQUEST_BYTES` the stream is cancelled and nothing more is
- * buffered, so a body without a Content-Length can't exhaust memory.
- */
-async function readText(request: Request): Promise<string> {
-  if (Number(request.headers.get("content-length")) > MAX_REQUEST_BYTES) throw tooLarge();
-  if (!request.body) return "";
-  const reader = request.body.getReader();
-  const decoder = new TextDecoder();
-  let text = "";
-  let bytes = 0;
-  for (let read = await reader.read(); !read.done; read = await reader.read()) {
-    bytes += read.value.byteLength;
-    if (bytes > MAX_REQUEST_BYTES) {
-      await reader.cancel();
-      throw tooLarge();
-    }
-    text += decoder.decode(read.value, { stream: true });
-  }
-  return text + decoder.decode();
-}
 
 /** The fields every submission carries, checked, and the rest of its JSON body for the route to check. */
 async function readSubmission(request: Request) {
   let body: Record<string, unknown>;
   try {
-    body = JSON.parse(await readText(request)) ?? {};
+    const bytes = await readBody(request, MAX_REQUEST_BYTES);
+    if (!bytes) throw tooLarge();
+    body = JSON.parse(new TextDecoder().decode(bytes)) ?? {};
   } catch (error) {
     if (error instanceof SubmissionError) throw error;
     throw invalid();
@@ -242,6 +232,12 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
   };
   /** The App's bot user, which a commit names as its committer. Only an App commits. */
   const committer = options.app ? appCommitter(options.repo, options.app, githubToken) : undefined;
+  const sync = options.sync && createSync(options.sync, {
+    repo: options.repo,
+    ...(options.branch ? { branch: options.branch } : {}),
+    root: data.vaultRoot,
+    token: githubToken,
+  });
 
   async function target(context: ServerContext): Promise<GitHubTarget> {
     const token = await githubToken(context.env);
@@ -309,20 +305,39 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
     await guard({ token: turnstileToken, identity: reader.identity, clientAddress: context.clientAddress, env: context.env });
     const github = await target(context);
     const full: Submission = { ...submission, submitter: reader.identity };
+
+    /** Answer the save, recorded first for its saver to follow when the site tracks edits. */
+    async function saved(answer: EditResponse): Promise<Response> {
+      await sync?.record(context, {
+        id: submission.id,
+        owner: ownerOf(reader),
+        kind: answer.kind,
+        page: submission.page,
+        path: submission.path,
+        commit: answer.kind === "commit" ? answer.sha : null,
+        pull: answer.kind === "pull-request" ? answer.number : null,
+        url: answer.url,
+        savedAt: new Date().toISOString(),
+      }).catch((error: unknown) => {
+        // The edit is saved; only following it is lost, so the answer stands.
+        console.error("[submissions] saved an edit but couldn't record it to follow", error);
+      });
+      return Response.json(answer, { status: 201 });
+    }
+
     let review: ReviewReason | undefined;
     if (destination === "commit" && reader.account && committer) {
       const self = submission.kind === "edit" ? slug : undefined;
       if (await mayClaim(reader.account, vaultPath, submission.markdown, self, context)) {
         const by = await attribution(reader.account, await committer(context.env), request, context);
         const committed = await commitSubmission(github, full, loaded, by);
-        if (committed.kind === "commit") return Response.json(committed satisfies EditResponse, { status: 201 });
+        if (committed.kind === "commit") return saved(committed);
         review = committed.reason;
       } else {
         review = "route";
       }
     }
-    const answer: EditResponse = { kind: "pull-request", ...await openSubmission(github, full), ...(review ? { reason: review } : {}) };
-    return Response.json(answer, { status: 201 });
+    return saved({ kind: "pull-request", ...await openSubmission(github, full), ...(review ? { reason: review } : {}) });
   }
 
   async function source(request: Request, context: ServerContext): Promise<Response> {
@@ -376,12 +391,18 @@ const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, dat
 
   const links = async () => Response.json({ notes: data.links, ...data.preview } satisfies LinksResponse);
 
-  const handlers = new Map([
+  const handlers = new Map<string, { method: string; run: (request: Request, context: ServerContext) => Promise<Response> }>([
     ["/source/", { method: "GET", run: source }],
     ["/destination/", { method: "GET", run: destination }],
     ["/links/", { method: "GET", run: links }],
     ["/edit/", { method: "POST", run: edit }],
     ["/new/", { method: "POST", run: create }],
+    ...sync
+      ? [
+        ["/github/webhook/", { method: "POST", run: sync.webhook }],
+        ["/status/", { method: "GET", run: async (request: Request, context: ServerContext) => sync.status(request, context, ownerOf(await readReader(request, context.env))) }],
+      ] as const
+      : [],
   ]);
 
   return async (request, context) => {

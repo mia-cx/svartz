@@ -63,6 +63,8 @@ export async function requestGitHub(
   path: string,
   body?: unknown,
   accept = "application/vnd.github+json",
+  /** More request headers, such as `if-none-match` for a conditional request. */
+  headers: Readonly<Record<string, string>> = {},
 ): Promise<Response> {
   try {
     const response = await fetch(`${API}${path}`, {
@@ -73,6 +75,7 @@ export async function requestGitHub(
         "user-agent": "svartz-submissions",
         "x-github-api-version": "2022-11-28",
         ...(body === undefined ? {} : { "content-type": "application/json" }),
+        ...headers,
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
