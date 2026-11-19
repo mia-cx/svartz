@@ -476,9 +476,9 @@ export interface ListedCommit {
   /** Its changed files inside the vault, as repository paths; `null` until the poll reads them. */
   readonly files: readonly string[] | null;
   /**
-   * The account that made it, by id: the one the site's record of the save names, or else the one its
-   * `Svartz-Account` trailer names when its committer is the App's bot. `null` for everyone else, whatever their
-   * trailer says. The bot is known by the committer of a commit the site recorded making, so no GitHub call is needed.
+   * The account that made it, by id, only from the site's own record of a save: a direct commit with this SHA, or a
+   * submission whose pull request the mirror says merged as this commit. `null` for every other commit, whatever its
+   * trailer, author or committer say: those are git metadata whoever makes the commit chooses.
    */
   readonly account: string | null;
 }
@@ -488,17 +488,12 @@ export interface ListedCommit {
  * A `before` the mirror doesn't hold answers none.
  */
 export async function listCommits({ db, scope }: Mirror, { before, limit }: { before?: string; limit: number }): Promise<ListedCommit[]> {
-  const { results } = await db.prepare(`WITH bot AS (
-      SELECT DISTINCT c.committer_email FROM submissions_commits c
-      JOIN submissions_edits e ON e.scope = c.scope AND e.commit_sha = c.sha AND e.kind = 'commit'
-      WHERE c.scope = ?1
-    )
-    SELECT c.sha, c.message, c.author_name, c.author_login, c.committed_at, c.files,
-      COALESCE(
-        (SELECT substr(e.owner, 9) FROM submissions_edits e
-          WHERE e.scope = c.scope AND e.commit_sha = c.sha AND e.kind = 'commit' AND e.owner LIKE 'account:%' LIMIT 1),
-        CASE WHEN c.committer_email IN (SELECT committer_email FROM bot) THEN c.trailer_account END
-      ) AS account
+  const { results } = await db.prepare(`SELECT c.sha, c.message, c.author_name, c.author_login, c.committed_at, c.files,
+      (SELECT substr(e.owner, 9) FROM submissions_edits e
+        LEFT JOIN submissions_pulls p ON e.kind = 'pull-request' AND p.scope = e.scope AND p.number = e.pull_number
+        WHERE e.scope = c.scope AND e.owner LIKE 'account:%'
+          AND ((e.kind = 'commit' AND e.commit_sha = c.sha) OR (p.merged_at IS NOT NULL AND p.merge_commit = c.sha))
+        ORDER BY e.saved_at LIMIT 1) AS account
     FROM submissions_commits c
     WHERE c.scope = ?1 AND (?2 IS NULL OR (c.committed_at, c.sha) < (SELECT committed_at, sha FROM submissions_commits WHERE scope = ?1 AND sha = ?2))
     ORDER BY c.committed_at DESC, c.sha DESC

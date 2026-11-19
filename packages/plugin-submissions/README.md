@@ -224,7 +224,7 @@ GitHub sends deliveries as `application/json`, which SvelteKit's CSRF check lets
 
 Each vault's rows are its own, keyed by the repository and the vault's folder in it:
 
-- **Commits** on the content branch that change a file in the vault's folder, with those files. A commit's `Svartz-Account` trailer is kept as a claim: anyone writing a commit can add one, so it names the account only on commits the App committed, known by the committer of the commits the site recorded making.
+- **Commits** on the content branch that change a file in the vault's folder, with those files. A commit's `Svartz-Account` trailer is kept as a claim and never trusted: whoever makes a commit chooses its trailer, author and committer, the App's bot address included. A commit is credited to an account only by the site's own record of the save (below).
 - **Pull requests** into the content branch, with whether they change a file in the vault's folder, their **reviews**, and the **comments** on their conversation and their diff. A deleted comment stays as an empty tombstone.
 - **Workflow runs** on the content branch, and **deployments** with their latest status and whether any status said it succeeded.
 - Every save the site made, with who made it.
@@ -265,7 +265,7 @@ With `sync`, the [dashboard](../../docs/auth.md#the-dashboard) gets a Submission
 - Its summary, the commit's first line.
 - How far it has got: Not live yet, Building, Live or Build failed, decided as for [an edit](#following-an-edit).
 - The pages it changed, linked, and the site's attachments it changed. A commit that changed many stays one entry, with the rest folded under "N more".
-- Who made it. A site account shows by name and handle when the site saved the commit itself, or when the App's bot committed it and its `Svartz-Account` trailer names the account. Anyone can write that trailer, so on every other commit it counts for nothing, and the author shows as their GitHub user, or by their git name when GitHub links them to none.
+- Who made it. A site account shows by name and handle only when the site's own record says so: the site committed it for that account, or it is the merge commit of a pull request the site opened for them. A commit's trailer, author and committer are chosen by whoever makes it, so they never name an account; every other commit shows its author as their GitHub user, or by their git name when GitHub links them to none.
 - When, and a link to its diff on GitHub.
 
 The panel names only what the last build published. Every other file, such as a protected, hidden or unpublished note, a file added since that build or one deleted before it, is counted ("1 file the site doesn't publish") but never named, and a commit that changed nothing the site publishes shows its short SHA in place of its summary, since the summary could name what it changed. The same holds while the poll hasn't yet read which files a backfilled commit changed.

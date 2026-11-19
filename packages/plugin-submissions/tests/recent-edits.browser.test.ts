@@ -51,10 +51,11 @@ describe("Recent edits", () => {
       "Rewrite the guide",
       "Fix a typo in Setup",
       "Edit content/Places/Paris.md",
+      "Add how long setup takes (#42)",
       "Edit content/guide.md",
     ]);
 
-    const site = entries.nth(5);
+    const site = entries.nth(6);
     await expect.element(site).toHaveTextContent(/Ada Lovelace @ada/);
     await expect.element(site.getByText("Live", { exact: true })).toBeVisible();
     await expect.element(site.getByRole("link", { name: "Guide" })).toHaveAttribute("href", "/wiki/guide/");

@@ -41,15 +41,18 @@ describe("the Recent edits panel", () => {
     }
   });
 
-  // Proves the trust rule: an account is credited only from the site's own record or the App's bot, never a bare trailer.
-  it("credits a site account only where the site can vouch for it", async () => {
+  // Proves the trust rule: an account is credited only from the site's own record of a save, never from git metadata.
+  it("credits a site account only where the site recorded the save", async () => {
     const wiki = await site();
     await seedEdits(wiki);
     const html = (await panel(wiki, "mod"))!;
     const by = Object.fromEntries(headings(html).map((heading, index) => [heading, entries(html)[index]!]));
 
     expect(by["Edit content/guide.md"]).toContain('<span class="sv-account-name">Ada Lovelace</span> <span class="sv-account-muted">@ada</span>');
-    expect(by["Edit content/Places/Paris.md"]).toContain('<span class="sv-account-name">Grace Hopper</span>');
+    expect(by["Add how long setup takes (#42)"]).toContain('<span class="sv-account-name">Grace Hopper</span> <span class="sv-account-muted">@grace</span>');
+    // Ada's author address, the App as committer and Ada's trailer, with no record of the save: a plain git author.
+    expect(by["Edit content/Places/Paris.md"]).toContain("Ada Lovelace (not on GitHub)");
+    expect(by["Edit content/Places/Paris.md"]).not.toContain("@ada");
     expect(by["Rewrite the guide"]).toContain('<a href="https://github.com/mallory">mallory</a> on GitHub');
     expect(by["Rewrite the guide"]).not.toContain("Ada Lovelace");
     expect(by["Fix a typo in Setup"]).toContain("Charles Babbage (not on GitHub)");

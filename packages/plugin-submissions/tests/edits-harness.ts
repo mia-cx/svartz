@@ -194,13 +194,16 @@ export async function createEditsSite() {
     },
   });
 
-  /** `viewer` saves an edit of the guide through the edit route, which commits `commit` as the App: a save the site made. */
-  async function saveGuide(viewer: Viewer, commit: string): Promise<Response> {
+  /**
+   * `viewer` saves an edit of the guide through the edit route, as submission `id`: an admin's commits as the App as
+   * `commit`, anyone else's opens pull request #42. Either way, a save the site recorded.
+   */
+  async function saveGuide(viewer: Viewer, commit: string, id = SUBMISSION_ID): Promise<Response> {
     github.committed = commit;
     return fetchAt(`${BASE}/edit/`, {
       method: "POST",
       headers: { cookie: sessions[viewer], origin: ORIGIN, "content-type": "application/json" },
-      body: JSON.stringify({ submissionId: SUBMISSION_ID, page: "/wiki/guide/", markdown: GUIDE_SOURCE.replace("Set up", "Plant"), note: "", sha: GUIDE_SHA }),
+      body: JSON.stringify({ submissionId: id, page: "/wiki/guide/", markdown: GUIDE_SOURCE.replace("Set up", "Plant"), note: "", sha: GUIDE_SHA }),
     });
   }
 
@@ -232,8 +235,10 @@ export type EditsSite = Awaited<ReturnType<typeof createEditsSite>>;
 export const COMMITS = {
   /** Ada's save of the guide, which the site committed as the App: live. */
   site: "c0ffee5b2dbb2f1c4e7d3e4a5b9f0c1d2e3f4a5b",
-  /** Committed by the App with a trailer naming Grace, which the site has no record of: no build holds it yet. */
-  bot: sha(2),
+  /** Grace's save of the guide, which the site opened as pull request #42, squash-merged on GitHub as this commit. */
+  merged: sha(2),
+  /** A copy of Ada's commit (her author address, the App as committer, her trailer) that the site has no record of. */
+  copied: sha(7),
   /** By a git author with no GitHub account. */
   local: sha(3),
   /** By mallory on GitHub, with a trailer claiming to be Ada: building. */
@@ -249,18 +254,30 @@ export const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).
 
 /** Fill the mirror with {@link COMMITS} and the runs that build them, as the site and GitHub would. */
 export async function seedEdits(site: EditsSite): Promise<void> {
-  const [ada, grace] = [await site.accountId("ada"), await site.accountId("grace")];
-  const saved = await site.saveGuide("ada", COMMITS.site);
-  if (saved.status !== 201) throw new Error(`The site didn't save Ada's edit: ${saved.status} ${await saved.text()}`);
+  const ada = await site.accountId("ada");
+  for (const [viewer, commit, id] of [["ada", COMMITS.site, "a".repeat(32)], ["grace", "", "b".repeat(32)]] as const) {
+    const saved = await site.saveGuide(viewer, commit, id);
+    if (saved.status !== 201) throw new Error(`The site didn't save ${viewer}'s edit: ${saved.status} ${await saved.text()}`);
+  }
+  const merged = await site.deliver("pull_request", {
+    action: "closed",
+    pull_request: {
+      number: 42, state: "closed", title: "Edit content/guide.md", user: { login: APP_BOT.name },
+      head: { ref: "svartz/submission/edit/wiki-guide", sha: sha(42) }, base: { ref: "main" },
+      html_url: `https://github.com/${REPO}/pull/42`, created_at: ago(55), updated_at: ago(50), closed_at: ago(50),
+      merged_at: ago(50), merge_commit_sha: COMMITS.merged,
+    },
+  });
+  if (merged.status !== 204) throw new Error(`The mirror refused the merge: ${merged.status}`);
+  const adaCommit = { author: { name: "Ada Lovelace", email: "ada@users.noreply.wiki.test" }, committer: APP_BOT };
   const pushed = await site.push([
+    { id: COMMITS.site, message: `Edit content/guide.md\n\nSvartz-Account: ${ada}`, at: ago(60), ...adaCommit, modified: ["content/guide.md"] },
     {
-      id: COMMITS.site, message: `Edit content/guide.md\n\nSvartz-Account: ${ada}`, at: ago(60),
-      author: { name: "Ada Lovelace", email: "ada@users.noreply.wiki.test" }, committer: APP_BOT, modified: ["content/guide.md"],
+      id: COMMITS.merged, message: "Add how long setup takes (#42)", at: ago(50),
+      author: { name: "Grace Hopper", email: "2+grace@users.noreply.github.com", username: "grace" },
+      committer: { name: "GitHub", email: "noreply@github.com" }, modified: ["content/guide.md"],
     },
-    {
-      id: COMMITS.bot, message: `Edit content/Places/Paris.md\n\nSvartz-Account: ${grace}`, at: ago(50),
-      author: { name: "Grace Hopper", email: "grace@users.noreply.wiki.test" }, committer: APP_BOT, modified: ["content/Places/Paris.md"],
-    },
+    { id: COMMITS.copied, message: `Edit content/Places/Paris.md\n\nSvartz-Account: ${ada}`, at: ago(45), ...adaCommit, modified: ["content/Places/Paris.md"] },
     {
       id: COMMITS.local, message: "Fix a typo in Setup", at: ago(40),
       author: { name: "Charles Babbage", email: "charles@example.org" }, modified: ["content/setup.md"],
@@ -302,8 +319,11 @@ function fakeGitHub(method: string, url: URL, github: { compare: Map<string, str
   if (below === "") return Response.json({ full_name: REPO, default_branch: "main" });
   if (below === "/git/ref/heads/main") return Response.json({ object: { sha: HEAD_COMMIT, type: "commit" } });
   if (below.startsWith("/contents/")) return Response.json({ type: "file", sha: GUIDE_SHA, content: "" });
-  if (below === `/git/commits/${HEAD_COMMIT}`) return Response.json({ sha: HEAD_COMMIT, tree: { sha: "9e8d7c6b5a49382716051f2e3d4c5b6a79881726" } });
+  if (method === "GET" && below.startsWith("/git/commits/")) return Response.json({ sha: below.slice("/git/commits/".length), tree: { sha: "9e8d7c6b5a49382716051f2e3d4c5b6a79881726" } });
   if (method === "POST" && below === "/git/trees") return Response.json({ sha: "1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e" }, { status: 201 });
+  // A save that opens a pull request: its branch, then pull request #42.
+  if (method === "POST" && below === "/git/refs") return Response.json({ ref: "refs/heads/submission" }, { status: 201 });
+  if (method === "POST" && below === "/pulls") return Response.json({ number: 42, html_url: `https://github.com/${REPO}/pull/42` }, { status: 201 });
   if (method === "POST" && below === "/git/commits") {
     return Response.json({ sha: github.committed, html_url: `https://github.com/${REPO}/commit/${github.committed}` }, { status: 201 });
   }
