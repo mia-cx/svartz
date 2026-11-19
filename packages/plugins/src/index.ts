@@ -25,6 +25,7 @@ import {
   filterUnpublished,
   FILTER_UNPUBLISHED_ID,
 } from "./filter-unpublished";
+export { publishesNote } from "./filter-unpublished";
 import { allocateRoutesPlugin, ALLOCATE_ROUTES_ID } from "./allocate-routes";
 import {
   resolveLinks,
