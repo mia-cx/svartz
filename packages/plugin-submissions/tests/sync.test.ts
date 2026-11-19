@@ -541,6 +541,24 @@ describe("an edit's status", () => {
     expect((await status(site, ada)).body).toMatchObject({ stage });
   });
 
+  it("finds that a failed deployment later succeeded, when its success was never delivered", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const site = await createSite({ live: { environment: "production" } });
+    const ada = await adaCommits(site);
+    const failure = { ...deploymentStatus({ statusId: 70, state: "failure" }).deployment_status };
+    let statuses: unknown[] = [failure];
+    quietGitHub({}, (path) => (path === "/deployments/7/statuses" ? Response.json(statuses) : undefined));
+
+    await deliver(site, "deployment_status", deploymentStatus({ statusId: 70, state: "failure" }));
+    expect((await status(site, ada)).body).toMatchObject({ stage: "failed" });
+
+    // A re-run succeeds; its delivery is lost.
+    statuses = [{ ...failure, id: 71, state: "success" }, failure];
+    vi.setSystemTime(Date.now() + 61_000);
+    await status(site, ada);
+    expect((await status(site, ada)).body).toMatchObject({ stage: "live" });
+  });
+
   it("says a pull request closed without merging is closed", async () => {
     const site = await createSite();
     const grace = await graceOpensPullRequest(site);

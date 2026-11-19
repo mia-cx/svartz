@@ -204,23 +204,29 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
   }
 
   /**
-   * The statuses of deployments still under way, or never seen with one: the latest, and whether any said `success`,
-   * since a later `inactive` hides it. GitHub doesn't document their order, so the latest is the highest id.
+   * The statuses of deployments still under way, or never seen with one, and of each environment's newest deployment
+   * while it stands failed: GitHub lets it succeed later, and the list carries no status to say so. Read for the
+   * latest, and whether any said `success`, since a later `inactive` hides it. GitHub doesn't document their order,
+   * so the latest is the highest id. Conditional, so asking again about a failure nothing changed costs a 304.
    */
   async function fillDeploymentStatuses() {
-    const pending = await rows<{ id: number }>(`SELECT id FROM submissions_deployments
-      WHERE scope = ? AND (state IS NULL OR state IN ('queued', 'pending', 'in_progress')) ORDER BY created_at DESC LIMIT ?`);
-    for (const { id } of pending) {
-      const answer = await get(`/deployments/${id}/statuses${query({ per_page: PAGE_SIZE })}`);
-      const statuses = list(answer?.body).flatMap((value) => deploymentStatus(value) ?? []);
-      const status = statuses.reduce<DeploymentStatus | undefined>((latest, next) => (latest && latest.id > next.id ? latest : next), undefined);
-      if (!status) continue;
-      await mirror.db.batch([
-        mirror.db.prepare(`UPDATE submissions_deployments SET status_id = ?, state = ?, status_url = ?, status_at = ?
-          WHERE scope = ? AND id = ? AND COALESCE(status_id, 0) < ?`)
-          .bind(status.id, status.state, status.url, status.createdAt, mirror.scope, id, status.id),
-        ...(statuses.some(({ state }) => state === "success") ? [markSucceeded(mirror, id)] : []),
-      ]);
+    const unsettled = await rows<{ id: number }>(`SELECT id FROM submissions_deployments d
+      WHERE scope = ? AND succeeded = 0 AND (state IS NULL OR state IN ('queued', 'pending', 'in_progress')
+        OR (state IN ('failure', 'error') AND NOT EXISTS (SELECT 1 FROM submissions_deployments newer
+          WHERE newer.scope = d.scope AND newer.environment = d.environment AND newer.created_at > d.created_at)))
+      ORDER BY created_at DESC LIMIT ?`);
+    for (const { id } of unsettled) {
+      await sync(`/deployments/${id}/statuses${query({ per_page: PAGE_SIZE })}`, (body) => {
+        const statuses = list(body).flatMap((value) => deploymentStatus(value) ?? []);
+        const status = statuses.reduce<DeploymentStatus | undefined>((latest, next) => (latest && latest.id > next.id ? latest : next), undefined);
+        if (!status) return [];
+        return [
+          mirror.db.prepare(`UPDATE submissions_deployments SET status_id = ?, state = ?, status_url = ?, status_at = ?
+            WHERE scope = ? AND id = ? AND COALESCE(status_id, 0) < ?`)
+            .bind(status.id, status.state, status.url, status.createdAt, mirror.scope, id, status.id),
+          ...(statuses.some(({ state }) => state === "success") ? [markSucceeded(mirror, id)] : []),
+        ];
+      });
     }
   }
 
