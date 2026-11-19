@@ -25,8 +25,8 @@ import { appTokens } from "./app";
 import { misconfigured } from "./errors";
 import { requestGitHub } from "./github";
 import { isDatabase, migrate, readBranch, scopeOf, type Mirror } from "./mirror";
-import { pause, readPause, reconcile, resumeAt } from "./reconcile";
-import { list, listedCommit, object, text, type CommitRecord } from "./records";
+import { hasNextPage, pause, readPause, reconcile, resumeAt } from "./reconcile";
+import { inVault, list, listedCommit, object, text, type CommitRecord } from "./records";
 import type { BuildData, Credentials, ServerOptions } from "./server";
 
 /** What reading a vault's commits takes: JSON, for the reader's server data. Holds no secret, only where they are. */
@@ -66,6 +66,11 @@ export interface Commit {
   readonly account: { readonly id: string } | null;
   /** The vault files it changed, as vault paths; `null` while unknown, as for commits read from GitHub's lists. */
   readonly files: readonly string[] | null;
+  /**
+   * Whether `files` holds every vault file it changed. GitHub lists a commit's files in pages past 300 and stops at
+   * 3,000, and only the first page is read, so a larger commit's `files` are a part of them.
+   */
+  readonly allFiles: boolean;
 }
 
 /** The content at a commit, or why there is none to show. */
@@ -163,9 +168,10 @@ interface CommitRow {
   committed_at: string;
   url: string;
   files: string | null;
+  files_complete: number;
 }
 
-const COMMIT_COLUMNS = "c.sha, c.message, c.author_name, c.author_login, c.committed_at, c.url, c.files";
+const COMMIT_COLUMNS = "c.sha, c.message, c.author_name, c.author_login, c.committed_at, c.url, c.files, c.files_complete";
 
 /** The site's record of making a commit: who saved it (`account:<id>`, `identity:<id>` or `null`), and how. */
 interface Made {
@@ -273,6 +279,7 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
           author: { name: row.author_name, login: row.author_login },
           account,
           files: row.files === null ? null : (JSON.parse(row.files) as string[]).map(vaultPath),
+          allFiles: row.files !== null && row.files_complete === 1,
         };
       });
     }
@@ -297,6 +304,7 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
         committed_at: record.committedAt,
         url: record.url,
         files: null,
+        files_complete: 0,
       }));
     }
 
@@ -365,9 +373,9 @@ export function commitReader(source: CommitSource): (context: ServerContext) => 
         if (!commit) return undefined;
         const changed = list(object(body)?.files).flatMap((file) => {
           const name = text(object(file)?.filename);
-          return name && (root === "" || name.startsWith(`${root}/`)) ? [vaultPath(name)] : [];
+          return name && inVault(name, root) ? [vaultPath(name)] : [];
         });
-        return { ...commit, files: commit.files ?? changed.sort() };
+        return { ...commit, files: changed.sort(), allFiles: !hasNextPage(response) };
       },
 
       async previous(path, sha) {

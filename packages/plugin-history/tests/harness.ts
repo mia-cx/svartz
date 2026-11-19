@@ -140,6 +140,25 @@ export const historyExchange = (path: string, commits: readonly TestCommit[], { 
   response: { status: 200, json: commits.map(listed), headers },
 });
 
+/** GitHub answering `GET /commits/<sha>` for `commit`, with its files, or their first page when `headers` link the next. */
+export const commitExchange = (commit: TestCommit, headers: Record<string, string> = {}): Exchange => ({
+  request: { method: "GET", url: `${API}/commits/${commit.sha}` },
+  authorization: `Bearer ${INSTALLATION_TOKEN}`,
+  response: { status: 200, json: listed(commit), headers },
+});
+
+/** GitHub's `Link` header on the first page of a commit's files, when it has more than one. */
+export const moreFiles = (sha: string) => ({
+  link: `<${API}/commits/${sha}?page=2>; rel="next", <${API}/commits/${sha}?page=2>; rel="last"`,
+});
+
+/** GitHub saying whether `main` holds commit `sha`: `ahead` (or `identical`) when it does. */
+export const compareExchange = (sha: string, status = "ahead"): Exchange => ({
+  request: { method: "GET", url: `${API}/compare/${sha}...main?per_page=1` },
+  authorization: `Bearer ${INSTALLATION_TOKEN}`,
+  response: { status: 200, json: { status, ahead_by: 1, behind_by: 0, total_commits: 1, commits: [], files: [] } },
+});
+
 /** GitHub answering `path` at commit `sha` with `markdown`. */
 export const contentExchange = (path: string, sha: string, markdown: string): Exchange => ({
   request: { method: "GET", url: `${API}/contents/${path}?ref=${sha}` },

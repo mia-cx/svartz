@@ -5,7 +5,8 @@
  * Rows are keyed by a scope, `<owner/name>:<vault folder>`, so vaults sharing a database never share rows. Within a
  * scope the mirror holds:
  *
- * - `submissions_commits`: commits on the content branch that touch the vault folder, with the files they changed in it.
+ * - `submissions_commits`: commits on the content branch that touch the vault folder, with the files they changed in it;
+ *   `files_complete = 0` when GitHub listed only part of them, as it does past 300 files.
  * - `submissions_pulls`: pull requests into the content branch. `in_vault` says whether one changes a file in the
  *   vault folder, `NULL` until the poll has read its files, `files_read` counting the pages read so far at its
  *   head; readers keep to `in_vault = 1`.
@@ -69,6 +70,7 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       committed_at TEXT NOT NULL,
       url TEXT NOT NULL,
       files TEXT,
+      files_complete INTEGER NOT NULL DEFAULT 1,
       PRIMARY KEY (scope, sha)
     )`,
     `CREATE INDEX IF NOT EXISTS submissions_commits_by_time ON submissions_commits (scope, committed_at)`,

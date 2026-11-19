@@ -34,9 +34,9 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
   const { repo, root, branch } = data.source;
   const repoPath = (path: string) => (root ? `${root}/${path}` : path);
 
-  /** A commit's summary, unless it changed a file the site doesn't publish, or files the mirror can't tell. */
+  /** A commit's summary, unless it changed a file the site doesn't publish, or files nobody listed in full. */
   const shownSummary = (commit: Commit) =>
-    commit.files !== null && commit.files.every((file) => published.has(file)) ? commit.summary : undefined;
+    commit.allFiles && commit.files !== null && commit.files.every((file) => published.has(file)) ? commit.summary : undefined;
 
   /** Every URL a page links to, from the plugin's own `context.base`: `<deployment base><mount>/_svartz/history`. */
   function urls(context: PageContext) {

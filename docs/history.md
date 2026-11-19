@@ -54,7 +54,7 @@ A save the site committed has the note its editor wrote as its summary; any othe
 History shows only what the site publishes:
 
 - A page that is hidden, private, a draft or password-protected has no history page, and Recent changes never lists it.
-- A commit that changed such a page shows no summary anywhere, since its message may name it. Neither does a commit whose files the mirror doesn't know yet, as with older changes read from GitHub.
+- A commit that changed such a page shows no summary anywhere, since its message may name it. Neither does a commit whose files aren't all known: one the mirror hasn't read yet, as with older changes read from GitHub, or one that changed more than 300 files, which GitHub lists only in part.
 - A revision whose frontmatter made it a draft, private or password-protected shows none of its content, even once the page is public: the diff says one of its revisions wasn't public.
 
 Which pages are published comes from the last build, so a page added since shows once the site rebuilds.

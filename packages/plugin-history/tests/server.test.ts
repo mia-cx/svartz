@@ -7,6 +7,8 @@ import {
   ADA,
   API,
   backfill,
+  commitExchange,
+  compareExchange,
   contentExchange,
   createSite,
   DIRECT_COMMIT,
@@ -16,6 +18,7 @@ import {
   GRACE as GRACE_SIGN_IN,
   historyExchange,
   INSTALLATION_TOKEN,
+  moreFiles,
   NOTE,
   replayGitHub,
   rows,
@@ -219,6 +222,48 @@ describe("/-/changes/", () => {
     ]);
     expect(changes!.html).toContain(`href="${HISTORY}?to=${saved.sha}">changes`);
     expect(changes!.html.toLowerCase()).not.toMatch(/secret|launch/);
+  });
+});
+
+describe("a commit GitHub lists more than a page of files for", () => {
+  // Its first page holds the public guide and files outside the vault; the hidden note is on the next.
+  const big: TestCommit = {
+    sha: "b16".padEnd(40, "0"),
+    message: "Plan the secret launch, and tidy the guide",
+    at: 20,
+    author: GRACE,
+    committer: GITHUB_WEB,
+    files: [GUIDE_PATH, ...Array.from({ length: 299 }, (_, index) => `assets/${index}.png`)],
+  };
+  const start: TestCommit = { sha: "5".repeat(40), message: "Start the guide", at: 0, author: GRACE, committer: GITHUB_WEB, files: [GUIDE_PATH] };
+
+  // Proves a commit whose files GitHub didn't list in full keeps its summary out, read from GitHub on a diff.
+  it("shows no summary on a diff of it read from GitHub", async () => {
+    const site = await createSite();
+    replayGitHub([
+      firstToken,
+      compareExchange(big.sha), commitExchange(big, moreFiles(big.sha)),
+      compareExchange(start.sha), commitExchange(start),
+      contentExchange(GUIDE_PATH, big.sha, "# Guide\n\nTidied.\n"), contentExchange(GUIDE_PATH, start.sha, "# Guide\n"),
+    ], INSTALLATION_TOKEN);
+
+    const diff = await site.page(`${HISTORY}?from=${start.sha}&to=${big.sha}`);
+
+    expect(text(diff!.html)).toContain("From 19 Nov 2026, 10:00 UTC Grace Hopper grace on GitHub Start the guide To 19 Nov 2026, 10:20 UTC Grace Hopper grace on GitHub Source");
+    expect(diff!.html.toLowerCase()).not.toContain("secret");
+  });
+
+  // Proves the mirror keeps a cut-short file list as a part, so its summary stays out of the history once backfilled.
+  it("shows no summary of it once the mirror has read its files", async () => {
+    const site = await createSite();
+    replayGitHub([firstToken, historyExchange(GUIDE_PATH, [big]), ...backfill([big]), commitExchange(big, moreFiles(big.sha))], INSTALLATION_TOKEN);
+    await site.page(HISTORY);
+    await site.settle();
+
+    replayGitHub([historyExchange(GUIDE_PATH, [big])], INSTALLATION_TOKEN);
+    const history = await site.page(HISTORY);
+
+    expect(rows(history)).toEqual(["19 Nov 2026, 10:20 UTC Grace Hopper grace on GitHub"]);
   });
 });
 
