@@ -7,7 +7,8 @@
  *
  * - `submissions_commits`: commits on the content branch that touch the vault folder, with the files they changed in it.
  * - `submissions_pulls`: pull requests into the content branch. `in_vault` says whether one changes a file in the
- *   vault folder, `NULL` until the poll reads its files; readers keep to `in_vault = 1`.
+ *   vault folder, `NULL` until the poll has read its files, `files_read` counting the pages read so far at its
+ *   head; readers keep to `in_vault = 1`.
  * - `submissions_reviews` and `submissions_comments`: what was said on those pull requests, `comments.kind` being
  *   `issue` (the conversation) or `review` (a diff line). Deleted comments stay as tombstones with an empty body.
  * - `submissions_runs`: workflow runs on the content branch, and `submissions_deployments`: deployments with their
@@ -86,6 +87,7 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       merged_at TEXT,
       merge_commit TEXT,
       in_vault INTEGER,
+      files_read INTEGER NOT NULL DEFAULT 0,
       reviews_synced_at TEXT,
       PRIMARY KEY (scope, number)
     )`,
@@ -229,7 +231,8 @@ export function writeCommit({ db, scope }: Mirror, commit: CommitRecord): Statem
 
 /**
  * A pull request, unless the mirror holds a newer update. `known` is its `in_vault` when it needs no lookup, as when
- * the vault is the whole repository; a new head commit forgets the old answer, since it may change other files.
+ * the vault is the whole repository; a new head commit forgets the old answer and the pages read toward it, since
+ * it may change other files.
  */
 export function writePull({ db, scope }: Mirror, pull: PullRecord, known: 1 | null): Statement {
   return db.prepare(`INSERT INTO submissions_pulls
@@ -240,7 +243,8 @@ export function writePull({ db, scope }: Mirror, pull: PullRecord, known: 1 | nu
       base_ref = excluded.base_ref, url = excluded.url, updated_at = excluded.updated_at, closed_at = excluded.closed_at,
       merged_at = COALESCE(submissions_pulls.merged_at, excluded.merged_at),
       merge_commit = COALESCE(submissions_pulls.merge_commit, excluded.merge_commit),
-      in_vault = CASE WHEN excluded.head_sha = submissions_pulls.head_sha THEN COALESCE(submissions_pulls.in_vault, excluded.in_vault) ELSE excluded.in_vault END
+      in_vault = CASE WHEN excluded.head_sha = submissions_pulls.head_sha THEN COALESCE(submissions_pulls.in_vault, excluded.in_vault) ELSE excluded.in_vault END,
+      files_read = CASE WHEN excluded.head_sha = submissions_pulls.head_sha THEN submissions_pulls.files_read ELSE 0 END
     WHERE excluded.updated_at >= submissions_pulls.updated_at`)
     .bind(
       scope, pull.number, pull.state, pull.title, pull.author, pull.headRef, pull.headSha, pull.baseRef, pull.url,

@@ -711,6 +711,30 @@ describe("the reconcile poll", () => {
     expect(again.pending).toEqual([]);
   });
 
+  it("keeps reading a pull request's files across polls until it finds the vault or the last page", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const site = await createSite();
+    const grace = await graceOpensPullRequest(site);
+    // 2,500 files outside the vault, then the guide.
+    const outside = (page: number) => Array.from({ length: 100 }, (_, index) => ({ filename: `assets/${page}-${index}.png`, status: "added" }));
+    quietGitHub({}, (path, query) => {
+      if (path !== "/pulls/42/files") return undefined;
+      const page = Number(query.get("page"));
+      return Response.json(page <= 25 ? outside(page) : [{ filename: "content/guide.md", status: "modified" }]);
+    });
+    await deliver(site, "pull_request", { action: "opened", number: 42, pull_request: pull(), repository, sender });
+
+    // The first poll's budget runs out first: still undecided.
+    await status(site, grace);
+    await site.settle();
+    expect(await site.rows("SELECT in_vault FROM submissions_pulls")).toEqual([{ in_vault: null }]);
+
+    vi.setSystemTime(Date.now() + 61_000);
+    await status(site, grace);
+    await site.settle();
+    expect(await site.rows("SELECT in_vault FROM submissions_pulls")).toEqual([{ in_vault: 1 }]);
+  });
+
   it("stops when GitHub's allowance runs low, and polls again only after it resets", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const site = await createSite();

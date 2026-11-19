@@ -52,8 +52,6 @@ export const MAX_REQUESTS = 30;
 export const RATE_LIMIT_RESERVE = 100;
 /** Items per list; also how far the first poll backfills. */
 const PAGE_SIZE = 100;
-/** Pages of a pull request's files read to tell whether it touches the vault. */
-const MAX_FILE_PAGES = 3;
 /** Rows of each kind a poll fills in at most, before the budget decides. */
 const FILL_BATCH = 10;
 const MS_PER_SECOND = 1000;
@@ -243,19 +241,21 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
     }
   }
 
-  /** Whether each pull request not yet known to touch the vault does, from its files at its head commit. */
+  /**
+   * Whether each pull request not yet known to touch the vault does, from its files at its head commit. Each page
+   * read is kept, so a scan the budget cuts short goes on from there next poll, and "no" waits for the last page.
+   */
   async function fillPullScopes() {
-    const unknown = await rows<{ number: number; head_sha: string }>(`SELECT number, head_sha FROM submissions_pulls
+    const unknown = await rows<{ number: number; head_sha: string; files_read: number }>(`SELECT number, head_sha, files_read FROM submissions_pulls
       WHERE scope = ? AND in_vault IS NULL ORDER BY updated_at DESC LIMIT ?`);
-    for (const { number, head_sha } of unknown) {
-      let touches = false;
-      for (let page = 1; page <= MAX_FILE_PAGES && !touches; page++) {
+    for (const { number, head_sha, files_read } of unknown) {
+      for (let page = files_read + 1, done = false; !done; page++) {
         const files = list((await get(`/pulls/${number}/files${query({ per_page: PAGE_SIZE, page })}`))?.body);
-        touches = files.some((file) => [object(file)?.filename, object(file)?.previous_filename].some((path) => typeof path === "string" && inVault(path, root)));
-        if (files.length < PAGE_SIZE) break;
+        const touches = files.some((file) => [object(file)?.filename, object(file)?.previous_filename].some((path) => typeof path === "string" && inVault(path, root)));
+        done = touches || files.length < PAGE_SIZE;
+        await mirror.db.prepare("UPDATE submissions_pulls SET in_vault = ?, files_read = ? WHERE scope = ? AND number = ? AND head_sha = ?")
+          .bind(done ? (touches ? 1 : 0) : null, page, mirror.scope, number, head_sha).run();
       }
-      await mirror.db.prepare("UPDATE submissions_pulls SET in_vault = ? WHERE scope = ? AND number = ? AND head_sha = ?")
-        .bind(touches ? 1 : 0, mirror.scope, number, head_sha).run();
     }
   }
 
