@@ -46,7 +46,8 @@ For a vault like `docs`, the CLI now prepares:
 ├── .svelte-kit/   # SvelteKit internal dev/build state for this vault only
 ├── artifacts/     # generated Svartz runtime modules and page artifacts
 ├── dist/          # final adapter output for static builds
-└── node_modules   # symlink to apps/web/node_modules for isolated prerender output
+├── node_modules   # symlink to apps/web/node_modules for isolated prerender output
+└── wrangler.jsonc # cloudflare-workers only: copy of apps/web's Wrangler config, which builds and deploys this vault
 ```
 
 The repository shell keeps parallel vault builds from sharing `apps/web/.svelte-kit`. Existing hosts keep their own `.svelte-kit` and adapter output; Svartz only creates the vault-scoped artifacts and dependency bridge.
@@ -63,5 +64,6 @@ The CLI derives and sets:
 - `SVARTZ_ARTIFACTS_MODULE_PATH`
 - `SVARTZ_HOST_MODULE_PATH` for the generated host registry, including single-vault builds
 - `SVARTZ_TAILWIND_SOURCES_PATH`
+- `SVARTZ_WRANGLER_CONFIG` for `cloudflare-workers`: the vault's copy of the shell's Wrangler config, handed to `adapter-cloudflare`
 
 For provider-style targets that rely on `adapter-auto`, the CLI also sets the matching platform environment variables for the selected vault before invoking Vite.
