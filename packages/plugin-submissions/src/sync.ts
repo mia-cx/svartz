@@ -213,8 +213,8 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     const since = new Date(Date.parse(landed) - CLOCK_SKEW_MS).toISOString();
     const branch = setup.branch ?? await readBranch(mirror);
     const signals = workflow
-      ? branch ? await workflowSignals(mirror, workflow, branch, since) : []
-      : await deploymentSignals(mirror, options.live.environment!, since);
+      ? branch ? await workflowSignals(mirror, workflow, branch, since, commit.sha) : []
+      : await deploymentSignals(mirror, options.live.environment!, since, commit.sha);
     const others = [...new Set(signals.map(({ sha }) => sha).filter((sha) => sha !== commit!.sha))];
     const verdicts = await readAncestry(mirror, commit.sha, others);
     const holding = signals.filter(({ sha }) => sha === commit!.sha || verdicts.get(sha) === true);

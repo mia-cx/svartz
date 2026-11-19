@@ -385,34 +385,53 @@ export interface Signal {
 const RUN_SUCCESS = new Set(["success"]);
 const RUN_FAILURE = new Set(["failure", "timed_out", "startup_failure"]);
 const DEPLOYMENT_FAILURE = new Set(["failure", "error"]);
-/** How many live signals since an edit landed are weighed; the most recent count. */
+/** How many recent live signals since an edit landed are weighed, and how many earlier successes besides. */
 const MAX_SIGNALS = 20;
 
 /**
- * The runs of `workflow` on `branch` made since `since`, newest first. A completed run that neither succeeded nor
- * failed (cancelled, skipped) says nothing about the edit and is left out.
+ * Signals from `candidates` (a query of `sha` and `created_at`, with `?1` the scope), newest first: the latest
+ * {@link MAX_SIGNALS}, and as many more where `succeeded` holds and GitHub hasn't said `sha` misses the commit bound
+ * as `?2`. A success stays evidence however many attempts follow it, and one known to miss makes room for the next.
  */
-export async function workflowSignals({ db, scope }: Mirror, workflow: string, branch: string, since: string): Promise<Signal[]> {
-  const { results } = await db.prepare(`SELECT head_sha, status, conclusion, created_at FROM submissions_runs
-    WHERE scope = ? AND workflow_path = ? AND head_branch = ? AND created_at >= ? ORDER BY created_at DESC LIMIT ?`)
-    .bind(scope, workflow, branch, since, MAX_SIGNALS)
-    .all<{ head_sha: string; status: string; conclusion: string | null; created_at: string }>();
-  return results.flatMap(({ head_sha, status, conclusion, created_at }): Signal[] => {
+const recentAndSucceeded = (candidates: string, succeeded: string) => `WITH candidates AS (${candidates})
+  SELECT * FROM (SELECT * FROM candidates ORDER BY created_at DESC LIMIT ?3)
+  UNION
+  SELECT * FROM (SELECT * FROM candidates WHERE ${succeeded} AND NOT EXISTS (SELECT 1 FROM submissions_ancestry
+    WHERE scope = ?1 AND ancestor = ?2 AND descendant = candidates.sha AND contains = 0) ORDER BY created_at DESC LIMIT ?3)
+  ORDER BY created_at DESC`;
+
+/**
+ * The runs of `workflow` on `branch` made since `since`, newest first, weighed for whether they put `commit` live. A
+ * completed run that neither succeeded nor failed (cancelled, skipped) says nothing about the edit and is left out.
+ */
+export async function workflowSignals({ db, scope }: Mirror, workflow: string, branch: string, since: string, commit: string): Promise<Signal[]> {
+  const { results } = await db.prepare(recentAndSucceeded(
+    `SELECT id, head_sha AS sha, status, conclusion, created_at FROM submissions_runs
+      WHERE scope = ?1 AND workflow_path = ?4 AND head_branch = ?5 AND created_at >= ?6`,
+    "status = 'completed' AND conclusion = 'success'",
+  ))
+    .bind(scope, commit, MAX_SIGNALS, workflow, branch, since)
+    .all<{ sha: string; status: string; conclusion: string | null; created_at: string }>();
+  return results.flatMap(({ sha, status, conclusion, created_at }): Signal[] => {
     const outcome = status !== "completed" ? "pending"
       : RUN_SUCCESS.has(conclusion ?? "") ? "success"
         : RUN_FAILURE.has(conclusion ?? "") ? "failure" : undefined;
-    return outcome ? [{ sha: head_sha, outcome, createdAt: created_at }] : [];
+    return outcome ? [{ sha, outcome, createdAt: created_at }] : [];
   });
 }
 
 /**
- * The deployments to `environment` made since `since`, newest first. One that ever succeeded is a success. One made
- * `inactive` without succeeding says nothing: GitHub lets a failed or unfinished deployment be deactivated too.
+ * The deployments to `environment` made since `since`, newest first, weighed for whether they put `commit` live. One
+ * that ever succeeded is a success. One made `inactive` without succeeding says nothing: GitHub lets a failed or
+ * unfinished deployment be deactivated too.
  */
-export async function deploymentSignals({ db, scope }: Mirror, environment: string, since: string): Promise<Signal[]> {
-  const { results } = await db.prepare(`SELECT sha, state, succeeded, created_at FROM submissions_deployments
-    WHERE scope = ? AND environment = ? AND created_at >= ? ORDER BY created_at DESC LIMIT ?`)
-    .bind(scope, environment, since, MAX_SIGNALS).all<{ sha: string; state: string | null; succeeded: number; created_at: string }>();
+export async function deploymentSignals({ db, scope }: Mirror, environment: string, since: string, commit: string): Promise<Signal[]> {
+  const { results } = await db.prepare(recentAndSucceeded(
+    `SELECT id, sha, state, succeeded, created_at FROM submissions_deployments
+      WHERE scope = ?1 AND environment = ?4 AND created_at >= ?5`,
+    "succeeded = 1",
+  ))
+    .bind(scope, commit, MAX_SIGNALS, environment, since).all<{ sha: string; state: string | null; succeeded: number; created_at: string }>();
   return results.flatMap(({ sha, state, succeeded, created_at }): Signal[] => {
     const outcome = succeeded ? "success" : DEPLOYMENT_FAILURE.has(state ?? "") ? "failure" : state === "inactive" ? undefined : "pending";
     return outcome ? [{ sha, outcome, createdAt: created_at }] : [];

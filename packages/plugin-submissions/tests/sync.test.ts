@@ -541,6 +541,31 @@ describe("an edit's status", () => {
     expect((await status(site, ada)).body).toMatchObject({ stage });
   });
 
+  it.each([
+    ["a workflow", { workflow: "deploy.yml" }, async (site: Site) => {
+      await deliver(site, "workflow_run", workflowRun("completed", run({ id: 900, status: "completed", conclusion: "success", created: at(10) })));
+      // Twenty runs cancelled since, which say nothing.
+      for (let index = 1; index <= 20; index++) {
+        await deliver(site, "workflow_run", workflowRun("completed", run({ id: 900 + index, status: "completed", conclusion: "cancelled", created: at(10 + index) })));
+      }
+    }],
+    ["an environment", { environment: "production" }, async (site: Site) => {
+      await deliver(site, "deployment_status", deploymentStatus({ id: 7, statusId: 70, created: at(10) }));
+      // Twenty deployments queued since.
+      for (let index = 1; index <= 20; index++) {
+        await deliver(site, "deployment_status", deploymentStatus({ id: 7 + index, statusId: 70 + index, state: "queued", created: at(10 + index) }));
+      }
+    }],
+  ] as const)("keeps an edit live through %s's success, however many attempts follow it", async (_case, live, deploy) => {
+    const site = await createSite({ live });
+    const ada = await adaCommits(site);
+    quietGitHub();
+
+    await deploy(site);
+
+    expect((await status(site, ada)).body).toMatchObject({ stage: "live" });
+  });
+
   it("finds that a failed deployment later succeeded, when its success was never delivered", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const site = await createSite({ live: { environment: "production" } });
