@@ -37,10 +37,13 @@ import { livePreview } from "./live-preview";
 import type { Preview, PreviewSource } from "./preview";
 import { wikilinkCompletion } from "./wikilinks";
 
-/** What the panel submits: an edit of a published note, or a new note in one of `folders`. */
+/**
+ * What the panel submits: an edit of a published note, or a new note in one of `folders`. A new note with a `title`
+ * keeps it, as the reader's own user page does.
+ */
 export type EditorTarget =
   | { readonly kind: "edit"; readonly page: string }
-  | { readonly kind: "new"; readonly folders: readonly string[] };
+  | { readonly kind: "new"; readonly folders: readonly string[]; readonly title?: string };
 
 export interface EditorInput {
   readonly target: EditorTarget;
@@ -348,8 +351,14 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
   const closers = dialog.querySelectorAll<HTMLButtonElement>("[data-close]");
   const title = dialog.querySelector<HTMLInputElement>('input[name="title"]');
   const folder = dialog.querySelector<HTMLSelectElement>('select[name="folder"]');
+  /** Whether the title is given, and the reader writes only the page. */
+  const fixedTitle = target.kind === "new" && target.title !== undefined;
   if (target.kind === "new") {
     folder?.append(...target.folders.map((path) => Object.assign(document.createElement("option"), { value: path, textContent: sectionName(path) })));
+    if (title && target.title !== undefined) {
+      title.value = target.title;
+      title.readOnly = true;
+    }
   }
   let turnstile: { api: Turnstile; id: string } | undefined;
   const draft = readDraft(endpoint, target);
@@ -537,7 +546,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
   function lock(locked: boolean) {
     view?.dispatch({ effects: editable.reconfigure(EditorView.editable.of(!locked)) });
     note.readOnly = locked;
-    if (title) title.readOnly = locked;
+    if (title) title.readOnly = locked || fixedTitle;
     if (folder) folder.disabled = locked;
   }
 
@@ -909,7 +918,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     } else if (draft) {
       offerDraft(draft, changed);
     } else {
-      (target.kind === "edit" ? view : title)?.focus();
+      (target.kind === "edit" || fixedTitle ? view : title)?.focus();
     }
   }
 
@@ -948,6 +957,8 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     void load(target.page);
   } else {
     showSource("");
+    // A given title already decides where the page goes.
+    if (fixedTitle) askDestination();
     begin();
   }
   if (turnstileSiteKey) void showChallenge(turnstileSiteKey);
