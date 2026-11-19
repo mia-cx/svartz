@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { chromium } from "playwright";
+import { writeKit2PluginPageRoute } from "./helpers/plugin-page-route";
 
 const execFileAsync = promisify(execFile);
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
@@ -74,11 +75,11 @@ async function createHost(base: string) {
   roots.push(root);
   await symlink(kit2Toolchain, path.join(root, "node_modules"), "dir");
   await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });
-  for (const name of ["+page.svelte", "+page.ts", "-/[...page]/+page.svelte", "-/[...page]/+page.ts", "-/[...page]/+page.server.ts"]) {
-    await mkdir(path.dirname(path.join(root, "src/routes/[...slug]", name)), { recursive: true });
+  for (const name of ["+page.svelte", "+page.ts"]) {
     await writeFile(path.join(root, "src/routes/[...slug]", name),
       await readFile(path.join(workspaceRoot, "packages/cli/template/src/routes/[...slug]", name)));
   }
+  await writeKit2PluginPageRoute(root);
   await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "svartz-host-auth", private: true, type: "module", devDependencies: { "@sveltejs/kit": "^2.0.0" } }));
   await writeFile(path.join(root, "vite.config.ts"), [
     "import { sveltekit } from '@sveltejs/kit/vite';",

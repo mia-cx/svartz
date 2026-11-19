@@ -8,6 +8,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
+import { PLUGIN_PAGE_ROUTE } from "./helpers/plugin-page-route";
 
 const execFileAsync = promisify(execFile);
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
@@ -72,6 +73,10 @@ async function createKit3Host(
   for (const [file, source] of Object.entries({ "+layout.js": "export const prerender = true;\n", ...routes })) {
     await mkdir(path.dirname(path.join(root, "src/routes", file)), { recursive: true });
     await writeFile(path.join(root, "src/routes", file), source);
+  }
+  // The plugin page route's param matchers, as `svartz init` writes them for SvelteKit 3.
+  if (Object.keys(routes).some((file) => file.startsWith(PLUGIN_PAGE_ROUTE))) {
+    await writeFile(path.join(root, "src/params.ts"), await readFile(path.join(workspaceRoot, "packages/cli/template/src/params.ts")));
   }
   await writeFile(path.join(root, "vault/intro.md"), "---\ntitle: Kit three lesson\n---\n# Kit three lesson\n\nLESSON_BODY_MARKER\n");
   await writeFile(path.join(root, "svartz.config.ts"), `export default {
@@ -149,12 +154,14 @@ kit3("prerenders a SvelteKit 3 host that reads the published index without compi
   }
 }, 240_000);
 
-/** The init catchall's route files, its plugin page route under `/-/` included, keyed by path under `src/routes`. */
+/** The init catchall's route files and its plugin page route under `/-/`, keyed by path under `src/routes`. */
 async function initRoutes(): Promise<Record<string, string>> {
   const routesRoot = path.join(workspaceRoot, "packages/cli/template/src/routes");
   const routes: Record<string, string> = {};
-  for (const file of await filesUnder(path.join(routesRoot, "[...slug]"))) {
-    routes[path.relative(routesRoot, file)] = await readFile(file, "utf8");
+  for (const route of ["[...slug]", PLUGIN_PAGE_ROUTE]) {
+    for (const file of await filesUnder(path.join(routesRoot, route))) {
+      routes[path.relative(routesRoot, file)] = await readFile(file, "utf8");
+    }
   }
   return routes;
 }
@@ -223,12 +230,18 @@ kit3("renders a plugin page in the theme shell of a SvelteKit 3 host, from its b
       : undefined,
   });\n`);
 
-  // The production build bundles the page into the worker and prerenders nothing under /-/.
+  // A note in a folder named `-`: no plugin claims `guide`, so it stays a note beside the plugin's page.
+  await mkdir(path.join(root, "vault/-"));
+  await writeFile(path.join(root, "vault/-/guide.md"), "# Dash guide\n\nDASH_NOTE_MARKER\n");
+
+  // The production build bundles the page into the worker and prerenders the note under /-/, but no plugin page.
   await build(root);
   const server = path.join(root, ".svelte-kit/output/server");
   const bundled = await Promise.all((await filesUnder(server)).map((file) => readFile(file, "utf8")));
   expect(bundled.some((source) => source.includes("greeter-page"))).toBe(true);
-  expect((await filesUnder(path.join(root, ".svelte-kit/cloudflare"))).filter((file) => file.includes(`${path.sep}-${path.sep}`))).toEqual([]);
+  const emitted = await filesUnder(path.join(root, ".svelte-kit/cloudflare"));
+  expect(emitted.filter((file) => file.includes(`${path.sep}greet`))).toEqual([]);
+  expect(await readFile(path.join(root, ".svelte-kit/cloudflare/learn/course/-/guide.html"), "utf8")).toContain("DASH_NOTE_MARKER");
 
   // Svartz reads bindings through wrangler's getPlatformProxy; this one answers without starting workerd.
   await writeFile(path.join(root, "wrangler.json"), "{}\n");
@@ -256,6 +269,9 @@ kit3("renders a plugin page in the theme shell of a SvelteKit 3 host, from its b
     expect(html).toContain("<title>Greetings | Course index</title>");
     expect(html).toContain('id="explorer-panel"');
     expect(response!.headers.get("cache-control")).toBe("private, no-store");
+    // Dev loads the matchers through Vite, and still leaves the note in a folder named `-` to the catchall.
+    const note = await fetch(`http://127.0.0.1:${port}/learn/course/-/guide`);
+    expect([note.status, await note.text()]).toEqual([200, expect.stringContaining("DASH_NOTE_MARKER")]);
   } finally {
     dev.kill("SIGTERM");
     if (dev.exitCode === null) await once(dev, "exit");

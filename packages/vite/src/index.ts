@@ -30,11 +30,13 @@ import {
 } from "./virtual-modules";
 import {
   createArtifactsVirtualModuleSource,
+  createPluginPagesModuleSource,
   createServerRegistrySource,
   getGeneratedArtifactsRoot,
   getGeneratedIndexModulePath,
   getGeneratedPageModulePath,
   getGeneratedPagesRoot,
+  getGeneratedPluginPagesModulePath,
   getGeneratedRuntimeArtifactsModulePath,
   getGeneratedRuntimeServerModulePath,
   getGeneratedRuntimeThemeModulePath,
@@ -206,7 +208,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     const owner = plugins.find((plugin) => plugin.server?.pages?.length)!;
     return [
       `Vault "${context.config.id}" activates plugin "${owner.id}", which renders pages under /-/, but no route in the host app renders them.`,
-      "Run `npx svartz init` to add src/routes/[...slug]/-/[...page]/, or copy it from the docs (host-vaults.md#plugin-pages).",
+      "Run `npx svartz init` to add src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/ and its param matchers, or copy them from the docs (host-vaults.md#plugin-pages).",
     ].join("\n");
   }
 
@@ -242,6 +244,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       getGeneratedRuntimeThemeModulePath(context.config),
       getGeneratedRuntimeArtifactsModulePath(context.config),
       getGeneratedRuntimeServerModulePath(context.config),
+      getGeneratedPluginPagesModulePath(context.config),
       getGeneratedIndexModulePath(context.config),
       getGeneratedSearchModulePath(context.config),
       ...emittedArtifacts.map((artifact) => artifact.path),
@@ -341,6 +344,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
               serverRuntime(),
             ),
           ),
+          writeGeneratedModule(getGeneratedPluginPagesModulePath(context.config), createPluginPagesModuleSource(plugins)),
         ],
         { concurrency: "unbounded", discard: true },
       ),
@@ -605,6 +609,7 @@ export {
   getGeneratedHostRegistryPath,
   getGeneratedHostServerPath,
   getGeneratedHostStylesPath,
+  isSvelteKit3,
   svelteKitBasePath,
   svelteKitPaths,
   clearPublicAssets,

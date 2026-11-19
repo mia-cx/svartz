@@ -6,11 +6,13 @@ import {
   open,
   readFile,
   readdir,
+  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isSvelteKit3 } from "@svartz/vite";
 import { Data, Effect, Either } from "effect";
 import { resolveAppLocation } from "./workspace";
 
@@ -145,7 +147,8 @@ async function templateFiles(
   directory = templateRoot,
   relative = "",
 ): Promise<string[]> {
-  const entries = await readdir(directory, { withFileTypes: true });
+  const entries = (await readdir(directory, { withFileTypes: true }))
+    .filter((entry) => relative || entry.name !== KIT2_TEMPLATE_DIRNAME);
   const files = await Promise.all(
     entries.map(async (entry) => {
       const name = path.join(relative, entry.name);
@@ -155,6 +158,45 @@ async function templateFiles(
     }),
   );
   return files.flat().sort();
+}
+
+const PAGE_ROUTE_FILES = ["+page.svelte", "+page.ts", "+page.server.ts"] as const;
+/** Files only SvelteKit 2 hosts get; a new project runs SvelteKit 3, so its scaffold leaves them out. */
+const KIT2_TEMPLATE_DIRNAME = "sveltekit-2";
+const kit2TemplateRoot = path.join(templateRoot, KIT2_TEMPLATE_DIRNAME);
+
+/**
+ * Whether `src/routes/[...slug]/-/` holds the plugin page route init wrote before param matchers, unchanged
+ * ("generated"), something the host wrote ("host"), or nothing.
+ */
+async function isEarlierPageRoute(directory: string, templates: readonly string[]): Promise<"absent" | "generated" | "host"> {
+  if (!existsSync(directory)) return "absent";
+  const route = path.join(directory, "[...page]");
+  const entries = await readdir(directory);
+  const files = existsSync(route) ? (await readdir(route)).sort() : [];
+  if (entries.length !== 1 || files.join() !== [...PAGE_ROUTE_FILES].sort().join()) return "host";
+  const sources = await Promise.all(PAGE_ROUTE_FILES.map((name) => readFile(path.join(route, name), "utf8")));
+  return sources.every((source, index) => source === templates[index]) ? "generated" : "host";
+}
+
+/**
+ * The param matcher files the plugin page route needs that the host lacks, as `[destination, template]` pairs:
+ * SvelteKit 3 reads one `params` export from `src/params`, SvelteKit 2 one `match` file per matcher in `src/params/`.
+ * `undefined` when a SvelteKit 3 host's own `src/params` defines neither matcher, since init can't merge into it.
+ */
+async function missingParamMatchers(root: string): Promise<[string, string][] | undefined> {
+  if (!isSvelteKit3(root)) {
+    return ["svartzMount", "svartzPage"]
+      .map((name) => path.join("src", "params", `${name}.ts`))
+      .filter((file) => !existsSync(path.join(root, file)))
+      .map((file) => [file, path.join(kit2TemplateRoot, file)]);
+  }
+  const entry = ["params.ts", "params.js", "params/index.ts", "params/index.js"]
+    .map((file) => path.join(root, "src", file))
+    .find(existsSync);
+  if (!entry) return [[path.join("src", "params.ts"), path.join(templateRoot, "src", "params.ts")]];
+  const source = await readFile(entry, "utf8");
+  return source.includes("svartzMount") && source.includes("svartzPage") ? [] : undefined;
 }
 
 /** Select the package manager declared by an existing project or its lockfile. */
@@ -535,11 +577,23 @@ const initProjectEffect = (
       const svelteConfigSource = svelteConfigPath
         ? yield* operation("read host Svelte config", () => readFile(svelteConfigPath, "utf8"))
         : "";
-      // Plugin pages under /-/ render through their own route; a host that has one keeps it as it is. A static host
-      // can't serve them, and adapter-static without a fallback refuses a route that isn't prerendered.
-      const pageRoute = path.join("src", "routes", "[...slug]", "-", "[...page]");
+      // Plugin pages under /-/ render through their own route, whose param matchers leave every path no plugin claims,
+      // such as a note in a folder named `-`, to the catchall. A host that has the route keeps it as it is. A static
+      // host can't serve plugin pages, and adapter-static without a fallback refuses a route that isn't prerendered.
+      const pageRoute = path.join("src", "routes", "[...mount=svartzMount]", "-", "[...page=svartzPage]");
+      const pageRouteTemplates = yield* operation("read plugin page route templates", () =>
+        Promise.all(PAGE_ROUTE_FILES.map((name) => readFile(path.join(templateRoot, pageRoute, name), "utf8"))),
+      );
+      // The route before the matchers answered every path with a `-` segment. Replace it where init wrote it unchanged.
+      const earlierPageRoot = path.join(catchallRoot, "-");
+      const earlierPageRoute = yield* operation("inspect earlier plugin page route", () =>
+        isEarlierPageRoute(earlierPageRoot, pageRouteTemplates),
+      );
+      const params = yield* operation("inspect host param matchers", () => missingParamMatchers(root));
       const installPageRoute = !existsSync(path.join(root, pageRoute))
-        && !`${viteSource}\n${svelteConfigSource}`.includes("@sveltejs/adapter-static");
+        && !`${viteSource}\n${svelteConfigSource}`.includes("@sveltejs/adapter-static")
+        && (earlierPageRoute === "generated" || earlierPageRoute === "absent")
+        && params !== undefined;
       const integratedViteSource = integrateViteConfig(
         viteSource,
         location.viteConfigPath,
@@ -625,13 +679,16 @@ const initProjectEffect = (
         }
       }
       if (installPageRoute) {
-        for (const name of ["+page.svelte", "+page.ts", "+page.server.ts"]) {
-          const source = yield* operation(`read plugin page ${name} template`, () =>
-            readFile(path.join(templateRoot, pageRoute, name), "utf8"),
-          );
+        if (earlierPageRoute === "generated")
+          yield* operation("remove earlier plugin page route", () => rm(earlierPageRoot, { recursive: true }));
+        for (const [index, name] of PAGE_ROUTE_FILES.entries()) {
           yield* operation(`write plugin page ${name}`, () =>
-            writeNewFile(path.join(root, pageRoute, name), source),
+            writeNewFile(path.join(root, pageRoute, name), pageRouteTemplates[index]!),
           );
+        }
+        for (const [destination, template] of params ?? []) {
+          const source = yield* operation(`read ${destination} template`, () => readFile(template, "utf8"));
+          yield* operation(`write ${destination}`, () => writeNewFile(path.join(root, destination), source));
         }
       }
       if (installCatchallServer)

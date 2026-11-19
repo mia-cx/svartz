@@ -68,7 +68,7 @@ Errors the handler throws reach SvelteKit's `handleError` and answer 500.
 
 A plugin page is a page a server plugin renders on every request, inside the theme's shell: the site's header, explorer and search stay put, and the plugin supplies the body. `@svartz/auth`'s [`/-/account/`](auth.md#the-account-page) is one.
 
-Claim page names with `server.pages`. Each name owns `<base><mount>/-/<name>/` and every path below it, so `history` covers `/-/history/notes/intro/` too. A name follows the plugin id rules, and no two plugins on a vault may claim the same one; the build fails naming both. A vault that claims pages may not publish notes under `<mount>/-/`; the build fails naming the note.
+Claim page names with `server.pages`. Each name owns `<base><mount>/-/<name>/` and every path below it, so `history` covers `/-/history/notes/intro/` too. A name follows the plugin id rules, and no two plugins on a vault may claim the same one; the build fails naming both. A vault may not publish a note under a name one of its plugins claims, such as `-/account/settings.md` beside `account`; the build fails naming the note. Every other note under `<mount>/-/`, such as `-/guide.md`, stays a note.
 
 ```ts
 plugins: [{
@@ -107,7 +107,7 @@ Plugin pages are never prerendered, never cached (`Cache-Control: private, no-st
 
 Style plugin pages with a [browser resource](../vaults/docs/guides/create-plugin.md) of `kind: "css"`, using the theme's `--sv-*` tokens so they follow the site's colours in both modes.
 
-The standalone shell renders plugin pages through its `src/routes/[...slug]/-/[...page]/` route. A host app needs the same route: `npx svartz init` adds it, and [host vaults](host-vaults.md#plugin-pages) shows it. A host build whose vault claims pages fails when no route renders them.
+The standalone shell renders plugin pages through its `src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/` route, whose param matchers send it only the names plugins claim. A host app needs the same route and matchers: `npx svartz init` adds it, and [host vaults](host-vaults.md#plugin-pages) shows it. A host build whose vault claims pages fails when no route renders them.
 
 ## Options and secrets
 

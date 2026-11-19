@@ -201,4 +201,8 @@ declare module 'virtual:svartz/host' {
 	export function prepareHostVault(pathname: string): Promise<PreparedHostVault | undefined>;
 	/** Built CSS assets needed by a direct SSR response for the selected vault. */
 	export function hostStylesheets(pathname: string): readonly string[];
+	/** The `svartzMount` param matcher: whether `param` is the mount, without its leading slash, of a vault with plugin pages. */
+	export function isPluginPageMount(param: string): boolean;
+	/** The `svartzPage` param matcher: whether a plugin claims the first segment of `param`, the path below `/-/`. */
+	export function isPluginPageName(param: string): boolean;
 }

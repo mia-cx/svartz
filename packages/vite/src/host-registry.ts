@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import type { ResolvedConfig } from "@svartz/core";
 import {
   getGeneratedIndexModulePath,
+  getGeneratedPluginPagesModulePath,
   getGeneratedRuntimeArtifactsModulePath,
   getGeneratedRuntimeServerModulePath,
   getGeneratedRuntimeThemeModulePath,
@@ -62,12 +63,13 @@ export function createHostIndexSource(vaults: readonly ResolvedConfig[], kitBase
  * It also exports SvelteKit's `base` and `assets`, which SvelteKit 3's `$app/paths` no longer does.
  */
 export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitPaths?: SvelteKitPaths): string {
-  const imports = vaults.map((vault, index) =>
-    `import * as index${index} from ${JSON.stringify(getGeneratedIndexModulePath(vault))};`
-  );
+  const imports = vaults.flatMap((vault, index) => [
+    `import * as index${index} from ${JSON.stringify(getGeneratedIndexModulePath(vault))};`,
+    `import { pluginPages as pages${index} } from ${JSON.stringify(getGeneratedPluginPagesModulePath(vault))};`,
+  ]);
   const records = vaults.map((vault, index) => {
     const { favicon: _favicon, ...siteConfig } = vault.site;
-    return `  { id: ${JSON.stringify(vault.id)}, mountPath: ${JSON.stringify(vault.mountPath)}, basePath: ${JSON.stringify(deploymentBasePath(vault, kitPaths?.base))}, artifacts: { index: index${index}.index, siteConfig: ${JSON.stringify(siteConfig)} }, theme: undefined },`;
+    return `  { id: ${JSON.stringify(vault.id)}, mountPath: ${JSON.stringify(vault.mountPath)}, basePath: ${JSON.stringify(deploymentBasePath(vault, kitPaths?.base))}, pluginPages: pages${index}, artifacts: { index: index${index}.index, siteConfig: ${JSON.stringify(siteConfig)} }, theme: undefined },`;
   });
   const loaders = vaults.map((vault) => `  () => Promise.all([import(${JSON.stringify(getGeneratedRuntimeArtifactsModulePath(vault))}), import(${JSON.stringify(getGeneratedRuntimeThemeModulePath(vault))})]),`);
   return [
@@ -83,6 +85,11 @@ export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitP
     "  all: [...new Set(vaults.flatMap((vault) => vault.artifacts.index.routes.all))],",
     "  redirects: Object.assign({}, ...vaults.map((vault) => vault.artifacts.index.routes.redirects)),",
     "};",
+    "// The plugin page route, `[...mount=svartzMount]/-/[...page=svartzPage]`, matches only the mount of a vault with",
+    "// plugin pages and a page name one claims, so any other path, a note in a folder named `-` included, stays a note.",
+    "const pageVaults = vaults.filter((vault) => vault.pluginPages.length > 0);",
+    "export const isPluginPageMount = (param) => pageVaults.some((vault) => vault.mountPath === (param && `/${param}`));",
+    "export const isPluginPageName = (param) => pageVaults.some((vault) => vault.pluginPages.includes(param.split('/', 1)[0]));",
     "function findHostVault(pathname) {",
     "  return vaults.find(({ mountPath }) => {",
     "    return pathname === mountPath || pathname.startsWith(`${mountPath}/`);",

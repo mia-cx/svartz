@@ -143,15 +143,17 @@ function hasPluginPages(plugins: readonly NormalizedSvartzPlugin[]): boolean {
 }
 
 /**
- * Plugin pages own `<mount>/-/`, so a published note there would be shadowed at runtime. Fail the build naming it.
- * `routes` are the vault's published routes, mount path included.
+ * A page name owns `<mount>/-/<name>/` and everything below it, so a published note there would be shadowed at
+ * runtime: fail the build naming it. Notes elsewhere under `<mount>/-/` stay notes. `routes` are the vault's
+ * published routes, mount path included.
  */
 function assertNoNotesUnderPages(config: ResolvedConfig, plugins: readonly NormalizedSvartzPlugin[], routes: readonly string[]): void {
-  if (!hasPluginPages(plugins)) return;
-  const prefix = `${config.mountPath}/${PAGE_ROUTE_SEGMENT}/`;
-  const shadowed = routes.find((route) => route.startsWith(prefix));
-  if (shadowed) {
-    throw new Error(`Vault "${config.id}" publishes ${shadowed}, but plugin pages own ${prefix}. Rename the note's folder or slug.`);
+  for (const name of plugins.flatMap(({ server }) => server?.pages ?? [])) {
+    const prefix = `${config.mountPath}/${PAGE_ROUTE_SEGMENT}/${name}/`;
+    const shadowed = routes.find((route) => route.startsWith(prefix));
+    if (shadowed) {
+      throw new Error(`Vault "${config.id}" publishes ${shadowed}, but a plugin page owns ${prefix}. Rename the note's folder or slug.`);
+    }
   }
 }
 

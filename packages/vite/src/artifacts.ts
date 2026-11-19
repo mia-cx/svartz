@@ -10,6 +10,7 @@ const GENERATED_SEARCH_BASENAME = "search.ts" as const;
 const GENERATED_RUNTIME_THEME_BASENAME = "runtime-theme.ts" as const;
 const GENERATED_RUNTIME_ARTIFACTS_BASENAME = "runtime-artifacts.ts" as const;
 const GENERATED_RUNTIME_SERVER_BASENAME = "runtime-server.ts" as const;
+const GENERATED_PLUGIN_PAGES_BASENAME = "plugin-pages.ts" as const;
 
 function getVaultBuildRoot(config: ResolvedConfig): string {
   return resolve(config.outDir, "..");
@@ -48,6 +49,18 @@ function getGeneratedPageModulePath(
 
 function getGeneratedRuntimeServerModulePath(config: ResolvedConfig): string {
   return join(getGeneratedArtifactsRoot(config), GENERATED_RUNTIME_SERVER_BASENAME);
+}
+
+function getGeneratedPluginPagesModulePath(config: ResolvedConfig): string {
+  return join(getGeneratedArtifactsRoot(config), GENERATED_PLUGIN_PAGES_BASENAME);
+}
+
+/**
+ * The page names the vault's plugins claim under `/-/`, which `virtual:svartz/host` reads so the plugin page route's
+ * param matchers can tell a plugin page from a note in a folder named `-`, on the server and in the browser.
+ */
+function createPluginPagesModuleSource(plugins: readonly NormalizedSvartzPlugin[]): string {
+  return `export const pluginPages = ${JSON.stringify(plugins.flatMap(({ server }) => server?.pages ?? []))};\n`;
 }
 
 function resolveCoreModuleId(): string {
@@ -265,6 +278,7 @@ function createArtifactsVirtualModuleSource(
 
 export {
   createArtifactsVirtualModuleSource,
+  createPluginPagesModuleSource,
   createServerRegistrySource,
   GENERATED_ARTIFACTS_DIRNAME,
   GENERATED_INDEX_BASENAME,
@@ -276,6 +290,7 @@ export {
   getGeneratedIndexModulePath,
   getGeneratedPageModulePath,
   getGeneratedPagesRoot,
+  getGeneratedPluginPagesModulePath,
   getGeneratedRuntimeArtifactsModulePath,
   getGeneratedRuntimeServerModulePath,
   getGeneratedRuntimeThemeModulePath,

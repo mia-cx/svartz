@@ -1,14 +1,17 @@
 ---
 description: Plugin pages under /-/ render through their own route and component, never through note rendering
-globs: packages/ui/src/lib/runtime/**, packages/core/src/plugin/server.ts, apps/web/src/routes/**, packages/cli/template/src/routes/**
+globs: packages/ui/src/lib/runtime/**, packages/core/src/plugin/server.ts, apps/web/src/routes/**, apps/web/src/params.ts, packages/cli/template/**, packages/vite/src/host-registry.ts
 alwaysApply: false
 ---
 
 # Plugin pages
 
-Server plugins render pages at `<base><mount>/-/<name>/` (`server.pages`, factory `{ handle, page }`). `createServer` in `@svartz/core` builds the handle and `svartzPage`; the route `src/routes/[...slug]/-/[...page]/` calls `svartzPage` from its server `load` and renders `SvartzPluginPage`.
+Server plugins render pages at `<base><mount>/-/<name>/` (`server.pages`, factory `{ handle, page }`). `createServer` in `@svartz/core` builds the handle and `svartzPage`; the route `src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/` calls `svartzPage` from its server `load` and renders `SvartzPluginPage`.
+
+- The route's param matchers (`isPluginPageMount`, `isPluginPageName` in `virtual:svartz/host`, fed by each vault's generated `plugin-pages.ts`) are what keep notes in folders named `-` on the catchall. Never give the route an unmatched `[...slug]` or `[...page]`: SvelteKit prefers `[...x]/-/…` to `[...slug]`, and the route's 404 would hide the note.
+- SvelteKit 3 imports `src/params.ts` in plain Node during `vite build` to check the matcher names, so it may not import a virtual module statically; it loads `virtual:svartz/host` only when `import.meta.env` exists. SvelteKit 2 reads one `match` file per matcher in `src/params/` (`packages/cli/template/sveltekit-2/`, which the scaffold skips).
 
 - Never add a branch, `{#if}` or prop-driven markup for plugin pages to `SvartzVaultPage` or `SvartzRuntimePage`. Every block adds hydration markers to every prerendered note, and the contract is that vaults without plugin pages prerender unchanged. Plugin page rendering belongs in `SvartzPluginPage`.
-- Prove "unchanged output" by building the same vault on the base commit and the branch and diffing after normalizing build-specific values: `_app/immutable` names, SvelteKit's version and `__sveltekit_<hash>`, `svelte-<hash>` classes and `<!--hash-->` ids (they depend on the checkout path), CSP script hashes, and timestamps. Give both vault copies the same mtimes; equal dates order notes by mtime. The new route adds one shared `modulepreload` link; nothing else may differ.
+- Prove "unchanged output" by building the same vault on the base commit and the branch and diffing after normalizing build-specific values: `_app/immutable` names, SvelteKit's version and `__sveltekit_<hash>`, `svelte-<hash>` classes and `<!--hash-->` ids (they depend on the checkout path), CSP script hashes, and timestamps. Give both vault copies the same mtimes; equal dates order notes by mtime. Include a note in a folder named `-` in the vault. The route and its matchers add `modulepreload` links and shift the catchall's node id in each page's hydration data; nothing else may differ.
 - The page route must keep `prerender = false`; adapter-static without a `fallback` refuses it, so `svartz init` skips it in static hosts.
 - Pages are GET-only. Forms post to the plugin's `/_svartz/<id>/` routes and redirect back with a 303.

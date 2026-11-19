@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runStages, type PluginContext, type ResolvedConfig, type SvartzPlugin, type SvartzTheme } from "@svartz/core";
-import { resolveRuntimePlugins } from "../src/plugins";
+import { assertNoNotesUnderPages, resolveRuntimePlugins } from "../src/plugins";
 
 function config(plugins: SvartzPlugin[] = []): ResolvedConfig {
   return { plugins } as unknown as ResolvedConfig;
@@ -155,6 +155,18 @@ describe("server plugins", () => {
     const other = { id: "other", server: { module: "/plugins/other/server.js", pages: ["account"] } } as SvartzPlugin;
     expect(() => resolveRuntimePlugins(vault("node", [hello({ pages: ["account"] }), other])))
       .toThrow('Vault "wiki": plugins "hello" and "other" both claim the page /-/account/.');
+  });
+
+  // Proves a claimed page name shadows only the notes below it: other notes under `/-/` keep their routes.
+  it("fails a build that publishes a note under a page a plugin claims, naming the note", () => {
+    const docs = { ...vault("node", [hello({ pages: ["account"] })]), mountPath: "/docs" } as ResolvedConfig;
+    const plugins = resolveRuntimePlugins(docs);
+    expect(() => assertNoNotesUnderPages(docs, plugins, ["/docs/-/guide/", "/docs/guides/-/account/", "/docs/-/accounts/"]))
+      .not.toThrow();
+    for (const note of ["/docs/-/account/", "/docs/-/account/settings/"]) {
+      expect(() => assertNoNotesUnderPages(docs, plugins, ["/docs/", note]))
+        .toThrow(`Vault "wiki" publishes ${note}, but a plugin page owns /docs/-/account/.`);
+    }
   });
 
   it("refuses ids that can't be a URL path segment and relative modules", () => {
