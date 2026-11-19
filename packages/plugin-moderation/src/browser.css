@@ -1,0 +1,309 @@
+/*
+ * The report dialog and the Reports panel. They follow theme-minimal's tokens (`--sv-*`), as the sign-in dialog and
+ * the dashboard do; a host page without them falls back to system colours. The panel is `.sv-account.sv-dashboard`
+ * too, so its buttons, messages and muted text come from `@svartz/auth`'s stylesheet.
+ */
+.sv-moderation-dialog {
+	inline-size: min(26rem, calc(100vw - 2rem));
+	/* Page resets zero the UA margin that centres a modal dialog. */
+	margin: auto;
+	padding: 0;
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	border-radius: var(--sv-radius-l, 10px);
+	background: var(--sv-paper, Canvas);
+	color: var(--sv-text, CanvasText);
+	box-shadow: var(--sv-shadow, 0 12px 32px -8px oklch(0 0 0 / 0.3));
+	font-family: var(--sv-font-sans, system-ui, sans-serif);
+	font-size: var(--sv-step-0, 1rem);
+}
+
+.sv-moderation-dialog::backdrop {
+	background: var(--sv-scrim, oklch(0 0 0 / 0.4));
+	backdrop-filter: blur(4px);
+}
+
+.sv-moderation-dialog[open] {
+	animation: sv-moderation-in var(--sv-duration, 200ms) var(--sv-ease, ease-out);
+}
+
+@keyframes sv-moderation-in {
+	from {
+		opacity: 0;
+		translate: 0 -0.5rem;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sv-moderation-dialog[open] {
+		animation: none;
+	}
+}
+
+.sv-moderation-dialog :focus-visible {
+	outline: var(--sv-focus-width, 2px) solid var(--sv-accent, Highlight);
+	outline-offset: var(--sv-focus-offset, 2px);
+}
+
+.sv-moderation-body {
+	display: grid;
+	gap: var(--sv-space-4, 1rem);
+	padding: var(--sv-space-5, 1.5rem);
+}
+
+.sv-moderation-body p {
+	margin: 0;
+}
+
+.sv-moderation-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--sv-space-3, 0.75rem);
+}
+
+.sv-moderation-title {
+	margin: 0;
+	color: var(--sv-ink, CanvasText);
+	font-size: var(--sv-step-2, 1.44rem);
+	font-weight: 700;
+	line-height: var(--sv-leading-tight, 1.15);
+}
+
+.sv-moderation-close {
+	display: inline-grid;
+	place-items: center;
+	inline-size: 2.25rem;
+	block-size: 2.25rem;
+	margin-inline-end: calc(-1 * var(--sv-space-2, 0.5rem));
+	padding: 0;
+	border: 0;
+	border-radius: var(--sv-radius-m, 6px);
+	background: transparent;
+	color: var(--sv-muted, GrayText);
+	cursor: pointer;
+}
+
+.sv-moderation-close:hover {
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+	color: var(--sv-text, CanvasText);
+}
+
+.sv-moderation-close svg {
+	inline-size: 1.25rem;
+	block-size: 1.25rem;
+}
+
+.sv-moderation-subject {
+	color: var(--sv-muted, GrayText);
+	overflow-wrap: anywhere;
+}
+
+.sv-moderation-choices {
+	display: grid;
+	gap: var(--sv-space-1, 0.25rem);
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.sv-moderation-choices legend,
+.sv-moderation-field label {
+	margin-block-end: var(--sv-space-1, 0.25rem);
+	padding: 0;
+	color: var(--sv-ink, CanvasText);
+	font-weight: 600;
+}
+
+.sv-moderation-choice {
+	display: flex;
+	align-items: center;
+	gap: var(--sv-space-2, 0.5rem);
+	min-block-size: 2.25rem;
+}
+
+.sv-moderation-choice input {
+	inline-size: 1.125rem;
+	block-size: 1.125rem;
+	margin: 0;
+	accent-color: var(--sv-accent, AccentColor);
+}
+
+.sv-moderation-field {
+	display: grid;
+}
+
+.sv-moderation-reason-input {
+	box-sizing: border-box;
+	inline-size: 100%;
+	min-block-size: 6rem;
+	padding: var(--sv-space-2, 0.5rem) var(--sv-space-3, 0.75rem);
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
+	border-radius: var(--sv-radius-m, 6px);
+	background: var(--sv-sunken, Field);
+	color: var(--sv-ink, FieldText);
+	font: inherit;
+	resize: vertical;
+}
+
+.sv-moderation-dialog .sv-moderation-reason-input:focus-visible {
+	outline-offset: 0;
+}
+
+.sv-moderation-reason-input[aria-invalid="true"] {
+	border-color: light-dark(oklch(0.53 0.15 var(--sv-hue-red, 25)), oklch(0.76 0.12 var(--sv-hue-red, 25)));
+}
+
+.sv-moderation-problem {
+	color: light-dark(oklch(0.45 0.15 var(--sv-hue-red, 25)), oklch(0.8 0.1 var(--sv-hue-red, 25)));
+	font-size: var(--sv-step--1, 0.875rem);
+}
+
+.sv-moderation-problem:empty {
+	display: none;
+}
+
+.sv-moderation-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: var(--sv-space-2, 0.5rem);
+}
+
+.sv-moderation-button {
+	min-block-size: 2.75rem;
+	padding-inline: var(--sv-space-4, 1rem);
+	border: var(--sv-rule-width, 1px) solid var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
+	border-radius: var(--sv-radius-m, 6px);
+	background: var(--sv-paper, Canvas);
+	color: var(--sv-ink, CanvasText);
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.sv-moderation-button:hover {
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+}
+
+.sv-moderation-primary {
+	border-color: transparent;
+	background: var(--sv-accent, AccentColor);
+	color: var(--sv-on-accent, AccentColorText);
+}
+
+.sv-moderation-primary:hover {
+	background: color-mix(in oklch, var(--sv-accent, AccentColor) 88%, var(--sv-ink, CanvasText));
+}
+
+.sv-moderation-button[aria-disabled="true"] {
+	opacity: 0.6;
+	cursor: progress;
+}
+
+/* The Reports panel. */
+.sv-moderation-views ul {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sv-space-1, 0.25rem);
+	margin: calc(-1 * var(--sv-space-3, 0.75rem)) 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.sv-moderation-views a {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--sv-space-2, 0.5rem);
+	min-block-size: 2.5rem;
+	padding-inline: var(--sv-space-3, 0.75rem);
+	border-radius: var(--sv-radius-m, 6px);
+	color: var(--sv-muted, GrayText);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.sv-moderation-views a:hover {
+	color: var(--sv-ink, CanvasText);
+}
+
+.sv-moderation-views a[aria-current="page"] {
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+	color: var(--sv-ink, CanvasText);
+}
+
+.sv-moderation-count {
+	color: var(--sv-muted, GrayText);
+	font-variant-numeric: tabular-nums;
+	font-weight: 500;
+}
+
+.sv-moderation-reports {
+	margin: 0;
+	padding: 0;
+	border-block-start: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	list-style: none;
+}
+
+.sv-moderation-report {
+	display: grid;
+	gap: var(--sv-space-2, 0.5rem);
+	padding-block: var(--sv-space-4, 1rem);
+	border-block-end: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+	scroll-margin-block-start: var(--sv-space-6, 2rem);
+}
+
+.sv-moderation-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: var(--sv-space-2, 0.5rem);
+	font-size: var(--sv-step--1, 0.875rem);
+}
+
+.sv-moderation-kind {
+	color: var(--sv-ink, CanvasText);
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+
+.sv-moderation-target {
+	color: var(--sv-ink, CanvasText);
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.sv-moderation-target a {
+	color: var(--sv-accent-text, LinkText);
+	text-underline-offset: 0.2em;
+}
+
+.sv-moderation-quote {
+	margin: 0;
+	padding-inline-start: var(--sv-space-3, 0.75rem);
+	border-inline-start: 3px solid var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.sv-moderation-reason {
+	display: grid;
+	gap: var(--sv-space-1, 0.25rem);
+	padding: var(--sv-space-2, 0.5rem) var(--sv-space-3, 0.75rem);
+	border-radius: var(--sv-radius-m, 6px);
+	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+}
+
+.sv-moderation-reason p:last-child {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.sv-moderation-reason .sv-account-muted {
+	font-size: var(--sv-step--1, 0.875rem);
+}
+
+.sv-moderation .sv-moderation-actions {
+	justify-content: flex-start;
+	margin-block-start: var(--sv-space-1, 0.25rem);
+}

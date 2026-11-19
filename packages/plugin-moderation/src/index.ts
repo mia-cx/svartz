@@ -1,0 +1,98 @@
+/**
+ * Readers report pages, edits, comments and accounts, and moderators work through the reports on the dashboard:
+ * `plugins: [auth({ … }), moderation({ database: { env: "SVARTZ_DB" } })]` in `svartz.config.ts`.
+ *
+ * The browser script adds **Report** beside a note's other page actions and answers every button marked
+ * `data-svartz-report="<kind>:<id>"`, as annotations marks its comment cards. The build tells the server which pages the
+ * vault publishes and which of the plugins that own other targets (annotations, submissions) it has; a target whose
+ * plugin is absent can't be reported.
+ */
+import { fileURLToPath } from "node:url";
+import { definePlugin, getCompilerContributions, type NormalizedSvartzPlugin, type SvartzPlugin } from "@svartz/core";
+import { PLUGIN_ID, type BrowserOptions } from "./api";
+import { PERMISSIONS } from "./permissions";
+import type { BuildData, ModerationOptions, ModerationServerOptions } from "./server";
+
+export type { ModerationOptions } from "./server";
+export type { ReportRequest, TargetKind } from "./api";
+export { PLUGIN_ID as MODERATION_PLUGIN_ID, REASON_MAX_LENGTH, TARGET_KINDS } from "./api";
+
+/** Reports each signed-in reader may send per hour unless `limits.reportsPerHour` says otherwise. */
+export const DEFAULT_REPORTS_PER_HOUR = 10;
+
+/** The folder user pages live in, as auth reads it: `users/<handle>`. */
+const USER_PAGES = "users";
+
+// Beside this module in dist.
+const SERVER_MODULE = fileURLToPath(new URL("./server.js", import.meta.url));
+const BROWSER_MODULE = fileURLToPath(new URL("./browser.js", import.meta.url));
+const STYLESHEET = fileURLToPath(new URL("./browser.css", import.meta.url));
+
+function fail(message: string): never {
+  throw new Error(`[svartz:moderation] ${message}`);
+}
+
+/** Refuse config the routes could never serve, so a typo fails the build instead of every request. */
+function resolve(options: ModerationOptions): ModerationServerOptions {
+  const env = options?.database?.env;
+  if (typeof env !== "string" || !env.trim()) fail('database must name the D1 binding: { env: "SVARTZ_DB" }');
+  const reportsPerHour = options.limits?.reportsPerHour ?? DEFAULT_REPORTS_PER_HOUR;
+  if (!Number.isSafeInteger(reportsPerHour) || reportsPerHour < 1) fail("limits.reportsPerHour must be a whole number above 0");
+  return { database: { env }, limits: { reportsPerHour } };
+}
+
+/** Reports need accounts, which need auth, and D1, which a node target lacks. */
+function checkVault(vault: { readonly id: string; readonly target: { readonly type: string }; readonly plugins: readonly unknown[] }): void {
+  if (vault.target.type === "node") {
+    fail(`vault "${vault.id}" deploys to node, but reports are stored in Cloudflare D1; deploy it to cloudflare-workers or cloudflare-pages`);
+  }
+  const auth = (vault.plugins as readonly SvartzPlugin[]).find(({ id }) => id === "auth");
+  if (!auth?.server || auth.disabled) fail(`vault "${vault.id}" enables moderation without auth; add auth({ providers: … }) to the same vault`);
+}
+
+/** A server plugin the build runs for this vault, by id, with its server options. */
+function serverOptionsOf(plugins: readonly SvartzPlugin[] | undefined, id: string): Record<string, unknown> | undefined {
+  const server = plugins?.find((plugin) => plugin.id === id)?.server;
+  return server ? (server.options ?? {}) as Record<string, unknown> : undefined;
+}
+
+/** The `moderation` plugin: its routes and Reports panel on the server, and the Report action in the browser. */
+export function moderation(options: ModerationOptions): NormalizedSvartzPlugin {
+  const serverOptions = resolve(options);
+  const plugin: NormalizedSvartzPlugin = definePlugin(() => ({
+    id: PLUGIN_ID,
+    server: { module: SERVER_MODULE, options: serverOptions },
+    permissions: PERMISSIONS,
+    forVault({ vault }) {
+      checkVault(vault);
+      return plugin;
+    },
+    emitArtifacts: {
+      options: { fatal: true },
+      run(ctx) {
+        // Protected notes stay out: reporting one would tell moderators it exists.
+        const pages = Object.fromEntries((ctx.index?.entries ?? [])
+          .filter((entry) => !entry.locked)
+          .map((entry) => [entry.slug, { title: entry.title, href: entry.href }]));
+        const annotations = serverOptionsOf(ctx.plugins, "annotations")?.database as { env?: unknown } | undefined;
+        const submissions = serverOptionsOf(ctx.plugins, "submissions");
+        const data: BuildData = {
+          pages,
+          userPages: USER_PAGES,
+          ...typeof annotations?.env === "string" && { annotations: { database: annotations.env } },
+          ...typeof submissions?.repo === "string" && { submissions: { repo: submissions.repo } },
+        };
+        const compiler = getCompilerContributions(ctx);
+        compiler.serverData.set(PLUGIN_ID, data);
+        compiler.browserResources.set(PLUGIN_ID, {
+          id: PLUGIN_ID,
+          kind: "script",
+          importId: BROWSER_MODULE,
+          options: { mountPath: ctx.config.mountPath ?? "", userPages: USER_PAGES } satisfies BrowserOptions,
+        });
+        compiler.browserResources.set(`${PLUGIN_ID}-css`, { id: `${PLUGIN_ID}-css`, kind: "css", importId: STYLESHEET });
+      },
+    },
+  }))();
+  return plugin;
+}
