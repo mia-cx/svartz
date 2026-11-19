@@ -130,6 +130,30 @@ it("adds configuration to an existing Kit app without changing its routes or bui
     .toContain('/// <reference types="@svartz/vite/virtual-modules" />');
 });
 
+// Proves init gives a server host the route plugin pages render through, keeps a host's own copy, and leaves it out of
+// a static host, whose adapter would refuse a route that isn't prerendered.
+it("adds the plugin page route to hosts that can serve it", async () => {
+  const pageRoute = "src/routes/[...slug]/-/[...page]";
+  const host = async (viteConfig: string) => {
+    const root = await fixture();
+    await mkdir(path.join(root, "src/routes"), { recursive: true });
+    await writeFile(path.join(root, "vite.config.ts"), viteConfig);
+    await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "host-app", devDependencies: { "@sveltejs/kit": "^2.0.0" } }));
+    return root;
+  };
+
+  const server = await host("import adapter from '@sveltejs/adapter-node';\nexport default { plugins: [] };\n");
+  expect((await initProject({ cwd: server, install: false, git: false })).kind).toBe("integrated");
+  expect(await readFile(path.join(server, pageRoute, "+page.server.ts"), "utf8")).toContain("svartzPage(event)");
+  await writeFile(path.join(server, pageRoute, "+page.svelte"), "<h1>Mine</h1>\n");
+  expect((await initProject({ cwd: server, install: false, git: false })).kind).toBe("already-configured");
+  expect(await readFile(path.join(server, pageRoute, "+page.svelte"), "utf8")).toBe("<h1>Mine</h1>\n");
+
+  const staticHost = await host("import adapter from '@sveltejs/adapter-static';\nexport default { plugins: [] };\n");
+  expect((await initProject({ cwd: staticHost, install: false, git: false })).kind).toBe("integrated");
+  await expect(access(path.join(staticHost, pageRoute))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
 it("upgrades only the previous generated CSS entry and root layout", async () => {
   const root = await fixture();
   await mkdir(path.join(root, "src/routes/[...slug]"), { recursive: true });

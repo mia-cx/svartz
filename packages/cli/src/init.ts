@@ -528,12 +528,18 @@ const initProjectEffect = (
           ? catchallPageTemplate
           : existingCatchallPage === previousCatchallPage ? previousStyledCatchallPage : undefined;
       const migrateCatchallPage = catchallPageUpdate !== undefined && catchallPageUpdate !== existingCatchallPage;
-      // Plugin pages under /-/ render through their own route; a host that has one keeps it as it is.
-      const pageRoute = path.join("src", "routes", "[...slug]", "-", "[...page]");
-      const installPageRoute = !existsSync(path.join(root, pageRoute));
       const viteSource = yield* operation("read host Vite config", () =>
         readFile(location.viteConfigPath, "utf8"),
       );
+      const svelteConfigPath = ["js", "ts"].map((extension) => path.join(root, `svelte.config.${extension}`)).find(existsSync);
+      const svelteConfigSource = svelteConfigPath
+        ? yield* operation("read host Svelte config", () => readFile(svelteConfigPath, "utf8"))
+        : "";
+      // Plugin pages under /-/ render through their own route; a host that has one keeps it as it is. A static host
+      // can't serve them, and adapter-static without a fallback refuses a route that isn't prerendered.
+      const pageRoute = path.join("src", "routes", "[...slug]", "-", "[...page]");
+      const installPageRoute = !existsSync(path.join(root, pageRoute))
+        && !`${viteSource}\n${svelteConfigSource}`.includes("@sveltejs/adapter-static");
       const integratedViteSource = integrateViteConfig(
         viteSource,
         location.viteConfigPath,

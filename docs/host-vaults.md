@@ -94,6 +94,62 @@ export default withSvartzHost(defineConfig({
 }));
 ```
 
+### Plugin pages
+
+[Plugin pages](server-plugins.md#plugin-pages), such as auth's `/-/account/`, render through their own route beside the catchall. `npx svartz init` adds it to an app with a server adapter; an app that has the directory keeps it as it is. A build whose vault claims pages fails when no route in the app renders them. The route works in SvelteKit 2 and 3:
+
+```ts
+// src/routes/[...slug]/-/[...page]/+page.server.ts
+import { error, redirect } from '@sveltejs/kit';
+import { decodeRoutePath } from '@svartz/ui/runtime';
+import { assets, base, hostStylesheets, prepareHostVault } from 'virtual:svartz/host';
+import { svartzPage } from 'virtual:svartz/server';
+
+// Plugin pages under /-/ render on every request; notes stay prerendered.
+export const prerender = false;
+
+export const load = async (event) => {
+  const page = await svartzPage(event);
+  if (!page) error(404);
+  if ('redirect' in page) redirect(303, page.redirect);
+  const pathname = decodeRoutePath(event.url.pathname.slice(base.length)) ?? '/';
+  await prepareHostVault(pathname);
+  return { svartzPage: page, svartzStylesheets: hostStylesheets(pathname).map((file) => `${assets}/${file}`) };
+};
+```
+
+```ts
+// src/routes/[...slug]/-/[...page]/+page.ts
+import { decodeRoutePath } from '@svartz/ui/runtime';
+import { base, prepareHostVault } from 'virtual:svartz/host';
+
+// The theme's shell loads lazily; prepare it before rendering here and before hydrating in the browser.
+export const load = async ({ url, data }) => {
+  await prepareHostVault(decodeRoutePath(url.pathname.slice(base.length)) ?? '/');
+  return data;
+};
+```
+
+```svelte
+<!-- src/routes/[...slug]/-/[...page]/+page.svelte -->
+<script lang="ts">
+  import type { PageData } from './$types';
+  import { page } from '$app/state';
+  import { SvartzPluginPage } from '@svartz/ui/runtime';
+  let { data }: { data: PageData } = $props();
+</script>
+
+<svelte:head>
+  {#each data.svartzStylesheets as stylesheet}
+    <link rel="stylesheet" href={stylesheet} />
+  {/each}
+</svelte:head>
+
+<SvartzPluginPage pathname={page.url.pathname} page={data.svartzPage} />
+```
+
+`SvartzPluginPage` draws the page with the vault's theme shell, as `SvartzRuntimePage` does for notes. The route needs `svartzHandle` in the hooks, which marks plugin pages uncacheable. An app on `@sveltejs/adapter-static` can't serve plugin pages, so init leaves the route out there.
+
 ## Render a note inside your own page
 
 `SvartzRuntimePage` draws the whole theme page. To keep your own layout, render only the note body with `SvartzNoteContent` from `@svartz/ui/runtime`. Read the title, properties, dates and backlinks from the [published vault view](vault-view.md).

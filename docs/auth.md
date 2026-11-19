@@ -160,7 +160,7 @@ The provider's access token is used once, to read the profile, and then dropped;
 
 Each sign-in starts a **session** in D1 that lasts 30 days. The `__Host-svartz-session` cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`) holds only its id, encrypted with AES-GCM under a key HKDF derives from `PRIVATE_SVARTZ_SESSION_SECRET`. Every read looks the session up, so deleting it signs that browser out on its next request, along with any copy of the cookie. Signing out deletes it. A tampered, expired or wrong-key cookie reads as signed out.
 
-Until the account pages arrive, end sessions with Wrangler. Delete one account's sessions to sign them out everywhere:
+Readers see their sessions and sign out everywhere on [the account page](#the-account-page). To sign an account out everywhere yourself, delete its sessions with Wrangler:
 
 ```sh
 wrangler d1 execute notes --remote --command "DELETE FROM auth_sessions WHERE account_id = (SELECT id FROM auth_accounts WHERE handle = 'octocat')"
@@ -190,8 +190,25 @@ Under `<base><mount>/_svartz/auth/`, where `<base>` is the deployment base path,
 | `POST handle/` | Creates the account with the form's `handle` and redirects to `returnTo` signed in. A taken or malformed handle shows the chooser again, answering 422. Refused from another origin. |
 | `GET me/` | The identity the reader signed in with, or `null`. |
 | `POST sign-out/` | Ends the session; answers 204. Refused from another origin. |
+| `POST account/profile/` | Sets the signed-in account's display name (`name`) and handle (`handle`), then redirects to the account page. |
+| `POST account/unlink/` | Unlinks the provider account named by `identity` and ends its sessions, then redirects to the account page. |
+| `POST account/sign-out-everywhere/` | Ends every session of the signed-in account, this one included, then redirects to the account page. |
+| `POST account/link/<provider>/?returnTo=<path>` | Starts linking another provider to the signed-in account. Only the callback vault answers it. |
+| `GET users/<handle>/` | The public profile, `{ handle, name, avatarUrl }`, or a 308 from an old handle to the current one's URL. |
 
-Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` answers 503.
+Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` and the `account/` routes answer 503. The `account/` routes answer 403 to a request whose `Origin` is missing or another site's, and send a signed-out reader to the account page.
+
+## The account page
+
+`<base><mount>/-/account/` is a [plugin page](server-plugins.md#plugin-pages) in the theme's shell where readers manage their account. Link it from anywhere on the site. It needs `SVARTZ_DB` and the session secret; without them it answers 404. A signed-out reader sees a sign-in link per provider, each returning to the page. A signed-in reader can:
+
+- **Change their display name and handle.** A new handle follows the [handle rules](#first-sign-in). The old one keeps pointing at the account for good: `users/<old>/` redirects to `users/<new>/`, and no other account can take it, though its owner can switch back to it.
+- **Link another provider.** The provider's sign-in comes back to the account that started it, bound to that browser's session: if the reader signs out or switches accounts meanwhile, nothing is linked. A provider account that already belongs to another account is refused, and stays with that account.
+- **Unlink a provider** while another remains. The one this browser signed in with stays linked; sign in another way to unlink it. Unlinking ends every session that provider signed in. Two browsers unlinking an account's last two providers at once leave one linked.
+- **See their sessions**: the provider each signed in with, when, and which is this browser.
+- **Sign out everywhere.** Every session of the account ends, this browser's included, so each reads as signed out on its next request.
+
+Forms on the page post to the routes above and work without JavaScript.
 
 ## The sign-in dialog
 
@@ -235,6 +252,8 @@ export default guestbook;
 `readSignIn(request, env)` answers `{ account }`, or `{ account: null, reason }` saying why there is none: `"signed-out"`, or `"no-database"` when the site binds no `SVARTZ_DB`. A plugin that needs accounts can answer the second with a 503 naming the binding.
 
 `readIdentity(request, env)` answers the provider account the reader signed in with, or `null`. It works with or without `SVARTZ_DB`, so plugins written before accounts keep working; new plugins should read the account.
+
+`findProfile(handle, env)` answers the public profile, `{ handle, name, avatarUrl }`, of the account that holds `handle` now or held it before, or `undefined`. When its `handle` differs from the one asked for, the asked one is old: redirect to the current one.
 
 ## Permissions
 
