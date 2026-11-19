@@ -4,15 +4,19 @@
  * page artifact the build hands SvelteKit, so the assertions cover exactly what prerenders.
  */
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { resolveConfig } from "@svartz/config";
 import { getCompilerContributions, runStages, type PluginContext } from "@svartz/core";
 import { createCorePlugins } from "@svartz/plugins";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { history } from "../src/index";
+
+// Svartz's own code, by content, as the version cache keys it: a test changes it to stand for a new release.
+const software = vi.hoisted(() => ({ fingerprint: "svartz-1" }));
+vi.mock("../src/software", () => ({ softwareFingerprint: async () => software.fingerprint }));
 
 const exec = promisify(execFile);
 const EMAIL = "ada@example.com";
@@ -29,6 +33,8 @@ async function repository() {
   const vault = join(root, "content");
   await mkdir(join(vault, "posts"), { recursive: true });
   await exec("git", ["init", "-q", root]);
+  // The build writes beside the vault, its version cache included.
+  await writeFile(join(root, ".gitignore"), ".svartz/\n");
   let day = 0;
   return {
     root,
@@ -62,7 +68,18 @@ async function build(vault: string, plugins: unknown[] = [history({ source: "git
     artifacts: new Map(),
     meta: new Map([["svartz:protectionReady", true]]),
   };
-  await runStages(ctx.plugins!, ctx);
+  const info = vi.spyOn(console, "info").mockImplementation(() => {});
+  let lines: string[];
+  try {
+    await runStages(ctx.plugins!, ctx);
+  } finally {
+    lines = info.mock.calls.map((call) => String(call[0]));
+    info.mockRestore();
+  }
+  /** How many versions this build compiled, and how many it reused from the cache, as it reports them. */
+  const report = lines.find((line) => line.startsWith("[history]"));
+  const counted = report && /compiled (\d+) versions?, reused (\d+)/.exec(report);
+  const cache = counted ? { compiled: Number(counted[1]), reused: Number(counted[2]) } : undefined;
   const routes = ctx.index!.routes.all;
   /** The markup of the page component at `pathname`, as the build hands it to SvelteKit: a note's or a version's. */
   const page = (pathname: string) => {
@@ -76,7 +93,7 @@ async function build(vault: string, plugins: unknown[] = [history({ source: "git
   const versions = routes.filter((route) => route.includes("/versions/"));
   const everything = [...ctx.artifacts.values()].map(({ contents }) => String(contents)).join("\n");
   const link = getCompilerContributions(ctx).browserResources.get("history")?.options;
-  return { ctx, routes, versions, page, asset, everything, link };
+  return { ctx, routes, versions, page, asset, everything, link, cache };
 }
 
 describe("previous versions from git", () => {
@@ -358,5 +375,114 @@ describe("previous versions from git", () => {
     expect(page(`/posts/hello/versions/${shas[1]}/`)).toContain("<ins>BREAKS-THE-PLUGIN once.</ins>");
     expect(page(`/posts/hello/versions/${shas[0]}/`)).not.toContain("can't be shown as it read");
     await expect(build(repo.vault, [history({ source: "git" }), breaking(true)])).rejects.toThrow();
+  });
+});
+
+describe("the version cache", () => {
+  /** A post with three versions, the newest linking `posts/other.md`. */
+  async function threeVersions() {
+    const repo = await repository();
+    await repo.write("posts/other.md", "---\ntitle: Other\n---\n\nAnother post.\n");
+    for (const wording of ["One.", "Two.", "Three, see [[other]]."]) {
+      await repo.write("posts/hello.md", post(wording));
+      await repo.commit(`Say ${wording}`);
+    }
+    return repo;
+  }
+  /** Every page and file the build hands SvelteKit, by key. */
+  const emitted = ({ ctx }: Awaited<ReturnType<typeof build>>) =>
+    new Map([...ctx.artifacts].map(([key, { contents }]) => [key, String(contents)]));
+  /** The entries in the vault's version cache. */
+  const entries = async (repo: { root: string }) => (await readdir(join(repo.root, ".svartz/vaults/blog/cache/versions"))).sort();
+
+  // Proves a second build with nothing changed compiles no version, and hands SvelteKit exactly what the first did.
+  it("compiles no version when nothing changed, and builds the same pages", async () => {
+    const repo = await threeVersions();
+
+    const first = await build(repo.vault);
+    const second = await build(repo.vault);
+
+    expect(first.cache).toEqual({ compiled: 3, reused: 0 });
+    expect(second.cache).toEqual({ compiled: 0, reused: 3 });
+    expect(emitted(second)).toEqual(emitted(first));
+  });
+
+  // Proves a new commit to the post compiles its new version alone: the post's own current text isn't in the key.
+  it("compiles only the new version after a new commit to the post", async () => {
+    const repo = await threeVersions();
+    await build(repo.vault);
+    await repo.write("posts/hello.md", post("Four, see [[other]]."));
+    await repo.commit("Say four");
+
+    expect((await build(repo.vault)).cache).toEqual({ compiled: 1, reused: 3 });
+  });
+
+  // Proves what a version's compile reads is in its key: the vault's config, the address of a note it links, and
+  // Svartz's own code each compile the versions again, and a linked note's new address shows.
+  it("compiles the versions again when the config, a linked note's address, or Svartz changes", async () => {
+    const repo = await threeVersions();
+    await build(repo.vault);
+
+    expect((await build(repo.vault, [history({ source: "git" })], { site: { title: "Renamed blog" } })).cache).toEqual({ compiled: 3, reused: 0 });
+
+    await repo.write("posts/other.md", "---\ntitle: Other\nslug: elsewhere\n---\n\nAnother post.\n");
+    const moved = await build(repo.vault);
+    const shas = (await exec("git", ["-C", repo.root, "log", "--format=%h", "--abbrev=7"])).stdout.trim().split("\n");
+    expect(moved.cache).toEqual({ compiled: 3, reused: 0 });
+    // The note's `slug` moves it within its folder, to `/posts/elsewhere/`.
+    expect(moved.page(`/posts/hello/versions/${shas[0]}/`)).toContain('"href":"../../../elsewhere/"');
+
+    software.fingerprint = "svartz-2";
+    try {
+      expect((await build(repo.vault)).cache).toEqual({ compiled: 3, reused: 0 });
+    } finally {
+      software.fingerprint = "svartz-1";
+    }
+  });
+
+  // Proves visibility is decided before the cache is read: a version the vault excludes since never shows, though
+  // its compiled page was cached, and the cache keeps only versions that show.
+  it("never serves a version hidden since, and keeps only versions that show", async () => {
+    const repo = await repository();
+    await mkdir(join(repo.vault, "drafts"));
+    await repo.write("drafts/hello.md", post("Drafted."));
+    await repo.commit("Draft it");
+    await repo.move("drafts/hello.md", "posts/hello.md");
+    await repo.write("posts/hello.md", post("Published."));
+    await repo.commit("Publish it");
+    await repo.write("posts/hello.md", post("Edited."));
+    await repo.commit("Edit it");
+    const shas = (await exec("git", ["-C", repo.root, "log", "--format=%h", "--abbrev=7"])).stdout.trim().split("\n");
+
+    const open = await build(repo.vault);
+    expect(open.versions).toContain(`/posts/hello/versions/${shas[2]}/`);
+    expect(await entries(repo)).toHaveLength(3);
+
+    const closed = await build(repo.vault, [history({ source: "git" })], { exclude: ["drafts/**"] });
+    expect(closed.versions).not.toContain(`/posts/hello/versions/${shas[2]}/`);
+    expect(closed.everything).not.toContain("Drafted.");
+    expect(await entries(repo)).toHaveLength(2);
+  });
+
+  // Proves a version a plugin couldn't read isn't cached as broken: the next build compiles it again.
+  it("compiles a version that failed again on the next build", async () => {
+    const repo = await threeVersions();
+    await repo.write("posts/hello.md", post("BREAKS-THE-PLUGIN now."));
+    await repo.commit("Break it");
+    const breaking = {
+      id: "breaking",
+      transformOfm: {
+        options: { fatal: false },
+        run: (ctx: PluginContext) => {
+          if (ctx.files.some(({ content }) => content.includes("BREAKS-THE-PLUGIN"))) throw new Error("can't read this");
+        },
+      },
+    };
+    await repo.write("posts/hello.md", post("Fixed."));
+    await repo.commit("Fix it");
+
+    const plugins = [history({ source: "git" }), breaking];
+    expect((await build(repo.vault, plugins)).cache).toEqual({ compiled: 5, reused: 0 });
+    expect((await build(repo.vault, plugins)).cache).toEqual({ compiled: 1, reused: 4 });
   });
 });
