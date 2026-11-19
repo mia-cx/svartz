@@ -1,7 +1,8 @@
 /**
  * The submission panel: a full-height modal dialog with a note's Markdown source in CodeMirror, a note for reviewers,
- * and the pull request link once submitted. Edit opens it on a published note's source; New page opens it blank,
- * under a title and a section. Loaded on the first click of either.
+ * a line beside the submit button saying whether the save goes live or to review, as the server decides for this
+ * reader, and the commit or pull request link once saved. Edit opens it on a published note's source; New page opens
+ * it blank, under a title and a section. Loaded on the first click of either.
  *
  * The source opens in Live Preview, Source, Rich text or Split, as the reader last chose, and suggests published notes
  * after `[[`. Rich text formats from a toolbar and edits frontmatter as properties, loading on first use. Split shows
@@ -18,6 +19,8 @@ import { openSignIn } from "@svartz/auth/browser";
 import {
   MAX_NOTE_LENGTH,
   MAX_TITLE_LENGTH,
+  type Destination,
+  type DestinationResponse,
   type EditRequest,
   type EditResponse,
   type ErrorResponse,
@@ -103,6 +106,18 @@ declare global {
 }
 
 const UNVERIFIED = "Finish the check that you're human, then open the pull request.";
+
+/** What the submit button says, and what the panel says beside it, for each place a save can go. */
+const DESTINATIONS = {
+  commit: { idle: "Publish", sending: "Publishing…", hint: "Goes live once the site rebuilds." },
+  "pull-request": { idle: "Open pull request", sending: "Opening pull request…", hint: "Goes to review before it goes live." },
+} as const;
+
+/**
+ * Git's null object id, which no file has: sent in place of the loaded source's SHA when the panel holds a draft
+ * written against another source, so a save that would commit opens a pull request instead.
+ */
+const UNKNOWN_SOURCE = "0".repeat(40);
 const TURNSTILE_SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 let turnstileLoad: Promise<Turnstile> | undefined;
 
@@ -172,8 +187,9 @@ const panel = (target: EditorTarget, offered: readonly Mode[]) => `
     <div class="svartz-submissions-turnstile" hidden></div>
     <p class="svartz-submissions-error" data-sv-signal role="alert" hidden></p>
     <footer class="svartz-submissions-actions">
-      <button type="submit" class="svartz-submissions-primary" disabled>Open pull request</button>
+      <button type="submit" class="svartz-submissions-primary" aria-describedby="svartz-submissions-destination" disabled>Open pull request</button>
       <button type="button" class="sv-action" data-close>Cancel</button>
+      <p class="svartz-submissions-destination" id="svartz-submissions-destination" hidden></p>
     </footer>
   </form>
 </div>`;
@@ -239,6 +255,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
   const error = query<HTMLElement>(dialog, ".svartz-submissions-error");
   const actions = query<HTMLElement>(dialog, ".svartz-submissions-actions");
   const submit = query<HTMLButtonElement>(dialog, '[type="submit"]');
+  const hint = query<HTMLElement>(dialog, ".svartz-submissions-destination");
   const challenge = query<HTMLElement>(dialog, ".svartz-submissions-turnstile");
   const closers = dialog.querySelectorAll<HTMLButtonElement>("[data-close]");
   const title = dialog.querySelector<HTMLInputElement>('input[name="title"]');
@@ -376,6 +393,10 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
    * restored over a newer source still warns when it is offered again.
    */
   let sourceHash: string | undefined;
+  /** The loaded source's blob SHA and {@link Draft.sourceHash}: an edit is based on it only while the hashes match. */
+  let loaded: { sha: string; hash: string } | undefined;
+  /** Where a save goes for this reader, as the server last said; `null` until it says, or when they can't save. */
+  let destination: Destination = null;
   // The fields are locked while sending, so the pull request holds exactly what the reader sees. The panel can't be
   // dismissed then either: the reader would never see the pull request it opens.
   let phase: "editing" | "sending" | "sent" = "editing";
@@ -449,6 +470,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     if (!dialog.isConnected) return;
     if (keep) save();
     clearTimeout(autosave);
+    clearTimeout(destinationTimer);
     window.removeEventListener("pagehide", save);
     phone.removeEventListener("change", arrange);
     void preview?.then((shown) => shown?.destroy());
@@ -483,25 +505,57 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     error.hidden = true;
     error.replaceChildren();
   }
+  /** Say where a save goes, on the button and beside it. */
+  function showDestination(next: Destination) {
+    destination = next;
+    hint.textContent = next ? DESTINATIONS[next].hint : "";
+    hint.hidden = !next;
+    if (phase === "editing") submit.textContent = DESTINATIONS[next ?? "pull-request"].idle;
+  }
+
+  let destinationTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Counts questions, so only the latest answer shows. */
+  let asked = 0;
+  /** Ask where a new page goes once the reader pauses: its title and section decide which grants apply. */
+  function askDestination() {
+    clearTimeout(destinationTimer);
+    const ask = ++asked;
+    const name = title?.value.trim() ?? "";
+    if (!name) return showDestination(null);
+    destinationTimer = setTimeout(async () => {
+      const query = new URLSearchParams({ folder: folder?.value ?? "", title: name });
+      const answer = await request<DestinationResponse>(`${endpoint}/destination/?${query}`).catch(() => ({ destination: null }));
+      if (ask === asked && dialog.isConnected) showDestination(answer.destination);
+    }, AUTOSAVE_DELAY_MS);
+  }
+
   title?.addEventListener("input", () => {
     dropConflict();
     refreshPreview();
     if (phase === "editing") submit.disabled = !ready();
+    askDestination();
     saveSoon();
   });
   folder?.addEventListener("change", () => {
     dropConflict();
     refreshPreview();
+    askDestination();
     saveSoon();
   });
   note.addEventListener("input", saveSoon);
   // A closed tab or a crash loses at most the last pause's worth of typing.
   window.addEventListener("pagehide", save);
 
-  /** The submission's route, its key in {@link unconfirmed}, and its fields, without its id or Turnstile token. */
+  /**
+   * The submission's route, its key in {@link unconfirmed}, and its fields, without its id or Turnstile token. An edit
+   * names the source it was written against by SHA: the loaded one, unless a restored draft was written against another.
+   */
   function fields(markdown: string) {
     const key = draftSlot(endpoint, target);
-    if (target.kind === "edit") return { route: "edit" as const, key, fields: { page: target.page, markdown, note: note.value } };
+    if (target.kind === "edit") {
+      const sha = loaded && loaded.hash === sourceHash ? loaded.sha : UNKNOWN_SOURCE;
+      return { route: "edit" as const, key, fields: { page: target.page, markdown, note: note.value, sha } };
+    }
     return { route: "new" as const, key, fields: { folder: folder?.value ?? "", title: title?.value ?? "", markdown, note: note.value } };
   }
 
@@ -543,14 +597,14 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     holdOpen(true);
     error.hidden = true;
     submit.disabled = true;
-    submit.textContent = "Opening pull request…";
+    submit.textContent = DESTINATIONS[destination ?? "pull-request"].sending;
     const submission = fields(view.state.sliceDoc());
     const payload = JSON.stringify(submission.fields);
     const last = unconfirmed.get(submission.key);
     const submissionId = last?.payload === payload ? last.id : newSubmissionId();
     unconfirmed.set(submission.key, { id: submissionId, payload });
     try {
-      const pull = await request<EditResponse>(`${endpoint}/${submission.route}/`, {
+      const saved = await request<EditResponse>(`${endpoint}/${submission.route}/`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ submissionId, ...submission.fields, turnstileToken } satisfies EditRequest | NewPageRequest),
@@ -564,7 +618,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
       phase = "sent";
       challenge.hidden = true;
       holdOpen(false);
-      showOpened(pull);
+      showSaved(saved);
     } catch (cause) {
       // Navigation closed the panel mid-send: the refusal belongs to a page the reader left, so it opens no sign-in
       // and saves no draft. The unconfirmed id stays for the next panel's retry.
@@ -575,24 +629,32 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
       // The server spent the token; a retry needs a fresh one.
       if (turnstile) turnstile.api.reset(turnstile.id);
       submit.disabled = false;
-      submit.textContent = "Open pull request";
+      submit.textContent = DESTINATIONS[destination ?? "pull-request"].idle;
       const failure = cause as ServerError;
       if (failure.code === "sign_in_required") signIn(failure);
       else showError(failure);
     }
   });
 
-  function showOpened(pull: EditResponse) {
+  /** What became of the save, in place of the buttons: the commit, the pull request, or why it went to review. */
+  function showSaved(saved: EditResponse) {
     query<HTMLElement>(dialog, ".svartz-submissions-note").hidden = true;
+    const changed = target.kind === "edit"
+      ? "This page changed since you opened it, so your edit went to review"
+      : "A page with this title was saved meanwhile, so yours went to review";
     const status = Object.assign(document.createElement("p"), {
       className: "svartz-submissions-opened",
-      textContent: `Opened pull request #${pull.number}.`,
+      textContent: saved.kind === "commit"
+        ? "Published. It goes live once the site rebuilds."
+        : saved.reason === "changed"
+          ? `${changed} as pull request #${saved.number}.`
+          : `Opened pull request #${saved.number}.`,
     });
     status.setAttribute("role", "status");
     const link = Object.assign(document.createElement("a"), {
       className: "svartz-submissions-primary",
-      href: pull.url,
-      textContent: `View pull request #${pull.number}`,
+      href: saved.url,
+      textContent: saved.kind === "commit" ? "View commit" : `View pull request #${saved.number}`,
       rel: "noopener",
       target: "_blank",
     });
@@ -644,6 +706,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     else if (title && folder) {
       title.value = rest.title;
       folder.value = rest.folder;
+      askDestination();
     }
     submit.disabled = !ready();
     unrestored = undefined;
@@ -708,10 +771,12 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
 
   async function load(page: string) {
     try {
-      const { markdown } = await request<SourceResponse>(`${endpoint}/source/?page=${encodeURIComponent(page)}`);
+      const answer = await request<SourceResponse>(`${endpoint}/source/?page=${encodeURIComponent(page)}`);
       // Navigation closed the panel while the source loaded; a draft stays saved for the page's next visit.
       if (!dialog.isConnected) return;
-      showSource(markdown);
+      showSource(answer.markdown);
+      loaded = { sha: answer.sha, hash: hashSource(answer.markdown) };
+      showDestination(answer.destination);
       begin();
     } catch (cause) {
       source.replaceChildren();
