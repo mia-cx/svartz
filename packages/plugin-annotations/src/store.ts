@@ -334,11 +334,17 @@ export interface ReportedComment {
 
 /** Comment `annotation` of `vault`, hidden or not; `undefined` when `vault` has no such comment. */
 export async function readComment(db: Database, vault: string, annotation: string): Promise<ReportedComment | undefined> {
-  const { results: [row] } = await db.prepare(`SELECT a.id, a.page, a.body, a.created_at, ${HIDDEN} AS hidden, ${AUTHOR_COLUMNS}
+  return (await readComments(db, vault, [annotation])).get(annotation);
+}
+
+/** {@link readComment} for each of `annotations` in one query, by id; ids `vault` has no comment for are absent. */
+export async function readComments(db: Database, vault: string, annotations: readonly string[]): Promise<Map<string, ReportedComment>> {
+  if (annotations.length === 0) return new Map();
+  const { results } = await db.prepare(`SELECT a.id, a.page, a.body, a.created_at, ${HIDDEN} AS hidden, ${AUTHOR_COLUMNS}
     FROM annotations a JOIN identities i ON i.id = a.author_id
-    WHERE a.id = ? AND a.vault = ? AND a.kind = 'comment'`)
-    .bind(annotation, vault).all<IdentityRow & { id: string; page: string; body: string; created_at: string; hidden: number }>();
-  return row && { id: row.id, page: row.page, body: row.body, author: identityOf(row), createdAt: row.created_at, hidden: row.hidden === 1 };
+    WHERE a.id IN (SELECT value FROM json_each(?)) AND a.vault = ? AND a.kind = 'comment'`)
+    .bind(JSON.stringify(annotations), vault).all<IdentityRow & { id: string; page: string; body: string; created_at: string; hidden: number }>();
+  return new Map(results.map((row) => [row.id, { id: row.id, page: row.page, body: row.body, author: identityOf(row), createdAt: row.created_at, hidden: row.hidden === 1 }]));
 }
 
 /**

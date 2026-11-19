@@ -28,7 +28,7 @@ import { CONTEXT_LENGTH, type Anchor } from "./anchor";
 import { COMMENT_MAX_LENGTH, QUOTE_MAX_LENGTH } from "./limits";
 import { DELETE_COMMENTS, WRITE_COMMENTS } from "./permissions";
 import {
-  createComment, deleteAnnotation, findAnnotation, hideStatement, listPage, migrate, readAgreement, readComment as storedComment, setAgreement,
+  createComment, deleteAnnotation, findAnnotation, hideStatement, listPage, migrate, readAgreement, readComment as storedComment, readComments as storedComments, setAgreement,
   spendWrite, type Database, type ReportedComment,
 } from "./store";
 
@@ -343,6 +343,17 @@ export async function findComment(env: ServerContext["env"], database: string, v
   if (!isDatabase(db)) return undefined;
   await migrate(db);
   return storedComment(db, vault, id);
+}
+
+/**
+ * {@link findComment} for each of `ids` in one query, by id, for a list of reports: ids with no such comment are absent,
+ * and so is every id when there's no such binding.
+ */
+export async function findComments(env: ServerContext["env"], database: string, vault: string, ids: readonly string[]): Promise<Map<string, ReportedComment>> {
+  const db = env[database];
+  if (!isDatabase(db) || ids.length === 0) return new Map();
+  await migrate(db);
+  return storedComments(db, vault, ids);
 }
 
 /**
