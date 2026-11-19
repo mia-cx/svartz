@@ -25,7 +25,8 @@ import {
   filterUnpublished,
   FILTER_UNPUBLISHED_ID,
 } from "./filter-unpublished";
-export { publishesNote } from "./filter-unpublished";
+export { keepsAttachment, publishesNote } from "./filter-unpublished";
+export { compileNoteVersion, type CompiledNoteVersion } from "./note-version";
 import { allocateRoutesPlugin, ALLOCATE_ROUTES_ID } from "./allocate-routes";
 import {
   resolveLinks,

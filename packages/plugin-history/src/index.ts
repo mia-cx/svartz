@@ -26,7 +26,7 @@ import { alternateNames } from "@svartz/plugins/routes";
 import { PAGES, PLUGIN_ID, type BrowserOptions, type HistoryData } from "./api";
 import { PERMISSIONS } from "./permissions";
 import type { VersionsBrowserOptions } from "./versions-browser";
-import { DEFAULT_MAX_VERSIONS, emitVersions } from "./versions";
+import { DEFAULT_MAX_VERSIONS, DISCOVERED, emitVersions } from "./versions";
 
 export type { BrowserOptions } from "./api";
 export { VERSIONS_FIELD } from "./versions";
@@ -78,6 +78,12 @@ function versions(maxVersions: number): NormalizedSvartzPlugin {
   if (!Number.isInteger(maxVersions) || maxVersions < 2) fail(`maxVersions must be a whole number of at least 2, not ${maxVersions}`);
   return definePlugin(() => ({
     id: PLUGIN_ID,
+    filterUnpublished: {
+      // Before core:filter-unpublished drops the attachments no published note references now: an earlier version may.
+      run(ctx) {
+        ctx.meta.set(DISCOVERED, ctx.files.filter((file) => !/\.(?:md|mdx|svx)$/i.test(file.path)));
+      },
+    },
     emitArtifacts: {
       // Before core:emit-artifacts writes the route index and the page artifacts, which this adds to.
       options: { fatal: true },

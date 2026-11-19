@@ -34,6 +34,14 @@ export function publishesNote(
   return published && frontmatter?.private !== true;
 }
 
+/**
+ * Whether the build may publish the attachment at `path` inside the vault: discovery reads its folder and the
+ * exclude patterns let it through. The build publishes it only once a published note references it.
+ */
+export function keepsAttachment(config: Pick<ResolvedConfig, "exclude">, path: string): boolean {
+  return !path.replaceAll("\\", "/").split("/").some(shouldIgnore) && !matches(path, config.exclude);
+}
+
 export const filterUnpublished = definePlugin(() => ({
   id: "core:filter-unpublished",
 
@@ -79,7 +87,7 @@ export const filterUnpublished = definePlugin(() => ({
       ctx.meta.set("svartz:protectedGroupTokens", groupTokens);
 
       const assets = ctx.files.filter(
-        (file) => !isNote(file) && !matches(file.path, ctx.config.exclude),
+        (file) => !isNote(file) && keepsAttachment(ctx.config, file.path),
       );
       const roamMedia = ctx.meta.get("svartz:roamMedia") === true;
       const usedAssets = referencedAssets(publishedNotes, assets, roamMedia);

@@ -112,11 +112,19 @@ export async function filesChanged(root: string, shas: readonly string[]): Promi
   return files;
 }
 
+/** The paths, in the repository, of every file in the tree of commit `sha` below the folder `prefix`. */
+export async function filesAt(root: string, sha: string, prefix: string): Promise<string[]> {
+  const { stdout } = await exec("git", ["-C", root, "-c", "core.quotePath=false", "ls-tree", "-r", "-z", "--name-only", sha, "--", prefix || "."], {
+    maxBuffer: MAX_LOG_BYTES,
+  });
+  return stdout.split("\0").filter(Boolean);
+}
+
 /**
- * The text of each file in `specs`, each `<commit>:<path>`, read in one `git cat-file --batch`: `undefined` for one
+ * The bytes of each file in `specs`, each `<commit>:<path>`, read in one `git cat-file --batch`: `undefined` for one
  * the repository doesn't hold.
  */
-export async function readFiles(root: string, specs: readonly string[]): Promise<(string | undefined)[]> {
+export async function readFiles(root: string, specs: readonly string[]): Promise<(Buffer | undefined)[]> {
   if (specs.length === 0) return [];
   // Each answer is `<oid> <type> <size>\n<content>\n`, or `<spec> missing\n` (or `ambiguous`).
   const output = await pipe(root, ["cat-file", "--batch"], specs.map((spec) => `${spec}\n`).join(""));
@@ -130,6 +138,6 @@ export async function readFiles(root: string, specs: readonly string[]): Promise
     const length = Number(found[2]);
     const content = output.subarray(offset, offset + length);
     offset += length + 1;
-    return found[1] === "blob" ? content.toString("utf8") : undefined;
+    return found[1] === "blob" ? Buffer.from(content) : undefined;
   });
 }

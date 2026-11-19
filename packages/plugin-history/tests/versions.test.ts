@@ -64,15 +64,19 @@ async function build(vault: string, plugins: unknown[] = [history({ source: "git
   };
   await runStages(ctx.plugins!, ctx);
   const routes = ctx.index!.routes.all;
-  /** The HTML of the generated page at `pathname`, as SvelteKit renders it. */
+  /** The markup of the page component at `pathname`, as the build hands it to SvelteKit: a note's or a version's. */
   const page = (pathname: string) => {
     const source = ctx.artifacts.get(`pages/${pathname.replace(/^\/+|\/+$/g, "")}.svelte`)?.contents;
-    return typeof source === "string" ? JSON.parse(/\{@html (".*")\}/.exec(source)![1]!) as string : undefined;
+    if (typeof source !== "string") return undefined;
+    const head = source.indexOf("</svelte:head>");
+    return source.slice(head >= 0 ? head + "</svelte:head>".length : source.lastIndexOf("</script>") + "</script>".length).trim();
   };
+  /** The bytes of the attachment the build publishes at `path` in the vault. */
+  const asset = (path: string) => ctx.artifacts.get(`assets/${path}`)?.contents;
   const versions = routes.filter((route) => route.includes("/versions/"));
   const everything = [...ctx.artifacts.values()].map(({ contents }) => String(contents)).join("\n");
   const link = getCompilerContributions(ctx).browserResources.get("history")?.options;
-  return { ctx, routes, versions, page, everything, link };
+  return { ctx, routes, versions, page, asset, everything, link };
 }
 
 describe("previous versions from git", () => {
@@ -115,7 +119,7 @@ describe("previous versions from git", () => {
     expect(latest).toContain("<del>Second wording.</del>");
     expect(latest).toContain("<ins>Third wording, with [a link](other.md).</ins>");
     // Rendered with the build's Markdown steps, its link relative to the version's own page.
-    expect(latest).toContain('<a href="../../../../posts/other/">a link</a>');
+    expect(latest).toContain('"href":"../../../other/"');
     expect(latest).toContain('href="../../">Hello</a>');
     expect(latest).toContain(`<a href="../${shas[1]}/">Older version</a>`);
     const first = page(`/posts/hello/versions/${shas[3]}/`)!;
@@ -123,17 +127,64 @@ describe("previous versions from git", () => {
     expect(first).toContain("<ins>First wording.</ins>");
   });
 
+  // Proves a version renders through the vault's own steps, math included, exactly as the note renders: the version
+  // that matches the note today holds the note's own markup.
+  it("renders a version with the vault's own Markdown steps, as the note renders", async () => {
+    const repo = await repository();
+    await repo.write("posts/hello.md", post("No math yet."));
+    await repo.commit("Write it");
+    await repo.write("posts/hello.md", post("Now $x^2$ and ==highlighted== text.\n\n> [!note] A callout\n> Inside it."));
+    await repo.commit("Add math");
+
+    const { page } = await build(repo.vault);
+
+    const shas = (await exec("git", ["-C", repo.root, "log", "--format=%h", "--abbrev=7"])).stdout.trim().split("\n");
+    const note = page("/posts/hello/")!;
+    expect(note).toContain('class="katex"');
+    expect(page(`/posts/hello/versions/${shas[0]}/`)).toContain(note);
+  });
+
+  // Proves a version's page shows the attachments it referenced, whether the vault still holds the file (and no
+  // note references it now) or the file is gone and is read from git at that version's commit.
+  it("publishes the attachments a shown version references, from the vault or from git", async () => {
+    const repo = await repository();
+    await mkdir(join(repo.vault, "media"));
+    await repo.write("media/chart.svg", "<svg>chart</svg>");
+    await repo.write("media/old.svg", "<svg>old</svg>");
+    await repo.write("posts/hello.md", post("![Chart](../media/chart.svg)\n\n![[old.svg]]"));
+    await repo.commit("Draw it");
+    await repo.write("media/old.svg", "<svg>old, redrawn</svg>");
+    await repo.commit("Redraw the old chart");
+    await rm(join(repo.vault, "media/old.svg"));
+    await repo.write("posts/hello.md", post("No charts any more."));
+    await repo.commit("Drop the charts");
+
+    const { page, asset } = await build(repo.vault);
+
+    const shas = (await exec("git", ["-C", repo.root, "log", "--format=%h", "--abbrev=7"])).stdout.trim().split("\n");
+    const drawn = page(`/posts/hello/versions/${shas[2]}/`)!;
+    expect(drawn).toContain('"src":"../../../../media/chart.svg"');
+    expect(drawn).toContain('"src":"../../../../media/old.svg"');
+    expect(String(asset("media/chart.svg"))).toBe("<svg>chart</svg>");
+    // As the version's commit had it, not as it was redrawn later.
+    expect(String(asset("media/old.svg"))).toBe("<svg>old</svg>");
+  });
+
   // Proves nothing of a version the build would have hidden shows anywhere: not listed, not as the next version's
-  // "before", not in any file the build emits; and a summary naming a file the site doesn't publish stays out.
+  // "before", not in any file the build emits, its attachments included; an attachment the vault excludes stays out
+  // though a shown version references it; and a summary naming a file the site doesn't publish stays out.
   it("never shows a draft, private, protected or excluded version, nor a summary naming an unpublished file", async () => {
     const repo = await repository();
     await mkdir(join(repo.vault, "drafts"));
+    await mkdir(join(repo.vault, "media"));
     await repo.write("drafts/hello.md", post("SECRET in an excluded folder."));
+    await repo.write("drafts/secret.svg", "<svg>SECRET-ASSET-EXCLUDED</svg>");
     await repo.commit("Start in drafts");
     await repo.move("drafts/hello.md", "posts/hello.md");
-    await repo.write("posts/hello.md", post("Public one."));
+    await repo.write("posts/hello.md", post("Public one.\n\n![Excluded](../drafts/secret.svg)"));
     await repo.commit("Publish it");
-    await repo.write("posts/hello.md", post("SECRET draft wording.", "versions: true\ndraft: true"));
+    await repo.write("posts/hello.md", post("SECRET draft wording.\n\n![Draft](../media/draft-only.svg)", "versions: true\ndraft: true"));
+    await repo.write("media/draft-only.svg", "<svg>SECRET-ASSET-DRAFT</svg>");
     await repo.commit("Draft SECRET-SUMMARY");
     await repo.write("posts/hello.md", post("SECRET private wording.", "versions: true\nprivate: true"));
     await repo.commit("Hide it");
@@ -143,10 +194,14 @@ describe("previous versions from git", () => {
     await repo.write("posts/diary.md", "---\nprivate: true\n---\n\nSECRET diary.\n");
     await repo.commit("Publish again and write in SECRET-DIARY");
 
-    const { versions, page, everything } = await build(repo.vault, [history({ source: "git" })], { exclude: ["drafts/**"] });
+    const { versions, page, asset, everything } = await build(repo.vault, [history({ source: "git" })], { exclude: ["drafts/**"] });
 
     const shas = (await exec("git", ["-C", repo.root, "log", "--format=%h", "--abbrev=7"])).stdout.trim().split("\n");
     expect(versions).toEqual(["/posts/hello/versions/", `/posts/hello/versions/${shas[0]}/`, `/posts/hello/versions/${shas[4]}/`].sort());
+    expect(asset("drafts/secret.svg")).toBeUndefined();
+    // The excluded chart's link shows unresolved, as a link to a missing note does, so nothing points at the file.
+    expect(page(`/posts/hello/versions/${shas[4]}/`)).toMatch(/<span class="svartz-unresolved-link"[^>]*>Excluded<\/span>/);
+    expect(asset("media/draft-only.svg")).toBeUndefined();
     expect(everything).not.toMatch(/SECRET|Start in drafts|Publish it|Hide it|Protect it/);
     expect(everything).not.toContain(EMAIL);
     const latest = page(`/posts/hello/versions/${shas[0]}/`)!;

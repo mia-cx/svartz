@@ -5,30 +5,36 @@
  *
  * The pages are page artifacts and routes the build adds after indexing, never files in the pipeline, so search, the
  * explorer, the graph, tags, backlinks, feeds and sitemaps never see them, and the theme renders each in its shell as
- * it renders a listing: the body as the page, without a note around it.
+ * it renders a listing: the body as the page, without a note around it. A version's body compiles as the note does,
+ * through the vault's own steps (`compileNoteVersion`), and the attachments it references are published with it.
  *
  * A version shows only when the build would have published it unprotected at the path it had then. Diffs run between
  * consecutive shown versions, so nothing of a hidden one shows, not even as the "before" of the next.
  */
-import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { matchThemeRoute, type IndexEntry, type PluginContext, type SvartzTheme } from "@svartz/core";
-import { renderRevision } from "@svartz/plugin-submissions/render";
-import { publishedAttachments, publishesNote, sharedAttachmentNames } from "@svartz/plugins";
-import type { PreviewNote, PreviewOptions } from "@svartz/plugins/preview";
-import { alternateNames, extractFrontmatter } from "@svartz/plugins/routes";
+import { matchThemeRoute, type IndexEntry, type PluginContext, type ProcessedFile, type SvartzTheme } from "@svartz/core";
+import { compileNoteVersion, keepsAttachment, publishedAttachments, publishesNote } from "@svartz/plugins";
+import { extractFrontmatter } from "@svartz/plugins/routes";
 import { diffLines } from "./diff";
-import { commitsOf, filesChanged, readFiles, repositoryOf, type Commit, type Repository } from "./git";
+import { commitsOf, filesAt, filesChanged, readFiles, repositoryOf, type Commit, type Repository } from "./git";
 import { versionPage, versionsPage, type Version, type VersionsPage } from "./versions-pages";
 
 /** The frontmatter field a note sets to `true` to publish its previous versions. */
 export const VERSIONS_FIELD = "versions";
 /** How many versions of a note are listed, newest first, unless `maxVersions` says otherwise. */
 export const DEFAULT_MAX_VERSIONS = 50;
+/** Where the plugin keeps, in `ctx.meta`, every attachment discovery found, before publication filtering drops some. */
+export const DISCOVERED = "history:attachments";
 /** Commits whose files one `git cat-file` reads at a time, while looking for versions that may show. */
 const READ_BATCH = 64;
 /** The shortest commit prefix a version's URL uses. */
 const SHORT_SHA = 7;
+/** From a version's page back to its note's: `<note>versions/<sha>/`. */
+const TO_NOTE = "../../";
+/** Where a version's body goes in its page's HTML. The page escapes every `<` it is given, so only this can be it. */
+const BODY = "<!--svartz:version-body-->";
+const NOTE_FILE = /\.(?:md|mdx|svx)$/i;
 
 function fail(message: string): never {
   throw new Error(`[history] ${message}`);
@@ -67,7 +73,7 @@ async function shownVersions(ctx: PluginContext, repository: Repository, path: s
     });
     const files = await readFiles(repository.root, batch.map(({ commit }) => `${commit.sha}:${commit.path}`));
     batch.forEach(({ commit, path: at }, index) => {
-      const markdown = files[index];
+      const markdown = files[index]?.toString("utf8");
       if (markdown !== undefined && isPublic(ctx, at, markdown)) shown.push({ commit, markdown, path: at });
     });
   }
@@ -81,24 +87,35 @@ function shortLength(shas: readonly string[]): number {
   return length;
 }
 
-/** `../` for each segment of `pathname`, which ends in a slash: from that page back to the deployment base. */
-const upFrom = (pathname: string) => "../".repeat(pathname.split("/").length - 2);
+/** Our own HTML as Svelte markup: braces would start expressions. */
+const literal = (html: string) => html.replaceAll("{", "&#123;").replaceAll("}", "&#125;");
 
-/** A generated page as a Svelte component: its `<title>`, kept out of search engines, and its HTML. */
-const component = (page: VersionsPage, site: string) => [
-  "<svelte:head>",
-  `\t<title>{${JSON.stringify(`${page.title} | ${site}`)}}</title>`,
-  '\t<meta name="robots" content="noindex" />',
-  "</svelte:head>",
-  "",
-  `{@html ${JSON.stringify(page.html)}}`,
-  "",
-].join("\n");
+/**
+ * A generated page as a Svelte component, as the build writes a note's: its `<title>`, kept out of search engines,
+ * and its HTML, with `body`, a version's compiled Markdown, where {@link BODY} marks it.
+ */
+function component(page: VersionsPage, site: string, body = ""): string {
+  const [before = "", after = ""] = page.html.split(BODY);
+  return [
+    "<script>",
+    "\tlet { contentComponents } = $props();",
+    "</script>",
+    "",
+    "<svelte:head>",
+    `\t<title>{${JSON.stringify(`${page.title} | ${site}`)}}</title>`,
+    '\t<meta name="robots" content="noindex" />',
+    "</svelte:head>",
+    "",
+    `${literal(before)}${body}${literal(after)}`,
+    "",
+  ].join("\n");
+}
 
 /**
  * Adds the version pages of every published note that sets `versions: true` and has at least two versions that
- * show, as page artifacts and routes. Answers the routes of those notes, which link their versions. Fails the build
- * when the vault isn't in a git repository with its whole history, or a version page's address is taken.
+ * show, as page artifacts and routes, and the attachments those versions reference that the build doesn't publish
+ * already. Answers the routes of those notes, which link their versions. Fails the build when the vault isn't in a
+ * git repository with its whole history, or a version page's address is taken.
  */
 export async function emitVersions(ctx: PluginContext, maxVersions: number): Promise<string[]> {
   const index = ctx.index;
@@ -116,31 +133,27 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
   }
 
   const mountPath = ctx.config.mountPath ?? "";
-  const notes: PreviewNote[] = unlocked.map((entry) => {
-    const aliases = alternateNames(frontmatter.get(entry.slug), ctx.config.frontmatter.aliasesField);
-    return { slug: entry.slug, path: entry.path.replaceAll("\\", "/"), href: entry.href, title: entry.title, ...(aliases.length ? { aliases } : {}) };
-  });
-  const attachments = publishedAttachments(ctx).map((file) => file.path.replaceAll("\\", "/"));
-  // Revisions render with links from a placeholder base, then each page makes them relative to itself, since the
-  // deployment base is only known to SvelteKit.
-  const base = `/svartz-base-${randomUUID()}`;
-  const preview: Omit<PreviewOptions, "path"> = {
-    notes,
-    base,
-    mountPath,
-    linkResolution: ctx.config.linkResolution,
-    // Inline `#tags` link under the theme's tags route, as core:transform-ofm links them.
-    tagsRoute: (ctx.config.theme.routes as { tags?: string } | undefined)?.tags ?? "tags",
-    attachments,
-    sharedNames: sharedAttachmentNames(ctx),
-  };
-  const published = new Set([...notes.map(({ path }) => path), ...attachments]);
+  const notePaths = unlocked.map((entry) => entry.path.replaceAll("\\", "/"));
+  const published = new Set([...notePaths, ...publishedAttachments(ctx).map((file) => file.path.replaceAll("\\", "/"))]);
+  // Every attachment the vault holds now that its rules let through, published or not: an earlier version may use one.
+  const inTree = ((ctx.meta.get(DISCOVERED) as readonly ProcessedFile[] | undefined) ?? [])
+    .filter((file) => keepsAttachment(ctx.config, file.path));
+  const inTreePaths = new Set(inTree.map(({ path }) => path.replaceAll("\\", "/")));
+  // Every page and file the site publishes, below the deployment base: a version's link to anything else shows
+  // unresolved. Attachments, and files such as feeds that steps before this one emitted, serve at `<mount>/<path>`.
+  const urls = new Set([
+    ...index.routes.all,
+    ...[...published].filter((path) => !NOTE_FILE.test(path)).map((path) => `${mountPath}/${path}`),
+    ...[...ctx.artifacts.keys()].filter((key) => key.startsWith("assets/")).map((key) => `${mountPath}/${key.slice("assets/".length)}`),
+  ]);
+  /** Attachments version pages reference, by vault path, as each is published: from the working tree or from git. */
+  const attachments = new Map<string, { readonly sourcePath: string } | { readonly spec: string }>();
+
   const taken = new Set([...index.routes.all, ...ctx.files.map((file) => `/${file.slug}/`)]);
   const theme = ctx.meta.get("svartz:theme") as SvartzTheme | undefined;
   const site = ctx.config.site.title;
-
   const routes: string[] = [];
-  const add = (pathname: string, page: VersionsPage, note: IndexEntry) => {
+  const add = (pathname: string, page: VersionsPage, note: IndexEntry, body?: string) => {
     // The theme finds a page's component by its path below the vault's mount, as it finds a note's.
     const below = mountPath && pathname.startsWith(`${mountPath}/`) ? pathname.slice(mountPath.length) : pathname;
     const slug = below.replace(/^\/+|\/+$/g, "");
@@ -154,9 +167,21 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
       path: resolve(ctx.config.outDir, "..", "artifacts", key),
       type: "svelte",
       pluginId: "history",
-      contents: component(page, site),
+      contents: component(page, site, body),
     });
     routes.push(pathname);
+  };
+
+  /**
+   * What `version` may reference beyond what the build publishes: the attachments in the tree now, and those only
+   * its commit had, which are read from git as `<commit>:<path>`.
+   */
+  const candidatesAt = async ({ commit }: Shown) => {
+    const gone = (await filesAt(repository.root, commit.sha, repository.prefix))
+      .map((file) => file.slice(repository.prefix.length))
+      .filter((path) => !NOTE_FILE.test(path) && !inTreePaths.has(path) && keepsAttachment(ctx.config, path));
+    const files: ProcessedFile[] = [...inTree, ...gone.map((path) => ({ path, slug: path, content: "" }))];
+    return { files, git: new Map(gone.map((path) => [path, `${commit.sha}:${repository.prefix}${path}`])) };
   };
 
   const linked: string[] = [];
@@ -190,23 +215,47 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
       ...(shown.length > maxVersions ? { max: maxVersions } : {}),
     }), note);
     for (const [position, version] of listed.entries()) {
-      const pathname = `${list}${short(version)}/`;
       const before = shown[position + 1];
       const newer = listed[position - 1];
       const older = listed[position + 1];
-      const rendered = await renderRevision(version.markdown, { ...preview, path: version.path });
+      const candidates = await candidatesAt(version);
+      let compiled;
+      try {
+        compiled = await compileNoteVersion(ctx, note, version, { attachments: candidates.files, prefix: TO_NOTE, published: (path) => urls.has(path) });
+      } catch (error) {
+        throw new Error(`[history] couldn't build the version of "${note.path}" in vault "${vault}" at ${version.commit.sha}`, { cause: error });
+      }
+      // The newest version that references an attachment decides its bytes.
+      for (const path of compiled.attachments) {
+        if (attachments.has(path)) continue;
+        const spec = candidates.git.get(path);
+        const sourcePath = candidates.files.find((file) => file.path === path)?.sourcePath;
+        if (spec) attachments.set(path, { spec });
+        else if (sourcePath) attachments.set(path, { sourcePath });
+      }
       const page = versionPage({
         title: note.title,
         version: describe(version),
         // The version before the oldest listed one has no page.
         before: before && describe(before, older && `../${short(older)}/`),
         hunks: diffLines(before?.markdown ?? "", version.markdown),
-        rendered: rendered.replaceAll(`${base}/`, upFrom(pathname)),
-        links: { note: "../../", versions: "../", ...(newer ? { newer: `../${short(newer)}/` } : {}), ...(older ? { older: `../${short(older)}/` } : {}) },
+        rendered: BODY,
+        links: { note: TO_NOTE, versions: "../", ...(newer ? { newer: `../${short(newer)}/` } : {}), ...(older ? { older: `../${short(older)}/` } : {}) },
       });
-      add(pathname, page, note);
+      add(`${list}${short(version)}/`, page, note, compiled.markup);
     }
     linked.push(note.href);
+  }
+
+  // Published as the build publishes an attachment: `assets/<vault path>`, served at `<mount>/<vault path>`.
+  const fromGit = [...attachments].flatMap(([path, source]) => ("spec" in source ? [[path, source.spec] as const] : []));
+  const bytes = await readFiles(repository.root, fromGit.map(([, spec]) => spec));
+  const gitBytes = new Map(fromGit.map(([path], index) => [path, bytes[index]]));
+  for (const [path, source] of attachments) {
+    const contents = "spec" in source ? gitBytes.get(path) : await readFile(source.sourcePath);
+    if (!contents) continue;
+    const key = `assets/${path}`;
+    ctx.artifacts.set(key, { key, path: resolve(ctx.config.outDir, "..", "artifacts", key), type: "asset", pluginId: "history", contents });
   }
 
   ctx.index = { ...index, routes: { ...index.routes, all: [...new Set([...index.routes.all, ...routes])].sort() } };

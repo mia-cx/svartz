@@ -264,7 +264,7 @@ describe("svartz CLI", () => {
     const build = async (plugins: string) => {
       await writeFile(configPath, `import { history } from ${JSON.stringify(resolve(ROOT, "packages/plugin-history/dist/index.js"))};
         export default { version: "1.0.0", vaults: [{ id: "versions-e2e", path: ${JSON.stringify(vault)},
-          target: { type: "static" }, site: { title: "Versions" }, plugins: ${plugins} }] };\n`);
+          target: { type: "static" }, site: { title: "Versions" }, exclude: ["private/**"], plugins: ${plugins} }] };\n`);
       await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
       const stamp = (JSON.parse(await readFile(resolve(dist, "_app/version.json"), "utf8")) as { version: string }).version;
       const files = await readdir(dist, { recursive: true, withFileTypes: true });
@@ -289,10 +289,18 @@ describe("svartz CLI", () => {
       const without = await build("[]");
       expect(await build('[history({ source: "git" })]')).toEqual(without);
 
-      await post("versions: true\n", "Third wording.");
+      // Charts only this version shows: one stays in the vault, one is deleted later, one the vault excludes.
+      await mkdir(resolve(vault, "media"));
+      await mkdir(resolve(vault, "private"));
+      await writeFile(resolve(vault, "media/chart.svg"), '<svg xmlns="http://www.w3.org/2000/svg">kept</svg>');
+      await writeFile(resolve(vault, "media/gone.svg"), '<svg xmlns="http://www.w3.org/2000/svg">gone</svg>');
+      await writeFile(resolve(vault, "private/secret.svg"), "<svg>SECRET-EXCLUDED</svg>");
+      await post("versions: true\n", "Third wording, $x^2$.\n\n![Kept](../media/chart.svg)\n\n![Gone](../media/gone.svg)\n\n![Excluded](../private/secret.svg)");
       await commit("Publish its versions");
-      await post("versions: true\ndraft: true\n", "SECRET draft wording.");
+      await writeFile(resolve(vault, "media/draft-only.svg"), "<svg>SECRET-DRAFT</svg>");
+      await post("versions: true\ndraft: true\n", "SECRET draft wording.\n\n![Draft](../media/draft-only.svg)");
       await commit("Draft SECRET-SUMMARY");
+      await rm(resolve(vault, "media/gone.svg"));
       await post("versions: true\n", "Fourth wording.");
       await commit("Finish it");
       const emitted = await build('[history({ source: "git" })]');
@@ -303,10 +311,19 @@ describe("svartz CLI", () => {
       expect(listing).toContain('<meta name="robots" content="noindex"');
       expect([...listing.matchAll(/<a href="([0-9a-f]+\/)"/g)].map(([, href]) => href)).toEqual([finish, publish, reword, write].map((sha) => `${sha}/`));
       const latest = emitted.get(`/posts/hello/versions/${finish}/index.html`)!;
-      expect(latest).toContain("<del>Third wording.</del>");
+      expect(latest).toContain("<del>Third wording, $x^2$.</del>");
       expect(latest).toContain("<ins>Fourth wording.</ins>");
       expect(latest).toContain("<p>Fourth wording.</p>");
       expect(emitted.has(`/posts/hello/versions/${draft}/index.html`)).toBe(false);
+      // The version with charts renders its math with KaTeX, as the note would, and finds both charts it showed.
+      const charted = emitted.get(`/posts/hello/versions/${publish}/index.html`)!;
+      expect(charted).toContain('class="katex"');
+      expect(charted).toContain('src="../../../../media/chart.svg"');
+      expect(charted).toContain('src="../../../../media/gone.svg"');
+      expect(emitted.get("/media/chart.svg")).toContain("kept");
+      expect(emitted.get("/media/gone.svg")).toContain("gone");
+      expect(emitted.has("/private/secret.svg")).toBe(false);
+      expect(emitted.has("/media/draft-only.svg")).toBe(false);
       for (const [path, contents] of emitted) expect(contents, path).not.toMatch(/SECRET|ada@example\.com/);
     } finally {
       await rm(configPath, { force: true });
