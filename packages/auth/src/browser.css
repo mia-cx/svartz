@@ -454,6 +454,21 @@
 	max-inline-size: none;
 }
 
+/* Page resets drop the native arrow, so a select would read as a text field: draw a chevron in the text colour. */
+.sv-dashboard select.sv-account-input {
+	appearance: none;
+	padding-inline-end: var(--sv-space-6, 2rem);
+	background-image:
+		linear-gradient(45deg, transparent 50%, currentColor 50%),
+		linear-gradient(135deg, currentColor 50%, transparent 50%);
+	background-position:
+		calc(100% - 1.15rem) 55%,
+		calc(100% - 0.8rem) 55%;
+	background-size: 0.35rem 0.35rem;
+	background-repeat: no-repeat;
+	cursor: pointer;
+}
+
 .sv-dashboard-submit {
 	grid-column: 1 / -1;
 }
