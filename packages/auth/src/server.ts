@@ -449,7 +449,7 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
     const [{ identities, sessions }, handles] = await Promise.all([signInsOf(db, session.account.id), handlesOf(db, session.account.id)]);
     // The page under the current handle, else under one held before, where a handle change left it.
     const { handle: current } = session.account;
-    const owned = [current, ...handles.filter((handle) => handle !== current)].find((handle) => handle in userPages);
+    const owned = [current, ...handles.filter((handle) => handle !== current)].find((handle) => Object.hasOwn(userPages, handle));
     const href = owned === undefined ? undefined : userPages[owned];
     return accountPage({
       account: session.account,

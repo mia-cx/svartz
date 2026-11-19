@@ -173,6 +173,8 @@ describe("signing in with accounts", () => {
     const invalid = await chooseHandle(request, callback, "-octo cat-");
     expect(invalid.status).toBe(422);
     expect(await invalid.text()).toContain("starting and ending with a letter or number");
+    // Page addresses collapse a run of hyphens, so `octo--cat` would name the user page of `octo-cat`.
+    expect((await chooseHandle(request, callback, "octo--cat")).status).toBe(422);
 
     const chosen = await chooseHandle(request, callback, "@Octo_Cat");
     expect(chosen.status).toBe(303);

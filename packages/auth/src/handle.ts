@@ -1,18 +1,19 @@
 /**
- * Handles: the unique name an account goes by across the site, and later the slug of its `users/<handle>` page. So a
+ * Handles: the unique name an account goes by across the site, and the slug of its `users/<handle>` page. So a
  * handle is lowercase letters, digits, hyphens and underscores, starts and ends with a letter or digit, and fits
- * GitHub's longest login.
+ * GitHub's longest login. Page slugs collapse a run of hyphens into one, so a handle never has two in a row: `a--b`
+ * would name the page of `a-b`.
  */
 
 export const HANDLE_MAX_LENGTH = 39;
-const HANDLE = new RegExp(`^[a-z0-9](?:[a-z0-9_-]{0,${HANDLE_MAX_LENGTH - 2}}[a-z0-9])?$`);
+const HANDLE = new RegExp(`^(?!.*--)[a-z0-9](?:[a-z0-9_-]{0,${HANDLE_MAX_LENGTH - 2}}[a-z0-9])?$`);
 /** What a handle falls back to when nothing about the reader makes one. */
 const FALLBACK_HANDLE = "reader";
 
 export const isHandle = (value: string): boolean => HANDLE.test(value);
 
 /** What a reader sees when the handle they typed breaks the rules. */
-export const HANDLE_PROBLEM = `Use up to ${HANDLE_MAX_LENGTH} lowercase letters, numbers, hyphens and underscores, starting and ending with a letter or number.`;
+export const HANDLE_PROBLEM = `Use up to ${HANDLE_MAX_LENGTH} lowercase letters, numbers, single hyphens and underscores, starting and ending with a letter or number.`;
 
 /** What the reader typed, as the handle it would become: trimmed, lowercase, without a leading `@`. */
 export const typedHandle = (input: string): string => input.trim().replace(/^@/, "").toLowerCase();

@@ -57,7 +57,7 @@ describe("the auth plugin", () => {
   });
 
   // Each would let the override match pages outside one folder, or match no page's slug at all.
-  it.each(["", "/", "/users", "users//x", "../users", "users/..", "./users", "Users", "user pages", "-", "users\\x", 7])(
+  it.each(["", "/", "/users", "users//x", "../users", "users/..", "./users", "Users", "user pages", "-", "users\\x", "user--pages", 7])(
     "fails the build for the user page folder %j",
     (userPages) => {
       expect(() => auth({ providers: { github }, userPages } as unknown as AuthOptions)).toThrow(/userPages must be a folder of the vault/);

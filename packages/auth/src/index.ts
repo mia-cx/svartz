@@ -63,8 +63,11 @@ function validate(options: AuthOptions): ProviderId[] {
   return names as ProviderId[];
 }
 
-/** A folder as page slugs spell it: lowercase segments of letters, digits, `-` and `_`, starting with a letter or digit. */
-const USER_PAGE_FOLDER = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/;
+/**
+ * A folder as page slugs spell it: lowercase segments of letters, digits, `-` and `_`, starting with a letter or digit.
+ * Slugs collapse a run of hyphens into one, so no segment has two in a row.
+ */
+const USER_PAGE_FOLDER = /^[a-z0-9](?:[a-z0-9_]|-(?!-))*(?:\/[a-z0-9](?:[a-z0-9_]|-(?!-))*)*$/;
 
 /**
  * The folder of user pages, without a trailing slash. Refused when pages outside one folder could match it: empty, a

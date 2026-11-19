@@ -269,6 +269,16 @@ describe("/-/account/", () => {
     expect((await after.page(grace))?.html).not.toMatch(/Your page|user-page-actions/);
   });
 
+  it("leaves room to start a page for a handle that names something every object has", async () => {
+    const { request, page } = site(await createDatabase());
+    const account = await signUp(request, OCTOCAT, "constructor");
+
+    const html = (await page(account))?.html;
+
+    expect(html).toContain('data-svartz-region="user-page-actions" data-svartz-user-page="users/constructor"');
+    expect(html).not.toContain("Your page");
+  });
+
   // Proves the page stays reachable through a handle change: it stays where it was written, and stays its owner's.
   it("keeps linking the user page under the old handle after a handle change", async () => {
     // Handles differ from the other tests': a user page the build found keeps its handle taken for the whole process.

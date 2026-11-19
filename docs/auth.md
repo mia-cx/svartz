@@ -129,7 +129,7 @@ Sign-in asks GitHub for no scopes: it reads only the public profile.
 
 The first time someone signs in, they choose a handle: the name they go by across the site, and later the address of their user page. The chooser is prefilled with the provider's username, or with the closest free variant (`octocat-2`) when someone has it. Google accounts have no username, so theirs starts from the display name. Signing in creates the account, links the provider account to it, and returns the reader to the page they started from. Every later sign-in with that provider account reaches the same account without asking.
 
-A handle is 1 to 39 lowercase letters, numbers, hyphens and underscores, starting and ending with a letter or number, and no two accounts share one. The chooser lowercases what the reader types and drops a leading `@`. A reader has 15 minutes to choose; after that they sign in again.
+A handle is 1 to 39 lowercase letters, numbers, hyphens and underscores, starting and ending with a letter or number and never with two hyphens in a row, and no two accounts share one. The chooser lowercases what the reader types and drops a leading `@`. A reader has 15 minutes to choose; after that they sign in again.
 
 ## What is kept
 
@@ -184,7 +184,7 @@ Auth starts before the site answers any request, so server plugins and a host ap
 
 Each account has a user page: the note at `users/<handle>` in each vault, such as `users/ada.md`. Its account holds every permission on it, whatever the [grants](#grants) say, so with [submissions](../packages/plugin-submissions/README.md#modes) its owner's edits commit straight to the repository and everyone else's go to review. The override covers the page itself, not pages below it such as `users/ada/drafts`; to give an account a folder of its own, grant it on `folder:<vault>/users/ada/`.
 
-`userPages` names another folder, written as page addresses spell it: lowercase letters, numbers, hyphens and underscores, with `/` between folders, such as `"people"` or `"wiki/people"`. Host vaults share accounts, so every host vault that enables auth must set the same folder, or the build fails.
+`userPages` names another folder, written as page addresses spell it: lowercase letters, numbers, single hyphens and underscores, with `/` between folders, such as `"people"` or `"wiki/people"`. Host vaults share accounts, so every host vault that enables auth must set the same folder, or the build fails.
 
 The [account page](#the-account-page) links the reader's user page. While they have none, a plugin that writes pages can offer to start it there; [submissions](../packages/plugin-submissions/README.md#new-page) offers **Create your page**.
 
