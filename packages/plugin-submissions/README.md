@@ -138,6 +138,7 @@ The plugin declares four permissions, which admins grant on the site, a vault, a
 | `submissions:commits:write` | Saving straight to the repository | Admins only |
 | `submissions:reviews:write` | Commenting on, reviewing, merging and closing submissions | Admins only |
 | `submissions:pull-requests:read` | Seeing other people's submissions, and every edit on the dashboard's [Recent edits](#recent-edits) | Admins only |
+| `submissions:own-submissions:read` | [Following your own submissions](#my-submissions): the panel, replies and follow-up edits. Declared only with [sync](#github-sync). | Signed-in readers |
 
 Admins hold every permission, and each account holds every one on its own [user page](../../docs/auth.md#user-pages), `users/<handle>`, so its owner's edits there commit and everyone else's go to review. Vaults that share accounts must configure Turnstile alike, since the guest default comes from it and is shared.
 
@@ -269,6 +270,29 @@ With sync, each save an account makes earns that account [reputation](../../docs
 
 Only the site's own record of a save names who earns: the commit the site made for it, or the pull request it opened. A commit's trailer, author and committer are whatever its maker wrote, so they count for nothing, and a commit or pull request the site has no save for earns nobody anything, whoever it claims to be from. A save that found its content already on the branch made no commit, so it is not recorded and earns nothing. Saves made before reputation existed, and guests' saves, earn nothing.
 
+### My submissions
+
+On a site with [accounts](../../docs/auth.md) and sync, the [dashboard](../../docs/auth.md#the-dashboard) has a **My submissions** panel for every signed-in reader, at `/-/dashboard/submissions/mine/`. It lists the pull requests their saves opened: open ones first, then the rest, newest first, 20 a page. Each shows its page, whether it is in review, approved, waiting on changes, merged or closed, and how many comments it has. As on GitHub, each reviewer's latest approval or request for changes counts: an open submission waits on changes while any reviewer's does, until that reviewer approves or the review is dismissed, and is approved once a reviewer approves and none asks for changes.
+
+Opening one shows where it stands (waiting for review, closed, merged, rebuilding, live or failed, as the editor says), then its conversation in time order: reviews, comments, and the comments on lines of the diff, each line's thread together. A long conversation shows its newest 500 comments, with the first comment of each thread they're in, and links to the pull request on GitHub for the earlier ones. Everything is read from the mirror, so the page never waits on GitHub; a mirror older than a minute is read again after the page answers. Comments show as the plain text they were written in, escaped, so nothing GitHub sends runs or renders on the site.
+
+A submission belongs to the account that saved it, as the site recorded the save. Nothing a pull request says, its text, branch or commit trailers, makes it anyone's, and a pull request the site didn't open is nobody's. Other readers' submissions, and guests' edits, never show here.
+
+**Replies.** Under the conversation, and under each line's thread, the reader can reply. The App posts the reply on GitHub, as a comment on the pull request or in that line's thread, starting with a header that names who wrote it:
+
+```md
+> [!NOTE]
+> Sent from wiki.example by [Grace Hopper (grace)](<https://wiki.example/users/grace/>), submitter.
+
+Added a source.
+```
+
+The header names the account's display name and handle, its role (`submitter` on their own submission; otherwise their first role, or `reviewer`), and links their [user page](../../docs/auth.md#user-pages) when this vault publishes one. A name can't break it: names lose line breaks and their Markdown is escaped. What the reader writes keeps its Markdown, but a `@name` in it doesn't notify anyone on GitHub, and a callout in it shows as a plain quote, so nothing below the header can pass for another one. The panel shows the reply as the account that wrote it, until someone edits it on GitHub. A reply is up to 4,000 characters, and the browser keeps it while it is sent, so a reply GitHub refuses is still there to send again.
+
+**Follow-up edits.** While the pull request is open, **Edit page** opens the editor on the file as the submission's branch holds it now, and **Add to submission** commits the change to that branch, authored and committed as [direct commits](#how-a-commit-lands) are. It never overwrites: when someone pushed to the file since the editor loaded it, nothing is written and the editor says to copy the changes and reopen it. A pull request that is closed or merged, or whose branch isn't the one the site made for that submission, takes no follow-up. Follow-ups need a [GitHub App](#github-app).
+
+The submitter may reply while they hold `submissions:own-submissions:read`, and push follow-ups while they may also still suggest edits to the page. Anyone holding `submissions:reviews:write` on the page may do both on anyone's submission. Replies and follow-ups share one [rate limit](#rate-limit) per account, separate from saves.
+
 ### Recent edits
 
 With `sync`, the [dashboard](../../docs/auth.md#the-dashboard) gets a Submissions section with a **Recent edits** panel, at `<mount>/-/dashboard/submissions/recent-edits/`. It lists every mirrored commit that changed the vault, newest first and 25 to a page, whether the site made it or someone pushed it on GitHub. Each entry shows:
@@ -331,6 +355,9 @@ The plugin answers under `<base><mount>/_svartz/submissions/`. Failures answer `
 | `POST edit/` with `{ "submissionId", "page", "markdown", "note"?, "sha"?, "turnstileToken"? }` | 201 `{ "kind": "pull-request", "url", "number", "reason"? }` of the pull request, new or opened by an earlier attempt with the same `submissionId`, or `{ "kind": "commit", "url", "sha" }` of the commit. `sha` is `source/`'s, and a save that would commit without it is refused with 400. 401 `sign_in_required` when the reader is anonymous and sign-in is required, their address isn't visible, or guests may not save; 403 `not_allowed` when their account may not, and when Turnstile is missing or refused; 429 with `retryAfter` past the rate limit; 503 when Cloudflare, the rate limiter or GitHub can't be reached. |
 | `POST new/` with `{ "submissionId", "folder", "title", "markdown", "note"?, "turnstileToken"? }` | As `edit/`. Also 400 `not_a_section` or `invalid_title`, and 409 `exists` when the title is taken, with `existing` set to the clashing page's public URL unless that page is hidden. |
 | `GET status/?edit=<submissionId>` | With [sync](#github-sync): `{ "stage", "pull"?: { "number", "url" }, "commit"?: { "sha", "url" } }`, where `stage` is `open`, `closed`, `committed`, `building`, `live` or `failed`. 401 `sign_in_required` when the edit was saved signed in and the reader isn't; 404 `not_found` for an edit the site has no record of, or someone else's. |
+| `POST reply/` with the form fields `pull`, `thread`?, `body` | With [sync](#my-submissions): posts a reply on pull request `pull`, in the line thread whose first comment is `thread` if given, then 303 back to the submission with `?status=sent`, or `empty`, `too-long`, `rate-limited`, `thread-gone` or `github`. 403 `cross_origin` from another site; 401 when signed out; 404 `not_found` for a pull request that isn't the reader's submission. |
+| `GET follow-up/source/?pull=42` | With [sync](#my-submissions): `{ "markdown", "sha", "path" }`, the submission's file on its branch now, its blob SHA, and its path in the vault. |
+| `POST follow-up/` with `{ "pull", "markdown", "note"?, "sha" }` | With [sync](#my-submissions): 201 `{ "kind": "commit", "url", "sha" }` once the follow-up is on the submission's branch. 409 `changed` when the file isn't `sha` anymore, 409 `closed` for a closed or merged pull request, 403 `not_allowed`, 404 `not_found`, 429 past the rate limit. |
 | `POST github/webhook/` | With [sync](#github-sync): GitHub's deliveries. 204 once stored, 202 for a delivery with nothing the mirror keeps, 401 `bad_signature`, 403 `other_repository`, 413 past 5 MB. |
 
 `page` is the note's URL path below the deployment base, as it appears in the site's index. `folder` is a section's path inside the vault, `""` for its top level, or the user page folder when `title` is the signed-in reader's handle. `submissionId` is 32 lowercase hex digits the client picks at random and repeats on every retry of the same submission.

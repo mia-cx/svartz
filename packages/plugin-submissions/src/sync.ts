@@ -304,6 +304,23 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     }
   }
 
+  /** Run the reconcile poll after the answer, when the mirror is stale, then settle the reputation it shows owed. */
+  function refresh(context: ServerContext, mirror: Mirror): void {
+    const environment = options.live.environment;
+    const target = { mirror, repo: setup.repo, root: setup.root, ...(setup.branch ? { branch: setup.branch } : {}), ...(environment ? { environment } : {}) };
+    context.waitUntil(reconcile(target, () => setup.token(context.env)).then(() => settleCredit(mirror, context)));
+  }
+
+  /** Where `edit` has got to, read from the mirror only; GitHub is asked what the mirror lacks after the answer. */
+  async function progress(context: ServerContext, mirror: Mirror, edit: EditRecord): Promise<StatusResponse> {
+    refresh(context, mirror);
+    const { status: answer, unchecked } = await editStatus(mirror, edit);
+    if (unchecked.heads.length > 0) {
+      context.waitUntil(checkAncestry(mirror, () => setup.token(context.env), unchecked.heads.map((head) => ({ commit: unchecked.commit, head }))));
+    }
+    return answer;
+  }
+
   /** `owner` is the reader asking: `account:<id>`, `identity:<id>`, or `null` for a guest. */
   async function status(request: Request, context: ServerContext, owner: string | null): Promise<Response> {
     const id = new URL(request.url).searchParams.get("edit") ?? "";
@@ -313,20 +330,7 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     // Someone else's edit answers as no edit at all.
     if (edit?.owner && !owner) throw new SubmissionError("sign_in_required", 401, "Sign in to see how your edit is doing.");
     if (!edit || (edit.owner && edit.owner !== owner)) throw new SubmissionError("not_found", 404, "This site has no record of that edit.");
-
-    refresh(context, mirror);
-    const { status: answer, unchecked } = await editStatus(mirror, edit);
-    if (unchecked.heads.length > 0) {
-      context.waitUntil(checkAncestry(mirror, () => setup.token(context.env), unchecked.heads.map((head) => ({ commit: unchecked.commit, head }))));
-    }
-    return Response.json(answer satisfies StatusResponse, { headers: { "cache-control": "private, no-store" } });
-  }
-
-  /** Run the reconcile poll after the answer, when the mirror is stale, then settle the reputation it shows owed. */
-  function refresh(context: ServerContext, mirror: Mirror): void {
-    const environment = options.live.environment;
-    const target = { mirror, repo: setup.repo, root: setup.root, ...(setup.branch ? { branch: setup.branch } : {}), ...(environment ? { environment } : {}) };
-    context.waitUntil(reconcile(target, () => setup.token(context.env)).then(() => settleCredit(mirror, context)));
+    return Response.json(await progress(context, mirror, edit) satisfies StatusResponse, { headers: { "cache-control": "private, no-store" } });
   }
 
   /** Keep a save, so its saver can follow it to live. */
@@ -354,5 +358,5 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
     return new Map([...found].map(([sha, { stage }]) => [sha, stage]));
   }
 
-  return { webhook, status, record, read, stages };
+  return { webhook, status, record, mirrorFor, refresh, progress, read, stages };
 }

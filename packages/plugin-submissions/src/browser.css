@@ -744,6 +744,102 @@
 }
 
 /*
+ * My submissions, on the dashboard. The page is auth's `.sv-account.sv-dashboard`, so headings, lists, forms and
+ * messages look as on its other panels; these add the state tags and the conversation.
+ */
+.svartz-submissions-state {
+	flex: none;
+	padding: 0.125rem var(--sv-space-2, 0.5rem);
+	border: var(--sv-rule-width, 1px) solid currentColor;
+	border-radius: 999px;
+	color: var(--sv-muted, GrayText);
+	font-size: var(--sv-step--1, 0.875rem);
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.svartz-submissions-state[data-state="open"] {
+	color: var(--sv-accent-text, LinkText);
+}
+
+.svartz-submissions-state[data-state="approved"],
+.svartz-submissions-state[data-state="merged"] {
+	color: light-dark(oklch(0.45 0.12 var(--sv-hue-green, 150)), oklch(0.8 0.12 var(--sv-hue-green, 150)));
+}
+
+.svartz-submissions-state[data-state="changes_requested"] {
+	color: light-dark(oklch(0.48 0.13 var(--sv-hue-orange, 60)), oklch(0.82 0.11 var(--sv-hue-orange, 60)));
+}
+
+.svartz-submissions-links a {
+	color: var(--sv-accent-text, LinkText);
+	text-underline-offset: 0.2em;
+}
+
+.svartz-submissions-timeline {
+	display: grid;
+	gap: var(--sv-space-4, 1rem);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.svartz-submissions-comment {
+	display: grid;
+	gap: var(--sv-space-1, 0.25rem);
+}
+
+.svartz-submissions-comment header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0 var(--sv-space-2, 0.5rem);
+}
+
+.svartz-submissions-comment header a {
+	text-underline-offset: 0.2em;
+}
+
+/* Comments are plain text as written: their line breaks stay, and long words and links wrap. */
+.svartz-submissions-text {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.svartz-submissions-thread {
+	display: grid;
+	gap: var(--sv-space-3, 0.75rem);
+	padding-inline-start: var(--sv-space-4, 1rem);
+	border-inline-start: 3px solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
+}
+
+.svartz-submissions-thread h3 {
+	margin: 0;
+	font-weight: 600;
+}
+
+.svartz-submissions-thread-reply summary {
+	inline-size: fit-content;
+	min-block-size: 2rem;
+	color: var(--sv-accent-text, LinkText);
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.svartz-submissions-thread-reply[open] summary {
+	margin-block-end: var(--sv-space-3, 0.75rem);
+}
+
+.svartz-submissions-dashboard .svartz-submissions-reply {
+	max-inline-size: none;
+}
+
+.svartz-submissions-dashboard textarea.sv-account-input {
+	resize: vertical;
+	line-height: var(--sv-leading, 1.5);
+}
+
+/*
  * The dashboard's Recent edits panel. It is auth's `.sv-account.sv-dashboard`, so headings, muted text and the list's
  * rules match the other panels; these lay out each commit: its summary and deploy state, the pages it changed, then
  * who, when, and its diff.

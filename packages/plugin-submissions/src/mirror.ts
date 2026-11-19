@@ -11,11 +11,13 @@
  *   vault folder, `NULL` until the poll has read its files, `files_read` counting the pages read so far at its
  *   head; readers keep to `in_vault = 1`.
  * - `submissions_reviews` and `submissions_comments`: what was said on those pull requests, `comments.kind` being
- *   `issue` (the conversation) or `review` (a diff line). Deleted comments stay as tombstones with an empty body.
+ *   `issue` (the conversation) or `review` (a diff line), a diff comment's `in_reply_to` naming its thread's first
+ *   comment. Deleted comments stay as tombstones with an empty body.
  * - `submissions_runs`: workflow runs on the content branch, and `submissions_deployments`: deployments with their
  *   latest status, `succeeded` once any status said `success`, since a later `inactive` doesn't say, and
  *   `statuses_read`, the latest status id the poll has seen in a deployment's whole status history.
  * - `submissions_edits`: every save the site made, keyed by its submission id, with who made it.
+ * - `submissions_replies`: every comment the site posted on an account's behalf (see `attribution.ts`).
  * - `submissions_credits`: what reputation still owes for each save an account made (see `credit.ts`).
  *
  * Deliveries arrive at least once and in any order, so every write is idempotent and never moves a record backwards:
@@ -190,6 +192,25 @@ const MIGRATIONS: readonly (readonly string[])[] = [
     "UPDATE submissions_commits SET files = NULL",
   ],
   [
+    // Which top-level comment a diff comment replies to, so threads show as GitHub shows them.
+    "ALTER TABLE submissions_comments ADD COLUMN in_reply_to INTEGER",
+    // Comments mirrored before were stored without it: the next poll lists them again.
+    "DELETE FROM submissions_etags WHERE path LIKE '/pulls/comments%'",
+    "CREATE INDEX IF NOT EXISTS submissions_edits_by_pull ON submissions_edits (scope, pull_number)",
+    // What the site posted on an account's behalf: the header it wrote and the text the account typed.
+    `CREATE TABLE IF NOT EXISTS submissions_replies (
+      scope TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('issue', 'review')),
+      id INTEGER NOT NULL,
+      account TEXT NOT NULL,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      header TEXT NOT NULL,
+      body TEXT NOT NULL,
+      PRIMARY KEY (scope, kind, id)
+    )`,
+  ],
+  [
     // What reputation still owes for each save an account made, as `credit.ts` settles it: `lines` the landed commit
     // changed in the vault, once read; `state` `declined` once a declined pull request was posted, `done` once settled.
     `CREATE TABLE IF NOT EXISTS submissions_credits (
@@ -302,13 +323,14 @@ export function rereadReviews({ db, scope }: Mirror, number: number): Statement 
 /** A comment, unless the mirror holds a newer edit; once deleted, it stays a tombstone. */
 export function writeComment({ db, scope }: Mirror, comment: CommentRecord): Statement {
   return db.prepare(`INSERT INTO submissions_comments
-      (scope, kind, id, pull_number, author_login, body, path, line, url, created_at, updated_at, deleted)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-    ON CONFLICT (scope, kind, id) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at, deleted = excluded.deleted
+      (scope, kind, id, pull_number, author_login, body, path, line, url, created_at, updated_at, deleted, in_reply_to)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+    ON CONFLICT (scope, kind, id) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at, deleted = excluded.deleted,
+      in_reply_to = COALESCE(excluded.in_reply_to, submissions_comments.in_reply_to)
     WHERE submissions_comments.deleted = 0 AND (excluded.deleted = 1 OR excluded.updated_at >= submissions_comments.updated_at)`)
     .bind(
       scope, comment.kind, comment.id, comment.pull, comment.author, comment.body, comment.path, comment.line, comment.url,
-      comment.createdAt, comment.updatedAt, comment.deleted ? 1 : 0,
+      comment.createdAt, comment.updatedAt, comment.deleted ? 1 : 0, comment.inReplyTo,
     );
 }
 
@@ -401,7 +423,18 @@ interface EditRow {
 
 export async function readEdit({ db, scope }: Mirror, id: string): Promise<EditRecord | undefined> {
   const { results: [row] } = await db.prepare("SELECT * FROM submissions_edits WHERE id = ? AND scope = ?").bind(id, scope).all<EditRow>();
-  return row && {
+  return row && editOf(row);
+}
+
+/** The save that opened pull request `number`, when this vault's site opened it. */
+export async function readSubmission({ db, scope }: Mirror, number: number): Promise<EditRecord | undefined> {
+  const { results: [row] } = await db.prepare(`SELECT * FROM submissions_edits WHERE scope = ? AND pull_number = ? AND kind = 'pull-request'
+    ORDER BY saved_at LIMIT 1`).bind(scope, number).all<EditRow>();
+  return row && editOf(row);
+}
+
+function editOf(row: EditRow): EditRecord {
+  return {
     id: row.id,
     owner: row.owner,
     kind: row.kind,

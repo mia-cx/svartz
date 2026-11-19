@@ -29,7 +29,8 @@ afterEach(() => {
 });
 
 describe("Recent edits", () => {
-  // Proves the gate: a viewer holding submissions:pull-requests:read finds the panel on the dashboard and opens it; others get neither.
+  // Proves the gate: a viewer holding submissions:pull-requests:read finds the panel on the dashboard and opens it;
+  // others, whose dashboard holds only My submissions, get neither.
   it("shows only to viewers who may see submissions", async () => {
     expect(await open("mod", DASHBOARD)).toBe(true);
     await expect.element(page.getByRole("heading", { name: "Submissions" })).toBeVisible();
@@ -37,7 +38,9 @@ describe("Recent edits", () => {
     expect(await open("mod", PANEL)).toBe(true);
     await expect.element(page.getByRole("heading", { level: 1, name: "Recent edits" })).toBeVisible();
 
-    expect(await open("reader", DASHBOARD)).toBe(false);
+    expect(await open("reader", DASHBOARD)).toBe(true);
+    await expect.element(page.getByRole("link", { name: "My submissions" })).toBeVisible();
+    await expect.element(page.getByRole("link", { name: "Recent edits" })).not.toBeInTheDocument();
     expect(await open("reader", PANEL)).toBe(false);
   });
 
