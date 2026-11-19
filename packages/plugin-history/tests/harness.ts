@@ -64,6 +64,8 @@ export const GUIDE = { slug: "guide", path: "guide.md", href: "/wiki/guide/", ti
 export const SETUP = { slug: "setup", path: "setup.md", href: "/wiki/setup/", title: "Setup" };
 /** Ada's user page, in the vault's `users/` folder. */
 export const ADA_PAGE = { slug: "users/ada", path: "users/ada.md", href: "/wiki/users/ada/", title: "Ada Lovelace" };
+/** Grace's user page, written as SVX: published, with no revision history of its own. */
+export const GRACE_PAGE = { slug: "users/grace", path: "users/grace.svx", href: "/wiki/users/grace/", title: "Grace Hopper" };
 
 const HISTORY: HistoryData = {
   source: {
@@ -73,7 +75,7 @@ const HISTORY: HistoryData = {
     credentials: { app: { id: APP_ID, privateKey: { env: "SVARTZ_GITHUB_APP_KEY" }, installation: INSTALLATION_ID } },
     database: { env: "SVARTZ_DB" },
   },
-  notes: [GUIDE, SETUP, ADA_PAGE],
+  notes: [GUIDE, SETUP, ADA_PAGE, GRACE_PAGE],
   preview: { linkResolution: "shallowest", mountPath: "/wiki", tagsRoute: "tags", attachments: [], sharedNames: [] },
 };
 

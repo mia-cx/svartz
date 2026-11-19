@@ -12,6 +12,7 @@ import {
   firstToken,
   GITHUB_WEB,
   GRACE as GRACE_SIGN_IN,
+  GRACE_PAGE,
   INSTALLATION_TOKEN,
   NOTE,
   replayGitHub,
@@ -226,5 +227,36 @@ describe("the section below a user page", () => {
     expect(pagesEdited(html)).toEqual(["Guide", "Setup"]);
     expect(html).toContain('href="/wiki/-/contributions/ada/">All contributions</a>');
     expect(other.status).toBe(404);
+  });
+
+  // Proves edits the site keeps back don't push shown ones out: the few listed are counted after hidden pages' fall out.
+  it("lists the latest edits that may show, past newer ones to hidden pages", async () => {
+    const site = await createSite();
+    const ada = await site.signUp(ADA);
+    site.addUserPage("ada", "/wiki/users/ada/");
+    const commits = await saves(site, ada.id, 7, 400, (index) => (index === 0 ? GUIDE_PATH : SECRET_PATH));
+    replayGitHub([firstToken, ...backfill(commits)], INSTALLATION_TOKEN);
+
+    const response = await site.request(`${SECTION}?page=${encodeURIComponent("/wiki/users/ada/")}`);
+    await site.settle();
+    const html = await response.text();
+
+    expect(rows({ title: "", html })).toEqual(["19 Nov 2026, 10:00 UTC Guide (changes, history) Edit 0"]);
+    expect(pagesEdited(html)).toEqual(["Guide"]);
+    expect(html.toLowerCase()).not.toContain("secret");
+  });
+
+  // Proves a user page written in another note format, which has no history of its own, still gets its section.
+  it("answers for a user page that isn't Markdown", async () => {
+    const site = await createSite();
+    await site.signUp(GRACE_SIGN_IN);
+    site.addUserPage("grace", GRACE_PAGE.href);
+    replayGitHub([firstToken, ...backfill([])], INSTALLATION_TOKEN);
+
+    const response = await site.request(`${SECTION}?page=${encodeURIComponent(GRACE_PAGE.href)}`);
+    await site.settle();
+
+    expect(response.status).toBe(200);
+    expect(text(await response.text())).toMatch(/^Contributions /);
   });
 });

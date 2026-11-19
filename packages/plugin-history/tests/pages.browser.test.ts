@@ -147,6 +147,22 @@ describe("the contributions section", () => {
     expect(document.querySelector("section")).toBeNull();
   });
 
+  // Proves the section doesn't depend on the page having a history: a user page in another note format asks for it too.
+  it("asks for a user page that has no history of its own", async () => {
+    userPage();
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      asked.push(url);
+      return new Response(contributionsSection({ ...CONTRIBUTIONS, all: "/wiki/-/contributions/ada/" }), { headers: { "content-type": "text/html" } });
+    });
+
+    const unmount = mount("/wiki/users/ada/", { ...OPTIONS, pages: ["/wiki/guide/"] });
+
+    await expect.element(page.getByRole("heading", { name: "Contributions", level: 2 })).toBeVisible();
+    expect(asked).toEqual(["/wiki/_svartz/history/contributions/?page=%2Fwiki%2Fusers%2Fada%2F"]);
+    unmount?.();
+  });
+
   // Proves a page outside the user page folder never asks for a section.
   it("stays off other pages", () => {
     userPage();

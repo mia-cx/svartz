@@ -21,6 +21,17 @@ function pageAt(path: string, pages: ReadonlySet<string>): string | undefined {
   }
 }
 
+/** `path` decoded, when it is a page directly in `folder`, the folder of user pages: `/wiki/users/ada/` in `/wiki/users/`. */
+function userPageAt(path: string, folder: string): string | undefined {
+  try {
+    const decoded = decodeURIComponent(path);
+    return decoded.startsWith(folder) && /^[^/]+\/$/.test(decoded.slice(folder.length)) ? decoded : undefined;
+  } catch {
+    // A malformed escape names no page.
+    return undefined;
+  }
+}
+
 /**
  * Show the contributions of the account whose user page is `page` after `note`, the page's note body, as annotations
  * attaches its comments: beside the theme's markup, never in it. The server decides which pages are user pages and
@@ -71,10 +82,10 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
     cleanups.push(() => link.remove());
   }
 
+  // A user page may be in any note format, with or without a history of its own: the server says whether it is one.
   const note = context.note ?? document.querySelector<HTMLElement>("[data-svartz-note]");
-  if (page && note && options.userPages && page.startsWith(options.userPages)) {
-    cleanups.push(showContributions(note, `${home}/_svartz/${PLUGIN_ID}`, page));
-  }
+  const userPage = options.userPages === undefined ? undefined : userPageAt(pathname.slice(context.base.length), options.userPages);
+  if (note && userPage) cleanups.push(showContributions(note, `${home}/_svartz/${PLUGIN_ID}`, userPage));
 
   if (cleanups.length === 0) return undefined;
   return () => {

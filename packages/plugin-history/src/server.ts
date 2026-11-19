@@ -45,6 +45,8 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
   const read = commitReader(data.source);
   const notes = new Map(data.notes.filter(({ path }) => /\.md$/i.test(path)).map((note) => [note.href, note]));
   const byPath = new Map(data.notes.filter(({ path }) => /\.md$/i.test(path)).map((note) => [note.path, note]));
+  /** Every published, unprotected note by its route, whatever its format. */
+  const everyNote = new Map(data.notes.map((note) => [note.href, note]));
   const published = new Set([...data.notes.map(({ path }) => path), ...data.preview.attachments]);
   const { repo, root, branch } = data.source;
   const repoPath = (path: string) => (root ? `${root}/${path}` : path);
@@ -246,14 +248,16 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
 
   /** `GET contributions/?page=<path>`: the section below the user page at `path`, or 404 for any other page. */
   async function section(request: Request, context: ServerContext): Promise<Response> {
-    const note = notes.get(new URL(request.url).searchParams.get("page") ?? "");
+    // A user page may be in any note format; only Markdown ones have a history of their own.
+    const note = everyNote.get(new URL(request.url).searchParams.get("page") ?? "");
     const handle = note && userPageHandle(note, context);
     const account = handle === undefined ? undefined : await findStanding(handle, context.env);
     if (!account) return new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
     const reader = read(context);
     let made: Awaited<ReturnType<CommitReader["madeBy"]>>;
     try {
-      made = await reader.madeBy(account.id, { limit: SECTION_CHANGES });
+      // A whole page of edits, not the few shown: those to pages the site keeps back fall out of the list below.
+      made = await reader.madeBy(account.id);
     } catch (error) {
       if (!(error instanceof CommitsUnavailable)) throw error;
       return new Response(null, { status: 503, headers: { "cache-control": "no-store" } });
@@ -263,7 +267,7 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
       name: account.name,
       handle: account.handle,
       reputation: await reputationFor(account, request, context),
-      changes: await wikiChanges(made.commits, context),
+      changes: (await wikiChanges(made.commits, context)).slice(0, SECTION_CHANGES),
       pages: publishedPages(made.files, context).slice(0, SECTION_PAGES),
       all: urls(context).contributions(account.handle),
     });
