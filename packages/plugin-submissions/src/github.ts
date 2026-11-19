@@ -414,8 +414,9 @@ async function latestCommit(target: Repository, head: string, path: string): Pro
  * answer is `changed`, for the caller to open a pull request instead. The commit's parent is the head that check read,
  * and the branch moves only forward to it, so a save landing in between makes GitHub refuse the move; the check then
  * runs again on the new head. When GitHub refuses the move while the head stays put, a rule for the branch refused it,
- * such as one requiring pull requests or signed commits, and the answer is `protected`. A retry whose content the
- * branch already holds, as after a lost answer, answers the latest commit to the file instead of committing again.
+ * such as one requiring pull requests or signed commits, and the answer is `protected`. A move GitHub never answers
+ * reads the branch's head once: at this call's commit, the move landed and the commit is answered as made. A retry
+ * whose content the branch already holds answers the latest commit to the file instead of committing again.
  *
  * `beforeMove` runs once the commit exists and before the branch moves to it, to record the commit being made (an
  * audit entry). With it, a branch that moved meanwhile isn't tried again, since the commit recorded would never land:
@@ -434,8 +435,9 @@ export async function commitSubmission(
   const ref = `/git/refs/heads/${encodePath(branch)}`;
   const author = { name: gitName(attribution.name) || attribution.handle, email: `${attribution.handle}@users.noreply.${attribution.host}` };
   let refused: { head: string; response: Response } | undefined;
+  const headOf = async () => (await call<{ object: { sha: string } }>(target, "GET", `/git/ref/heads/${encodePath(branch)}`)).object.sha;
   for (let attempt = 0; attempt < COMMIT_ATTEMPTS; attempt++) {
-    const head = (await call<{ object: { sha: string } }>(target, "GET", `/git/ref/heads/${encodePath(branch)}`)).object.sha;
+    const head = await headOf();
     // Refused while the branch stayed put: not a race but a rule, such as branch protection.
     if (refused?.head === head) {
       const detail = await refused.response.json().then((body: { message?: unknown }) => body?.message, () => undefined);
@@ -458,8 +460,16 @@ export async function commitSubmission(
       committer: attribution.committer,
     });
     await beforeMove?.({ sha: commit.sha, url: commit.html_url });
-    const moved = await send(target, "PATCH", ref, { sha: commit.sha, force: false });
-    if (moved.ok) return { kind: "commit", url: commit.html_url, sha: commit.sha, made: true };
+    const made = { kind: "commit", url: commit.html_url, sha: commit.sha, made: true } as const;
+    let moved: Response;
+    try {
+      moved = await send(target, "PATCH", ref, { sha: commit.sha, force: false });
+    } catch (error) {
+      // No answer, yet GitHub may have moved the branch: a head at this commit says it did.
+      if (error instanceof SubmissionError && error.code === "github_unavailable" && await headOf() === commit.sha) return made;
+      throw error;
+    }
+    if (moved.ok) return made;
     if (moved.status !== 422) throw await failure(target, moved);
     refused = { head, response: moved };
   }

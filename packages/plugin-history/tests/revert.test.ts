@@ -94,7 +94,7 @@ const revertMessage = (sha: string, account: string, reason?: string) => {
 };
 
 /** GitHub committing `markdown` over `current` as Ada: the App's bot, the head of `main`, the file's blob, the commit. */
-const commitAsAda = async (markdown: string, current: string, message: string, moved: "ok" | "protected" = "ok"): Promise<Exchange[]> => [
+const commitAsAda = async (markdown: string, current: string, message: string, moved: "ok" | "protected" | "lost" = "ok"): Promise<Exchange[]> => [
   headExchange(),
   blobExchange(GUIDE_PATH, HEAD_COMMIT, await blobSha(current)),
   ...commitExchanges({ path: GUIDE_PATH, markdown, message, author: ADA_AUTHOR, moved }),
@@ -262,6 +262,33 @@ describe("reverting a page", () => {
     expect(github.pending).toEqual([]);
     expect(await query(site, "SELECT 1 FROM submissions_edits WHERE commit_sha = ?", DIRECT_COMMIT)).toEqual([]);
     expect(await query(site, "SELECT 1 FROM auth_reputation WHERE source = 'reversal'")).toEqual([]);
+  });
+
+  // Proves a revert GitHub applied but never answered for still records what it undid and takes back its earnings: the
+  // branch's head says the move landed. Otherwise the audit entry stands with no record, and a retry finds the content
+  // on the branch and records nothing either. A head elsewhere is still GitHub failing.
+  it.each([
+    ["reverted when the branch is at the revert's commit", DIRECT_COMMIT, `${HISTORY}?status=reverted`, [{ commit_sha: DIRECT_COMMIT }], [-4]],
+    ["refused when the branch is elsewhere", "f".repeat(40), "&revert=github#sv-history-revert", [], []],
+  ])("reads the branch once after a move GitHub never answered: %s", async (_case, head, location, recorded, reversed) => {
+    const page = await wiki();
+    const { site, ada, grace, commits: c } = page;
+    const github = replayGitHub([
+      firstToken,
+      historyExchange(GUIDE_PATH, listOf(page)),
+      contentExchange(GUIDE_PATH, c.restored.sha, RESTORED),
+      contentExchange(GUIDE_PATH, c.vandalised.sha, VANDALISED),
+      ...committerExchanges,
+      ...await commitAsAda(RESTORED, VANDALISED, revertMessage(c.restored.sha, ada.id), "lost"),
+      headExchange(head),
+    ], INSTALLATION_TOKEN);
+    const response = await revert(site, ada.cookie, { revision: c.restored.sha, head: c.vandalised.sha, to: c.vandalised.sha });
+
+    expect(response.headers.get("location")).toContain(location);
+    expect(github.pending).toEqual([]);
+    expect(await query(site, "SELECT commit_sha FROM submissions_edits WHERE commit_sha = ?", DIRECT_COMMIT)).toEqual(recorded);
+    expect((await query(site, "SELECT points FROM auth_reputation WHERE source = 'reversal' AND account_id = ?", grace.id)).map(({ points }) => points))
+      .toEqual(reversed);
   });
 });
 

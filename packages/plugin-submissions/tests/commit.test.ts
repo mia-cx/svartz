@@ -7,6 +7,7 @@ import { createServerHandle } from "@svartz/core";
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { blobSha } from "../src/github";
+import { migrate } from "../src/mirror";
 import { permissions } from "../src/permissions";
 import type { BuildData, Mode, ServerOptions } from "../src/server";
 import {
@@ -297,6 +298,35 @@ describe("a direct commit", () => {
 
     expect(await save(site, { page: "/wiki/guide/", sha: GUIDE_SHA }, ada)).toEqual({ status: 201, body: commitAnswer });
     expect(replay.pending).toEqual([]);
+  });
+
+  // Proves a save GitHub committed is recorded even when the branch move's answer never arrived: the branch's head says
+  // it moved. Otherwise the save fails, its retry finds the content on the branch and records nothing either, and the
+  // account has no edit to follow and no credit for it. A head elsewhere still fails the save.
+  it.each([
+    ["records the commit as made when the branch is at it", DIRECT_COMMIT, { status: 201, body: commitAnswer }, [DIRECT_COMMIT]],
+    ["fails the save when the branch is elsewhere", MOVED_HEAD, { status: 503, body: expect.objectContaining({ error: "github_unavailable" }) }, []],
+  ])("reads the branch once after a move GitHub never answered, and %s", async (_case, head, answer, recorded) => {
+    const site = await createSite({ admins: [ADA.id], sync: true });
+    const ada = await signIn(site, ADA);
+    const replay = github([
+      ...commitStart,
+      blobExchange("content/guide.md", "3a1f9c0e5b7d2468ace013579bdf2468ace01357", GUIDE_SHA),
+      ...commitExchanges({
+        path: "content/guide.md",
+        markdown: MARKDOWN,
+        message: adaMessage(await accountId(site, "ada")),
+        author: { name: "Ada Lovelace", email: "ada@users.noreply.wiki.example" },
+        moved: "lost",
+      }),
+      headExchange(head),
+    ]);
+
+    expect(await save(site, { page: "/wiki/guide/", sha: GUIDE_SHA }, ada)).toEqual(answer);
+    expect(replay.pending).toEqual([]);
+    await migrate(site.db);
+    const { results } = await site.db.prepare("SELECT commit_sha FROM submissions_edits").all<{ commit_sha: string }>();
+    expect(results.map(({ commit_sha }) => commit_sha)).toEqual(recorded);
   });
 
   it("opens a pull request instead, and says why, when a rule for the branch refuses the commit", async () => {
