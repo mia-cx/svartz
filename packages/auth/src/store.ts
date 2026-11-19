@@ -698,6 +698,18 @@ export async function profileByHandle(db: Database, handle: string): Promise<Pub
   return row && { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } };
 }
 
+/**
+ * The accounts that hold or held `handles`, by the handle asked for, under their current handles; handles no account
+ * ever held are absent.
+ */
+export async function profilesByHandle(db: Database, handles: readonly string[]): Promise<Map<string, PublicProfile>> {
+  if (handles.length === 0) return new Map();
+  const { results } = await db.prepare(`SELECT h.handle AS asked, a.handle, a.name, a.avatar_url FROM auth_handles h
+    JOIN auth_accounts a ON a.id = h.account_id WHERE h.handle IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(handles))
+    .all<{ asked: string; handle: string; name: string; avatar_url: string | null }>();
+  return new Map(results.map((row) => [row.asked, { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } }]));
+}
+
 /** The accounts with ids `ids`, by id, under their current handles; ids no account has are absent. */
 export async function profilesById(db: Database, ids: readonly string[]): Promise<Map<string, PublicProfile>> {
   if (ids.length === 0) return new Map();

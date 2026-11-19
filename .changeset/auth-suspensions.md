@@ -9,3 +9,5 @@ Server plugins suspend and lift with `suspend(env, actor, { handle, reason, unti
 A suspended reader's `/-/account/` says why and until when, without naming the moderator, and offers **Sign out**. `POST sign-out/` takes a same-site `?returnTo=<path>` and redirects there, so a plain form can sign out. `GET viewer/` answers `{ suspended: true }` for a suspended reader, and the site actions keep the **Account** link for them.
 
 `readAuditLog(env, { actor?, target?, before?, limit? })` reads the audit log, newest first, a page at a time in one query, filtered by who made each entry (any handle they've held) and by its exact target. `findProfileByIdentity(identity, env)` answers the account a provider account such as `github:583231` is linked to.
+
+For pages that list many things at once, `findProfilesByIdentity(identities, env)` and `findProfilesByHandle(handles, env)` answer many accounts in one D1 query, by what was asked, and `canEach(account, permission, targets, env)` checks a permission on many targets, such as the pages of a queue of comments, in the D1 calls one `can()` makes.

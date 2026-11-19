@@ -43,23 +43,28 @@ interface GrantRow {
 }
 
 /**
- * What a check reads, in one D1 call however long the chain: every stored grant of `permission` on `chain`'s objects,
- * and who `account` is to the resolver. That is itself, its roles (config's `admin` and stored ones) and its groups,
- * read on every check, so a removed member loses the group's grants on their next request. Its former handles cost a
- * second call, made only when `chain` checks a user page under another handle than its current one, the one case they
- * can decide.
+ * What a check reads, in one D1 call however many chains and however long: every stored grant of `permission` on the
+ * objects of `chains`, and who `account` is to the resolver. That is itself, its roles (config's `admin` and stored
+ * ones) and its groups, read on every check, so a removed member loses the group's grants on their next request. Its
+ * former handles cost a second call, made only when a chain checks a user page under another handle than its current
+ * one, the one case they can decide.
  */
 async function load(
-  db: Database, account: Pick<Account, "id" | "handle" | "roles"> | null, permission: string, chain: readonly string[],
+  db: Database, account: Pick<Account, "id" | "handle" | "roles"> | null, permission: string, chains: readonly (readonly string[])[],
 ): Promise<[stored: Grant[], who: Principals]> {
+  const objects = [...new Set(chains.flat())];
   const grants = db.prepare(`SELECT actor_type, actor_id, object, value FROM auth_grants
-      WHERE permission = ?1 AND object IN (SELECT value FROM json_each(?2))`).bind(permission, JSON.stringify(chain));
+      WHERE permission = ?1 AND object IN (SELECT value FROM json_each(?2))`).bind(permission, JSON.stringify(objects));
   const [granted, joined] = await db.batch(account ? [grants, membershipsQuery(db, account.id)] : [grants]);
   const stored = (granted!.results as GrantRow[])
     .map((row): Grant => ({ actorType: row.actor_type, actorId: row.actor_id, object: row.object, permission, value: row.value }));
   if (!account) return [stored, { roles: [], groups: [] }];
-  const owner = userPageHandle(chain[0], userPageLocation());
-  const formerHandles = owner !== undefined && owner !== account.handle ? await handlesOf(db, account.id) : [];
+  const location = userPageLocation();
+  const othersPage = chains.some((chain) => {
+    const owner = userPageHandle(chain[0], location);
+    return owner !== undefined && owner !== account.handle;
+  });
+  const formerHandles = othersPage ? await handlesOf(db, account.id) : [];
   const groups = memberships(joined!.results as MembershipRow[]);
   return [stored, { account: { id: account.id, handle: account.handle, formerHandles }, roles: account.roles, groups }];
 }
@@ -89,7 +94,7 @@ export interface Explanation extends Decision {
  */
 export async function explain(db: Database, account: Pick<Account, "id" | "handle" | "roles">, permission: PermissionSlug, chain: readonly string[]): Promise<Explanation> {
   const declaration = declared(permission);
-  const [stored, who] = await load(db, account, permission, chain);
+  const [stored, who] = await load(db, account, permission, [chain]);
   const decision = resolve(withDefaults(stored, declaration), who, chain, permission, userPageLocation(), declaration.administrative);
   const { decidedBy } = decision;
   return { ...decision, byDefault: decidedBy.kind === "grant" && !stored.includes(decidedBy.grant) };
@@ -113,12 +118,23 @@ export async function mayOn(db: Database, account: Pick<Account, "id" | "handle"
  * the site's plugins don't declare throws too.
  */
 export async function can(account: Account | null, permission: PermissionSlug, target: PermissionTarget, env: Env): Promise<boolean> {
+  const [allowed] = await canEach(account, permission, [target], env);
+  return allowed!;
+}
+
+/**
+ * {@link can} for each of `targets`, in order, in the D1 calls one check makes: for a list that asks about many pages
+ * at once, such as a queue of comments on different pages.
+ */
+export async function canEach(account: Account | null, permission: PermissionSlug, targets: readonly PermissionTarget[], env: Env): Promise<boolean[]> {
   const declaration = declared(permission);
   const db = await accountsDatabase(env);
-  if (!db) return false;
-  const chain = objectChain(target);
-  const [stored, who] = await load(db, account, permission, chain);
-  return resolve(withDefaults(stored, declaration), who, chain, permission, userPageLocation(), declaration.administrative).value === "allow";
+  if (!db || targets.length === 0) return targets.map(() => false);
+  const chains = targets.map(objectChain);
+  const [stored, who] = await load(db, account, permission, chains);
+  const grants = withDefaults(stored, declaration);
+  const location = userPageLocation();
+  return chains.map((chain) => resolve(grants, who, chain, permission, location, declaration.administrative).value === "allow");
 }
 
 /** A grant a plugin's config gives an identity, such as a moderator it lists, to move onto that identity's account. */

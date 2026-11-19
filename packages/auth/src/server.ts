@@ -51,7 +51,7 @@ import {
 } from "./session";
 import {
   ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, endAccountSessions, handlesOf, hasAccount, linkIdentity,
-  profileByHandle, profilesById, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity,
+  profileByHandle, profilesByHandle, profilesById, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity,
   updateProfile, type Database, type PublicProfile,
 } from "./store";
 import { builtUserPages, DEFAULT_USER_PAGE_FOLDER, hasUserPage, useUserPages, userPageLocation, type UserPages } from "./user-pages";
@@ -61,7 +61,7 @@ export type { Account, SignIn, SignedOutReason } from "./session";
 export type { PublicProfile } from "./store";
 export { ADMIN_ROLE, readAccount, readIdentity, readSignIn } from "./session";
 export { ACCOUNTS_DATABASE_ENV };
-export { can, migrateGrants, type IdentityGrant } from "./grants";
+export { can, canEach, migrateGrants, type IdentityGrant } from "./grants";
 export type { PermissionTarget } from "./permissions";
 export { audit, auditIfChanged, readAuditLog, type AuditEntry, type AuditLogPage, type AuditQuery, type AuditRecord } from "./audit";
 export {
@@ -87,12 +87,26 @@ export async function findProfile(handle: string, env: Readonly<Record<string, u
  * that stored who wrote something by their sign-in; `undefined` when no account has it or the site binds no `SVARTZ_DB`.
  */
 export async function findProfileByIdentity(identity: string, env: Readonly<Record<string, unknown>>): Promise<PublicProfile | undefined> {
+  return (await findProfilesByIdentity([identity], env)).get(identity);
+}
+
+/** {@link findProfileByIdentity} for each of `identities` in one D1 call, by identity; identities no account has are absent. */
+export async function findProfilesByIdentity(identities: readonly string[], env: Readonly<Record<string, unknown>>): Promise<Map<string, PublicProfile>> {
   const db = await accountsDatabase(env);
-  const { results: [row] } = db
-    ? await db.prepare("SELECT a.handle, a.name, a.avatar_url FROM auth_identities i JOIN auth_accounts a ON a.id = i.account_id WHERE i.id = ?")
-      .bind(identity).all<{ handle: string; name: string; avatar_url: string | null }>()
-    : { results: [] };
-  return row && { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } };
+  if (!db || identities.length === 0) return new Map();
+  const { results } = await db.prepare(`SELECT i.id, a.handle, a.name, a.avatar_url FROM auth_identities i JOIN auth_accounts a ON a.id = i.account_id
+    WHERE i.id IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(identities))
+    .all<{ id: string; handle: string; name: string; avatar_url: string | null }>();
+  return new Map(results.map((row) => [row.id, { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } }]));
+}
+
+/**
+ * {@link findProfile} for each of `handles` in one D1 call, by the handle asked for; handles no account ever held are
+ * absent, and so is every one when the site binds no `SVARTZ_DB`.
+ */
+export async function findProfilesByHandle(handles: readonly string[], env: Readonly<Record<string, unknown>>): Promise<Map<string, PublicProfile>> {
+  const db = await accountsDatabase(env);
+  return db ? profilesByHandle(db, handles) : new Map();
 }
 
 /**

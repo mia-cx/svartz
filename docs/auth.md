@@ -317,6 +317,8 @@ export default guestbook;
 
 `findProfiles(ids, env)` answers the public profiles of the accounts with those ids, as a `Map` by id, for a plugin that stored an account's id. Ids no account has are left out, and the map is empty without `SVARTZ_DB`. Show the handle and name; never show the id.
 
+`findProfilesByHandle(handles, env)` and `findProfilesByIdentity(identities, env)` answer what `findProfile` and `findProfileByIdentity` answer for each of a list, in one query, as a `Map` by what was asked. Use them for a page that lists many things, so its D1 calls don't grow with the list.
+
 `userPageLocation()` answers where [user pages](#user-pages) live, such as `{ vault: "notes", folder: "users" }`, so a plugin can find or start an account's page at `<folder>/<handle>` in that vault.
 
 `userPageOf(handle)` answers the URL, below the deployment base, of the user page at `<folder>/<handle>`, such as `/notes/users/ada/`, or `undefined` when there is none, it's hidden, or the vault that holds user pages hasn't started yet.
@@ -423,7 +425,7 @@ const guestbook: ServerModuleFactory = () => async (request, context) => {
 };
 ```
 
-`can(account, permission, object, env)` answers whether `account`, or a guest for `null`, holds `permission` on `object`: the site (`{}`), a vault (`{ vault }`), or a page of one (`{ vault, page }`, with the page's slug). It loads every grant that could apply in one query and decides in memory.
+`can(account, permission, object, env)` answers whether `account`, or a guest for `null`, holds `permission` on `object`: the site (`{}`), a vault (`{ vault }`), or a page of one (`{ vault, page }`, with the page's slug). It loads every grant that could apply in one query and decides in memory. `canEach(account, permission, objects, env)` answers it for each of a list of objects, in order, with the same one query, for a page that checks many, such as a queue of comments on different pages.
 
 It fails closed. Without `SVARTZ_DB` there are no grants and no accounts, so it answers `false`, defaults included; a plugin that must work without accounts decides that case itself, as [annotations](annotations.md#moderating) does. A database error throws. A permission no plugin on the site declares throws too, naming it, and so does every check in code that runs outside `svartzHandle`, since auth registers the catalogue as it starts.
 
