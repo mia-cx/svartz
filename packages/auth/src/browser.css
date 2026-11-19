@@ -185,6 +185,11 @@
 	font-size: var(--sv-step-1, 1.2rem);
 }
 
+/* Filled by plugins' browser scripts, such as history's link to the account's contributions. */
+.sv-account-activity:empty {
+	display: none;
+}
+
 .sv-account-who {
 	display: flex;
 	flex-wrap: wrap;
