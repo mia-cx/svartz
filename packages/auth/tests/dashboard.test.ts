@@ -175,6 +175,9 @@ describe("People & permissions", () => {
     await tour.post("member", admin, { role: "editors", handle: "@reader" });
     expect(await tour.ask(reader, "guestbook:entries:delete")).toBe(true);
     expect(text(await tour.page(PANEL, admin))).toMatch(/editors @reader reader Remove Add an account to editors/);
+    // The Roles link and the redirects above land on an id, so each id on the page names one element.
+    const ids = [...(await tour.page(PANEL, admin) as { html: string }).html.matchAll(/\sid="([^"]+)"/g)].map(([, id]) => id);
+    expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);
 
     await tour.post("member/remove", admin, { role: "editors", handle: "reader" });
     expect(await tour.ask(reader, "guestbook:entries:delete")).toBe(false);

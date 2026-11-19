@@ -136,7 +136,7 @@ function grantsSection(view: PeopleView): string {
   </div>
   <div class="sv-account-field">
     <label for="sv-dashboard-grant-actor">Handle or role name</label>
-    <input class="sv-account-input" id="sv-dashboard-grant-actor" name="actor" value="${escape(typed("actor") ?? "")}" required maxlength="${HANDLE_MAX_LENGTH + 1}" list="sv-dashboard-roles" autocomplete="off" autocapitalize="none" spellcheck="false"${invalid(status, "actor")}>
+    <input class="sv-account-input" id="sv-dashboard-grant-actor" name="actor" value="${escape(typed("actor") ?? "")}" required maxlength="${HANDLE_MAX_LENGTH + 1}" list="sv-dashboard-role-names" autocomplete="off" autocapitalize="none" spellcheck="false"${invalid(status, "actor")}>
   </div>
   <div class="sv-account-field">
     <label for="sv-dashboard-grant-permission">Permission</label>
@@ -293,7 +293,7 @@ export function peoplePage(view: PeopleView): PluginPage {
 <h1>${escape(PEOPLE_TITLE)}</h1>
 <nav class="sv-dashboard-sections" aria-label="Sections"><ul>${sections.map(([id, label]) => `<li><a href="#${id}">${label}</a></li>`).join("")}</ul></nav>
 <datalist id="sv-dashboard-paths">${view.paths.map((path) => `<option value="${escape(path)}"></option>`).join("")}</datalist>
-<datalist id="sv-dashboard-roles">${view.roles.map(({ name }) => `<option value="${escape(name)}"></option>`).join("")}</datalist>
+<datalist id="sv-dashboard-role-names">${view.roles.map(({ name }) => `<option value="${escape(name)}"></option>`).join("")}</datalist>
 ${grantsSection(view)}
 ${rolesSection(view)}
 ${checkSection(view)}
