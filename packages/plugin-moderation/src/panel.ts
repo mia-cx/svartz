@@ -92,12 +92,16 @@ function describer(context: PageContext, data: BuildData, viewer: Account | null
         return { what: `${handle} <span class="sv-account-muted">${escape(profile.name)}</span>`, actions: [] };
       }
       case "annotation": {
-        const comment: ReportedComment | undefined = data.annotations && await findComment(context.env, data.annotations.database, vault, id);
-        if (!comment) return { what: data.annotations ? "A comment that has since been deleted" : "A comment", actions: [] };
+        const comments = data.annotations?.database;
+        const comment: ReportedComment | undefined = comments === undefined ? undefined : await findComment(context.env, comments, vault, id);
+        if (!comment) return { what: comments === undefined ? "A comment" : "A comment that has since been deleted", actions: [] };
         const what = `${escape(comment.author.name)} on ${pageLink(comment.page)}${comment.hidden ? ' <span class="sv-account-tag">Hidden</span>' : ""}`;
-        const hides = open && !comment.hidden && await can(viewer, HIDE_COMMENTS, { vault, page: comment.page }, context.env);
+        // Annotations hides a comment only when it keeps them in the accounts database, beside the audit log.
+        const hides = open && !comment.hidden && comments === ACCOUNTS_DATABASE_ENV
+          && await can(viewer, HIDE_COMMENTS, { vault, page: comment.page }, context.env);
         const actions = hides ? [button(`${root}/_svartz/annotations/${encodeURIComponent(id)}/hide/`, { returnTo: back("hidden") }, "Hide comment", describedBy)] : [];
-        return { what, quote: comment.body, actions };
+        // A page that's since gone unpublished or protected takes its comments out of sight, here too.
+        return { what, ...publishedPage(data, comment.page) && { quote: comment.body }, actions };
       }
       case "submission": {
         const submissions = data.submissions;

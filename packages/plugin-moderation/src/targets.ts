@@ -1,7 +1,8 @@
 /**
  * What a report can be about, checked against this vault before it's stored. Pages, comments and accounts must exist
- * now. Commits and submissions live on GitHub, which this plugin doesn't call: they need the submissions plugin on the
- * vault, whose repository they belong to, and a well-formed SHA or number. The owning plugin checks the rest when a
+ * now, and a comment must be on a published page. Commits and submissions live on GitHub, which this plugin doesn't
+ * call: they need the submissions plugin on the vault and a well-formed SHA or number, and nothing checks that the
+ * repository holds them. The owning plugin checks the rest when a
  * moderator acts: closing a submission refuses a pull request that isn't one.
  */
 import { findProfile } from "@svartz/auth/server";
@@ -56,7 +57,8 @@ export async function checkTarget(input: unknown, context: ServerContext, data: 
     case "annotation": {
       if (!data.annotations) return refuse(400, "invalid_target", "This site has no comments to report.");
       const comment = await findComment(context.env, data.annotations.database, context.vault.id, id);
-      return comment && !comment.hidden ? { kind, id } : refuse(404, "not_found", "This comment has been deleted.");
+      // Only a comment readers can see: on a page the build publishes unprotected, and not hidden.
+      return comment && !comment.hidden && publishedPage(data, comment.page) ? { kind, id } : refuse(404, "not_found", "This comment has been deleted.");
     }
     case "account": {
       const profile = await findProfile(id, context.env);

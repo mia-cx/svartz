@@ -37,22 +37,22 @@ Any element marked `data-svartz-report="<kind>:<id>"` opens the same dialog for 
 | Kind | Named by | Reportable when |
 | --- | --- | --- |
 | `page` | Its slug, such as `garden/roses` | The last build published it, unprotected. |
-| `annotation` | Its id | The vault has annotations and the comment is there, not hidden. |
+| `annotation` | Its id | The vault has annotations and the comment is there, not hidden, on a page the last build published unprotected. |
 | `account` | Its handle; an old handle is stored as the current one | An account holds or held it. |
 | `submission` | Its pull request number | The vault has submissions. |
-| `commit` | Its full 40-character SHA | The vault has submissions, whose repository it's in. |
+| `commit` | Its full 40-character SHA | The vault has submissions. |
 
-A reader's report of a target stays one report while it's open: sending it again changes nothing.
+Moderation doesn't call GitHub, so a submission or commit report is checked by form only, a number or a full SHA: nothing asks whether the repository holds it. Closing a submission checks that it's the vault's own. A reader's report of a target stays one report while it's open: sending it again changes nothing.
 
 ## The Reports panel
 
 `/-/dashboard/moderation/reports/` lists the open reports, oldest first, each with what it's about as the site knows it now (the page's title, the comment and who wrote it, the account's name, a link to the pull request or commit on GitHub) and the reader's reason. **Closed** lists resolved and dismissed reports with who closed them and when. Moderators never see who sent a report.
 
 - **Resolve** closes a report that was right, once something was done about it. **Dismiss** closes one that needs nothing. A report closes once, even when two moderators click at the same moment: the second is told someone was first, and the audit log holds only the first.
-- **Hide comment** hides the reported comment through annotations, for a moderator who holds `annotations:comments:delete` on its page. It stays in the report, marked hidden.
+- **Hide comment** hides the reported comment through annotations, for a moderator who holds `annotations:comments:delete` on its page. It stays in the report, marked hidden. A hide commits in one transaction with its audit entry, so it needs annotations to keep its comments in the accounts database, `annotations({ database: { env: "SVARTZ_DB" } })`, as the example above does; with another binding the panel doesn't offer it.
 - **Close submission** closes the reported pull request without merging it, through submissions, for a moderator who holds `submissions:reviews:write`. It shows only for a pull request the vault's own submissions saved, which takes submissions' [sync](../packages/plugin-submissions/README.md#github-sync): vaults that share a repository never close each other's.
 
-Hiding and closing leave the report open, to resolve once done. Each shows only to a moderator who holds the owning plugin's permission, and its route checks that again. A report whose target's plugin has left the vault, or whose comment was deleted since, still shows, without those actions.
+Hiding and closing leave the report open, to resolve once done. Each shows only to a moderator who holds the owning plugin's permission, and its route checks that again. A report whose target's plugin has left the vault, or whose comment was deleted since, still shows, without those actions. A comment whose page the build no longer publishes, or now protects, shows without its text.
 
 ## Permissions
 

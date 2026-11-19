@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  ADA, ALAN, createDatabase, createSite, grant, GRACE, ORIGIN, seedComment, seedSubmission, signIn, type Database, type Site, type SiteOptions,
+  ADA, ALAN, createDatabase, createSite, grant, GRACE, ORIGIN, PAGES, seedComment, seedSubmission, signIn, type Database, type Site, type SiteOptions,
 } from "./harness";
 
 const ENDPOINT = "/notes/_svartz/moderation";
@@ -219,6 +219,18 @@ describe("what can be reported", () => {
     expect((await report(site, ada, { kind: "annotation", id: "c1" })).status).toBe(404);
   });
 
+  // Proves a comment is reportable only where readers can see it: on a page the build still publishes unprotected.
+  it("refuses a comment on a page the build no longer publishes", async () => {
+    const { db, ada } = await moderated();
+    const protectedGarden = createSite(db, { pages: { "users/grace": PAGES["users/grace"] } });
+
+    const answer = await report(protectedGarden, ada, { kind: "annotation", id: "c1" });
+
+    expect(answer.status).toBe(404);
+    expect(await answer.json()).toEqual({ error: "not_found", message: "This comment has been deleted." });
+    expect(await reports(db)).toEqual([]);
+  });
+
   it.each([
     ["comments without annotations", { annotations: false }, { kind: "annotation", id: "c1" }],
     ["submissions without submissions", { submissions: false }, { kind: "submission", id: "42" }],
@@ -370,6 +382,31 @@ describe("the Reports panel", () => {
     expect(after).not.toContain("Hide comment");
     expect(await reports(db)).toEqual([expect.objectContaining({ state: "open" })]);
     expect((await audited(db)).map(({ action }) => action)).toEqual(["annotations:comment:hide"]);
+  });
+
+  // Proves the panel offers Hide only where annotations' route can do it: with comments in the accounts database.
+  it("offers no Hide when annotations keeps comments outside SVARTZ_DB", async () => {
+    const { db, site, ada, alan } = await moderated({ comments: "DB" });
+    await grant(db, "alan", "annotations:comments:delete");
+    await report(site, ada, { kind: "annotation", id: "c1" });
+
+    const queue = await panel(site, alan);
+
+    expect(queue).toContain("Cheap pills");
+    expect(queue).not.toContain("Hide comment");
+  });
+
+  // Proves the panel never shows moderators a comment readers can no longer see: its page went unpublished or protected.
+  it("shows a report about a comment on a page no longer published without the comment", async () => {
+    const { db, site, ada, alan } = await moderated();
+    await report(site, ada, { kind: "annotation", id: "c1" });
+    const protectedGarden = createSite(db, { pages: { "users/grace": PAGES["users/grace"] } });
+
+    const queue = await panel(protectedGarden, alan);
+
+    expect(queue).toContain('garden <span class="sv-account-muted">(no longer on the site)</span>');
+    expect(queue).not.toContain("Cheap pills");
+    expect(queue).toContain("Resolve");
   });
 
   it("offers to close a submission through submissions only to a moderator who may review them", async () => {

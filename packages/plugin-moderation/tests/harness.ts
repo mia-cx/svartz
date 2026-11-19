@@ -50,16 +50,22 @@ export interface SiteOptions {
   readonly reportsPerHour?: number;
   /** Bind no `SVARTZ_DB`, so nobody has an account. */
   readonly accounts?: boolean;
+  /** The binding annotations keeps comments in. Default `SVARTZ_DB`. */
+  readonly comments?: string;
+  /** The pages the build published. Default {@link PAGES}. */
+  readonly pages?: BuildData["pages"];
 }
 
 /**
- * One vault at /notes with `auth`, `annotations` (comments in `DB`) and `moderation`, all on `db`, answering like the
- * deployed Worker. The build published {@link PAGES}, and the vault has submissions on `wikiplace/wikiplace.live`.
+ * One vault at /notes with `auth`, `annotations` (comments in `SVARTZ_DB`) and `moderation`, all on `db`, answering
+ * like the deployed Worker. The build published {@link PAGES}, and the vault has submissions on `wikiplace/wikiplace.live`.
  */
-export function createSite(db: Database, { vault = "notes", annotations = true, submissions = true, reportsPerHour = DEFAULT_REPORTS_PER_HOUR, accounts = true }: SiteOptions = {}) {
+export function createSite(db: Database, {
+  vault = "notes", annotations = true, submissions = true, reportsPerHour = DEFAULT_REPORTS_PER_HOUR, accounts = true, comments = "SVARTZ_DB", pages = PAGES,
+}: SiteOptions = {}) {
   const data: BuildData = {
-    pages: PAGES,
-    ...annotations && { annotations: { database: "DB" } },
+    pages,
+    ...annotations && { annotations: { database: comments } },
     ...submissions && { submissions: { repo: SUBMISSIONS.repo, records: { database: "DB", root: SUBMISSIONS.root } } },
   };
   const options: ModerationServerOptions = { limits: { reportsPerHour } };
@@ -75,7 +81,7 @@ export function createSite(db: Database, { vault = "notes", annotations = true, 
         },
         data: { permissions: [], paths: [] },
       },
-      ...annotations ? [{ id: "annotations", load: () => import("@svartz/plugin-annotations/server"), options: { database: { env: "DB" }, reactions: [], moderators: [], limits: { writesPerHour: 30 } } }] : [],
+      ...annotations ? [{ id: "annotations", load: () => import("@svartz/plugin-annotations/server"), options: { database: { env: comments }, reactions: [], moderators: [], limits: { writesPerHour: 30 } } }] : [],
       { id: "moderation", load: () => import("../src/server"), options, data },
     ],
   }, {
