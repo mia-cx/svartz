@@ -1,0 +1,14 @@
+---
+description: Dashboard panels — core lists them, auth gates them, every write re-checks and audits
+globs: packages/core/src/plugin/server.ts, packages/auth/src/dashboard.ts, packages/auth/src/people*.ts, packages/auth/src/audit.ts, packages/plugin-*/src/server.ts
+alwaysApply: false
+---
+
+# Dashboard panels
+
+- `@svartz/core` never imports `@svartz/auth`. Core only collects panels: a server factory returns `dashboard: { title, panels }`, and `context.dashboard()` lists them, each `render` bound to its own plugin's context. It checks no permission.
+- Auth owns `/-/dashboard/` (`pages: ["account", "dashboard"]`, `dashboard.ts`): a panel shows to a viewer who holds its `permission` on the vault (`can(viewer, permission, { vault })`, so a site grant covers it), and the same check runs before every render. No openable panel means 404, not an empty page.
+- Hiding a panel is not the gate. Every route a panel's forms post to checks `Origin === url.origin` and its own write permission with `can()` on the server.
+- Record every grant, role and moderation change with the change in one batch: `auditStatement` inside auth, `audit(env, entry, changes)` from `@svartz/auth/server` elsewhere. The actor comes from `readAccount`, never from the form. `auth_audit` is append-only by trigger.
+- `admin` is config-only: no stored role, member or grant may name it, and grants on an admin's account are refused.
+- Object strings come only from `pickedObject` in `objects.ts` (known vault, no `.`/`..`/empty segments); a whole `object` field must round-trip through it unchanged.
