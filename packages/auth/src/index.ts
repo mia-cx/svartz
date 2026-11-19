@@ -77,6 +77,11 @@ function callbackVaultFor(options: AuthOptions, providers: readonly ProviderId[]
     fail(`vault "${vault.id}" sets callbackVault "${named}", but only host vaults share a sign-in; "${vault.id}" runs its own`);
   }
   const host = vaults.filter((candidate) => candidate.target.type === "host" && authOptionsOf(candidate));
+  // Every host vault, not only the callback vault: vaults with separate callback vaults still share accounts.
+  const differs = host.find((candidate) => !sameAdmins(options.admins, authOptionsOf(candidate)!.admins));
+  if (differs) {
+    fail(`vault "${vault.id}" lists different admins than vault "${differs.id}"; host vaults share accounts, so list the same admins on each`);
+  }
   const id = named ?? host[0]!.id;
   const target = vaults.find((candidate) => candidate.id === id);
   if (!target) fail(`vault "${vault.id}" sets callbackVault "${id}", but no vault has that id`);
@@ -84,9 +89,6 @@ function callbackVaultFor(options: AuthOptions, providers: readonly ProviderId[]
   if (!targetOptions) fail(`vault "${vault.id}" sets callbackVault "${id}", which must be a host vault that enables auth`);
   const missing = providers.find((provider) => !targetOptions.providers[provider]);
   if (missing) fail(`vault "${vault.id}" offers ${missing}, but its callbackVault "${id}" doesn't list it under providers`);
-  if (!sameAdmins(options.admins, targetOptions.admins)) {
-    fail(`vault "${vault.id}" lists different admins than its callbackVault "${id}"; host vaults share accounts, so list the same admins on each`);
-  }
   // The target forwards nothing itself, or sign-in could bounce between vaults forever (or hop through a chain).
   const targetOwner = targetOptions.callbackVault ?? host[0]!.id;
   if (targetOwner !== target.id) {

@@ -205,6 +205,19 @@ describe("a cookie from before accounts", () => {
 
     expect(await whoIs(request, cookie)).toEqual({ signIn: { account: null, reason: "signed-out" }, identity: null });
   });
+
+  it("stays signed out when the same cookie is sent in another base64 spelling", async () => {
+    const db = await createDatabase();
+    const request = site(db);
+    const [cookie] = await legacyCookie();
+    await whoIs(request, [cookie!]);
+    await db.prepare("DELETE FROM auth_sessions").run();
+
+    // base64 decoding skips whitespace, so this opens to the same sealed bytes.
+    const respelled = `${cookie!.slice(0, -4)} ${cookie!.slice(-4)}`;
+
+    expect((await whoIs(request, [respelled])).signIn).toEqual({ account: null, reason: "signed-out" });
+  });
 });
 
 describe("bootstrap admins", () => {

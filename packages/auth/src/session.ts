@@ -3,7 +3,7 @@
  * {@link readAccount}, {@link readSignIn} or, until they move to accounts, {@link readIdentity}.
  */
 import { isProviderId, type Identity } from "./providers";
-import { seal, sessionSecret, unseal } from "./seal";
+import { canonicalSeal, seal, sessionSecret, unseal } from "./seal";
 import { accountsDatabase, boundDatabase, deleteSession, digest, forgetLegacyCookie, legacySession, migrate, readSession, SESSION_MAX_AGE_SECONDS } from "./store";
 
 type Env = Readonly<Record<string, unknown>>;
@@ -79,13 +79,17 @@ const isSessionCookie = (value: unknown): value is SessionCookie =>
 export const sealSession = (sid: string, secret: string): Promise<string> =>
   seal({ sid } satisfies SessionCookie, secret, "session", SESSION_MAX_AGE_SECONDS);
 
-/** The request's session cookie: raw, and opened. `undefined` when there is none or it doesn't open. */
+/**
+ * The request's session cookie: opened, and `raw` in its canonical spelling, so a respelled copy of a cookie from
+ * before accounts hashes to the same row and stays signed out with it. `undefined` when there is none or it doesn't open.
+ */
 async function sessionCookie(request: Request, env: Env): Promise<{ raw: string; value: SessionCookie | Identity } | undefined> {
   const secret = sessionSecret(env);
-  const raw = readCookie(request, SESSION_COOKIE);
-  if (!secret || !raw) return undefined;
-  const value = await unseal(raw, secret, "session");
-  return isSessionCookie(value) || isIdentity(value) ? { raw, value } : undefined;
+  const sent = readCookie(request, SESSION_COOKIE);
+  if (!secret || !sent) return undefined;
+  const value = await unseal(sent, secret, "session");
+  const raw = canonicalSeal(sent);
+  return raw !== undefined && (isSessionCookie(value) || isIdentity(value)) ? { raw, value } : undefined;
 }
 
 interface Reader {

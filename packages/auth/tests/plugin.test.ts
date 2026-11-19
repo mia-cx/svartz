@@ -98,7 +98,11 @@ describe("one sign-in per host app", () => {
     ["lists other admins", [
       { id: "journal", plugins: [auth({ providers: { github }, admins: ["github:583231"] })] },
       { id: "work", plugins: [auth({ providers: { github } })] },
-    ], /vault "work" lists different admins than its callbackVault "journal"/],
+    ], /vault "work" lists different admins than vault "journal"/],
+    ["is its own, with other admins than another host vault", [
+      { id: "journal", plugins: [auth({ providers: { github }, admins: ["github:583231"] })] },
+      { id: "work", plugins: [auth({ providers: { github }, callbackVault: "work" })] },
+    ], /vault "work" lists different admins than vault "journal"/],
   ])("fails config resolution when the callbackVault %s", (_case, vaults, error) => {
     expect(() => resolve(site(...vaults), "work")).toThrow(error);
   });
