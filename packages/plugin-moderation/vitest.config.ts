@@ -117,8 +117,9 @@ export default defineConfig({
         test: {
           name: "server",
           environment: "node",
-          // Real D1 startup, migrations and sign-ins need headroom while CI tests other workspaces.
-          testTimeout: 15_000,
+          // Real D1 startup, migrations and sign-ins. CI runs every workspace's tests at once on one small runner,
+          // where the same test takes several times as long.
+          testTimeout: process.env.CI ? 60_000 : 15_000,
           include: ["tests/**/*.test.ts"],
           exclude: ["tests/**/*.browser.test.ts"],
         },
