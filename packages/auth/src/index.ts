@@ -169,7 +169,21 @@ interface Resolved {
   readonly callbackMountPath?: string;
   readonly permissions: readonly PermissionDeclaration[];
   readonly vaults: readonly string[];
-  readonly userPageVault: string;
+  readonly userPageVault?: string;
+}
+
+/**
+ * The vault that holds user pages: `target`, the one that runs `vault`'s sign-in, and so allocates every handle against
+ * its own pages. Host vaults that send sign-in to different vaults share accounts but would each allocate handles
+ * knowing only their own pages, so in such an app no page is a user page.
+ */
+function userPageVaultFor(target: ResolvedConfig, { vault, vaults }: SiteVaults): Pick<Resolved, "userPageVault"> {
+  if (vault.target.type === "host") {
+    const host = vaults.filter((candidate) => candidate.target.type === "host" && authOptionsOf(candidate));
+    const callbacks = new Set(host.map((candidate) => authOptionsOf(candidate)!.callbackVault ?? host[0]!.id));
+    if (callbacks.size > 1) return {};
+  }
+  return { userPageVault: target.id };
 }
 
 /** The plugin one vault runs; `resolved` is set once every vault is known. */
@@ -187,7 +201,7 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], reso
         ...target.id !== site.vault.id && { callbackMountPath: target.mountPath },
         permissions: permissionsFor(site),
         vaults: sharingVaults(site).map(({ id }) => id),
-        userPageVault: target.id,
+        ...userPageVaultFor(target, site),
       });
     },
     emitArtifacts: {

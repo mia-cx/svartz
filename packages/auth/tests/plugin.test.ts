@@ -154,6 +154,23 @@ describe("one sign-in per host app", () => {
     expect(await dialogEndpoint(resolve(vaults, "work"), "/work")).toBe("/work/_svartz/auth");
   });
 
+  it("keeps user pages in the one vault that runs sign-in, and has none when host vaults sign in through different vaults", () => {
+    const shared = site(
+      { id: "journal", plugins: [auth({ providers: { github } })] },
+      { id: "work", plugins: [auth({ providers: { github } })] },
+    );
+    expect(resolve(shared, "journal").server?.options).toMatchObject({ userPageVault: "journal" });
+    expect(resolve(shared, "work").server?.options).toMatchObject({ userPageVault: "journal" });
+
+    // Each callback vault would allocate handles knowing only its own pages, so neither holds user pages.
+    const split = site(
+      { id: "journal", plugins: [auth({ providers: { github } })] },
+      { id: "work", plugins: [auth({ providers: { github }, callbackVault: "work" })] },
+    );
+    expect(resolve(split, "journal").server?.options).not.toHaveProperty("userPageVault");
+    expect(resolve(split, "work").server?.options).not.toHaveProperty("userPageVault");
+  });
+
   it.each([
     ["names no vault", [{ id: "work", plugins: [auth({ providers: { github }, callbackVault: "jornal" })] }],
       /vault "work" sets callbackVault "jornal", but no vault has that id/],
