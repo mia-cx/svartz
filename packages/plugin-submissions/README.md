@@ -82,6 +82,8 @@ The editor saves what a reader writes in the browser's `localStorage` as they wr
 
 Every page gets a **New page** action in the site actions (the rail or site navigation). Its panel asks for a **Title** and a **Section**, then opens on a blank page with a **Why add this page** field. The sections are the vault's folders that hold a published note, plus its top level when that does. The page is saved as `<section>/<title>.md`, so the title is the note's name as in Obsidian, and its URL follows the vault's usual slug rules. A title that a page in that section already has is refused, with a link to that page.
 
+A signed-in reader without a [user page](../../docs/auth.md#user-pages) gets **Create your page** on the account page, `/-/account/`, of the vault that holds user pages. It opens the same panel on `users/<handle>.md`, with the title and section fixed, even before the user page folder holds a published note.
+
 ## What maintainers get
 
 - For an edit, a branch `svartz/submission/edit/<page>-<submission id>` from the commit the site was built from, with one commit replacing the note. When the page changed since, GitHub shows a conflict instead of the edit overwriting it. The pull request is titled `Edit <path>`.
@@ -94,7 +96,7 @@ Each opened editor makes a random submission id and sends it with every attempt.
 Readers never choose a file path; the server works it out:
 
 - An edit must name a published `.md` note. Password-protected notes, other files and paths outside the vault are refused.
-- A new page must name a section from the list. Folders without a published note, folders holding only password-protected notes, and hidden folders are refused. So are titles that start with a dot or contain `\ / : * ? " < > | # ^ [ ]`, and titles over 120 characters.
+- A new page must name a section from the list, or be the reader's own user page. Folders without a published note, folders holding only password-protected notes, and hidden folders are refused. So are titles that start with a dot or contain `\ / : * ? " < > | # ^ [ ]`, and titles over 120 characters.
 - A new page is never written over a file. Before calling GitHub, the server refuses a title whose page would ask for a route that a published page of any type (`.md`, `.svx` and the rest, password-protected and hidden ones included) holds or asks for, as the build allocates routes: `ada-lovelace` and `Ada Lovelace` both clash with `Ada Lovelace.md`. Otherwise the new page would take that page's URL or push it to `-2`. Before writing anything, it also refuses a title whose file exists in the commit the site was built from, published or not.
 
 A page's source is capped at 512 KB and the note at 2,000 characters.
@@ -137,7 +139,7 @@ The plugin declares four permissions, which admins grant on the site, a vault, a
 | `submissions:reviews:write` | Commenting on, reviewing, merging and closing submissions | Admins only |
 | `submissions:pull-requests:read` | Seeing other people's submissions | Admins only |
 
-Admins hold every permission, and each account holds every one on its own `users/<handle>` page. Vaults that share accounts must configure Turnstile alike, since the guest default comes from it and is shared.
+Admins hold every permission, and each account holds every one on its own [user page](../../docs/auth.md#user-pages), `users/<handle>`, so its owner's edits there commit and everyone else's go to review. Vaults that share accounts must configure Turnstile alike, since the guest default comes from it and is shared.
 
 ### What commits need
 
@@ -306,4 +308,4 @@ The plugin answers under `<base><mount>/_svartz/submissions/`. Failures answer `
 | `GET status/?edit=<submissionId>` | With [sync](#github-sync): `{ "stage", "pull"?: { "number", "url" }, "commit"?: { "sha", "url" } }`, where `stage` is `open`, `closed`, `committed`, `building`, `live` or `failed`. 401 `sign_in_required` when the edit was saved signed in and the reader isn't; 404 `not_found` for an edit the site has no record of, or someone else's. |
 | `POST github/webhook/` | With [sync](#github-sync): GitHub's deliveries. 204 once stored, 202 for a delivery with nothing the mirror keeps, 401 `bad_signature`, 403 `other_repository`, 413 past 5 MB. |
 
-`page` is the note's URL path below the deployment base, as it appears in the site's index. `folder` is a section's path inside the vault, `""` for its top level. `submissionId` is 32 lowercase hex digits the client picks at random and repeats on every retry of the same submission.
+`page` is the note's URL path below the deployment base, as it appears in the site's index. `folder` is a section's path inside the vault, `""` for its top level, or the user page folder when `title` is the signed-in reader's handle. `submissionId` is 32 lowercase hex digits the client picks at random and repeats on every retry of the same submission.

@@ -5,6 +5,7 @@
  */
 import { handleFrom, numbered } from "./handle";
 import type { Identity } from "./providers";
+import { hasUserPage, type UserPages } from "./user-pages";
 
 /**
  * The D1 binding accounts live in. A fixed name, like `PRIVATE_SVARTZ_SESSION_SECRET`, because every server plugin
@@ -353,11 +354,20 @@ async function isTaken(db: Database, handle: string): Promise<boolean> {
   return results.length > 0;
 }
 
-/** The first free handle among `base`, `base-2`, `base-3` and so on. */
-export async function suggestHandle(db: Database, base: string): Promise<string> {
+/**
+ * The first free handle among `base`, `base-2`, `base-3` and so on: one no account holds or held, and whose user page
+ * `pages`, the user page vault's build, doesn't hold.
+ */
+export async function suggestHandle(db: Database, base: string, pages: UserPages): Promise<string> {
   let candidate = base;
-  for (let n = 2; await isTaken(db, candidate); n++) candidate = numbered(base, n);
+  for (let n = 2; hasUserPage(pages, candidate) || await isTaken(db, candidate); n++) candidate = numbered(base, n);
   return candidate;
+}
+
+/** Every handle `account` holds or held, the current one included. */
+export async function handlesOf(db: Database, account: string): Promise<string[]> {
+  const { results } = await db.prepare("SELECT handle FROM auth_handles WHERE account_id = ?").bind(account).all<{ handle: string }>();
+  return results.map(({ handle }) => handle);
 }
 
 /** Insert a new account with `handle` and link `identity` to it. */
@@ -378,8 +388,11 @@ function insertAccount(db: Database, account: string, identity: Identity, handle
  * account too when `identity` has none, with the closest free handle to the provider's, so nobody is asked anything
  * and nobody is signed out. Racing first reads agree on one session. `undefined` once that session was signed out or
  * deleted: the old cookie never becomes a session again.
+ *
+ * `pages` is the user page vault's build, which a new handle must avoid. Until that vault's `auth` module has started
+ * it is `undefined`, and a cookie whose identity has no account yet stays as it is, read as signed out, until then.
  */
-export async function legacySession(db: Database, hash: string, identity: Identity): Promise<string | undefined> {
+export async function legacySession(db: Database, hash: string, identity: Identity, pages: UserPages | undefined): Promise<string | undefined> {
   for (let attempt = 1; ; attempt++) {
     const { results: [known] } = await db.prepare("SELECT session_id FROM auth_legacy_cookies WHERE hash = ?").bind(hash)
       .all<{ session_id: string | null }>();
@@ -389,7 +402,11 @@ export async function legacySession(db: Database, hash: string, identity: Identi
     const session = newSessionId();
     const linked = await linkedAccount(db, identity.id);
     const account = linked ?? crypto.randomUUID();
-    const create = linked ? [] : insertAccount(db, account, identity, await suggestHandle(db, handleFrom(identity.handle ?? identity.name)), at);
+    let create: Statement[] = [];
+    if (!linked) {
+      if (!pages) return undefined;
+      create = insertAccount(db, account, identity, await suggestHandle(db, handleFrom(identity.handle ?? identity.name), pages), at);
+    }
     try {
       await db.batch([
         ...create,

@@ -3,11 +3,19 @@
  * Server plugins read who is signed in with `readAccount` from `@svartz/auth/server`.
  */
 import { fileURLToPath } from "node:url";
-import { definePlugin, getCompilerContributions, type PermissionDeclaration, type ResolvedConfig, type NormalizedSvartzPlugin, type SiteVaults, type SvartzPlugin } from "@svartz/core";
+import {
+  definePlugin, getCompilerContributions, type NormalizedSvartzPlugin, type PermissionDeclaration, type PluginContext, type ResolvedConfig,
+  type SiteVaults, type SvartzPlugin,
+} from "@svartz/core";
 import type { SignInConfig } from "./browser";
 import { assertSharedCatalogue, collectPermissions } from "./catalogue";
+import { userPageHandle } from "./permissions";
 import { isProviderId, PROVIDERS, type ProviderId } from "./providers";
 import type { AuthOptions, AuthServerData, AuthServerOptions } from "./server";
+import { DEFAULT_USER_PAGE_FOLDER } from "./user-pages";
+
+/** The extensions of notes, which are pages; anything else a vault publishes is an attachment. */
+const NOTE_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
 
 export type { Identity, ProviderId } from "./providers";
 export type { Account, SignIn, SignedOutReason } from "./session";
@@ -55,6 +63,37 @@ function validate(options: AuthOptions): ProviderId[] {
   return names as ProviderId[];
 }
 
+/**
+ * A folder as page slugs spell it: lowercase segments of letters, digits, `-` and `_`, starting with a letter or digit.
+ * Slugs collapse a run of hyphens into one, so no segment has two in a row.
+ */
+const USER_PAGE_FOLDER = /^[a-z0-9](?:[a-z0-9_]|-(?!-))*(?:\/[a-z0-9](?:[a-z0-9_]|-(?!-))*)*$/;
+
+/**
+ * The folder of user pages, without a trailing slash. Refused when pages outside one folder could match it: empty, a
+ * leading slash, dot segments, or any spelling a page's slug never has.
+ */
+function userPageFolderOf({ userPages = DEFAULT_USER_PAGE_FOLDER }: AuthOptions): string {
+  const folder = typeof userPages === "string" ? userPages.replace(/\/$/, "") : "";
+  if (!USER_PAGE_FOLDER.test(folder)) {
+    fail(`userPages must be a folder of the vault, such as "users": lowercase letters, numbers, hyphens and underscores, with / between folders; ${JSON.stringify(userPages)} isn't`);
+  }
+  return folder;
+}
+
+/** The user pages a build holds, `<folder>/<handle>`, by handle, mapped to their URL; `null` for a hidden page. */
+function userPagesOf(ctx: PluginContext, folder: string): Record<string, string | null> {
+  const hrefs = new Map((ctx.index?.entries ?? []).map(({ slug, href }) => [slug, href]));
+  const pages: Record<string, string | null> = {};
+  for (const file of ctx.files) {
+    if (!NOTE_EXTENSIONS.has(file.extension ?? "")) continue;
+    // As the resolver reads a page object, so the build and the override agree on which pages are user pages.
+    const handle = userPageHandle(`page:${ctx.config.id}/${file.slug}`, { vault: ctx.config.id, folder });
+    if (handle !== undefined) pages[handle] = file.protection?.hidden ? null : hrefs.get(file.slug) ?? null;
+  }
+  return pages;
+}
+
 /** The same admins in any order: host vaults share accounts, so they must agree on who administers them. */
 const sameAdmins = (a: readonly string[] = [], b: readonly string[] = []): boolean =>
   new Set(a).size === new Set(b).size && a.every((admin) => b.includes(admin));
@@ -82,6 +121,10 @@ function callbackVaultFor(options: AuthOptions, providers: readonly ProviderId[]
   const differs = host.find((candidate) => !sameAdmins(options.admins, authOptionsOf(candidate)!.admins));
   if (differs) {
     fail(`vault "${vault.id}" lists different admins than vault "${differs.id}"; host vaults share accounts, so list the same admins on each`);
+  }
+  const otherFolder = host.find((candidate) => authOptionsOf(candidate)!.userPages !== options.userPages);
+  if (otherFolder) {
+    fail(`vault "${vault.id}" keeps user pages in another folder than vault "${otherFolder.id}"; host vaults share accounts, so set the same userPages on each`);
   }
   const id = named ?? host[0]!.id;
   const target = vaults.find((candidate) => candidate.id === id);
@@ -118,11 +161,29 @@ function pathsOf(slugs: readonly string[]): string[] {
   return [...new Set([...folders, ...slugs])].sort();
 }
 
-/** What `forVault` resolved for one vault: where its sign-ins run, the catalogue, and the vaults sharing its accounts. */
+/**
+ * What `forVault` resolved for one vault: where its sign-ins run, the catalogue, the vaults sharing its accounts, and
+ * the vault that runs sign-in, which holds the user pages.
+ */
 interface Resolved {
   readonly callbackMountPath?: string;
   readonly permissions: readonly PermissionDeclaration[];
   readonly vaults: readonly string[];
+  readonly userPageVault?: string;
+}
+
+/**
+ * The vault that holds user pages: `target`, the one that runs `vault`'s sign-in, and so allocates every handle against
+ * its own pages. Host vaults that send sign-in to different vaults share accounts but would each allocate handles
+ * knowing only their own pages, so in such an app no page is a user page.
+ */
+function userPageVaultFor(target: ResolvedConfig, { vault, vaults }: SiteVaults): Pick<Resolved, "userPageVault"> {
+  if (vault.target.type === "host") {
+    const host = vaults.filter((candidate) => candidate.target.type === "host" && authOptionsOf(candidate));
+    const callbacks = new Set(host.map((candidate) => authOptionsOf(candidate)!.callbackVault ?? host[0]!.id));
+    if (callbacks.size > 1) return {};
+  }
+  return { userPageVault: target.id };
 }
 
 /** The plugin one vault runs; `resolved` is set once every vault is known. */
@@ -140,6 +201,7 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], reso
         ...target.id !== site.vault.id && { callbackMountPath: target.mountPath },
         permissions: permissionsFor(site),
         vaults: sharingVaults(site).map(({ id }) => id),
+        ...userPageVaultFor(target, site),
       });
     },
     emitArtifacts: {
@@ -156,9 +218,11 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], reso
         compiler.browserResources.set(`${AUTH_PLUGIN_ID}-css`, { id: `${AUTH_PLUGIN_ID}-css`, kind: "css", importId: STYLESHEET });
         // The build's final plugins, which config resolution couldn't see whole: a theme preset's plugins, and what
         // other plugins' `forVault` returned. Checked like the catalogue, and added to it when the server starts.
+        // Only the vault that holds user pages records them, so no other vault's build can reserve a handle.
         const built: AuthServerData = {
           permissions: collectPermissions([{ id: ctx.config.id, plugins: ctx.plugins ?? ctx.config.plugins }]),
           paths: pathsOf(ctx.index?.entries.map(({ slug }) => slug) ?? []),
+          ...resolved?.userPageVault === ctx.config.id && { userPages: userPagesOf(ctx, options.userPages ?? DEFAULT_USER_PAGE_FOLDER) },
         };
         // The catalogue config resolution collected reaches every vault's server as well, so the build may add to it
         // but not contradict it, or which of the two a server read last would decide a default.
@@ -177,5 +241,6 @@ function authPlugin(options: AuthOptions, providers: readonly ProviderId[], reso
 
 /** The `auth` plugin: sign-in routes on the server and the sign-in dialog in the browser. */
 export function auth(options: AuthOptions): NormalizedSvartzPlugin {
-  return authPlugin(options, validate(options));
+  const providers = validate(options);
+  return authPlugin({ ...options, userPages: userPageFolderOf(options) }, providers);
 }

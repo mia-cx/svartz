@@ -5,7 +5,9 @@
  * vault to the site, and the most specific one with a grant that applies decides. Within it, the most specific actor
  * decides: an account, then its groups, then its roles, then `signed-in`, then `guest`. Deny wins between equals.
  */
+import { isHandle } from "./handle";
 import { ADMIN_ROLE } from "./session";
+import type { UserPageLocation } from "./user-pages";
 
 export type GrantValue = "allow" | "deny" | "unset";
 
@@ -43,7 +45,12 @@ export interface Membership {
 
 /** Who is asking. Without `account` they are a guest. */
 export interface Principals {
-  readonly account?: { readonly id: string; readonly handle: string };
+  readonly account?: {
+    readonly id: string;
+    readonly handle: string;
+    /** Handles the account held before. They never pass to another account, so their user pages stay its own. */
+    readonly formerHandles?: readonly string[];
+  };
   readonly roles: readonly string[];
   readonly groups: readonly Membership[];
 }
@@ -52,7 +59,7 @@ export interface Principals {
 export type DecidedBy =
   /** The asker holds the `admin` role, which is allowed everything. */
   | { readonly kind: "admin" }
-  /** The asker's own user page, `users/<handle>`. */
+  /** The asker's own user page, `<userPages>/<handle>`. */
   | { readonly kind: "user-page"; readonly object: string }
   /** The asker owns a group linked to `object`, which is this object or encloses it. */
   | { readonly kind: "group-owner"; readonly group: string; readonly object: string }
@@ -87,22 +94,40 @@ function rank(grant: Grant, who: Principals): number | undefined {
   }
 }
 
-const USER_PAGE = /^page:[^/]+\/users\/([^/]+)$/;
+/**
+ * The handle whose user page `object` is, `<folder>/<handle>` in the vault `at` names, or `undefined`. Only the page
+ * itself: a page below it, in another vault, or named by a handle in another case or one that breaks the handle rules
+ * is nobody's user page.
+ */
+export function userPageHandle(object: string | undefined, { vault, folder }: UserPageLocation): string | undefined {
+  if (vault === undefined) return undefined;
+  const prefix = `page:${vault}/${folder}/`;
+  if (!object?.startsWith(prefix)) return undefined;
+  const handle = object.slice(prefix.length);
+  return isHandle(handle) ? handle : undefined;
+}
 
 /**
  * Decide `permission` on the object `chain` describes (from {@link objectChain}) for `who`, from `grants` already loaded.
+ * User pages are `<folder>/<handle>` in the vault `userPages` names.
  *
  * 1. The `admin` role is allowed everything.
- * 2. Owner overrides allow: an account on its own `users/<handle>` page, and a group's owners on any object linked to
- *    the group, or enclosed by one.
+ * 2. Owner overrides allow: an account on its own user page, under its current handle or one it held before, and a
+ *    group's owners on any object linked to the group, or enclosed by one.
  * 3. Otherwise the first object in the chain with a set grant that applies to `who` decides. Within it, the first actor
  *    tier with such a grant decides (account, group, role, `signed-in`, `guest`), and a deny beats an allow in a tier.
  * 4. With nothing set, the answer is `unset`.
  */
-export function resolve(grants: readonly Grant[], who: Principals, chain: readonly string[], permission: string): Decision {
+export function resolve(
+  grants: readonly Grant[],
+  who: Principals,
+  chain: readonly string[],
+  permission: string,
+  userPages: UserPageLocation,
+): Decision {
   if (who.roles.includes(ADMIN_ROLE)) return { value: "allow", decidedBy: { kind: "admin" } };
-  const page = chain[0] && USER_PAGE.exec(chain[0]);
-  if (page && who.account && page[1] === who.account.handle) {
+  const owner = userPageHandle(chain[0], userPages);
+  if (owner !== undefined && who.account && (owner === who.account.handle || who.account.formerHandles?.includes(owner))) {
     return { value: "allow", decidedBy: { kind: "user-page", object: chain[0]! } };
   }
   for (const object of chain) {

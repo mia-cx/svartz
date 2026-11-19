@@ -87,9 +87,12 @@ interface Database {
 
 /**
  * A wiki at /wiki with `auth` and `submissions` as a GitHub App, on a fresh D1. `admins` are identities whose accounts
- * are admins; `db` is the database, for storing grants.
+ * are admins; `userPages` is auth's user page folder, in `userPageVault`, the vault that runs sign-in; `build` what the
+ * submissions build recorded; `db` is the database, for storing grants.
  */
-async function createSite({ mode = "permission" as Mode, admins = [] as string[] } = {}) {
+async function createSite({
+  mode = "permission" as Mode, admins = [] as string[], userPages = undefined as string | undefined, userPageVault = "wiki", build = BUILD,
+} = {}) {
   const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
   disposers.push(() => miniflare.dispose());
   const db = await miniflare.getD1Database("SVARTZ_DB") as unknown as Database;
@@ -109,9 +112,15 @@ async function createSite({ mode = "permission" as Mode, admins = [] as string[]
         id: "auth",
         eager: true,
         load: () => import("@svartz/auth/server"),
-        options: { providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } }, admins, permissions: permissions(false) },
+        options: {
+          providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
+          admins,
+          permissions: permissions(false),
+          userPageVault,
+          ...userPages && { userPages },
+        },
       },
-      { id: "submissions", load: () => import("../src/server"), options, data: BUILD },
+      { id: "submissions", load: () => import("../src/server"), options, data: build },
     ],
   }, {
     privateEnv: {
@@ -484,6 +493,133 @@ describe("a commit's claim on routes", () => {
       status: 201,
       body: { kind: "pull-request", url: PULL_42.html_url, number: 42, reason: "route" },
     });
+    expect(replay.pending).toEqual([]);
+  });
+});
+
+describe("user pages", () => {
+  const HEAD = "3a1f9c0e5b7d2468ace013579bdf2468ace01357";
+  const adaAuthor = { name: "Ada Lovelace", email: "583231+ada@users.noreply.github.com" };
+  const adaCredit = "by [Ada Lovelace](<https://github.com/ada>) (signed in with GitHub)";
+  /** The guide and the user pages of `handles` in `folder`, which holds a published note only when it holds one of them. */
+  const buildWith = (folder: string, handles = ["ada", "grace"]): BuildData => {
+    const notes = [published("guide.md", "Guide"), ...handles.map((handle) => published(`${folder}/${handle}.md`, handle))];
+    return {
+      ...BUILD,
+      pages: Object.fromEntries(notes.map(({ href, path }) => [href, `content/${path}`])),
+      routes: Object.fromEntries(notes.map(({ slug }) => [slug, holder(slug)])),
+      aliases: {},
+      folders: handles.length > 0 ? ["", folder] : [""],
+      links: notes,
+    };
+  };
+  /** The editor loading the source of `path` at the build commit. */
+  const sourceOf = (path: string): Exchange => ({
+    request: { method: "GET", url: `${API}/contents/${path}?ref=${BUILD_COMMIT}` },
+    response: { status: 200, raw: GUIDE_SOURCE },
+  });
+  /**
+   * `person`'s save of `path` committed straight to the branch, as the account `account` with the handle `handle`: an
+   * edit of the guide's source, or a new page where nothing is.
+   */
+  const committed = (path: string, person: Identity, account: string, { handle = person.handle!, kind = "edit" as "edit" | "new", markdown = MARKDOWN } = {}) => [
+    ...commitStart,
+    blobExchange(path, HEAD, ...kind === "edit" ? [GUIDE_SHA] : []),
+    ...commitExchanges({
+      path,
+      markdown,
+      message: `${kind === "edit" ? "Edit" : "Add"} ${path}\n\n${NOTE}\n\n`
+        + `Co-authored-by: ${person.name} <${person.id.split(":")[1]}+${person.handle}@users.noreply.github.com>\nSvartz-Account: ${account}`,
+      author: { name: person.name, email: `${handle}@users.noreply.wiki.example` },
+    }),
+  ];
+
+  it.each([
+    ["the default folder", undefined, "users"],
+    ["a configured folder", "people", "people"],
+  ])("in %s, commits the owner's save of her user page and opens a pull request for anyone else's", async (_, userPages, folder) => {
+    const site = await createSite({ userPages, build: buildWith(folder) });
+    const grace = await signIn(site, GRACE);
+    const ada = await signIn(site, ADA);
+    const path = `content/${folder}/grace.md`;
+    const replay = github([
+      sourceOf(path), sourceOf(path),
+      ...committed(path, GRACE, await accountId(site, "grace")),
+      ...editExchanges({
+        path, markdown: MARKDOWN, note: NOTE, pageUrl: `${ORIGIN}/wiki/${folder}/grace/`, branch: branchFor(`wiki-${folder}-grace`), author: adaAuthor, credit: adaCredit,
+      }).filter(({ request }) => request.url !== `${API}/issues/42/labels`),
+    ]);
+    const page = `/wiki/${folder}/grace/`;
+    const destinationOf = async (cookie: string) =>
+      (await (await site.request(`${BASE}/source/?page=${encodeURIComponent(page)}`, { cookie })).json() as { destination: unknown }).destination;
+
+    expect([await destinationOf(grace), await destinationOf(ada)]).toEqual(["commit", "pull-request"]);
+    expect(await save(site, { page, sha: GUIDE_SHA }, grace)).toEqual({ status: 201, body: commitAnswer });
+    expect(await save(site, { page, sha: GUIDE_SHA }, ada)).toEqual({ status: 201, body: { kind: "pull-request", url: PULL_42.html_url, number: 42 } });
+    expect(replay.pending).toEqual([]);
+  });
+
+  it("gives no override in the default folder once another is configured", async () => {
+    const site = await createSite({ userPages: "people" });
+    const grace = await signIn(site, GRACE);
+    github([sourceOf("content/users/grace.md")]);
+
+    expect((await (await site.request(`${BASE}/source/?page=%2Fwiki%2Fusers%2Fgrace%2F`, { cookie: grace })).json() as { destination: unknown }).destination)
+      .toBe("pull-request");
+  });
+
+  // Proves a page at the user page path of a vault that doesn't run sign-in is an ordinary page: no override on it, and
+  // no starting it outside the sections.
+  it("treats the user page folder of a vault that holds no user pages as an ordinary folder", async () => {
+    const empty = await createSite({ userPageVault: "journal", build: buildWith("users", []) });
+    const started = await empty.request(`${BASE}/destination/?folder=users&title=ada`, { cookie: await signIn(empty, ADA) });
+    expect([started.status, (await started.json() as { error: unknown }).error]).toEqual([400, "not_a_section"]);
+
+    const withGrace = await createSite({ userPageVault: "journal", build: buildWith("users", ["grace"]) });
+    const grace = await signIn(withGrace, GRACE);
+    github([sourceOf("content/users/grace.md")]);
+    expect((await (await withGrace.request(`${BASE}/source/?page=%2Fwiki%2Fusers%2Fgrace%2F`, { cookie: grace })).json() as { destination: unknown }).destination)
+      .toBe("pull-request");
+  });
+
+  it("lets an account start its own user page in a folder with no page yet, and nobody else's", async () => {
+    const site = await createSite({ build: buildWith("users", []) });
+    const ada = await signIn(site, ADA);
+    const grace = await signIn(site, GRACE);
+    const path = "content/users/ada.md";
+    const replay = github(committed(path, ADA, await accountId(site, "ada"), { kind: "new" }));
+    const ask = async (title: string, cookie?: string) => {
+      const response = await site.request(`${BASE}/destination/?folder=users&title=${title}`, { cookie });
+      return response.ok ? (await response.json() as { destination: unknown }).destination : (await response.json() as { error: unknown }).error;
+    };
+
+    expect([await ask("ada", ada), await ask("ada", grace), await ask("ada"), await ask("grace", ada)])
+      .toEqual(["commit", "not_a_section", "not_a_section", "not_a_section"]);
+    expect(await save(site, { folder: "users", title: "grace" }, ada, "new")).toMatchObject({ status: 400, body: { error: "not_a_section" } });
+    expect(await save(site, { folder: "users", title: "ada" }, grace, "new")).toMatchObject({ status: 400, body: { error: "not_a_section" } });
+    expect(await save(site, { folder: "users", title: " ada " }, ada, "new")).toEqual({ status: 201, body: commitAnswer });
+    expect(replay.pending).toEqual([]);
+  });
+
+  it("keeps committing its owner's saves of a user page after a handle change", async () => {
+    const site = await createSite({ build: buildWith("users") });
+    const ada = await signIn(site, ADA);
+    const account = await accountId(site, "ada");
+    const renamed = await site.request(`${AUTH}/account/profile/`, {
+      method: "POST", cookie: ada, body: new URLSearchParams({ name: "Ada Lovelace", handle: "lovelace" }),
+    });
+    expect(renamed.headers.get("location")).toContain("status=saved");
+    // Moving the page to the new handle, with the old address redirecting, claims only addresses that are Ada's.
+    const moved = "---\nslug: lovelace\naliases: [users/ada]\n---\n# Ada Lovelace\n";
+    const replay = github([
+      ...committed("content/users/ada.md", ADA, account, { handle: "lovelace" }),
+      repositoryExchange,
+      headExchange(),
+      ...committed("content/users/ada.md", ADA, account, { handle: "lovelace", markdown: moved }).slice(commitStart.length),
+    ]);
+
+    expect(await save(site, { page: "/wiki/users/ada/", sha: GUIDE_SHA }, ada)).toEqual({ status: 201, body: commitAnswer });
+    expect(await save(site, { page: "/wiki/users/ada/", sha: GUIDE_SHA, markdown: moved }, ada)).toEqual({ status: 201, body: commitAnswer });
     expect(replay.pending).toEqual([]);
   });
 });

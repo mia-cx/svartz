@@ -178,9 +178,27 @@
 
 .sv-account-who {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: var(--sv-space-3, 0.75rem);
 	margin-block-start: calc(-1 * var(--sv-space-3, 0.75rem));
+}
+
+/* The user page link, or the region a plugin puts "Create your page" in, at the end of the line. */
+.sv-account-page {
+	flex: none;
+	margin-inline-start: auto;
+}
+
+a.sv-account-page {
+	text-decoration: none;
+}
+
+.sv-account .sv-account-page svg {
+	flex: none;
+	inline-size: 1rem;
+	block-size: 1rem;
+	stroke-width: 2;
 }
 
 .sv-account-avatar {
@@ -273,24 +291,34 @@
 	font-size: var(--sv-step--1, 0.875rem);
 }
 
-.sv-account-button {
+/*
+ * A plugin's button in the user page region would take the theme's action look, which every `[data-svartz-region]`
+ * child gets; inside `.sv-account` it outranks that and looks like the page's own buttons.
+ */
+.sv-account-button,
+.sv-account .sv-account-page > button {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	gap: var(--sv-space-2, 0.5rem);
 	min-block-size: 2.75rem;
-	padding-inline: var(--sv-space-4, 1rem);
+	padding: 0 var(--sv-space-4, 1rem);
 	border: var(--sv-rule-width, 1px) solid var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
 	border-radius: var(--sv-radius-m, 6px);
 	background: var(--sv-paper, Canvas);
 	color: var(--sv-ink, CanvasText);
 	font: inherit;
 	font-weight: 600;
+	text-transform: none;
 	cursor: pointer;
 	transition: background-color var(--sv-duration-fast, 120ms) var(--sv-ease, ease-out);
 }
 
-.sv-account-button:hover {
+.sv-account-button:hover,
+.sv-account .sv-account-page > button:hover {
+	border-color: var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
 	background: var(--sv-surface, color-mix(in oklch, CanvasText 6%, Canvas));
+	color: var(--sv-ink, CanvasText);
 }
 
 .sv-account-button[data-primary] {

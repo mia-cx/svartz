@@ -31,8 +31,11 @@ async function createDatabase(): Promise<Database> {
   return await miniflare.getD1Database("SVARTZ_DB") as unknown as Database;
 }
 
-/** A vault at /notes with auth offering GitHub and Discord, and a plugin that reports who reads as signed in. */
-function site(db: Database | undefined) {
+/**
+ * A vault at /notes with auth offering GitHub and Discord, and a plugin that reports who reads as signed in. `userPages`
+ * is what the build found in the user page folder, by handle.
+ */
+function site(db: Database | undefined, userPages: Record<string, string | null> = {}) {
   const env = { PRIVATE_SVARTZ_SESSION_SECRET: SECRET, PRIVATE_GITHUB_SECRET: "gh", PRIVATE_DISCORD_SECRET: "dc", ...db && { SVARTZ_DB: db } };
   const providers = {
     github: { clientId: "gh-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } },
@@ -42,7 +45,7 @@ function site(db: Database | undefined) {
     basePath: "/notes",
     vault: { id: "notes", mountPath: "/notes", site: { title: "Notes" } },
     servers: [
-      { id: "auth", eager: true, pages: ["account"], load: () => import("../src/server"), options: { providers } },
+      { id: "auth", eager: true, pages: ["account"], load: () => import("../src/server"), options: { providers, userPageVault: "notes" }, data: { permissions: [], userPages } },
       { id: "reader", load: async () => ({ default: () => async (request: Request, context: { env: Record<string, unknown> }) => Response.json(await readSignIn(request, context.env)) }) },
     ],
   }, { privateEnv: env, building: false, dev: false });
@@ -244,6 +247,64 @@ describe("/-/account/", () => {
     expect(await (await request(`${AUTH}/handle/`, { cookies: cookiesFrom(namesake) })).text()).toContain('value="octocat-2"');
     expect((await post(request, "profile", session, { name: "The Octocat", handle: "octocat" })).headers.get("location")).toContain("status=saved");
     expect((await request(`${AUTH}/users/mona/`)).headers.get("location")).toBe(`${AUTH}/users/octocat/`);
+  });
+
+  // Proves the entry point: a link to the account's user page, or, while it has none, the empty region a plugin that
+  // can create pages fills with the action that starts one.
+  it("links the account's user page, or leaves room for a plugin to start it", async () => {
+    const db = await createDatabase();
+    const before = site(db);
+    const ada = await signUp(before.request, OCTOCAT, "ada");
+    const grace = await signUp(before.request, HUBOT, "grace");
+
+    const region = (await before.page(ada))?.html;
+    expect(region).toContain('<div class="sv-account-page" data-svartz-region="user-page-actions" data-svartz-user-page="users/ada"></div>');
+    expect(region).not.toContain("Your page");
+
+    // The next build has Ada's page, and a hidden one for Grace, which the site never links.
+    const after = site(db, { ada: "/notes/users/ada/", grace: null });
+    const linked = (await after.page(ada))?.html;
+    expect(linked).toContain('<a class="sv-account-button sv-account-page" href="/notes/users/ada/">Your page</a>');
+    expect(linked).not.toContain("user-page-actions");
+    expect((await after.page(grace))?.html).not.toMatch(/Your page|user-page-actions/);
+  });
+
+  it("leaves room to start a page for a handle that names something every object has", async () => {
+    const { request, page } = site(await createDatabase());
+    const account = await signUp(request, OCTOCAT, "constructor");
+
+    const html = (await page(account))?.html;
+
+    expect(html).toContain('data-svartz-region="user-page-actions" data-svartz-user-page="users/constructor"');
+    expect(html).not.toContain("Your page");
+  });
+
+  // Proves the page stays reachable through a handle change: it stays where it was written, and stays its owner's.
+  it("keeps linking the user page under the old handle after a handle change", async () => {
+    const db = await createDatabase();
+    const hopper = await signUp(site(db).request, OCTOCAT, "hopper");
+    const { request, page } = site(db, { hopper: "/notes/users/hopper/" });
+
+    expect((await post(request, "profile", hopper, { name: "Grace", handle: "grace-hopper" })).headers.get("location")).toContain("status=saved");
+    expect((await page(hopper))?.html).toContain('href="/notes/users/hopper/">Your page</a>');
+    // Its owner may switch back to the handle its page carries.
+    expect((await post(request, "profile", hopper, { name: "Grace", handle: "hopper" })).headers.get("location")).toContain("status=saved");
+  });
+
+  // Proves no account gains a page someone else wrote by taking the handle it carries, when no account ever held it.
+  it("treats a handle whose user page exists as taken", async () => {
+    const { request } = site(await createDatabase(), { babbage: "/notes/users/babbage/" });
+
+    const back = await callback(request, await request(`${AUTH}/start/github/?returnTo=/notes/`), { ...OCTOCAT, login: "babbage" });
+    const chooser = await request(`${AUTH}/handle/`, { cookies: cookiesFrom(back) });
+    expect(await chooser.text()).toContain('value="babbage-2"');
+    const refused = await request(`${AUTH}/handle/`, { method: "POST", cookies: cookiesFrom(back), body: new URLSearchParams({ handle: "babbage" }) });
+    expect([refused.status, await refused.text()]).toEqual([422, expect.stringContaining("@babbage is taken")]);
+
+    const hubot = await signUp(request, HUBOT, "hubot");
+    const taken = await post(request, "profile", hubot, { name: "Hubot", handle: "babbage" });
+    expect(taken.headers.get("location")).toContain("status=handle-taken");
+    expect(await reader(request, hubot)).toMatchObject({ handle: "hubot" });
   });
 
   // Proves a refused profile change keeps what the reader typed and says what to fix, changing nothing.

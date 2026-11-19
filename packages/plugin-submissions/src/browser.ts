@@ -1,6 +1,7 @@
 /**
- * Adds Edit to the page actions of every editable note, and New page to the site actions of every page. The editor
- * itself loads on first use, or at once when the reader comes back from signing in with a draft for this page.
+ * Adds Edit to the page actions of every editable note, New page to the site actions of every page, and Create your
+ * page to the account page of a reader without a user page. The editor itself loads on first use, or at once when the
+ * reader comes back from signing in with a draft for this page.
  */
 import type { BrowserScriptContext } from "@svartz/core";
 import type { BrowserOptions } from "./api";
@@ -64,6 +65,13 @@ export function mount(pathname: string, options: BrowserOptions, context: Browse
   if (page) action(document.querySelector('[data-svartz-region="page-actions"]'), PENCIL_ICON, "Edit", { kind: "edit", page });
   if (options.folders.length > 0) {
     action(document.querySelector('[data-svartz-region="site-actions"]'), FILE_PLUS_ICON, "New page", { kind: "new", folders: options.folders });
+  }
+  // On `/-/account/`, `auth` leaves this region while the reader has no user page, naming where it goes.
+  const userPage = document.querySelector<HTMLElement>('[data-svartz-region="user-page-actions"]');
+  const path = userPage?.dataset.svartzUserPage;
+  if (path) {
+    const slash = path.lastIndexOf("/");
+    action(userPage, FILE_PLUS_ICON, "Create your page", { kind: "new", folders: [path.slice(0, slash)], title: path.slice(slash + 1) });
   }
   if (buttons.length === 0) return;
 

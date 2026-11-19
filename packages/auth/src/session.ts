@@ -5,6 +5,7 @@
 import { isProviderId, type Identity } from "./providers";
 import { canonicalSeal, seal, sessionSecret, unseal } from "./seal";
 import { accountsDatabase, boundDatabase, deleteSession, digest, forgetLegacyCookie, legacySession, migrate, readSession, SESSION_MAX_AGE_SECONDS } from "./store";
+import { builtUserPages } from "./user-pages";
 
 type Env = Readonly<Record<string, unknown>>;
 
@@ -128,7 +129,7 @@ async function read(request: Request, env: Env): Promise<Reader> {
   // Signed-out readers never touch the database.
   if (!cookie) return SIGNED_OUT;
   await migrate(db);
-  const sid = isSessionCookie(cookie.value) ? cookie.value.sid : await legacySession(db, await digest(cookie.raw), cookie.value);
+  const sid = isSessionCookie(cookie.value) ? cookie.value.sid : await legacySession(db, await digest(cookie.raw), cookie.value, builtUserPages());
   const session = sid === undefined ? undefined : await readSession(db, sid);
   if (!session) return SIGNED_OUT;
   const account: Account = {
