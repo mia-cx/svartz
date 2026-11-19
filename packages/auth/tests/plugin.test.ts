@@ -18,7 +18,12 @@ describe("the auth plugin", () => {
       .toEqual(["garden/", "garden/herbs/", "garden/herbs/basil", "garden/roses", "index"]);
     // Eager: plugins that read accounts need this deployment's admins before their own first request. It renders
     // /-/account/ and /-/dashboard/.
-    expect(plugin.server).toEqual({ module: expect.stringMatching(/server\.js$/), options: { providers: { github }, privacyNotice: "/privacy/" }, eager: true, pages: ["account", "dashboard"] });
+    expect(plugin.server).toEqual({
+      module: expect.stringMatching(/server\.js$/),
+      options: { providers: { github }, privacyNotice: "/privacy/", userPages: "users" },
+      eager: true,
+      pages: ["account", "dashboard"],
+    });
     expect(ctx.compiler?.browserResources.get("auth")?.options).toEqual({
       // Below the deployment base, which the dialog only learns when it mounts: a host app's comes from SvelteKit.
       endpoint: "/notes/_svartz/auth",
@@ -41,6 +46,46 @@ describe("the auth plugin", () => {
 
   it.each(["", "  "])("fails the build when the client secret's variable name is %j", (env) => {
     expect(() => auth({ providers: { github: { ...github, clientSecret: { env } } } })).toThrow(/clientSecret must name its environment variable/);
+  });
+
+  it.each([
+    ["people", "people"],
+    ["people/", "people"],
+    ["wiki/user_pages", "wiki/user_pages"],
+  ])("keeps user pages in the folder %j names", (userPages, folder) => {
+    expect((auth({ providers: { github }, userPages }).server?.options as AuthOptions).userPages).toBe(folder);
+  });
+
+  // Each would let the override match pages outside one folder, or match no page's slug at all.
+  it.each(["", "/", "/users", "users//x", "../users", "users/..", "./users", "Users", "user pages", "-", "users\\x", 7])(
+    "fails the build for the user page folder %j",
+    (userPages) => {
+      expect(() => auth({ providers: { github }, userPages } as unknown as AuthOptions)).toThrow(/userPages must be a folder of the vault/);
+    },
+  );
+
+  it("records the build's user pages for the server: each page directly in the folder named after a handle", async () => {
+    const plugin = auth({ providers: { github }, userPages: "people" });
+    const note = (slug: string, extra = {}) => ({ slug, extension: ".md", ...extra });
+    const ctx = {
+      config: { id: "notes", mountPath: "/notes", target: { type: "node" }, plugins: [plugin] },
+      plugins: [plugin],
+      files: [
+        note("people/ada"),
+        note("people/grace", { protection: { group: "staff", hidden: true } }),
+        note("people/ada/notes"),
+        note("people/Bad Handle"),
+        note("people"),
+        note("users/bob"),
+        { slug: "people/photo", extension: ".png" },
+      ],
+      index: { entries: [{ slug: "people/ada", href: "/notes/people/ada/" }] },
+      meta: new Map(),
+    } as unknown as PluginContext;
+
+    await plugin.emitArtifacts!.run(ctx);
+
+    expect(ctx.compiler?.serverData.get("auth")).toEqual({ permissions: [], userPages: { ada: "/notes/people/ada/", grace: null } });
   });
 });
 
@@ -114,6 +159,11 @@ describe("one sign-in per host app", () => {
       { id: "journal", plugins: [auth({ providers: { github }, admins: ["github:583231"] })] },
       { id: "work", plugins: [auth({ providers: { github }, callbackVault: "work" })] },
     ], /vault "work" lists different admins than vault "journal"/],
+    // A handle is one account's across the app, so its user page is in the same folder everywhere.
+    ["keeps user pages in another folder", [
+      { id: "journal", plugins: [auth({ providers: { github }, userPages: "people" })] },
+      { id: "work", plugins: [auth({ providers: { github } })] },
+    ], /vault "work" keeps user pages in another folder than vault "journal"/],
   ])("fails config resolution when the callbackVault %s", (_case, vaults, error) => {
     expect(() => resolve(site(...vaults), "work")).toThrow(error);
   });
@@ -158,7 +208,7 @@ describe("the permission catalogue", () => {
 
     await plugin.emitArtifacts!.run(ctx);
 
-    expect(ctx.compiler?.serverData.get("auth")).toEqual({ permissions: [comment], paths: [] });
+    expect(ctx.compiler?.serverData.get("auth")).toEqual({ permissions: [comment], paths: [], userPages: {} });
   });
 
   it("fails the build for a malformed declaration that only the build's final plugins carry", async () => {

@@ -5,6 +5,7 @@
  */
 import { handleFrom, numbered } from "./handle";
 import type { Identity } from "./providers";
+import { hasUserPage } from "./user-pages";
 
 /**
  * The D1 binding accounts live in. A fixed name, like `PRIVATE_SVARTZ_SESSION_SECRET`, because every server plugin
@@ -353,11 +354,17 @@ async function isTaken(db: Database, handle: string): Promise<boolean> {
   return results.length > 0;
 }
 
-/** The first free handle among `base`, `base-2`, `base-3` and so on. */
+/** The first free handle among `base`, `base-2`, `base-3` and so on: one no account holds or held, with no user page. */
 export async function suggestHandle(db: Database, base: string): Promise<string> {
   let candidate = base;
-  for (let n = 2; await isTaken(db, candidate); n++) candidate = numbered(base, n);
+  for (let n = 2; hasUserPage(candidate) || await isTaken(db, candidate); n++) candidate = numbered(base, n);
   return candidate;
+}
+
+/** Every handle `account` holds or held, the current one included. */
+export async function handlesOf(db: Database, account: string): Promise<string[]> {
+  const { results } = await db.prepare("SELECT handle FROM auth_handles WHERE account_id = ?").bind(account).all<{ handle: string }>();
+  return results.map(({ handle }) => handle);
 }
 
 /** Insert a new account with `handle` and link `identity` to it. */

@@ -38,10 +38,11 @@ import { isProviderId, PROVIDERS, type Identity, type ProviderId } from "./provi
 import { seal, SESSION_SECRET_ENV, SESSION_SECRET_MIN_LENGTH, sessionSecret, unseal } from "./seal";
 import { endSession, isIdentity, readAccount, readCookie, readCurrentSession, readIdentity, sealSession, SESSION_COOKIE, useAdmins } from "./session";
 import {
-  ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, endAccountSessions, hasAccount, linkIdentity, profileByHandle,
-  SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity, updateProfile, type Database,
-  type PublicProfile,
+  ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, endAccountSessions, handlesOf, hasAccount, linkIdentity,
+  profileByHandle, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity, updateProfile,
+  type Database, type PublicProfile,
 } from "./store";
+import { DEFAULT_USER_PAGE_FOLDER, hasUserPage, useUserPages, userPageFolder } from "./user-pages";
 
 export type { Identity, ProviderId } from "./providers";
 export type { Account, SignIn, SignedOutReason } from "./session";
@@ -52,6 +53,7 @@ export { can, migrateGrants, type IdentityGrant } from "./grants";
 export type { PermissionTarget } from "./permissions";
 export { audit, type AuditEntry } from "./audit";
 export { linkedIdentities } from "./identities";
+export { userPageFolder } from "./user-pages";
 
 /**
  * The public profile of the account that holds or held `handle`, under its current handle; `undefined` when no account
@@ -85,6 +87,11 @@ export interface AuthOptions {
    * not from the database, so nothing stored there can take it away.
    */
   readonly admins?: readonly string[];
+  /**
+   * The vault folder of user pages, as page slugs spell it. `<folder>/<handle>` is the page of the account with that
+   * handle, which it may always edit. Default: `"users"`. Host vaults share accounts, so they must set the same one.
+   */
+  readonly userPages?: string;
 }
 
 /** What the server module receives: the options, plus where sign-in runs when another vault runs it. */
@@ -103,6 +110,8 @@ export interface AuthServerData {
   readonly permissions: readonly PermissionDeclaration[];
   /** The vault's published folders (ending in `/`) and pages, which the dashboard's object picker suggests. */
   readonly paths?: readonly string[];
+  /** The vault's user pages, by handle, mapped to their URL below the deployment base; `null` for a hidden page. */
+  readonly userPages: Readonly<Record<string, string | null>>;
 }
 
 const FLOW_COOKIE = "__Host-svartz-oauth";
@@ -163,11 +172,15 @@ function sameOriginPath(candidate: string, url: URL): string | undefined {
   return `${target.pathname}${target.search}${target.hash}`;
 }
 
+/** The deployment base, which page URLs from the build are below: `context.base` without the mount and plugin. */
+function deploymentBase(context: ServerContext): string {
+  const plugin = context.base.slice(context.base.lastIndexOf("/_svartz/"));
+  return context.base.slice(0, context.base.length - context.vault.mountPath.length - plugin.length);
+}
+
 /** `context.base` for the same plugin on the vault mounted at `mountPath`. */
 function baseAt(context: ServerContext, mountPath: string): string {
-  const plugin = context.base.slice(context.base.lastIndexOf("/_svartz/"));
-  const deployment = context.base.slice(0, context.base.length - context.vault.mountPath.length - plugin.length);
-  return `${deployment}${mountPath}${plugin}`;
+  return `${deploymentBase(context)}${mountPath}${context.base.slice(context.base.lastIndexOf("/_svartz/"))}`;
 }
 
 /** Every provider returns to this vault's callback. */
@@ -266,7 +279,8 @@ async function chooseHandle(request: Request, url: URL, context: ServerContext, 
   const form = await request.formData().catch(() => undefined);
   const handle = typedHandle(String(form?.get("handle") ?? ""));
   if (!isHandle(handle)) return show(handle, HANDLE_PROBLEM);
-  const sid = await createAccount(db, identity, handle);
+  // A user page nobody holds the handle of would become this account's.
+  const sid = hasUserPage(handle) ? "taken" : await createAccount(db, identity, handle);
   if (sid === "linked") return spent();
   if (sid === "taken") {
     const free = await suggestHandle(db, handle);
@@ -317,6 +331,8 @@ async function changeProfile({ request, url, context, db, session }: AccountChan
   const name = displayName(typedName);
   if (!name) return back("name-invalid");
   if (!isHandle(handle)) return back("handle-invalid");
+  // A user page is its owner's whatever their handle: a handle with a page the account never held isn't free to take.
+  if (hasUserPage(handle) && !(await handlesOf(db, session.account.id)).includes(handle)) return back("handle-taken");
   return back(await updateProfile(db, session.account.id, { name, handle }) === "saved" ? "saved" : "handle-taken");
 }
 
@@ -377,6 +393,8 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
   // this deployment's config, and every `can()` its permission catalogue.
   useAdmins(options.admins ?? []);
   usePermissions([...AUTH_PERMISSIONS, ...options.permissions ?? [], ...data?.permissions ?? []]);
+  const userPages = data?.userPages ?? {};
+  useUserPages(options.userPages ?? DEFAULT_USER_PAGE_FOLDER, Object.keys(userPages));
   const providers = Object.keys(options.providers).filter(isProviderId);
   /** The OAuth client for a configured provider, or the response explaining why there is none. */
   const clientFor = (provider: ProviderId, url: URL, context: ServerContext): OAuth2Client | Response => {
@@ -428,12 +446,18 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
       return signedOutPage(providers, (provider) => `${context.base}/start/${provider}/?returnTo=${encodeURIComponent(here)}`);
     }
     const linkBase = options.callbackMountPath === undefined ? context.base : baseAt(context, options.callbackMountPath);
-    const { identities, sessions } = await signInsOf(db, session.account.id);
+    const [{ identities, sessions }, handles] = await Promise.all([signInsOf(db, session.account.id), handlesOf(db, session.account.id)]);
+    // The page under the current handle, else under one held before, where a handle change left it.
+    const { handle: current } = session.account;
+    const owned = [current, ...handles.filter((handle) => handle !== current)].find((handle) => handle in userPages);
+    const href = owned === undefined ? undefined : userPages[owned];
     return accountPage({
       account: session.account,
       identities,
       sessions,
       session: session.sid,
+      // A hidden page gets no link: the site never shows where it is.
+      userPage: owned === undefined ? { missing: `${userPageFolder()}/${current}` } : href ? { href: `${deploymentBase(context)}${href}` } : undefined,
       providers,
       query: url.searchParams,
       actions: {

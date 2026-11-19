@@ -3,9 +3,12 @@
  * declared defaults, to the pure resolver. {@link migrateGrants} moves a plugin's config list onto grants, once.
  */
 import type { PermissionDeclaration, PermissionSlug } from "@svartz/core";
-import { objectChain, resolve, SITE, type Decision, type Grant, type GrantValue, type PermissionTarget, type Principals } from "./permissions";
+import {
+  objectChain, resolve, SITE, userPageHandle, type Decision, type Grant, type GrantValue, type PermissionTarget, type Principals,
+} from "./permissions";
 import type { Account } from "./session";
-import { accountsDatabase, type Database } from "./store";
+import { accountsDatabase, handlesOf, type Database } from "./store";
+import { userPageFolder } from "./user-pages";
 
 type Env = Readonly<Record<string, unknown>>;
 
@@ -54,10 +57,17 @@ function withDefaults(stored: readonly Grant[], { slug, defaults = {} }: Permiss
   return [...stored, ...declaredGrants];
 }
 
-/** Who `account` is to the resolver: itself and its roles, config's `admin` and stored ones. Groups arrive with their table. */
-const principalsOf = (account: Pick<Account, "id" | "handle" | "roles"> | null): Principals => account
-  ? { account: { id: account.id, handle: account.handle }, roles: account.roles, groups: [] }
-  : { roles: [], groups: [] };
+/**
+ * Who `account` is to the resolver: itself, its roles (config's `admin` and stored ones), and its former handles, loaded
+ * only when `chain` checks a user page under another handle than its current one, the one case they can decide. Groups
+ * arrive with their table.
+ */
+async function principalsOf(db: Database, account: Pick<Account, "id" | "handle" | "roles"> | null, chain: readonly string[]): Promise<Principals> {
+  if (!account) return { roles: [], groups: [] };
+  const owner = userPageHandle(chain[0], userPageFolder());
+  const formerHandles = owner !== undefined && owner !== account.handle ? await handlesOf(db, account.id) : [];
+  return { account: { id: account.id, handle: account.handle, formerHandles }, roles: account.roles, groups: [] };
+}
 
 /** Every permission the site's plugins declare, in the order they registered. */
 export const permissionCatalogue = (): PermissionDeclaration[] => [...catalogue.values()];
@@ -76,8 +86,8 @@ export interface Explanation extends Decision {
  */
 export async function explain(db: Database, account: Pick<Account, "id" | "handle" | "roles">, permission: PermissionSlug, chain: readonly string[]): Promise<Explanation> {
   const declaration = declared(permission);
-  const stored = await loadGrants(db, permission, chain);
-  const decision = resolve(withDefaults(stored, declaration), principalsOf(account), chain, permission);
+  const [stored, who] = await Promise.all([loadGrants(db, permission, chain), principalsOf(db, account, chain)]);
+  const decision = resolve(withDefaults(stored, declaration), who, chain, permission, userPageFolder());
   const { decidedBy } = decision;
   return { ...decision, byDefault: decidedBy.kind === "grant" && !stored.includes(decidedBy.grant) };
 }
@@ -95,8 +105,8 @@ export async function can(account: Account | null, permission: PermissionSlug, t
   const db = await accountsDatabase(env);
   if (!db) return false;
   const chain = objectChain(target);
-  const grants = withDefaults(await loadGrants(db, permission, chain), declaration);
-  return resolve(grants, principalsOf(account), chain, permission).value === "allow";
+  const [stored, who] = await Promise.all([loadGrants(db, permission, chain), principalsOf(db, account, chain)]);
+  return resolve(withDefaults(stored, declaration), who, chain, permission, userPageFolder()).value === "allow";
 }
 
 /** A grant a plugin's config gives an identity, such as a moderator it lists, to move onto that identity's account. */
