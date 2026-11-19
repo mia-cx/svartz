@@ -72,6 +72,9 @@ export {
   SERVER_ROUTE_SEGMENT,
 } from "./plugin/server";
 export type {
+  DashboardContribution,
+  DashboardPanel,
+  DashboardSection,
   DevBindings,
   EnvReference,
   PageContext,

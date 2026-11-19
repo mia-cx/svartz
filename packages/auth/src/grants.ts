@@ -3,7 +3,7 @@
  * declared defaults, to the pure resolver. {@link migrateGrants} moves a plugin's config list onto grants, once.
  */
 import type { PermissionDeclaration, PermissionSlug } from "@svartz/core";
-import { objectChain, resolve, SITE, type Grant, type GrantValue, type PermissionTarget, type Principals } from "./permissions";
+import { objectChain, resolve, SITE, type Decision, type Grant, type GrantValue, type PermissionTarget, type Principals } from "./permissions";
 import type { Account } from "./session";
 import { accountsDatabase, type Database } from "./store";
 
@@ -54,10 +54,33 @@ function withDefaults(stored: readonly Grant[], { slug, defaults = {} }: Permiss
   return [...stored, ...declaredGrants];
 }
 
-/** Who `account` is to the resolver. Groups and stored roles arrive with their own tables. */
-const principalsOf = (account: Account | null): Principals => account
+/** Who `account` is to the resolver: itself and its roles, config's `admin` and stored ones. Groups arrive with their table. */
+const principalsOf = (account: Pick<Account, "id" | "handle" | "roles"> | null): Principals => account
   ? { account: { id: account.id, handle: account.handle }, roles: account.roles, groups: [] }
   : { roles: [], groups: [] };
+
+/** Every permission the site's plugins declare, in the order they registered. */
+export const permissionCatalogue = (): PermissionDeclaration[] => [...catalogue.values()];
+
+/** Whether a plugin on the site declares `permission`. */
+export const isDeclared = (permission: string): permission is PermissionSlug => catalogue.has(permission);
+
+/** A {@link Decision}, and whether a permission's declared default made it rather than a stored grant. */
+export interface Explanation extends Decision {
+  readonly byDefault: boolean;
+}
+
+/**
+ * Why `account` may or may not do `permission` on the objects of `chain` (most specific first, ending in the site), as
+ * `can()` decides it. For the dashboard's "can they?" check.
+ */
+export async function explain(db: Database, account: Pick<Account, "id" | "handle" | "roles">, permission: PermissionSlug, chain: readonly string[]): Promise<Explanation> {
+  const declaration = declared(permission);
+  const stored = await loadGrants(db, permission, chain);
+  const decision = resolve(withDefaults(stored, declaration), principalsOf(account), chain, permission);
+  const { decidedBy } = decision;
+  return { ...decision, byDefault: decidedBy.kind === "grant" && !stored.includes(decidedBy.grant) };
+}
 
 /**
  * Whether `account` (`null` for a guest) may do `permission` on `target`: the site (`{}`), a vault (`{ vault }`), or a

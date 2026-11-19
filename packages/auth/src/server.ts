@@ -13,6 +13,10 @@
  * - `POST account/profile/`, `account/unlink/`, `account/sign-out-everywhere/` and `account/link/<provider>/` change the
  *   signed-in account and redirect back to its `/-/account/` page, which this module also renders.
  * - `GET users/<handle>/` answers a public profile, redirecting an old handle to the current one.
+ * - `GET viewer/` answers the signed-in handle and whether the dashboard has a panel for them, for the site's links.
+ * - `POST people/…` changes grants and roles from the dashboard's People & permissions panel (`people-panel.ts`).
+ *
+ * Pages: `/-/account/`, and `/-/dashboard/`, which lists every plugin's panels the viewer may open (`dashboard.ts`).
  *
  * Accounts and sessions live in the D1 database bound as `SVARTZ_DB`; without one, the session cookie holds the
  * identity itself and nobody has an account. On a vault whose `callbackVault` is another vault, `start` forwards to
@@ -24,12 +28,15 @@ import {
   type ServerModuleFactory,
 } from "@svartz/core";
 import { accountPage, NAME_MAX_LENGTH, signedOutPage, type StatusCode } from "./account";
+import { AUTH_PERMISSIONS } from "./auth-permissions";
 import { chooserPage, expiredPage } from "./chooser";
+import { DASHBOARD_PAGE, dashboardPage, openableSections } from "./dashboard";
 import { usePermissions } from "./grants";
+import { peoplePanel, peopleRoute } from "./people-panel";
 import { handleFrom, HANDLE_PROBLEM, isHandle, typedHandle } from "./handle";
 import { isProviderId, PROVIDERS, type Identity, type ProviderId } from "./providers";
 import { seal, SESSION_SECRET_ENV, SESSION_SECRET_MIN_LENGTH, sessionSecret, unseal } from "./seal";
-import { endSession, isIdentity, readCookie, readCurrentSession, readIdentity, sealSession, SESSION_COOKIE, useAdmins } from "./session";
+import { endSession, isIdentity, readAccount, readCookie, readCurrentSession, readIdentity, sealSession, SESSION_COOKIE, useAdmins } from "./session";
 import {
   ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, endAccountSessions, hasAccount, linkIdentity, profileByHandle,
   SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity, updateProfile, type Database,
@@ -43,6 +50,7 @@ export { ADMIN_ROLE, readAccount, readIdentity, readSignIn } from "./session";
 export { ACCOUNTS_DATABASE_ENV };
 export { can, migrateGrants, type IdentityGrant } from "./grants";
 export type { PermissionTarget } from "./permissions";
+export { audit, type AuditEntry } from "./audit";
 export { linkedIdentities } from "./identities";
 
 /**
@@ -85,12 +93,16 @@ export interface AuthServerOptions extends AuthOptions {
   readonly callbackMountPath?: string;
   /** Every permission the config's plugins declare, across the vaults that share accounts, collected at config resolution. */
   readonly permissions?: readonly PermissionDeclaration[];
+  /** The ids of the vaults that share these accounts, for the dashboard's object picker. Default: this vault alone. */
+  readonly vaults?: readonly string[];
 }
 
 /** What the plugin's build hook records for the server module. */
 export interface AuthServerData {
   /** Every permission the vault's final plugins declare, a theme preset's included, collected as the build runs. */
   readonly permissions: readonly PermissionDeclaration[];
+  /** The vault's published folders (ending in `/`) and pages, which the dashboard's object picker suggests. */
+  readonly paths?: readonly string[];
 }
 
 const FLOW_COOKIE = "__Host-svartz-oauth";
@@ -345,16 +357,26 @@ async function userProfile(handle: string, context: ServerContext): Promise<Resp
   return json(profile);
 }
 
+/**
+ * `GET viewer/`: who the sign-in links name, and whether the dashboard has a panel for them: `{ handle, dashboard }`,
+ * or `null` when nobody is signed in to an account.
+ */
+async function viewer(request: Request, context: ServerContext): Promise<Response> {
+  const account = await readAccount(request, context.env);
+  if (!account) return json(null);
+  return json({ handle: account.handle, dashboard: (await openableSections(account, context)).length > 0 });
+}
+
 const ROUTE = /^\/(?:(start|callback)\/([^/]+)|(me)|(sign-out)|(handle))\/$/;
 const ACCOUNT_ROUTE = /^\/account\/(?:(profile|unlink|sign-out-everywhere)|link\/([^/]+))\/$/;
 const USER_ROUTE = /^\/users\/([^/]+)\/$/;
 
-/** The `auth` server module: `server: { module, options, pages: ["account"] }` with {@link AuthOptions}. */
+/** The `auth` server module: `server: { module, options, pages: ["account", "dashboard"] }` with {@link AuthOptions}. */
 const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefined> = (options, data) => {
   // The plugin is eager, so this runs before the site answers anything: every account read resolves `admin` from
   // this deployment's config, and every `can()` its permission catalogue.
   useAdmins(options.admins ?? []);
-  usePermissions([...options.permissions ?? [], ...data?.permissions ?? []]);
+  usePermissions([...AUTH_PERMISSIONS, ...options.permissions ?? [], ...data?.permissions ?? []]);
   const providers = Object.keys(options.providers).filter(isProviderId);
   /** The OAuth client for a configured provider, or the response explaining why there is none. */
   const clientFor = (provider: ProviderId, url: URL, context: ServerContext): OAuth2Client | Response => {
@@ -391,7 +413,10 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
     return signOutEverywhere(change);
   };
 
+  const vaultsOf = (context: ServerContext): readonly string[] => options.vaults ?? [context.vault.id];
+
   const page: PageRenderer = async (request, context) => {
+    if (context.path.startsWith(`${DASHBOARD_PAGE}/`)) return dashboardPage(request, context, await readAccount(request, context.env));
     if (context.path !== "account/") return undefined;
     // Without accounts, or without the secret that opens sessions, there is no account to show.
     const db = await accountsDatabase(context.env);
@@ -425,6 +450,11 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
     const path = url.pathname.slice(context.base.length);
     const account = ACCOUNT_ROUTE.exec(path);
     if (account) return accountRoute(request, url, context, account[1], account[2]);
+    if (path === "/viewer/") {
+      return request.method === "GET" ? viewer(request, context) : failure(405, "method_not_allowed", "Use GET.", { allow: "GET" });
+    }
+    const people = await peopleRoute(request, path, context, vaultsOf(context));
+    if (people) return people;
     const user = USER_ROUTE.exec(path);
     if (user) {
       if (request.method !== "GET") return failure(405, "method_not_allowed", "Use GET.", { allow: "GET" });
@@ -471,7 +501,11 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
     return step === "start" ? start(args) : callback(args);
   };
 
-  return { handle, page };
+  return {
+    handle,
+    page,
+    dashboard: { title: "Accounts", panels: [peoplePanel({ vaults: vaultsOf, paths: data?.paths ?? [] })] },
+  };
 };
 
 export default authServer;

@@ -61,6 +61,7 @@ The handler receives a `context`:
 | `vault` | The vault's `id`, `mountPath` and public `site` settings. |
 | `base` | The path the plugin answers under, without a trailing slash, such as `/_svartz/hello`. |
 | `waitUntil(promise)` | Keeps work running after the response. On Cloudflare it is the Worker's `waitUntil`; on Node the promise runs on and a failure is logged. |
+| `dashboard()` | Every [dashboard panel](#dashboard-panels) the vault's plugins contribute. |
 
 Errors the handler throws reach SvelteKit's `handleError` and answer 500.
 
@@ -108,6 +109,50 @@ Plugin pages are never prerendered, never cached (`Cache-Control: private, no-st
 Style plugin pages with a [browser resource](../vaults/docs/guides/create-plugin.md) of `kind: "css"`, using the theme's `--sv-*` tokens so they follow the site's colours in both modes.
 
 The standalone shell renders plugin pages through its `src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/` route, whose param matchers send it only the names the plugins of the vault at that mount claim. A host app needs the same route and matchers: `npx svartz init` adds it, and [host vaults](host-vaults.md#plugin-pages) shows it. A host build whose vault claims pages fails when no route renders them.
+
+## Dashboard panels
+
+A plugin adds tools and settings to the site's [dashboard](auth.md#the-dashboard), `/-/dashboard/`, as **panels**. `@svartz/auth` serves the dashboard, so a vault needs auth for panels to show. The factory returns `dashboard` beside `handle`:
+
+```ts
+import type { ServerModuleFactory } from "@svartz/core";
+import { can, readAccount } from "@svartz/auth/server";
+
+const moderation: ServerModuleFactory = () => ({
+  dashboard: {
+    title: "Moderation",
+    panels: [{
+      id: "reports",
+      title: "Reports",
+      permission: "moderation:reports:read",
+      render: async (request, context) => {
+        if (context.path !== "") return undefined;
+        return { title: "Reports", html: `<h1>Reports</h1><form method="post" action="${context.base}/resolve/">…</form>` };
+      },
+    }],
+  },
+  handle: async (request, context) => {
+    const reader = await readAccount(request, context.env);
+    if (!await can(reader, "moderation:reports:write", { vault: context.vault.id }, context.env)) {
+      return Response.json({ error: "forbidden", message: "You can't resolve reports." }, { status: 403 });
+    }
+    // …resolve the report, then go back to the panel.
+    return new Response(null, { status: 303, headers: { location: "/-/dashboard/moderation/reports/" } });
+  },
+});
+```
+
+| Field | Value |
+| --- | --- |
+| `dashboard.title` | Names the plugin on the dashboard, above its panels. |
+| `id` | The panel's path segment: it renders at `/-/dashboard/<plugin id>/<panel id>/` and every path below. Lowercase letters, digits and hyphens, unique within the plugin. |
+| `title` | The panel's link on the dashboard. |
+| `permission` | What a viewer must hold, on the vault or the whole site, to see the panel and open it. The plugin [declares](auth.md#declaring-permissions) it. |
+| `render(request, context)` | Renders the panel as a [page renderer](#plugin-pages) does, in the plugin's own context, so `context.base` is where its forms post. `context.path` is the path below the panel: `""` for the panel, or such as `open/` for `/-/dashboard/moderation/reports/open/`. |
+
+The dashboard lists a plugin only when the viewer may open one of its panels, and checks the panel's permission before every render, so `render` runs only for viewers who hold it. That is the gate for showing the panel, not for changing anything: every route its forms post to checks with `can()` itself, as above. A malformed `dashboard` fails the plugin's first request, naming the plugin and the panel.
+
+Any server code can list the vault's panels with `context.dashboard()`, which answers each plugin's `{ plugin, title, panels }` in registry order, every panel with a `render(request, path)` bound to its own plugin. It checks no permission; auth's dashboard does.
 
 ## Options and secrets
 

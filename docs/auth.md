@@ -196,12 +196,17 @@ Under `<base><mount>/_svartz/auth/`, where `<base>` is the deployment base path,
 | `POST account/sign-out-everywhere/` | Ends every session of the signed-in account, this one included, then redirects to the account page. |
 | `POST account/link/<provider>/?returnTo=<path>` | Starts linking another provider to the signed-in account. Only the callback vault answers it. |
 | `GET users/<handle>/` | The public profile, `{ handle, name, avatarUrl }`, or a 308 from an old handle to the current one's URL. |
+| `GET viewer/` | `{ handle, dashboard }` for a signed-in account, where `dashboard` says whether [the dashboard](#the-dashboard) has a panel for them; `null` otherwise. |
+| `POST people/grant/` | Sets the grant of `permission` for an account (`actor-type=account`, `actor=<handle>`) or a role (`actor-type=role`, `actor=<name>`) to `value` (`allow`, `deny` or `unset`), on the object `scope` (`site` or `vault:<id>`) and `path` (empty, a folder ending in `/`, or a page) name, or `object` names whole. Redirects to People & permissions. |
+| `POST people/role/` | Creates the role `name`, then redirects to People & permissions. |
+| `POST people/member/` | Gives the account `handle` the role `role`, then redirects to People & permissions. |
+| `POST people/member/remove/` | Takes the role `role` from the account `handle`, then redirects to People & permissions. |
 
-Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` and the `account/` routes answer 503. The `account/` routes answer 403 to a request whose `Origin` is missing or another site's, and send a signed-out reader to the account page.
+Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` and the `account/` routes answer 503. The `account/` routes answer 403 to a request whose `Origin` is missing or another site's, and send a signed-out reader to the account page. The `people/` routes answer 403 to a request whose `Origin` is missing or another site's, and to anyone without `auth:grants:write` on the vault.
 
 ## The account page
 
-`<base><mount>/-/account/` is a [plugin page](server-plugins.md#plugin-pages) in the theme's shell where readers manage their account. Link it from anywhere on the site. It needs `SVARTZ_DB` and the session secret; without them it answers 404. A signed-out reader sees a sign-in link per provider, each returning to the page. A signed-in reader can:
+`<base><mount>/-/account/` is a [plugin page](server-plugins.md#plugin-pages) in the theme's shell where readers manage their account. Signed-in readers reach it from the **Account** link in the site actions, and you can link it from anywhere on the site. It needs `SVARTZ_DB` and the session secret; without them it answers 404. A signed-out reader sees a sign-in link per provider, each returning to the page. A signed-in reader can:
 
 - **Change their display name and handle.** A new handle follows the [handle rules](#first-sign-in). The old one keeps pointing at the account for good: `users/<old>/` redirects to `users/<new>/`, and no other account can take it, though its owner can switch back to it.
 - **Link another provider.** The provider's sign-in comes back to the account that started it, bound to that browser's session: if the reader signs out or switches accounts meanwhile, nothing is linked. A provider account that already belongs to another account is refused, and stays with that account.
@@ -245,7 +250,7 @@ export default guestbook;
   name: "The Octocat",
   avatarUrl: "https://avatars.githubusercontent.com/u/583231",
   createdAt: "2026-11-19T10:00:00.000Z",
-  roles: ["admin"],       // `admin` for bootstrap admins
+  roles: ["admin", "editors"], // `admin` first for bootstrap admins, then its stored roles
   identity: { id: "github:583231", provider: "github", … }, // the provider account this session used
 }
 ```
@@ -260,7 +265,7 @@ export default guestbook;
 
 ## Permissions
 
-Plugins declare what people may do on the site, and check it with `can()`. Admins decide who holds each permission with **grants**; until the dashboard arrives, they set them with Wrangler.
+Plugins declare what people may do on the site, and check it with `can()`. Admins decide who holds each permission with **grants**, which they set on [the dashboard](#the-dashboard).
 
 ### Declaring permissions
 
@@ -293,9 +298,10 @@ A grant gives one **actor** one permission on one **object**, set to `allow`, `d
 | Actor | Who |
 | --- | --- |
 | `account` | One account, by its id. |
+| `role` | Every account that holds the [role](#roles), by its name. |
 | `static` | `guest` or `signed-in`. |
 
-Grants can also name a `group` or a `role`, which rank between the two. Nothing puts an account in a group or gives it a role other than `admin` yet, so those grants match nobody.
+Grants can also name a `group`, which ranks between accounts and roles. Nothing puts an account in a group yet, so those grants match nobody.
 
 | Object | Covers |
 | --- | --- |
@@ -304,16 +310,17 @@ Grants can also name a `group` or a `role`, which rank between the two. Nothing 
 | `folder:<vault>/<path>/` | A folder of a vault and everything in it, such as `folder:notes/garden/`. |
 | `page:<vault>/<slug>` | One page, such as `page:notes/garden/roses`. |
 
-A check on a page consults the page, each folder enclosing it, its vault and the site, in that order, and the first of them with a set grant that applies to the reader decides. Within that object, the most specific actor decides: the account, then `signed-in`, then `guest`. Between grants of the same rank, `deny` beats `allow`. With nothing set, the answer is no. So a grant on a page beats any grant on the site, and to keep a page closed to guests but open to signed-in readers, set both actors on it.
+A check on a page consults the page, each folder enclosing it, its vault and the site, in that order, and the first of them with a set grant that applies to the reader decides. Within that object, the most specific actor decides: the account, then its roles, then `signed-in`, then `guest`. Between grants of the same rank, `deny` beats `allow`. With nothing set, the answer is no. So a grant on a page beats any grant on the site, and to keep a page closed to guests but open to signed-in readers, set both actors on it.
 
 Two things allow whatever the grants say: the `admin` role, which [bootstrap admins](#bootstrap-admins) hold, and an account's own user page, `users/<handle>` in any vault.
 
-Grants live in `SVARTZ_DB`, in `auth_grants`. To let one account delete any comment in the `notes` vault:
+Grants live in `SVARTZ_DB`, in `auth_grants`. Set them on the dashboard, which records each change in [the audit log](#the-audit-log).
 
-```sh
-wrangler d1 execute notes --remote --command "INSERT INTO auth_grants (actor_type, actor_id, object, permission, value, updated_at)
-  SELECT 'account', id, 'vault:notes', 'annotations:comments:delete', 'allow', datetime('now') FROM auth_accounts WHERE handle = 'octocat'"
-```
+### Roles
+
+A role is a named actor: give it grants, and every account that holds it gets them. Create roles and choose who holds them on the dashboard. A role's name is 1 to 39 lowercase letters, numbers and hyphens, starting and ending with a letter or number. `Account.roles` lists the roles an account holds, `admin` first.
+
+`admin` is not a stored role. Only [`admins`](#bootstrap-admins) in config grants it: no role can be named `admin`, no account can be added to it, and no grant can name it. Grants on an admin's account are refused too, since an admin may do everything whatever the grants say.
 
 ### Checking a permission
 
@@ -334,3 +341,51 @@ const guestbook: ServerModuleFactory = () => async (request, context) => {
 `can(account, permission, object, env)` answers whether `account`, or a guest for `null`, holds `permission` on `object`: the site (`{}`), a vault (`{ vault }`), or a page of one (`{ vault, page }`, with the page's slug). It loads every grant that could apply in one query and decides in memory.
 
 It fails closed. Without `SVARTZ_DB` there are no grants and no accounts, so it answers `false`, defaults included; a plugin that must work without accounts decides that case itself, as [annotations](annotations.md#moderating) does. A database error throws. A permission no plugin on the site declares throws too, naming it, and so does every check in code that runs outside `svartzHandle`, since auth registers the catalogue as it starts.
+
+## The dashboard
+
+`<base><mount>/-/dashboard/` is a [plugin page](server-plugins.md#plugin-pages) that lists, by plugin, every [dashboard panel](server-plugins.md#dashboard-panels) the viewer may open: the one place to find every plugin's tools and settings a person can reach. A panel shows only to a viewer who holds its permission on the vault, or on the whole site, and the same check runs before every render. A plugin with no panel the viewer may open stays off the list, and a viewer with no panel at all, signed out included, gets the 404. Without `SVARTZ_DB` nobody holds a permission, so there is no dashboard.
+
+Signed-in readers find an **Account** link to [their account page](#the-account-page) in the site actions, beside **New page** and other plugins' site-wide actions, and a **Dashboard** link when they hold a panel.
+
+### People & permissions
+
+Auth's own panel, at `/-/dashboard/auth/people/`, manages who may do what:
+
+- **Grants**: set an account's or a role's grant of any permission to allow, deny or unset, on the whole site, a vault, a folder or a page. The picker offers every vault that shares these accounts, and suggests this vault's published folders and pages; a folder ends in `/`, such as `garden/`.
+- **Roles**: create [roles](#roles), and add accounts to them or remove them.
+- **Check access**: ask whether an account may do something somewhere, and see the grant or rule that decided: a grant and where it sits, a permission's default, the admin role, or an account's own user page.
+- **People**: find accounts by the start of their handle or any part of their display name, with the roles each holds.
+- **Permissions**: every permission the site's plugins declare, with its name, description and defaults.
+
+It needs two permissions, which auth declares with no defaults, so only admins hold them until someone grants them:
+
+| Permission | Allows |
+| --- | --- |
+| `auth:grants:read` | Opening the panel: every account, role and grant, and the access check. |
+| `auth:grants:write` | Changing grants and roles. |
+
+Granting either is as powerful as making someone an admin: `auth:grants:read` shows every account and grant on the site, and whoever holds `auth:grants:write` can grant themselves, or anyone, any permission. Give them only to people you would make admins.
+
+The panel's forms post to the routes below and work without JavaScript. Each route checks `auth:grants:write` again, whatever the panel showed.
+
+## The audit log
+
+Every grant and role change is recorded in `auth_audit` in `SVARTZ_DB`: who made it, what it was, and when. The log is append-only: the database refuses to change or delete an entry. A change and its entry are written in one transaction, so neither lands without the other.
+
+Server plugins record their own changes, such as a suspension or a resolved report, with `audit(env, entry, changes?)` from `@svartz/auth/server`:
+
+```ts
+import { audit, readAccount } from "@svartz/auth/server";
+
+const moderator = await readAccount(request, context.env);
+const db = context.env.SVARTZ_DB as D1Database;
+await audit(context.env, {
+  actor: moderator,                      // the signed-in account that made the change
+  action: "moderation:report:resolve",   // <plugin id>:<thing>:<verb>
+  target: report.id,                     // what it changed
+  detail: { outcome: "removed" },        // anything else worth keeping, as JSON
+}, [db.prepare("UPDATE reports SET resolved_at = ? WHERE id = ?").bind(now, report.id)]);
+```
+
+Pass the change itself as `changes`, statements prepared on the `SVARTZ_DB` binding: they run in the same transaction as the entry. A change kept anywhere else can't share it, so record the entry first and make the change once `audit` resolves. `audit` throws when the site binds no `SVARTZ_DB`, or when the write fails. Take `actor` from `readAccount` on the server, never from what the request says.

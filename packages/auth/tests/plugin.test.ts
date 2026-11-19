@@ -7,16 +7,22 @@ const github = { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHU
 describe("the auth plugin", () => {
   it("serves its routes and gives the dialog the vault's providers, endpoint and privacy notice", async () => {
     const plugin = auth({ providers: { github }, privacyNotice: "/privacy/" });
-    const ctx = { config: { mountPath: "/notes", target: { type: "node", basePath: "/site/" } }, plugins: [], files: [], meta: new Map() } as unknown as PluginContext;
+    const entries = [{ slug: "garden/herbs/basil" }, { slug: "garden/roses" }, { slug: "index" }];
+    const ctx = { config: { mountPath: "/notes", target: { type: "node", basePath: "/site/" } }, plugins: [], files: [], index: { entries }, meta: new Map() } as unknown as PluginContext;
 
     await plugin.emitArtifacts!.run(ctx);
 
     expect(plugin.id).toBe("auth");
-    // Eager: plugins that read accounts need this deployment's admins before their own first request. It renders /-/account/.
-    expect(plugin.server).toEqual({ module: expect.stringMatching(/server\.js$/), options: { providers: { github }, privacyNotice: "/privacy/" }, eager: true, pages: ["account"] });
+    // The dashboard's object picker suggests every published page and the folders that hold them.
+    expect((ctx.compiler?.serverData.get("auth") as { paths: string[] }).paths)
+      .toEqual(["garden/", "garden/herbs/", "garden/herbs/basil", "garden/roses", "index"]);
+    // Eager: plugins that read accounts need this deployment's admins before their own first request. It renders
+    // /-/account/ and /-/dashboard/.
+    expect(plugin.server).toEqual({ module: expect.stringMatching(/server\.js$/), options: { providers: { github }, privacyNotice: "/privacy/" }, eager: true, pages: ["account", "dashboard"] });
     expect(ctx.compiler?.browserResources.get("auth")?.options).toEqual({
       // Below the deployment base, which the dialog only learns when it mounts: a host app's comes from SvelteKit.
       endpoint: "/notes/_svartz/auth",
+      mountPath: "/notes",
       providers: [{ id: "github", label: "GitHub" }],
       privacyNotice: "/privacy/",
     });
@@ -152,7 +158,7 @@ describe("the permission catalogue", () => {
 
     await plugin.emitArtifacts!.run(ctx);
 
-    expect(ctx.compiler?.serverData.get("auth")).toEqual({ permissions: [comment] });
+    expect(ctx.compiler?.serverData.get("auth")).toEqual({ permissions: [comment], paths: [] });
   });
 
   it("fails the build for a malformed declaration that only the build's final plugins carry", async () => {
