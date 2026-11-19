@@ -2,7 +2,8 @@
  * The Report action. The `moderation` plugin mounts this script on every page of its vault: a note gets **Report** in
  * its page actions (on a user page, `users/<handle>`, it reports the page or the account), and any element marked
  * `data-svartz-report="<kind>:<id>"` opens the same dialog for that target, named by `data-svartz-report-label`.
- * Annotations marks its comment cards this way; other plugins can mark their own views.
+ * Annotations marks its comment cards this way; other plugins can mark their own views. On a user page, a reader who
+ * may suspend accounts also gets **Suspend**, a link to the Suspensions panel's form for that account.
  *
  * A signed-out reader gets `@svartz/auth`'s sign-in dialog instead, and comes back to the page.
  */
@@ -24,9 +25,10 @@ const TITLES: Readonly<Record<TargetKind, string>> = {
   page: "Report page", commit: "Report commit", submission: "Report submission", annotation: "Report comment", account: "Report account",
 };
 
-// Lucide "flag" and "x", as the theme's other actions draw their icons.
+// Lucide "flag", "x" and "ban", as the theme's other actions draw their icons.
 const FLAG = ["M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z", "M4 22v-7"];
 const CLOSE = ["M18 6 6 18", "m6 6 12 12"];
+const BAN = ["M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0", "m4.9 4.9 14.2 14.2"];
 
 function icon(paths: readonly string[]): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, "svg");
@@ -264,6 +266,7 @@ export function mount(_pathname: string, { mountPath, userPages }: BrowserOption
   const note = mountedFor ? undefined : document.querySelector<HTMLElement>("[data-svartz-note]")?.dataset.svartzNote;
   const region = document.querySelector('[data-svartz-region="page-actions"]');
   let action: HTMLButtonElement | undefined;
+  let suspend: HTMLAnchorElement | undefined;
   if (note && region) {
     const handle = note.startsWith(`${userPages}/`) ? note.slice(userPages.length + 1) : "";
     // A user page is about its account: report either, the page as "This page" beside the account.
@@ -275,6 +278,19 @@ export function mount(_pathname: string, { mountPath, userPages }: BrowserOption
     action.type = "button";
     action.addEventListener("click", () => open(choices, action!));
     region.append(action);
+    if (account) {
+      // Moderators who may suspend get Suspend beside Report, leading to the form, which comes back to this page.
+      void fetch(`${endpoint}/viewer/`, { headers: { accept: "application/json" } })
+        .then((response) => response.ok ? response.json() as Promise<{ suspends: boolean }> : { suspends: false })
+        .then(({ suspends }) => {
+          if (!live || !suspends || !action?.isConnected) return;
+          const query = new URLSearchParams({ handle, returnTo: `${location.pathname}${location.search}` });
+          suspend = element("a", "", icon(BAN), "Suspend");
+          suspend.href = `${home}/-/dashboard/${PLUGIN_ID}/suspensions/?${query}`;
+          action.after(suspend);
+        })
+        .catch((cause: unknown) => console.error("[svartz:moderation] couldn't tell whether this reader may suspend", cause));
+    }
   }
 
   return () => {
@@ -282,6 +298,7 @@ export function mount(_pathname: string, { mountPath, userPages }: BrowserOption
     document.removeEventListener("click", onClick);
     if (mountedFor) scoped.delete(mountedFor);
     action?.remove();
+    suspend?.remove();
     // The dialog lives on <body>, outside the page, so client-side navigation alone would leave it open.
     shown?.remove();
   };

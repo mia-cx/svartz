@@ -3,16 +3,18 @@
  * about and the reader's reason, or with `?view=closed` the closed ones. Plain HTML forms post to this plugin's routes
  * to resolve or dismiss a report, and to the owning plugin's own routes to act on what was reported: annotations' to
  * hide a comment, submissions' to close a submission. Each action shows only to a viewer holding the owning plugin's
- * permission, which its route checks again. Reporters are never shown.
+ * permission, which its route checks again. A report about an account, or a comment one wrote, links viewers holding
+ * `moderation:accounts:write` to the Suspensions panel's form for that account. Reporters are never shown.
  */
-import { ACCOUNTS_DATABASE_ENV, can, findProfile, readAccount, userPageLocation, type Account } from "@svartz/auth/server";
+import { ACCOUNTS_DATABASE_ENV, can, findProfile, findProfileByIdentity, readAccount, userPageLocation, type Account } from "@svartz/auth/server";
 import type { DashboardPanel, PageContext, PluginPage } from "@svartz/core";
 import { findComment, type ReportedComment } from "@svartz/plugin-annotations/server";
 import { isVaultSubmission } from "@svartz/plugin-submissions/server";
-import { PLUGIN_ID } from "./api";
 import { escape } from "./html";
-import { READ_REPORTS } from "./permissions";
+import { panelPath, vaultPath } from "./paths";
+import { READ_REPORTS, WRITE_ACCOUNTS } from "./permissions";
 import { listReports, migrate, type Database, type Report } from "./store";
+import { suspensionPath } from "./suspensions";
 import { publishedPage, type BuildData } from "./targets";
 
 /** The panel's id below the plugin's, so it lives at `/-/dashboard/moderation/reports/`. */
@@ -34,11 +36,8 @@ const STATUSES: ReadonlyMap<string, { text: string; error?: true }> = new Map([
   ["submission-closed", { text: "Submission closed." }],
 ]);
 
-/** `<base><mount>` from a context of this plugin. */
-const vaultPath = (context: Pick<PageContext, "base">) => context.base.slice(0, -`/_svartz/${PLUGIN_ID}`.length);
-
 /** The panel's path, which every form here goes back to. */
-export const panelPath = (context: Pick<PageContext, "base">) => `${vaultPath(context)}/-/dashboard/${PLUGIN_ID}/${PANEL}/`;
+export const reportsPath = (context: Pick<PageContext, "base">) => panelPath(context, PANEL);
 
 const KIND_LABELS = { page: "Page", commit: "Commit", submission: "Submission", annotation: "Comment", account: "Account" } as const;
 
@@ -71,13 +70,19 @@ function describer(context: PageContext, data: BuildData, viewer: Account | null
     const page = publishedPage(data, slug);
     return page ? `<a href="${escape(`${site}${page.href}`)}">${escape(page.title)}</a>` : `${escape(slug)} <span class="sv-account-muted">(no longer on the site)</span>`;
   };
-  // Asked once, and only when a submission report needs it.
+  // Asked once, and only when a report needs it.
   let closes: Promise<boolean> | undefined;
   const closesSubmissions = () => closes ??= data.submissions ? can(viewer, CLOSE_SUBMISSIONS, { vault }, context.env) : Promise.resolve(false);
+  let suspends: Promise<boolean> | undefined;
+  const suspendsAccounts = () => suspends ??= can(viewer, WRITE_ACCOUNTS, { vault }, context.env);
+  /** A link to the form that suspends `handle`'s account, coming back to this report; offered only to who may suspend. */
+  const suspendLink = async (handle: string, reportId: string, describedBy: string) => await suspendsAccounts()
+    ? [`<a class="sv-account-button" href="${escape(suspensionPath(context, handle, `${reportsPath(context)}#report-${reportId}`))}" aria-describedby="${describedBy}">Suspend @${escape(handle)}</a>`]
+    : [];
 
   return async (report: Report, describedBy: string): Promise<Shown> => {
     const { kind, id } = report.target;
-    const back = (status: string) => `${panelPath(context)}?status=${status}#report-${report.id}`;
+    const back = (status: string) => `${reportsPath(context)}?status=${status}#report-${report.id}`;
     const open = report.state === "open";
     switch (kind) {
       case "page":
@@ -89,7 +94,8 @@ function describer(context: PageContext, data: BuildData, viewer: Account | null
         const userPages = userPageLocation();
         const userPage = userPages.vault === vault ? publishedPage(data, `${userPages.folder}/${profile.handle}`) : undefined;
         const handle = userPage ? `<a href="${escape(`${site}${userPage.href}`)}">@${escape(profile.handle)}</a>` : `@${escape(profile.handle)}`;
-        return { what: `${handle} <span class="sv-account-muted">${escape(profile.name)}</span>`, actions: [] };
+        const actions = open ? await suspendLink(profile.handle, report.id, describedBy) : [];
+        return { what: `${handle} <span class="sv-account-muted">${escape(profile.name)}</span>`, actions };
       }
       case "annotation": {
         const comments = data.annotations?.database;
@@ -100,6 +106,9 @@ function describer(context: PageContext, data: BuildData, viewer: Account | null
         const hides = open && !comment.hidden && comments === ACCOUNTS_DATABASE_ENV
           && await can(viewer, HIDE_COMMENTS, { vault, page: comment.page }, context.env);
         const actions = hides ? [button(`${root}/_svartz/annotations/${encodeURIComponent(id)}/hide/`, { returnTo: back("hidden") }, "Hide comment", describedBy)] : [];
+        // Comments name their author by sign-in; the account it's linked to is the one to suspend.
+        const author = open && await suspendsAccounts() ? await findProfileByIdentity(comment.author.id, context.env) : undefined;
+        if (author) actions.push(...await suspendLink(author.handle, report.id, describedBy));
         // A page that's since gone unpublished or protected takes its comments out of sight, here too.
         return { what, ...publishedPage(data, comment.page) && { quote: comment.body }, actions };
       }
@@ -163,7 +172,7 @@ async function reportsPage(request: Request, context: PageContext, data: BuildDa
   const message = status
     ? `<p class="sv-account-status" role="${status.error ? "alert" : "status"}"${status.error ? " data-error" : ""}>${escape(status.text)}</p>`
     : "";
-  const here = panelPath(context);
+  const here = reportsPath(context);
   const tab = (label: string, count: number, href: string, current: boolean) =>
     `<li><a href="${escape(href)}"${current ? ' aria-current="page"' : ""}>${label} <span class="sv-moderation-count">${count}</span></a></li>`;
   const empty = open ? "No open reports." : "No closed reports yet.";

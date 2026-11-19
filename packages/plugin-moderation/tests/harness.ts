@@ -54,6 +54,8 @@ export interface SiteOptions {
   readonly comments?: string;
   /** The pages the build published. Default {@link PAGES}. */
   readonly pages?: BuildData["pages"];
+  /** Identity ids config names admins. */
+  readonly admins?: readonly string[];
 }
 
 /**
@@ -62,6 +64,7 @@ export interface SiteOptions {
  */
 export function createSite(db: Database, {
   vault = "notes", annotations = true, submissions = true, reportsPerHour = DEFAULT_REPORTS_PER_HOUR, accounts = true, comments = "SVARTZ_DB", pages = PAGES,
+  admins = [],
 }: SiteOptions = {}) {
   const data: BuildData = {
     pages,
@@ -78,6 +81,7 @@ export function createSite(db: Database, {
         options: {
           providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
           permissions: [...PERMISSIONS, ...OTHERS],
+          admins,
         },
         data: { permissions: [], paths: [] },
       },

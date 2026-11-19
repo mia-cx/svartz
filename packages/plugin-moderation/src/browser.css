@@ -1,5 +1,5 @@
 /*
- * The report dialog and the Reports panel. They follow theme-minimal's tokens (`--sv-*`), as the sign-in dialog and
+ * The report dialog and the moderation panels. They follow theme-minimal's tokens (`--sv-*`), as the sign-in dialog and
  * the dashboard do; a host page without them falls back to system colours. The panel is `.sv-account.sv-dashboard`
  * too, so its buttons, messages and muted text come from `@svartz/auth`'s stylesheet.
  */
@@ -121,7 +121,7 @@
 	min-block-size: 2.25rem;
 }
 
-.sv-moderation-dialog .sv-moderation-choice input {
+.sv-moderation-choice input {
 	inline-size: 1.125rem;
 	block-size: 1.125rem;
 	margin: 0;
@@ -306,4 +306,91 @@
 .sv-moderation .sv-moderation-actions {
 	justify-content: flex-start;
 	margin-block-start: var(--sv-space-1, 0.25rem);
+}
+
+/* The Suspensions panel: a found account's suspension in force, and the form that suspends it. */
+.sv-moderation-back {
+	margin: 0 0 var(--sv-space-2, 0.5rem);
+}
+
+.sv-moderation-back a,
+.sv-moderation-pages a {
+	display: inline-flex;
+	align-items: center;
+	min-block-size: 2.75rem;
+	color: var(--sv-accent-text, LinkText);
+	text-underline-offset: 0.2em;
+}
+
+.sv-moderation .sv-moderation-find,
+.sv-moderation .sv-moderation-filters {
+	margin-block-end: var(--sv-space-5, 1.5rem);
+}
+
+.sv-account .sv-moderation-suspension {
+	display: grid;
+	gap: var(--sv-space-1, 0.25rem);
+	margin-block-end: var(--sv-space-5, 1.5rem);
+	padding: var(--sv-space-3, 0.75rem) var(--sv-space-4, 1rem);
+}
+
+.sv-moderation-suspension h2 {
+	margin: 0 0 var(--sv-space-1, 0.25rem);
+	color: inherit;
+	font-size: var(--sv-step-1, 1.2rem);
+}
+
+.sv-moderation-suspension p {
+	margin: 0;
+}
+
+.sv-moderation-suspension form {
+	margin-block-start: var(--sv-space-2, 0.5rem);
+}
+
+.sv-moderation-reason-text {
+	color: var(--sv-ink, CanvasText);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.sv-moderation .sv-moderation-field {
+	max-inline-size: 32rem;
+}
+
+/* The Audit log panel. */
+.sv-moderation .sv-moderation-action {
+	color: var(--sv-ink, CanvasText);
+	font-weight: 600;
+}
+
+.sv-moderation-detail {
+	display: grid;
+	gap: var(--sv-space-1, 0.25rem);
+	margin: 0;
+	font-size: var(--sv-step--1, 0.875rem);
+}
+
+.sv-moderation-detail div {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 var(--sv-space-2, 0.5rem);
+}
+
+.sv-moderation-detail dt {
+	color: var(--sv-muted, GrayText);
+}
+
+.sv-moderation-detail dd {
+	margin: 0;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.sv-moderation-pages {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: var(--sv-space-4, 1rem);
+	margin-block-start: var(--sv-space-3, 0.75rem);
 }

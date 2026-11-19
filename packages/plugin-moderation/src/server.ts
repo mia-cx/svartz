@@ -6,17 +6,26 @@
  * - `POST reports/<id>/resolve/` and `POST reports/<id>/dismiss/`, form posts from the Reports panel, close an open
  *   report for an account holding `moderation:reports:read` on the vault, record it in auth's audit log, and redirect
  *   back to the panel.
+ * - `POST accounts/suspend/` with `handle`, `duration` (`day`, `week`, `month` or `for-good`), `reason` and `returnTo`,
+ *   and `POST accounts/lift/` with `handle` and `returnTo`, form posts from the Suspensions panel, suspend an account or
+ *   lift its suspension through auth for an account holding `moderation:accounts:write` on the vault, and redirect to
+ *   `returnTo` with the outcome as `status`.
+ * - `GET viewer/` answers `{ suspends }`: whether the reader may suspend accounts, for the Suspend action on user pages.
  *
- * The dashboard's Reports panel (`panel.ts`) lists the queue. Reports are kept in the accounts database, `SVARTZ_DB`,
+ * The dashboard's Reports panel (`panel.ts`) lists the queue, the Suspensions panel (`suspensions.ts`) the suspensions
+ * in force and the form for one account, and the Audit log panel (`audit-panel.ts`) auth's audit log. Reports are kept in the accounts database, `SVARTZ_DB`,
  * beside the accounts they name and auth's audit log, so a close and its audit entry commit in one batch. Without
  * `SVARTZ_DB` every route answers 503. The first request that reaches the database migrates it to the plugin's schema.
  */
-import { ACCOUNTS_DATABASE_ENV, audit, can, readSignIn, type Account } from "@svartz/auth/server";
+import { ACCOUNTS_DATABASE_ENV, audit, can, liftSuspension, readAccount, readSignIn, suspend, type Account } from "@svartz/auth/server";
 import type { ServerContext, ServerModuleFactory } from "@svartz/core";
 import { REASON_MAX_LENGTH } from "./api";
-import { panelPath, reportsPanel } from "./panel";
-import { READ_REPORTS, WRITE_REPORTS } from "./permissions";
+import { auditPanel } from "./audit-panel";
+import { reportsPanel, reportsPath } from "./panel";
+import { sameSitePath, withStatus } from "./paths";
+import { READ_REPORTS, WRITE_ACCOUNTS, WRITE_REPORTS } from "./permissions";
 import { closeStatement, fileReport, findReport, migrate, spendReport, type Database } from "./store";
+import { DURATIONS, suspensionPath, suspensionsPanel } from "./suspensions";
 import { checkTarget, type BuildData } from "./targets";
 
 export type { BuildData } from "./targets";
@@ -135,7 +144,7 @@ const moderationServer: ServerModuleFactory<ModerationServerOptions, BuildData> 
     const report = await findReport(db, context.vault.id, id);
     if (!report) return failure(404, "not_found", "There's no such report.");
     const back = (status: string) => new Response(null, {
-      status: 303, headers: { location: `${panelPath(context)}?status=${status}#report-${id}`, "cache-control": "no-store" },
+      status: 303, headers: { location: `${reportsPath(context)}?status=${status}#report-${id}`, "cache-control": "no-store" },
     });
     if (report.state !== "open") return back("already-closed");
     const closing = { vault: context.vault.id, id, state, by: account.handle, at: new Date().toISOString() };
@@ -156,14 +165,50 @@ const moderationServer: ServerModuleFactory<ModerationServerOptions, BuildData> 
     return back(state);
   }
 
+  /**
+   * Suspend the form's account, or with `lift` lift its suspension, for a moderator holding `moderation:accounts:write`,
+   * and go back to the form's `returnTo` with the outcome as its `status`. Auth records each change in the audit log in
+   * the same transaction, and refuses an admin and the moderator's own account.
+   */
+  async function changeSuspension(request: Request, context: ServerContext, lift: boolean): Promise<Response> {
+    const write = await writer(request, context, "Sign in to suspend accounts.");
+    if (write instanceof Response) return write;
+    const { account } = write;
+    if (!await can(account, WRITE_ACCOUNTS, { vault: context.vault.id }, context.env)) return failure(403, "forbidden", "Your account can't suspend accounts here.");
+    const url = new URL(request.url);
+    const form = await request.formData().catch(() => undefined);
+    const handle = String(form?.get("handle") ?? "");
+    const returnTo = sameSitePath(String(form?.get("returnTo") ?? ""), url) ?? suspensionPath(context, handle);
+    const back = (status: string) => new Response(null, { status: 303, headers: { location: withStatus(returnTo, status, url), "cache-control": "no-store" } });
+    if (lift) return back(await liftSuspension(context.env, account, handle));
+    const duration = DURATIONS.get(String(form?.get("duration") ?? ""));
+    if (!duration) return back("duration-invalid");
+    const reason = readReason(form?.get("reason"));
+    if (typeof reason !== "string") return back("reason-invalid");
+    const until = duration.ms === undefined ? undefined : new Date(Date.now() + duration.ms);
+    return back(await suspend(context.env, account, { handle, reason, until }));
+  }
+
+  /** `GET viewer/`: what the browser script may offer the reader, `{ suspends }`. */
+  async function viewer(request: Request, context: ServerContext): Promise<Response> {
+    const account = await readAccount(request, context.env);
+    const suspends = account !== null && await can(account, WRITE_ACCOUNTS, { vault: context.vault.id }, context.env);
+    return Response.json({ suspends }, { headers: { "cache-control": "private, no-store" } });
+  }
+
   return {
-    dashboard: { title: "Moderation", panels: [reportsPanel(data)] },
+    dashboard: { title: "Moderation", panels: [reportsPanel(data), suspensionsPanel, auditPanel] },
     handle: async (request, context) => {
       const path = new URL(request.url).pathname.slice(context.base.length);
+      if (path === "/viewer/") {
+        return request.method === "GET" ? viewer(request, context) : failure(405, "method_not_allowed", "Use GET.", { allow: "GET" });
+      }
       // Report ids are UUIDs.
       const decision = /^\/reports\/([0-9a-f-]{36})\/(resolve|dismiss)\/$/.exec(path);
-      if (path !== "/reports/" && !decision) return undefined;
+      const suspension = /^\/accounts\/(suspend|lift)\/$/.exec(path);
+      if (path !== "/reports/" && !decision && !suspension) return undefined;
       if (request.method !== "POST") return failure(405, "method_not_allowed", "Use POST.", { allow: "POST" });
+      if (suspension) return changeSuspension(request, context, suspension[1] === "lift");
       if (!decision) return file(request, context);
       return decide(request, context, decision[1]!, decision[2] === "resolve" ? "resolved" : "dismissed");
     },
