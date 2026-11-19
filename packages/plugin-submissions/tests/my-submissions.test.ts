@@ -424,8 +424,8 @@ describe("replies", () => {
     expect(threaded.headers.get("location")).toBe(`${MINE}42/?status=sent&thread=5000001#comment-5000003`);
     quietGitHub();
     const shown = text(await site.page(`${MINE}42/?status=sent`, grace));
-    expect(shown).toContain("Which wiki? octocat Nov 19, 2026 The one this site runs. Grace Hopper submitter Nov 19, 2026 Thanks.");
-    expect(shown).toContain("Grace Hopper submitter Nov 19, 2026 Added one, @⁠octocat. Reply sent.");
+    expect(shown).toContain("Which wiki? octocat Nov 19, 2026 The one this site runs. Grace Hopper Reputation 0 submitter Nov 19, 2026 Thanks.");
+    expect(shown).toContain("Grace Hopper Reputation 0 submitter Nov 19, 2026 Added one, @⁠octocat. Reply sent.");
     expect(shown).not.toContain("[!NOTE]");
   });
 

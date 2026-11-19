@@ -7,6 +7,7 @@
  * Paths, titles and names come from GitHub or readers, so all of them are escaped; a rendered page arrives already
  * sanitized by `render.ts`.
  */
+import { reputationBadgeHtml } from "@svartz/auth/badge";
 import type { PluginPage } from "@svartz/core";
 import { MAX_REPLY_LENGTH } from "./attribution";
 import type { ListedState, ReviewVerdict } from "./submission-page";
@@ -18,7 +19,7 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
 
 /** Who sent a submission: the account the site saved it for, or its author on GitHub. */
 export type Submitter =
-  | { readonly kind: "account"; readonly name: string; readonly handle: string }
+  | { readonly kind: "account"; readonly name: string; readonly handle: string; readonly reputation: number }
   | { readonly kind: "github"; readonly login: string | null };
 
 /** One open submission in the list. */
@@ -41,7 +42,7 @@ const VERDICT_LABELS: Readonly<Record<Extract<ListedState, "open"> | ReviewVerdi
 };
 
 function submitter(who: Submitter): string {
-  if (who.kind === "account") return `${escape(who.name)} @${escape(who.handle)}`;
+  if (who.kind === "account") return `${escape(who.name)} ${reputationBadgeHtml(who.reputation)} @${escape(who.handle)}`;
   return who.login ? `${escape(who.login)} on GitHub` : "A deleted GitHub user";
 }
 

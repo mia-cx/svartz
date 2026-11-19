@@ -64,7 +64,7 @@ describe("Recent edits", () => {
     ]);
 
     const site = entries.nth(6);
-    await expect.element(site).toHaveTextContent(/Ada Lovelace @ada/);
+    await expect.element(site).toHaveTextContent(/Ada Lovelace Reputation \d+ @ada/);
     await expect.element(site.getByText("Live", { exact: true })).toBeVisible();
     await expect.element(site.getByRole("link", { name: "Guide" })).toHaveAttribute("href", "/wiki/guide/");
     await expect.element(site.getByRole("link", { name: "Diff on GitHub" }))

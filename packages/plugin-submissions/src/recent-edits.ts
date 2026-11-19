@@ -13,6 +13,7 @@
  * any other file, or whose files the poll hasn't read yet, shows its short SHA instead, since the summary could name
  * what the site keeps back.
  */
+import { reputationBadgeHtml } from "@svartz/auth/badge";
 import { can, findProfiles, readAccount, type PublicProfile } from "@svartz/auth/server";
 import type { DashboardPanel, PageContext, PluginPage } from "@svartz/core";
 import { PLUGIN_ID, type LinkTarget } from "./api";
@@ -81,7 +82,9 @@ function summary({ commit, changes }: Entry): string | undefined {
 }
 
 function author({ commit, account }: Entry): string {
-  if (account) return `<span class="sv-account-name">${escape(account.name)}</span> <span class="sv-account-muted">@${escape(account.handle)}</span>`;
+  if (account) {
+    return `<span class="sv-account-name">${escape(account.name)}</span> ${reputationBadgeHtml(account.reputation)} <span class="sv-account-muted">@${escape(account.handle)}</span>`;
+  }
   const login = commit.authorLogin;
   if (login && GITHUB_LOGIN.test(login)) return `<a href="https://github.com/${login}">${escape(login)}</a> on GitHub`;
   if (login) return `${escape(login)} on GitHub`;

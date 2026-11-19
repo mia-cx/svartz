@@ -22,7 +22,7 @@
 import type { EnvReference, ServerContext, ServerModuleFactory } from "@svartz/core";
 import type { Account, Identity } from "@svartz/auth";
 import {
-  ACCOUNTS_DATABASE_ENV, auditIfChanged, can, linkedIdentities, migrateGrants, postReputation, readIdentity, readSignIn,
+  ACCOUNTS_DATABASE_ENV, auditIfChanged, can, findProfilesByIdentity, linkedIdentities, migrateGrants, postReputation, readIdentity, readSignIn,
 } from "@svartz/auth/server";
 import { CONTEXT_LENGTH, type Anchor } from "./anchor";
 import { COMMENT_MAX_LENGTH, QUOTE_MAX_LENGTH } from "./limits";
@@ -206,8 +206,15 @@ async function list(request: Request, url: URL, context: ServerContext, options:
   const db = await databaseFor(context, options);
   if (db instanceof Response) return db;
   const reader = await readReader(request, context.env);
+  const annotations = await listPage(db, context.vault.id, page);
+  // A comment's author is a sign-in; the account it's linked to carries the reputation, looked up for all at once.
+  const commenters = [...new Set(annotations.flatMap((annotation) => (annotation.kind === "comment" ? [annotation.author.id] : [])))];
+  const accounts = commenters.length > 0 ? await findProfilesByIdentity(commenters, context.env) : new Map();
   return json({
-    annotations: await listPage(db, context.vault.id, page),
+    annotations: annotations.map((annotation) => {
+      const reputation = annotation.kind === "comment" ? accounts.get(annotation.author.id)?.reputation : undefined;
+      return reputation === undefined ? annotation : { ...annotation, reputation };
+    }),
     viewer: reader && { id: reader.identity.id, moderator: await rights.moderates(reader, page, context) },
   });
 }
@@ -267,7 +274,13 @@ async function create(request: Request, url: URL, context: ServerContext, option
   const comment = readComment(write.input);
   if (typeof comment === "string") return failure(400, "invalid_annotation", comment);
   if (!await rights.comments(write.reader, comment.page, context)) return failure(403, "forbidden", "You can't comment on this page.");
-  return json({ annotation: await createComment(write.db, { vault: context.vault.id, ...comment, author: write.reader.identity }) }, 201);
+  const [annotation, accounts] = await Promise.all([
+    createComment(write.db, { vault: context.vault.id, ...comment, author: write.reader.identity }),
+    findProfilesByIdentity([write.reader.identity.id], context.env),
+  ]);
+  // As the page's list gives it, so the new comment's card shows its author's reputation at once.
+  const reputation = accounts.get(write.reader.identity.id)?.reputation;
+  return json({ annotation: reputation === undefined ? annotation : { ...annotation, reputation } }, 201);
 }
 
 /** `{ agreed }` sets the reader's **+1** on comment `id`, and answers `{ agreed, agreements }` with every agreement after it. */

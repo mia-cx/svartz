@@ -155,7 +155,7 @@ describe("reverting a page", () => {
     const history = await site.page(`${HISTORY}?status=reverted`, { headers: { cookie: ada.cookie } });
     await site.settle();
     expect(text(history!.html)).toContain("Page reverted. It shows the restored revision once the site rebuilds.");
-    expect(rows(history)[0]).toBe("19 Nov 2026, 10:40 UTC Ada Lovelace @ada Reverted to aaaaaaa (19 Nov 2026): Spam.");
+    expect(rows(history)[0]).toBe("19 Nov 2026, 10:40 UTC Ada Lovelace Reputation 0 @ada Reverted to aaaaaaa (19 Nov 2026): Spam.");
 
     replayGitHub([
       historyExchange(GUIDE_PATH, listOf(page, reverted)),

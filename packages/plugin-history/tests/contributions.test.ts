@@ -202,11 +202,32 @@ describe("who made a change, linked", () => {
     expect(changes!.html).toContain('<a class="sv-history-name" href="/wiki/-/contributions/grace/">Grace Hopper</a>');
     expect(adas!.html).toContain('<h1>Contributions by <a href="/wiki/users/ada/">Ada Lovelace</a>');
   });
+
+  // Proves an account's reputation travels with its name: a signed-out reader sees each author's score beside it, as
+  // it stands now.
+  it("shows each author's reputation beside their name, to anyone", async () => {
+    const site = await createSite();
+    const ada = await site.signUp(ADA);
+    const grace = await site.signUp(GRACE_SIGN_IN);
+    await site.earnPage(ada.id, "test:page:1");
+    await site.earnPage(grace.id, "test:page:2");
+    await site.earnPage(grace.id, "test:page:3");
+    const adaEdit: TestCommit = { sha: sha(1), message: siteMessage("Expand the guide", ada.id), at: 10, author: ADA_GIT, files: [GUIDE_PATH] };
+    const graceEdit: TestCommit = { sha: sha(2), message: siteMessage("Tidy the guide", grace.id), at: 20, author: ADA_GIT, files: [GUIDE_PATH] };
+    await site.recordCommits(ada.id, [adaEdit.sha]);
+    await site.recordCommits(grace.id, [graceEdit.sha]);
+    await site.push([adaEdit, graceEdit]);
+
+    const changes = await backfilled(site, "/wiki/-/changes/", [graceEdit, adaEdit]);
+
+    expect(text(changes!.html)).toContain("Ada Lovelace Reputation 5 @ada");
+    expect(text(changes!.html)).toContain("Grace Hopper Reputation 10 @grace");
+  });
 });
 
 describe("the section below a user page", () => {
-  // Proves a user page gets its account's reputation, latest edits, the pages they changed and a link to the rest,
-  // and no other page gets a section.
+  // Proves a user page gets its account's latest edits, the pages they changed and a link to the rest, and no other
+  // page gets a section. Its reputation shows once on the page, beside its actions, not here.
   it("answers the account's latest contributions for its user page, and nothing for other pages", async () => {
     const site = await createSite();
     const ada = await site.signUp(ADA);
@@ -222,7 +243,7 @@ describe("the section below a user page", () => {
 
     expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(text(html)).toMatch(/^Contributions Reputation: 5 points Latest edits /);
+    expect(text(html)).toMatch(/^Contributions Latest edits /);
     expect(rows({ title: "", html })).toEqual([6, 5, 4, 3, 2].map((index) => `19 Nov 2026, 10:0${index} UTC Guide (changes, history) Edit ${index}`));
     expect(pagesEdited(html)).toEqual(["Guide", "Setup"]);
     expect(html).toContain('href="/wiki/-/contributions/ada/">All contributions</a>');

@@ -145,6 +145,25 @@
 	font-size: var(--sv-step--1, 0.875rem);
 }
 
+/* An account's reputation beside its name, wherever a plugin names it: a quiet number, read in full by screen readers. */
+.sv-reputation-badge {
+	color: var(--sv-muted, GrayText);
+	font-family: var(--sv-font-sans, system-ui, sans-serif);
+	font-size: 0.85em;
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.sv-reputation-badge-label {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
 /*
  * The `/-/account/` page, rendered in the theme's shell. Its provider buttons reuse the dialog's `.sv-auth-provider`.
  */

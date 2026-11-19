@@ -333,7 +333,9 @@ export function createReview(setup: ReviewSetup) {
     const here = panelPath(context);
     const rows = shown.map((row, index): ReviewRow => {
       const profile = row.owner?.startsWith("account:") ? profiles.get(row.owner.slice("account:".length)) : undefined;
-      const submitter: Submitter = profile ? { kind: "account", name: profile.name, handle: profile.handle } : { kind: "github", login: row.author_login };
+      const submitter: Submitter = profile
+        ? { kind: "account", name: profile.name, handle: profile.handle, reputation: profile.reputation }
+        : { kind: "github", login: row.author_login };
       return {
         number: row.number,
         title: titleOf(row.number, named[index] ? row.path : null),
@@ -405,7 +407,7 @@ export function createReview(setup: ReviewSetup) {
     // GitHub's word is newer than the mirror's, as right after a merge from here.
     if (stage === "open" && inspected && !inspected.pull.open) stage = inspected.pull.merged ? "committed" : "closed";
 
-    const { entries, earlier } = await conversation(mirror, number);
+    const { entries, earlier } = await conversation(mirror, number, context.env);
     // A diff thread names its file: one the reviewer may not review stays out, with what it says. A file the pull
     // request changes is judged as a whole, both sides of a move; one it no longer changes, by its path.
     const judged = new Map<string, boolean>();

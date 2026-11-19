@@ -28,6 +28,8 @@ const entries = (html: string) => [...html.matchAll(/<li class="svartz-submissio
 const entryOf = (html: string, id: string) => entries(html).find((body) => body.includes(`/commit/${id}"`))!;
 /** Each entry's heading: its summary, or its short SHA. */
 const headings = (html: string) => [...html.matchAll(/id="svartz-submissions-edit-\d+">([^<]*)</g)].map(([, text]) => text);
+/** What a reader of `html` reads, screen readers included, in one line. */
+const text = (html: string) => html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 
 describe("the Recent edits panel", () => {
   // Proves the gate: only a viewer holding submissions:pull-requests:read gets the panel or any page of it.
@@ -50,8 +52,9 @@ describe("the Recent edits panel", () => {
     const html = (await panel(wiki, "mod"))!;
     const by = Object.fromEntries(headings(html).map((heading, index) => [heading, entries(html)[index]!]));
 
-    expect(by["Edit content/guide.md"]).toContain('<span class="sv-account-name">Ada Lovelace</span> <span class="sv-account-muted">@ada</span>');
-    expect(by["Add how long setup takes (#42)"]).toContain('<span class="sv-account-name">Grace Hopper</span> <span class="sv-account-muted">@grace</span>');
+    // A site account shows with its reputation; nobody here has earned any yet.
+    expect(text(by["Edit content/guide.md"]!)).toContain("Ada Lovelace Reputation 0 @ada");
+    expect(text(by["Add how long setup takes (#42)"]!)).toContain("Grace Hopper Reputation 0 @grace");
     // Ada's author address, the App as committer and Ada's trailer, with no record of the save: a plain git author.
     expect(by["Edit content/Places/Paris.md"]).toContain("Ada Lovelace (not on GitHub)");
     expect(by["Edit content/Places/Paris.md"]).not.toContain("@ada");

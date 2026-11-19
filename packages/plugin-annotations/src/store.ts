@@ -26,6 +26,8 @@ interface AnnotationBase {
   readonly id: string;
   readonly anchor: Anchor;
   readonly author: Identity;
+  /** The reputation of the site account the author's sign-in is linked to; absent without one. */
+  readonly reputation?: number;
   /** ISO 8601. */
   readonly createdAt: string;
   /** Oldest first. Only comments collect agreements. */

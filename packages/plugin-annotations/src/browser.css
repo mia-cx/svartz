@@ -132,6 +132,18 @@
 	min-inline-size: 0;
 }
 
+/* The name and its reputation on one line: the name shortens before the score does. */
+.sv-annotations-name-line {
+	display: flex;
+	align-items: baseline;
+	gap: 0.35em;
+	min-inline-size: 0;
+}
+
+.sv-annotations-name-line .sv-reputation-badge {
+	flex: none;
+}
+
 .sv-annotations-name {
 	overflow: hidden;
 	color: var(--sv-ink, CanvasText);

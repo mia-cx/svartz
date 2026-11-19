@@ -688,14 +688,32 @@ export interface PublicProfile {
   readonly handle: string;
   readonly name: string;
   readonly avatarUrl?: string;
+  /** The account's reputation score, public: show it beside the name, as `reputationBadgeHtml` renders it. */
+  readonly reputation: number;
 }
+
+/**
+ * The columns a profile reads from `auth_accounts a`, its score included, so a list of names costs the one query
+ * whatever its length. The score is rounded as thresholds compare it.
+ */
+const PROFILE_COLUMNS = `a.handle, a.name, a.avatar_url,
+  (SELECT COALESCE(ROUND(SUM(r.points), 2), 0) FROM auth_reputation r WHERE r.account_id = a.id) AS reputation`;
+
+interface ProfileRow {
+  handle: string;
+  name: string;
+  avatar_url: string | null;
+  reputation: number;
+}
+
+const profileOf = (row: ProfileRow): PublicProfile =>
+  ({ handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url }, reputation: row.reputation });
 
 /** The account that holds or held `handle`, by its current handle; `undefined` when no account ever held it. */
 export async function profileByHandle(db: Database, handle: string): Promise<PublicProfile | undefined> {
-  const { results: [row] } = await db.prepare(`SELECT a.handle, a.name, a.avatar_url FROM auth_handles h
-    JOIN auth_accounts a ON a.id = h.account_id WHERE h.handle = ?`).bind(handle)
-    .all<{ handle: string; name: string; avatar_url: string | null }>();
-  return row && { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } };
+  const { results: [row] } = await db.prepare(`SELECT ${PROFILE_COLUMNS} FROM auth_handles h
+    JOIN auth_accounts a ON a.id = h.account_id WHERE h.handle = ?`).bind(handle).all<ProfileRow>();
+  return row && profileOf(row);
 }
 
 /**
@@ -704,18 +722,27 @@ export async function profileByHandle(db: Database, handle: string): Promise<Pub
  */
 export async function profilesByHandle(db: Database, handles: readonly string[]): Promise<Map<string, PublicProfile>> {
   if (handles.length === 0) return new Map();
-  const { results } = await db.prepare(`SELECT h.handle AS asked, a.handle, a.name, a.avatar_url FROM auth_handles h
+  const { results } = await db.prepare(`SELECT h.handle AS asked, ${PROFILE_COLUMNS} FROM auth_handles h
     JOIN auth_accounts a ON a.id = h.account_id WHERE h.handle IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(handles))
-    .all<{ asked: string; handle: string; name: string; avatar_url: string | null }>();
-  return new Map(results.map((row) => [row.asked, { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } }]));
+    .all<ProfileRow & { asked: string }>();
+  return new Map(results.map((row) => [row.asked, profileOf(row)]));
 }
 
 /** The accounts with ids `ids`, by id, under their current handles; ids no account has are absent. */
 export async function profilesById(db: Database, ids: readonly string[]): Promise<Map<string, PublicProfile>> {
   if (ids.length === 0) return new Map();
-  const { results } = await db.prepare("SELECT id, handle, name, avatar_url FROM auth_accounts WHERE id IN (SELECT value FROM json_each(?))")
-    .bind(JSON.stringify(ids)).all<{ id: string; handle: string; name: string; avatar_url: string | null }>();
-  return new Map(results.map((row) => [row.id, { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } }]));
+  const { results } = await db.prepare(`SELECT a.id, ${PROFILE_COLUMNS} FROM auth_accounts a WHERE a.id IN (SELECT value FROM json_each(?))`)
+    .bind(JSON.stringify(ids)).all<ProfileRow & { id: string }>();
+  return new Map(results.map((row) => [row.id, profileOf(row)]));
+}
+
+/** The accounts provider accounts `identities` are linked to, by identity; identities no account has are absent. */
+export async function profilesByIdentity(db: Database, identities: readonly string[]): Promise<Map<string, PublicProfile>> {
+  if (identities.length === 0) return new Map();
+  const { results } = await db.prepare(`SELECT i.id AS identity, ${PROFILE_COLUMNS} FROM auth_identities i
+    JOIN auth_accounts a ON a.id = i.account_id WHERE i.id IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(identities))
+    .all<ProfileRow & { identity: string }>();
+  return new Map(results.map((row) => [row.identity, profileOf(row)]));
 }
 
 /** Sign a cookie from before accounts out for good: its session goes, and the cookie can't start another. */
