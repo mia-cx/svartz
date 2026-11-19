@@ -771,6 +771,11 @@
 	color: light-dark(oklch(0.48 0.13 var(--sv-hue-orange, 60)), oklch(0.82 0.11 var(--sv-hue-orange, 60)));
 }
 
+.svartz-submissions-links a {
+	color: var(--sv-accent-text, LinkText);
+	text-underline-offset: 0.2em;
+}
+
 .svartz-submissions-timeline {
 	display: grid;
 	gap: var(--sv-space-4, 1rem);

@@ -225,10 +225,10 @@ export function submissionPage(view: SubmissionView): PluginPage {
   return {
     title: view.title,
     html: `<div class="sv-account sv-dashboard svartz-submissions-dashboard">
-<p><a href="${escape(view.back)}">My submissions</a></p>
+<nav class="sv-dashboard-crumbs" aria-label="Submissions"><a href="${escape(view.back)}">My submissions</a></nav>
 <div>
 <h1>${escape(view.title)}</h1>
-<p class="sv-account-muted">${view.kind === "edit" ? "Edit" : "New page"} · ${links.join(" · ")}</p>
+<p class="sv-account-muted svartz-submissions-links">${view.kind === "edit" ? "Edit" : "New page"} · ${links.join(" · ")}</p>
 </div>
 <div class="sv-account-who">
 <p class="sv-account-lead svartz-submissions-stage" data-stage="${view.stage}">${STAGE_TEXT[view.stage]}</p>${followUp}
