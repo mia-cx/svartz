@@ -21,6 +21,7 @@ const STATUSES: Readonly<Record<string, { section: Section; error: boolean; fiel
   "grant-saved": { section: "grants", error: false, text: () => "Grant saved." },
   "account-unknown": { section: "grants", error: true, field: "actor", text: (who) => `No account has the handle @${who}.` },
   "role-unknown": { section: "grants", error: true, field: "actor", text: (who) => `There's no role named ${who}. Create it under Roles first.` },
+  "group-unknown": { section: "grants", error: true, field: "actor", text: (who) => `There's no group named ${who}.` },
   "admin-account": { section: "grants", error: true, field: "actor", text: (who) => `@${who} is an admin and may do everything. Admins are set in the site's config.` },
   "admin-role": { section: "grants", error: true, field: "actor", text: () => "The admin role may do everything and is set in the site's config." },
   "permission-unknown": { section: "grants", error: true, field: "permission", text: () => "Choose a permission from the list." },
@@ -58,6 +59,8 @@ export interface PeopleView {
   readonly catalogue: readonly PermissionDeclaration[];
   readonly grants: readonly ListedGrant[];
   readonly roles: readonly Role[];
+  /** Every group's name, which the grant form suggests beside role names. */
+  readonly groups: readonly string[];
   /** The ids of the vaults that share these accounts, which the object picker offers. */
   readonly vaults: readonly string[];
   /** Folders (ending in `/`) and pages of this vault, which the picker suggests. */
@@ -113,9 +116,12 @@ function permissionSelect(id: string, name: string, catalogue: readonly Permissi
   return `<select class="sv-account-input" id="${id}" name="${name}" required${extra}>${groups.join("")}</select>`;
 }
 
-/** The object picker: where (the site or a vault) and, within a vault, a folder or page. */
-function objectPicker(prefix: string, names: { scope: string; path: string }, view: PeopleView, values: { scope: string | null; path: string | null }, extra = ""): string {
-  const scopes = [option(SITE, "Whole site", values.scope), ...view.vaults.map((vault) => option(`vault:${vault}`, `Vault ${vault}`, values.scope))];
+/**
+ * The object picker: where (the site, unless `site` is false, or a vault) and, within a vault, a folder or page. Its
+ * path field suggests from the page's `sv-dashboard-paths` list.
+ */
+export function objectPicker(prefix: string, names: { scope: string; path: string }, { vaults, site = true }: { vaults: readonly string[]; site?: boolean }, values: { scope: string | null; path: string | null }, extra = ""): string {
+  const scopes = [...site ? [option(SITE, "Whole site", values.scope)] : [], ...vaults.map((vault) => option(`vault:${vault}`, `Vault ${vault}`, values.scope))];
   return `<div class="sv-account-field">
     <label for="${prefix}-scope">Where</label>
     <select class="sv-account-input" id="${prefix}-scope" name="${names.scope}">${scopes.join("")}</select>
@@ -135,11 +141,11 @@ function grantsSection(view: PeopleView): string {
   const form = canWrite ? `<form class="sv-account-form sv-dashboard-grid" method="post" action="${escape(actions.grant)}">
   <div class="sv-account-field">
     <label for="sv-dashboard-grant-type">Grant to</label>
-    <select class="sv-account-input" id="sv-dashboard-grant-type" name="actor-type">${option("account", "An account", typed("actor-type"))}${option("role", "A role", typed("actor-type"))}</select>
+    <select class="sv-account-input" id="sv-dashboard-grant-type" name="actor-type">${option("account", "An account", typed("actor-type"))}${option("role", "A role", typed("actor-type"))}${option("group", "A group", typed("actor-type"))}</select>
   </div>
   <div class="sv-account-field">
-    <label for="sv-dashboard-grant-actor">Handle or role name</label>
-    <input class="sv-account-input" id="sv-dashboard-grant-actor" name="actor" value="${escape(typed("actor") ?? "")}" required maxlength="${HANDLE_MAX_LENGTH + 1}" list="sv-dashboard-role-names" autocomplete="off" autocapitalize="none" spellcheck="false"${invalid(status, "actor")}>
+    <label for="sv-dashboard-grant-actor">Handle, role or group name</label>
+    <input class="sv-account-input" id="sv-dashboard-grant-actor" name="actor" value="${escape(typed("actor") ?? "")}" required maxlength="${HANDLE_MAX_LENGTH + 1}" list="sv-dashboard-actor-names" autocomplete="off" autocapitalize="none" spellcheck="false"${invalid(status, "actor")}>
   </div>
   <div class="sv-account-field">
     <label for="sv-dashboard-grant-permission">Permission</label>
@@ -155,7 +161,7 @@ function grantsSection(view: PeopleView): string {
   const rows = grants.map((grant) => {
     const who = actorLabel(grant);
     const where = describeObject(grant.object);
-    const unset = canWrite && grant.value !== "unset" && (grant.actorType === "account" || grant.actorType === "role")
+    const unset = canWrite && grant.value !== "unset" && grant.actorType !== "static"
       ? `<form method="post" action="${escape(actions.grant)}">${[["actor-type", grant.actorType], ["actor", grant.actor], ["permission", grant.permission], ["object", grant.object], ["value", "unset"]]
         .map(([name, value]) => `<input type="hidden" name="${name}" value="${escape(value!)}">`).join("")}<button class="sv-account-button" type="submit" aria-label="Unset ${escape(nameOf(catalogue, grant.permission))} for ${escape(who)} on ${escape(where)}">Unset</button></form>`
       : "";
@@ -297,7 +303,7 @@ export function peoplePage(view: PeopleView): PluginPage {
 <h1>${escape(PEOPLE_TITLE)}</h1>
 <nav class="sv-dashboard-sections" aria-label="Sections"><ul>${sections.map(([id, label]) => `<li><a href="#${id}">${label}</a></li>`).join("")}</ul></nav>
 <datalist id="sv-dashboard-paths">${view.paths.map((path) => `<option value="${escape(path)}"></option>`).join("")}</datalist>
-<datalist id="sv-dashboard-role-names">${view.roles.map(({ name }) => `<option value="${escape(name)}"></option>`).join("")}</datalist>
+<datalist id="sv-dashboard-actor-names">${[...new Set([...view.roles.map(({ name }) => name), ...view.groups])].map((name) => `<option value="${escape(name)}"></option>`).join("")}</datalist>
 ${grantsSection(view)}
 ${rolesSection(view)}
 ${checkSection(view)}

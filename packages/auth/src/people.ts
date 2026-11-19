@@ -105,10 +105,10 @@ export async function listGrants(db: Database): Promise<ListedGrant[]> {
 }
 
 /**
- * Set an account's or a role's grant of `permission` on `object`. `unset` removes it: only built-in actors have
- * defaults for a stored `unset` to override.
+ * Set an account's, a role's or a group's grant of `permission` on `object`. `unset` removes it: only built-in actors
+ * have defaults for a stored `unset` to override.
  */
-export async function setGrant(db: Database, actor: Actor, grant: ListedGrant & { readonly actorType: "account" | "role" }): Promise<void> {
+export async function setGrant(db: Database, actor: Actor, grant: ListedGrant & { readonly actorType: "account" | "role" | "group" }): Promise<void> {
   const { actorType, actorId, object, permission, value } = grant;
   const change = value === "unset"
     ? db.prepare("DELETE FROM auth_grants WHERE permission = ? AND object = ? AND actor_type = ? AND actor_id = ?")

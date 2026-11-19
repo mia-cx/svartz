@@ -113,7 +113,8 @@ export function userPageHandle(object: string | undefined, { vault, folder }: Us
  *
  * 1. The `admin` role is allowed everything.
  * 2. Owner overrides allow: an account on its own user page, under its current handle or one it held before, and a
- *    group's owners on any object linked to the group, or enclosed by one.
+ *    group's owners on any object linked to the group, or enclosed by one. They cover what is done to a page's
+ *    content, never an `administrative` permission, which only the `admin` role or a grant gives.
  * 3. Otherwise the first object in the chain with a set grant that applies to `who` decides. Within it, the first actor
  *    tier with such a grant decides (account, group, role, `signed-in`, `guest`), and a deny beats an allow in a tier.
  * 4. With nothing set, the answer is `unset`.
@@ -124,15 +125,19 @@ export function resolve(
   chain: readonly string[],
   permission: string,
   userPages: UserPageLocation,
+  administrative = false,
 ): Decision {
   if (who.roles.includes(ADMIN_ROLE)) return { value: "allow", decidedBy: { kind: "admin" } };
-  const owner = userPageHandle(chain[0], userPages);
-  if (owner !== undefined && who.account && (owner === who.account.handle || who.account.formerHandles?.includes(owner))) {
-    return { value: "allow", decidedBy: { kind: "user-page", object: chain[0]! } };
-  }
-  for (const object of chain) {
-    const owned = who.groups.find(({ owner, linked }) => owner && linked.includes(object));
-    if (owned) return { value: "allow", decidedBy: { kind: "group-owner", group: owned.group, object } };
+  // Owning a page is about its content. A permission that administers the site comes only from a grant.
+  if (!administrative) {
+    const owner = userPageHandle(chain[0], userPages);
+    if (owner !== undefined && who.account && (owner === who.account.handle || who.account.formerHandles?.includes(owner))) {
+      return { value: "allow", decidedBy: { kind: "user-page", object: chain[0]! } };
+    }
+    for (const object of chain) {
+      const owned = who.groups.find(({ owner, linked }) => owner && linked.includes(object));
+      if (owned) return { value: "allow", decidedBy: { kind: "group-owner", group: owned.group, object } };
+    }
   }
 
   for (const object of chain) {

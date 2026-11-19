@@ -16,9 +16,11 @@
  * - `GET reputation/?page=<path>` answers the reputation of the account whose user page is at `path`, for that page.
  * - `GET viewer/` answers the signed-in handle and whether the dashboard has a panel for them, for the site's links.
  * - `POST people/…` changes grants and roles from the dashboard's People & permissions panel (`people-panel.ts`).
+ * - `POST groups/…` creates groups, manages their members and links them to objects (`groups-routes.ts`).
  * - `POST reputation/…` sets reputation's points and thresholds, and gives kudos (`reputation-panel.ts`).
  *
- * Pages: `/-/account/`, and `/-/dashboard/`, which lists every plugin's panels the viewer may open (`dashboard.ts`).
+ * Pages: `/-/account/`, each group's `/-/groups/<name>/`, and `/-/dashboard/`, which lists every plugin's panels the
+ * viewer may open (`dashboard.ts`).
  *
  * Accounts and sessions live in the D1 database bound as `SVARTZ_DB`; without one, the session cookie holds the
  * identity itself and nobody has an account. On a vault whose `callbackVault` is another vault, `start` forwards to
@@ -30,11 +32,12 @@ import {
   decodeRoutePath, type EnvReference, type PageRenderer, type PermissionDeclaration, type ServerContext, type ServerHandler,
   type ServerModuleFactory,
 } from "@svartz/core";
-import { accountPage, NAME_MAX_LENGTH, signedOutPage, type AccountView, type StatusCode } from "./account";
+import { accountPage, displayName, signedOutPage, type AccountView, type StatusCode } from "./account";
 import { AUTH_PERMISSIONS } from "./auth-permissions";
 import { chooserPage, expiredPage } from "./chooser";
 import { DASHBOARD_PAGE, dashboardPage, openableSections } from "./dashboard";
 import { usePermissions } from "./grants";
+import { accountGroups, groupsPage, groupsPanel, groupsRoute } from "./groups-routes";
 import { peoplePanel, peopleRoute } from "./people-panel";
 import { personByHandle } from "./people";
 import { handleScore, standingOf } from "./reputation";
@@ -45,8 +48,8 @@ import { seal, SESSION_SECRET_ENV, SESSION_SECRET_MIN_LENGTH, sessionSecret, uns
 import { endSession, isIdentity, readAccount, readCookie, readCurrentSession, readIdentity, sealSession, SESSION_COOKIE, useAdmins } from "./session";
 import {
   ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, endAccountSessions, handlesOf, hasAccount, linkIdentity,
-  profileByHandle, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity, updateProfile,
-  type Database, type PublicProfile,
+  profileByHandle, profilesById, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity,
+  updateProfile, type Database, type PublicProfile,
 } from "./store";
 import { builtUserPages, DEFAULT_USER_PAGE_FOLDER, hasUserPage, useUserPages, userPageLocation, type UserPages } from "./user-pages";
 
@@ -70,6 +73,15 @@ export { postReputation, type Recipient, type ReputationEvent } from "./reputati
 export async function findProfile(handle: string, env: Readonly<Record<string, unknown>>): Promise<PublicProfile | undefined> {
   const db = await accountsDatabase(env);
   return db && profileByHandle(db, handle);
+}
+
+/**
+ * The public profiles of the accounts with ids `ids`, by id, for plugins that stored an account id, such as a commit's
+ * `Svartz-Account` trailer. Ids no account has are absent, and so is every id when the site binds no `SVARTZ_DB`.
+ */
+export async function findProfiles(ids: readonly string[], env: Readonly<Record<string, unknown>>): Promise<Map<string, PublicProfile>> {
+  const db = await accountsDatabase(env);
+  return db ? profilesById(db, ids) : new Map();
 }
 
 /** One provider's OAuth app. The secret is named by environment variable, never inlined. */
@@ -354,12 +366,6 @@ function withStatus(path: string, url: URL, status: StatusCode, provider?: Provi
   return `${target.pathname}${target.search}`;
 }
 
-/** A display name: trimmed, at most {@link NAME_MAX_LENGTH} characters, with no control characters. */
-function displayName(input: string): string | undefined {
-  const name = input.trim();
-  return name && [...name].length <= NAME_MAX_LENGTH && !/\p{Cc}/u.test(name) ? name : undefined;
-}
-
 /** What an account form needs: the request, the signed-in session and the database. */
 interface AccountChange {
   readonly request: Request;
@@ -443,7 +449,7 @@ const ROUTE = /^\/(?:(start|callback)\/([^/]+)|(me)|(sign-out)|(handle))\/$/;
 const ACCOUNT_ROUTE = /^\/account\/(?:(profile|unlink|sign-out-everywhere)|link\/([^/]+))\/$/;
 const USER_ROUTE = /^\/users\/([^/]+)\/$/;
 
-/** The `auth` server module: `server: { module, options, pages: ["account", "dashboard"] }` with {@link AuthOptions}. */
+/** The `auth` server module: `server: { module, options, pages: ["account", "dashboard", "groups"] }` with {@link AuthOptions}. */
 const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefined> = (options, data) => {
   // The plugin is eager, so this runs before the site answers anything: every account read resolves `admin` from
   // this deployment's config, and every `can()` its permission catalogue.
@@ -496,6 +502,7 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
 
   const page: PageRenderer = async (request, context) => {
     if (context.path.startsWith(`${DASHBOARD_PAGE}/`)) return dashboardPage(request, context, await readAccount(request, context.env));
+    if (context.path.startsWith("groups/")) return groupsPage(request, context);
     if (context.path !== "account/") return undefined;
     // Without accounts, or without the secret that opens sessions, there is no account to show.
     const db = await accountsDatabase(context.env);
@@ -521,6 +528,7 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
       userPage,
       providers,
       query: url.searchParams,
+      groups: await accountGroups(db, session.account, context, url.searchParams),
       actions: {
         profile: `${linkBase}/account/profile/?returnTo=${encodeURIComponent(here)}`,
         unlink: `${context.base}/account/unlink/`,
@@ -542,8 +550,10 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
       if (request.method !== "GET") return failure(405, "method_not_allowed", "Use GET.", { allow: "GET" });
       return userPageStanding(request, url, context, runsSignIn ? pages : builtUserPages());
     }
-    const people = await peopleRoute(request, path, context, vaultsOf(context)) ?? await reputationRoute(request, path, context);
-    if (people) return people;
+    const changed = await peopleRoute(request, path, context, vaultsOf(context))
+      ?? await groupsRoute(request, path, context, vaultsOf(context))
+      ?? await reputationRoute(request, path, context);
+    if (changed) return changed;
     const user = USER_ROUTE.exec(path);
     if (user) {
       if (request.method !== "GET") return failure(405, "method_not_allowed", "Use GET.", { allow: "GET" });
@@ -593,7 +603,10 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
   return {
     handle,
     page,
-    dashboard: { title: "Accounts", panels: [peoplePanel({ vaults: vaultsOf, paths: data?.paths ?? [] }), reputationPanel, kudosPanel] },
+    dashboard: {
+      title: "Accounts",
+      panels: [peoplePanel({ vaults: vaultsOf, paths: data?.paths ?? [] }), groupsPanel({ vaults: vaultsOf, paths: data?.paths ?? [] }), reputationPanel, kudosPanel],
+    },
   };
 };
 

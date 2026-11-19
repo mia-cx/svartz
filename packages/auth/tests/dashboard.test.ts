@@ -47,7 +47,7 @@ function site(db: Database) {
     vault: { id: "notes", mountPath: "/notes", site: { title: "Notes" } },
     servers: [
       {
-        id: "auth", eager: true, pages: ["account", "dashboard"], load: () => import("../src/server"),
+        id: "auth", eager: true, pages: ["account", "dashboard", "groups"], load: () => import("../src/server"),
         options: {
           providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
           admins: [`github:${ADMIN}`], permissions: PERMISSIONS, vaults: ["notes", "docs"],
@@ -117,7 +117,7 @@ describe("/-/dashboard/", () => {
     const moderator = await signUp(tour, 3, "mod");
     await grant(tour.post, admin, { actor: "mod", permission: "moderation:reports:read" });
 
-    expect(text(await tour.page(DASHBOARD, admin))).toBe("Dashboard Accounts People & permissions Reputation Kudos Moderation Reports");
+    expect(text(await tour.page(DASHBOARD, admin))).toBe("Dashboard Accounts People & permissions Groups Reputation Kudos Moderation Reports");
     expect(text(await tour.page(DASHBOARD, moderator))).toBe("Dashboard Moderation Reports");
     expect(await tour.page(`${DASHBOARD}moderation/reports/`, moderator)).toEqual({ title: "Reports", html: expect.stringContaining("<h1>Reports</h1>") });
     expect(await tour.page(PANEL, moderator)).toBeUndefined();
