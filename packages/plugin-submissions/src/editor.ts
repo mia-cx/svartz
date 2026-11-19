@@ -740,8 +740,11 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
   function restore({ markdown, note: text, ...rest }: Draft) {
     view?.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: markdown } });
     note.value = text;
-    if (rest.kind === "edit") sourceHash = rest.sourceHash;
-    else if (title && folder) {
+    if (rest.kind === "edit") {
+      sourceHash = rest.sourceHash;
+      // Written against another source, it is sent without a SHA the branch could hold, so it can only go to review.
+      if (destination === "commit" && loaded?.hash !== sourceHash) showDestination("pull-request");
+    } else if (title && folder) {
       title.value = rest.title;
       folder.value = rest.folder;
       askDestination();

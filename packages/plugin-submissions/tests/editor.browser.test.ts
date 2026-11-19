@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import "../src/browser.css";
-import type { BrowserOptions } from "../src/api";
+import type { BrowserOptions, Destination } from "../src/api";
 import { mount } from "../src/browser";
 import { readDraft, storeDraft } from "../src/draft";
 import { mount as mountAuth } from "@svartz/auth/browser";
@@ -896,9 +896,9 @@ describe("drafts", () => {
     const NEWER = `${SOURCE}Newer change.\r\n`;
 
     /** Leave an edit of the guide unsent, then reopen the editor once the site serves a newer source. */
-    async function reopenChanged() {
+    async function reopenChanged(destination: Destination = "pull-request") {
       let markdown = SOURCE;
-      serve(() => Response.json({}), () => Response.json({ markdown }));
+      serve(() => Response.json({}), () => Response.json({ markdown, sha: SOURCE_SHA, destination }));
       await openEditor();
       // Navigation closes the panel and keeps the edit.
       if (unmount) unmount();
@@ -931,6 +931,16 @@ describe("drafts", () => {
       const [, init] = vi.mocked(globalThis.fetch).mock.calls.find(([url]) => String(url).endsWith("/edit/"))!;
       expect(JSON.parse(String(init!.body))).toMatchObject({ sha: "0".repeat(40) });
     });
+
+    it("says the restored draft goes to review, even for a reader whose edits go live", async () => {
+      await reopenChanged("commit");
+      await expect.element(page.getByRole("button", { name: "Publish" })).toBeVisible();
+      await page.getByRole("button", { name: "Restore anyway" }).click();
+
+      await expect.element(page.getByRole("button", { name: "Open pull request" }))
+        .toHaveAccessibleDescription("Goes to review before it goes live.");
+    });
+
     it("forgets the draft the reader discards", async () => {
       await reopenChanged();
       await page.getByRole("button", { name: "Discard edit" }).click();
