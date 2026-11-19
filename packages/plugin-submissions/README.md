@@ -272,6 +272,8 @@ With sync, each save an account makes earns that account [reputation](../../docs
 
 Only the site's own record of a save names who earns: the commit the site made for it, or the pull request it opened. A commit's trailer, author and committer are whatever its maker wrote, so they count for nothing, and a commit or pull request the site has no save for earns nobody anything, whoever it claims to be from. A save that found its content already on the branch made no commit, so it is not recorded and earns nothing. Saves made before reputation existed, and guests' saves, earn nothing.
 
+A moderator who [reverts a page](../../docs/history.md#reverting-a-page) takes back what the saves since the restored revision earned, and the revert, recorded as their save through `@svartz/plugin-submissions/restore`, earns nothing itself.
+
 ### My submissions
 
 On a site with [accounts](../../docs/auth.md) and sync, the [dashboard](../../docs/auth.md#the-dashboard) has a **My submissions** panel for every signed-in reader, at `/-/dashboard/submissions/mine/`. It lists the pull requests their saves opened: open ones first, then the rest, newest first, 20 a page. Each shows its page, whether it is in review, approved, waiting on changes, merged or closed, and how many comments it has. As on GitHub, each reviewer's latest approval or request for changes counts: an open submission waits on changes while any reviewer's does, until that reviewer approves or the review is dismissed, and is approved once a reviewer approves and none asks for changes.
