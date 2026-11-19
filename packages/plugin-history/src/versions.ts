@@ -122,19 +122,33 @@ function component(page: VersionsPage, site: string, body = ""): string {
  * show, as page artifacts and routes, and the attachments those versions reference that the build doesn't publish
  * already. Answers the routes of those notes, which link their versions. Fails the build when the vault isn't in a
  * git repository with its whole history, or a version page's address is taken.
+ *
+ * Every exit of a build that walked every note prunes the cache to the versions it used, so it holds only versions
+ * that show. A build that fails part way leaves it as it is: it never reached the versions it would have reused, and
+ * removing them would only make the next build compile them again. What it keeps of a version hidden since is never
+ * served, since visibility is decided before the cache is read, and was published once from the history the build
+ * reads anyway.
  */
 export async function emitVersions(ctx: PluginContext, maxVersions: number): Promise<string[]> {
+  const cache = VersionCache.for(ctx);
+  let walked = false;
+  try {
+    const linked = await buildVersions(ctx, maxVersions, cache);
+    walked = true;
+    return linked;
+  } finally {
+    if (walked) await cache.prune();
+  }
+}
+
+async function buildVersions(ctx: PluginContext, maxVersions: number, cache: VersionCache): Promise<string[]> {
   const index = ctx.index;
   if (!index) return [];
   const vault = ctx.config.id;
   const frontmatter = new Map(ctx.files.map((file) => [file.slug, file.frontmatter]));
   const unlocked = index.entries.filter((entry) => !entry.locked);
   const opted = unlocked.filter((entry) => /\.md$/i.test(entry.path) && frontmatter.get(entry.slug)?.[VERSIONS_FIELD] === true);
-  const cache = VersionCache.for(ctx);
-  if (opted.length === 0) {
-    await cache.prune();
-    return [];
-  }
+  if (opted.length === 0) return [];
 
   const repository = await repositoryOf(ctx.config.path);
   if (!repository) fail(`vault "${vault}" shows previous versions, but ${ctx.config.path} isn't in a git repository`);
@@ -311,7 +325,6 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
   const bytes = await readFiles(repository.root, snapshots.map(([, blob]) => blob));
   snapshots.forEach(([key], index) => asset(key, bytes[index]));
 
-  await cache.prune();
   console.info(`[history] vault "${vault}": compiled ${counts.compiled} ${counts.compiled === 1 ? "version" : "versions"}, reused ${counts.reused} from the cache`);
   ctx.index = { ...index, routes: { ...index.routes, all: [...new Set([...index.routes.all, ...routes])].sort() } };
   return linked;

@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { resolveConfig } from "@svartz/config";
 import { getCompilerContributions, runStages, type PluginContext } from "@svartz/core";
-import { createCorePlugins, roamFlavoredMarkdown } from "@svartz/plugins";
+import { citations, createCorePlugins, roamFlavoredMarkdown } from "@svartz/plugins";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { history } from "../src/index";
 
@@ -423,10 +423,12 @@ describe("the version cache", () => {
     const repo = await threeVersions();
     await build(repo.vault);
 
-    expect((await build(repo.vault, [history({ source: "git" })], { site: { title: "Renamed blog" } })).cache).toEqual({ compiled: 3, reused: 0 });
+    // Each build after this one keeps the renamed site, so only the change it makes compiles the versions again.
+    const renamed = { site: { title: "Renamed blog" } };
+    expect((await build(repo.vault, [history({ source: "git" })], renamed)).cache).toEqual({ compiled: 3, reused: 0 });
 
     await repo.write("posts/other.md", "---\ntitle: Other\nslug: elsewhere\n---\n\nAnother post.\n");
-    const moved = await build(repo.vault);
+    const moved = await build(repo.vault, [history({ source: "git" })], renamed);
     const shas = (await exec("git", ["-C", repo.root, "log", "--format=%h", "--abbrev=7"])).stdout.trim().split("\n");
     expect(moved.cache).toEqual({ compiled: 3, reused: 0 });
     // The note's `slug` moves it within its folder, to `/posts/elsewhere/`.
@@ -434,7 +436,7 @@ describe("the version cache", () => {
 
     software.fingerprint = "svartz-2";
     try {
-      expect((await build(repo.vault)).cache).toEqual({ compiled: 3, reused: 0 });
+      expect((await build(repo.vault, [history({ source: "git" })], renamed)).cache).toEqual({ compiled: 3, reused: 0 });
     } finally {
       software.fingerprint = "svartz-1";
     }
@@ -487,6 +489,59 @@ describe("the version cache", () => {
     expect(warm.cache).toEqual({ compiled: 2, reused: 0 });
     expect(versionPages(warm)).toEqual(versionPages(cold));
     expect([...versionPages(warm).values()].join("")).not.toContain('type="checkbox"');
+  });
+
+  // Proves a file a plugin reads while compiling counts by content: a changed bibliography compiles the versions again
+  // with its new entry, and an unchanged one lets them be reused. No note links it, so only its path was in the key.
+  it("compiles the versions again when a bibliography they cite changes, and only then", async () => {
+    const repo = await repository();
+    const bibliography = (title: string) => repo.write("refs.bib", `@article{doe2020,\n  author = {Doe, Jane},\n  title = {${title}},\n  year = {2020}\n}\n`);
+    await bibliography("First findings");
+    for (const wording of ["Research [@doe2020].", "More research [@doe2020]."]) {
+      await repo.write("posts/hello.md", post(wording));
+      await repo.commit(`Say ${wording}`);
+    }
+    const plugins = () => [history({ source: "git" }), citations({ bibliographyFile: "refs.bib" })];
+    const shas = (await exec("git", ["-C", repo.root, "log", "--format=%h", "--abbrev=7"])).stdout.trim().split("\n");
+
+    expect((await build(repo.vault, plugins())).cache).toEqual({ compiled: 2, reused: 0 });
+    expect((await build(repo.vault, plugins())).cache).toEqual({ compiled: 0, reused: 2 });
+
+    await bibliography("Revised findings");
+    const revised = await build(repo.vault, plugins());
+    expect(revised.cache).toEqual({ compiled: 2, reused: 0 });
+    expect(revised.page(`/posts/hello/versions/${shas[1]}/`)).toContain("Revised findings");
+  });
+
+  // Proves a build that fails part way keeps the cache it found: the next build reuses what the failed one never
+  // reached, then prunes what it doesn't use.
+  it("keeps the cache when a build fails, and prunes it on the next one that finishes", async () => {
+    const repo = await repository();
+    for (const wording of ["One.", "Two, BREAKS-THE-PLUGIN.", "Three."]) {
+      await repo.write("posts/hello.md", post(wording));
+      await repo.commit(`Say ${wording}`);
+    }
+    /** A plugin that fails on any file holding the marker, fatally or not. */
+    const breaking = (fatal: boolean) => ({
+      id: "breaking",
+      transformOfm: {
+        options: { fatal },
+        run: (ctx: PluginContext) => {
+          if (ctx.files.some(({ content }) => content.includes("BREAKS-THE-PLUGIN"))) throw new Error("can't read this");
+        },
+      },
+    });
+
+    // The marked version shows without its rendered page, and isn't cached.
+    expect((await build(repo.vault, [history({ source: "git" }), breaking(false)])).cache).toEqual({ compiled: 3, reused: 0 });
+    const kept = await entries(repo);
+    expect(kept).toHaveLength(2);
+
+    await expect(build(repo.vault, [history({ source: "git" }), breaking(true)])).rejects.toThrow();
+    expect(await entries(repo)).toEqual(expect.arrayContaining(kept));
+
+    expect((await build(repo.vault, [history({ source: "git" }), breaking(false)])).cache).toEqual({ compiled: 1, reused: 2 });
+    expect(await entries(repo)).toEqual(kept);
   });
 
   it("compiles a version that failed again on the next build", async () => {
