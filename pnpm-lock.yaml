@@ -398,6 +398,9 @@ importers:
         specifier: workspace:*
         version: link:../plugins
     devDependencies:
+      '@svartz/config':
+        specifier: workspace:*
+        version: link:../config
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.13

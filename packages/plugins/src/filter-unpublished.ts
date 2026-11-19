@@ -2,9 +2,10 @@
 import { randomBytes } from "node:crypto";
 import { minimatch } from "minimatch";
 import { extname } from "node:path";
-import { definePlugin, type ProcessedFile } from "@svartz/core";
+import { definePlugin, type ProcessedFile, type ResolvedConfig } from "@svartz/core";
 import { referencedAssets } from "./internal/asset-references";
 import { publicationOverride } from "./internal/datetime";
+import { shouldIgnore } from "./internal/ignore";
 
 const NOTE_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
 
@@ -15,26 +16,38 @@ function isNote(file: ProcessedFile): boolean {
   return NOTE_EXTENSIONS.has(file.extension ?? extname(file.path).toLowerCase());
 }
 
+/**
+ * Whether the build publishes a note at `path` inside the vault with `frontmatter`: discovery reads its folder, and
+ * the vault's include and exclude patterns let it through and it isn't a draft, unless a publication date publishes
+ * it anyway, and it isn't private. A published note may still be password-protected. Page history judges a note's
+ * earlier versions with it, at the paths they had then.
+ */
+export function publishesNote(
+  config: Pick<ResolvedConfig, "include" | "exclude" | "publicationMode" | "frontmatter">,
+  path: string,
+  frontmatter: Readonly<Record<string, unknown>> | undefined,
+): boolean {
+  if (path.replaceAll("\\", "/").split("/").some(shouldIgnore)) return false;
+  let published = (config.publicationMode !== "inclusion" || matches(path, config.include)) && !matches(path, config.exclude);
+  if (frontmatter?.draft === true) published = false;
+  if (publicationOverride(frontmatter, config.frontmatter.publishedField) !== undefined) published = true;
+  return published && frontmatter?.private !== true;
+}
+
+/**
+ * Whether the build may publish the attachment at `path` inside the vault: discovery reads its folder and the
+ * exclude patterns let it through. The build publishes it only once a published note references it.
+ */
+export function keepsAttachment(config: Pick<ResolvedConfig, "exclude">, path: string): boolean {
+  return !path.replaceAll("\\", "/").split("/").some(shouldIgnore) && !matches(path, config.exclude);
+}
+
 export const filterUnpublished = definePlugin(() => ({
   id: "core:filter-unpublished",
 
   filterUnpublished: {
     run(ctx) {
-      const { include, exclude, frontmatter } = ctx.config;
-      const inclusion = ctx.config.publicationMode === "inclusion";
-      const publishedNotes = ctx.files.filter((file) => {
-        if (!isNote(file)) return false;
-
-        let published = (!inclusion || matches(file.path, include)) &&
-          !matches(file.path, exclude);
-        if (file.frontmatter?.draft === true) published = false;
-
-        if (publicationOverride(file.frontmatter, frontmatter.publishedField) !== undefined) {
-          published = true;
-        }
-        if (file.frontmatter?.private === true) published = false;
-        return published;
-      });
+      const publishedNotes = ctx.files.filter((file) => isNote(file) && publishesNote(ctx.config, file.path, file.frontmatter));
 
       let protectedCount = 0;
       for (const file of publishedNotes) {
@@ -74,7 +87,7 @@ export const filterUnpublished = definePlugin(() => ({
       ctx.meta.set("svartz:protectedGroupTokens", groupTokens);
 
       const assets = ctx.files.filter(
-        (file) => !isNote(file) && !matches(file.path, exclude),
+        (file) => !isNote(file) && keepsAttachment(ctx.config, file.path),
       );
       const roamMedia = ctx.meta.get("svartz:roamMedia") === true;
       const usedAssets = referencedAssets(publishedNotes, assets, roamMedia);

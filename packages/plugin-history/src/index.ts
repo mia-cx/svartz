@@ -9,6 +9,13 @@
  * The vault needs the submissions plugin with `sync` set, which makes it a Cloudflare vault. A History action joins
  * Edit beside every page with a history, and each account's user page lists its contributions below the note. Whoever
  * holds `history:reverts:write` on a page can revert it to an earlier revision from its history.
+ *
+ * A vault on any target, a static blog included, can instead publish the previous versions of the notes that set
+ * `versions: true`, read from its own git repository when it builds:
+ *
+ * ```ts
+ * plugins: [history({ source: "git" })]
+ * ```
  */
 import { fileURLToPath } from "node:url";
 import type { AuthServerOptions } from "@svartz/auth/server";
@@ -18,12 +25,16 @@ import { publishedAttachments, sharedAttachmentNames } from "@svartz/plugins";
 import { alternateNames } from "@svartz/plugins/routes";
 import { PAGES, PLUGIN_ID, type BrowserOptions, type HistoryData } from "./api";
 import { PERMISSIONS } from "./permissions";
+import type { VersionsBrowserOptions } from "./versions-browser";
+import { DEFAULT_MAX_VERSIONS, DISCOVERED, emitVersions } from "./versions";
 
 export type { BrowserOptions } from "./api";
+export { VERSIONS_FIELD } from "./versions";
 
 // Beside this module in dist.
 const SERVER_MODULE = fileURLToPath(new URL("./server.js", import.meta.url));
 const BROWSER_SCRIPT = fileURLToPath(new URL("./browser.js", import.meta.url));
+const VERSIONS_BROWSER_SCRIPT = fileURLToPath(new URL("./versions-browser.js", import.meta.url));
 const STYLESHEET = fileURLToPath(new URL("./browser.css", import.meta.url));
 
 function fail(message: string): never {
@@ -44,8 +55,56 @@ function userPagesOf(ctx: PluginContext): string | undefined {
   return `${ctx.config.mountPath ?? ""}/${options.userPages}/`;
 }
 
-/** Page history and Recent changes, as plugin pages, and a History action on every published Markdown page. */
-export function history(): NormalizedSvartzPlugin {
+/** How a vault's history is read. */
+export type HistoryOptions =
+  /** Live, on every request, from the submissions plugin's GitHub mirror: the default. */
+  | { readonly source?: "github" }
+  /**
+   * At build time, from the vault's own git repository, as prerendered pages: the previous versions of every note
+   * that sets `versions: true`, at most `maxVersions` of each (default 50).
+   */
+  | { readonly source: "git"; readonly maxVersions?: number };
+
+/**
+ * Page history. By default, page history and Recent changes as plugin pages, and a History action on every published
+ * Markdown page. With `source: "git"`, prerendered previous versions of the notes that ask for them, on any target.
+ */
+export function history(options: HistoryOptions = {}): NormalizedSvartzPlugin {
+  return options.source === "git" ? versions(options.maxVersions ?? DEFAULT_MAX_VERSIONS) : live();
+}
+
+/** Previous versions read from git at build time, and a Previous versions action on each note that has them. */
+function versions(maxVersions: number): NormalizedSvartzPlugin {
+  if (!Number.isInteger(maxVersions) || maxVersions < 2) fail(`maxVersions must be a whole number of at least 2, not ${maxVersions}`);
+  return definePlugin(() => ({
+    id: PLUGIN_ID,
+    filterUnpublished: {
+      // Before core:filter-unpublished drops the attachments no published note references now: an earlier version may.
+      run(ctx) {
+        ctx.meta.set(DISCOVERED, ctx.files.filter((file) => !/\.(?:md|mdx|svx)$/i.test(file.path)));
+      },
+    },
+    emitArtifacts: {
+      // Before core:emit-artifacts writes the route index and the page artifacts, which this adds to.
+      options: { fatal: true },
+      async run(ctx) {
+        const pages = await emitVersions(ctx, maxVersions);
+        // A vault without version pages builds exactly as it would without the plugin.
+        if (pages.length === 0) return;
+        const compiler = getCompilerContributions(ctx);
+        compiler.browserResources.set(PLUGIN_ID, {
+          id: PLUGIN_ID,
+          kind: "script",
+          importId: VERSIONS_BROWSER_SCRIPT,
+          options: { pages } satisfies VersionsBrowserOptions,
+        });
+        compiler.browserResources.set(`${PLUGIN_ID}:css`, { id: `${PLUGIN_ID}:css`, kind: "css", importId: STYLESHEET });
+      },
+    },
+  }))();
+}
+
+function live(): NormalizedSvartzPlugin {
   const plugin: NormalizedSvartzPlugin = definePlugin(() => ({
     id: PLUGIN_ID,
     server: { module: SERVER_MODULE, pages: [...PAGES] },
