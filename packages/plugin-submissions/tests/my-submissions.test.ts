@@ -91,9 +91,16 @@ function quietGitHub() {
   }));
 }
 
-async function createSite() {
-  const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
-  disposers.push(() => miniflare.dispose());
+/**
+ * A site on `build`, on a fresh D1, or on `miniflare`'s: `createSite(next, site.miniflare)` is the site after a deploy
+ * of `next`, with its accounts, sessions and mirror.
+ */
+async function createSite(build: BuildData = BUILD, miniflare?: Miniflare) {
+  if (!miniflare) {
+    const fresh = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
+    disposers.push(() => fresh.dispose());
+    miniflare = fresh;
+  }
   const db = await miniflare.getD1Database("SVARTZ_DB") as unknown as { prepare(sql: string): { bind(...values: unknown[]): { all(): Promise<{ results: Record<string, unknown>[] }> } } };
   const options: ServerOptions = {
     repo: REPO,
@@ -121,7 +128,7 @@ async function createSite() {
         // User pages live in this vault; the build's notes (below) hold Grace's.
         data: { permissions: [] },
       },
-      { id: "submissions", load: () => import("../src/server"), options, data: BUILD },
+      { id: "submissions", load: () => import("../src/server"), options, data: build },
     ],
   }, {
     privateEnv: {
@@ -156,8 +163,8 @@ async function createSite() {
     while (background.length > 0) await Promise.all(background.splice(0));
   };
   disposers.unshift(settle);
-  const rows = async (sql: string) => (await db.prepare(sql).bind().all()).results;
-  return { request, page, settle, rows };
+  const rows = async (sql: string, ...values: unknown[]) => (await db.prepare(sql).bind(...values).all()).results;
+  return { request, page, settle, rows, miniflare };
 }
 type Site = Awaited<ReturnType<typeof createSite>>;
 
@@ -493,6 +500,31 @@ describe("follow-up edits", () => {
     expect((await site.request(`${BASE}/follow-up/source/?pull=42`, { cookie: bob })).status).toBe(404);
     expect((await site.request(`${BASE}/follow-up/`, { method: "POST", cookie: bob, body: JSON.stringify({ pull: 42, markdown: FOLLOW_UP, sha: GUIDE_SHA }) })).status).toBe(404);
     expect((await site.request(`${BASE}/follow-up/source/?pull=42`)).status).toBe(401);
+  });
+
+  // Proves permissions are checked on the page the file publishes as now: once the guide moves, a deny on its new
+  // page refuses the submitter's follow-ups, though the submission was saved under the old address.
+  it("checks follow-ups against the page the file publishes as now", async () => {
+    const before = await createSite();
+    const grace = await graceSubmits(before);
+    await before.settle();
+    const moved = { link: "Guide", title: "Guide", slug: "protected-guide", path: "guide.md", href: "/wiki/protected-guide/" };
+    const site = await createSite({
+      ...BUILD,
+      pages: { [moved.href]: "content/guide.md" },
+      routes: { [moved.slug]: { slug: moved.slug, href: moved.href } },
+      links: [moved, ...BUILD.links.filter(({ path }) => path !== moved.path)],
+    }, before.miniflare);
+    const [{ id }] = await site.rows("SELECT id FROM auth_accounts WHERE handle = 'grace'") as [{ id: string }];
+    await site.rows(`INSERT INTO auth_grants (actor_type, actor_id, object, permission, value, updated_at)
+      VALUES ('account', ?, 'page:wiki/protected-guide', 'submissions:pull-requests:write', 'deny', '2026-11-19T00:00:00.000Z')`, id);
+    const replay = replayGitHub([], INSTALLATION_TOKEN);
+
+    const source = await site.request(`${BASE}/follow-up/source/?pull=42`, { cookie: grace });
+    const saved = await site.request(`${BASE}/follow-up/`, { method: "POST", cookie: grace, body: JSON.stringify({ pull: 42, markdown: FOLLOW_UP, sha: GUIDE_SHA }) });
+
+    expect([source.status, saved.status]).toEqual([403, 403]);
+    expect(replay.requests).toEqual([]);
   });
 
   // Proves a follow-up never lands where it mustn't: not on a closed or merged pull request, not on a branch that

@@ -78,7 +78,6 @@ const json = (status: number, error: string, message: string) =>
   Response.json({ error, message }, { status, headers: { "cache-control": "no-store" } });
 
 export function createMySubmissions(setup: MySubmissionsSetup) {
-  const notes = new Map(setup.links.map((link) => [link.href, link]));
   const byPath = new Map(setup.links.map((link) => [link.path, link]));
 
   /** `/-/dashboard/submissions/mine/`, from the plugin's `/_svartz/submissions` base. */
@@ -88,12 +87,14 @@ export function createMySubmissions(setup: MySubmissionsSetup) {
   const vaultPath = ({ path }: Pick<EditRecord, "path">) => (setup.vaultRoot ? path.slice(setup.vaultRoot.length + 1) : path);
   /** An edit's `page` is the edited note's route, which starts with a slash; a new page's is its repository path. */
   const kindOf = ({ page }: Pick<EditRecord, "page">) => (page.startsWith("/") ? "edit" as const : "new" as const);
-  /** The page the submission writes, as permissions name it. */
-  const slugOf = (edit: EditRecord) => (kindOf(edit) === "edit" ? notes.get(edit.page)?.slug : undefined) ?? pathRoute(vaultPath(edit));
+  /** The page the file publishes as in this build, whatever address the submission was saved under. */
+  const publishedAs = (edit: Pick<EditRecord, "path">) => byPath.get(vaultPath(edit));
+  /** The page the submission writes, as permissions name it: as published now, or, for a file not published, its path's route. */
+  const slugOf = (edit: EditRecord) => publishedAs(edit)?.slug ?? pathRoute(vaultPath(edit));
   /** What the reader calls it: the published page's title, or the new page's name. */
   function titleOf(edit: Pick<EditRecord, "path">): string {
     const path = vaultPath(edit);
-    return byPath.get(path)?.title ?? path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/i, "");
+    return publishedAs(edit)?.title ?? path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/i, "");
   }
 
   async function access(account: Account, edit: EditRecord, context: ServerContext): Promise<Access> {
@@ -202,7 +203,8 @@ export function createMySubmissions(setup: MySubmissionsSetup) {
     const retry = query.get("retry");
     const mayEdit = stage === "open" && setup.committer !== undefined
       && await can(account, OPEN_PULL_REQUESTS, { vault: context.vault.id, page: slugOf(edit) }, context.env);
-    const page = kindOf(edit) === "edit" && notes.has(edit.page) ? setup.publicUrl(edit.page, request, context) : undefined;
+    const published = publishedAs(edit);
+    const page = published && setup.publicUrl(published.href, request, context);
     return submissionPage({
       number,
       title: titleOf(edit),
