@@ -820,6 +820,14 @@ describe("reputation for +1s", () => {
     // The page's list carries each comment author's reputation, to anyone: Ada's account's, and none for Grace.
     const listed = await (await site(`${ENDPOINT}/?page=garden`)).json() as { annotations: { id: string; reputation?: number }[] };
     expect(listed.annotations.map(({ id, reputation }) => ({ id, reputation }))).toEqual([{ id: "c1", reputation: 0.5 }, { id: "c2", reputation: undefined }]);
+
+    // A new comment answers with its author's reputation too, so its card shows it before any reload.
+    const posted = await site(`${ENDPOINT}/`, {
+      method: "POST", headers: { cookie: ada, origin: ORIGIN, "content-type": "application/json" },
+      body: JSON.stringify({ kind: "comment", page: "garden", anchor: anchor("roses", 0), body: "And then the tulips." }),
+    });
+    expect(posted.status).toBe(201);
+    expect(((await posted.json()) as { annotation: { reputation?: number } }).annotation.reputation).toBe(0.5);
   });
 
   describe("when a reader's +1 races their own changes to it", () => {

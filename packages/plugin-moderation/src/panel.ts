@@ -139,13 +139,15 @@ async function lookUp(context: PageContext, data: BuildData, viewer: Account | n
   const revertible = unique(asked.commits.flatMap(pagesOf));
 
   const openComments = ids("annotation", open).flatMap((id) => comments?.get(id) ?? []);
+  // Every listed comment's author shows with its reputation, a closed report's too.
+  const commentAuthors = unique(ids("annotation").flatMap((id) => comments?.get(id)?.author.id ?? []));
   // Annotations hides a comment only when it keeps them in the accounts database, beside the audit log.
   const hideable = commentsDatabase === ACCOUNTS_DATABASE_ENV ? openComments.filter((comment) => !comment.hidden) : [];
   const editAccounts = unique([...edits.commits.values(), ...edits.pulls.values()].flatMap((account) => account ?? []));
   const [hiding, authors, editors, reverting] = await Promise.all([
     hideable.length === 0 ? [] : settle("who may hide", canEach(viewer, HIDE_COMMENTS, hideable.map(({ page }) => ({ vault, page })), env), []),
     // Comments name their author by sign-in; the account it's linked to carries the reputation, and is the one to suspend.
-    openComments.length === 0 ? NO_PROFILES : settle("comments' authors", findProfilesByIdentity(unique(openComments.map(({ author }) => author.id)), env), NO_PROFILES),
+    commentAuthors.length === 0 ? NO_PROFILES : settle("comments' authors", findProfilesByIdentity(commentAuthors, env), NO_PROFILES),
     suspends ? settle("edits' accounts", findProfiles(editAccounts, env), NO_PROFILES) : NO_PROFILES,
     revertible.length === 0 ? [] : settle("who may revert", canEach(viewer, REVERT_PAGES, revertible.map((page) => ({ vault, page })), env), []),
   ]);

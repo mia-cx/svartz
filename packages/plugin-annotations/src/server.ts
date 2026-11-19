@@ -274,7 +274,13 @@ async function create(request: Request, url: URL, context: ServerContext, option
   const comment = readComment(write.input);
   if (typeof comment === "string") return failure(400, "invalid_annotation", comment);
   if (!await rights.comments(write.reader, comment.page, context)) return failure(403, "forbidden", "You can't comment on this page.");
-  return json({ annotation: await createComment(write.db, { vault: context.vault.id, ...comment, author: write.reader.identity }) }, 201);
+  const [annotation, accounts] = await Promise.all([
+    createComment(write.db, { vault: context.vault.id, ...comment, author: write.reader.identity }),
+    findProfilesByIdentity([write.reader.identity.id], context.env),
+  ]);
+  // As the page's list gives it, so the new comment's card shows its author's reputation at once.
+  const reputation = accounts.get(write.reader.identity.id)?.reputation;
+  return json({ annotation: reputation === undefined ? annotation : { ...annotation, reputation } }, 201);
 }
 
 /** `{ agreed }` sets the reader's **+1** on comment `id`, and answers `{ agreed, agreements }` with every agreement after it. */

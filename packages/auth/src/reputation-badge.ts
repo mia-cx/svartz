@@ -23,9 +23,21 @@ export function formatReputation(score: number): string {
 export const reputationLabel = (score: number): string => `Reputation ${whole.format(score)}`;
 
 /**
- * The badge as HTML, to follow an account's name after a space: `<span class="sv-reputation-badge" …>1,234</span>`. Its
- * text reads "Reputation 1,234", the word hidden from sight; its tooltip gives a shortened score in full.
+ * The badge's parts: what only assistive technology reads, and what everyone sees. A score shown whole reads as
+ * "Reputation 1,234"; a shortened one is read in full, "Reputation 12,500", while `12.5K` is shown.
+ */
+export function reputationBadgeParts(score: number): { readonly hidden: string; readonly shown: string; readonly shortened: boolean } {
+  const shown = formatReputation(score);
+  const shortened = shown !== whole.format(score);
+  return { hidden: shortened ? reputationLabel(score) : "Reputation ", shown, shortened };
+}
+
+/**
+ * The badge as HTML, to follow an account's name after a space: `<span class="sv-reputation-badge" …>1,234</span>`. A
+ * screen reader reads the score whole, and so does its tooltip.
  */
 export function reputationBadgeHtml(score: number): string {
-  return `<span class="${REPUTATION_BADGE_CLASS}" title="${reputationLabel(score)}"><span class="${REPUTATION_BADGE_CLASS}-label">Reputation </span>${formatReputation(score)}</span>`;
+  const { hidden, shown, shortened } = reputationBadgeParts(score);
+  const visible = shortened ? `<span aria-hidden="true">${shown}</span>` : shown;
+  return `<span class="${REPUTATION_BADGE_CLASS}" title="${reputationLabel(score)}"><span class="${REPUTATION_BADGE_CLASS}-label">${hidden}</span>${visible}</span>`;
 }

@@ -16,11 +16,21 @@ describe("an account's reputation beside its name", () => {
     expect(formatReputation(score)).toBe(shown);
   });
 
-  it("reads as \"Reputation\" and the score, with the whole score in its tooltip", () => {
+  // A screen reader reads what isn't aria-hidden: the visually hidden label, and the shown score unless it is shortened.
+  const read = (html: string) => html.replace(/<span aria-hidden="true">[^<]*<\/span>/g, "").replace(/<[^>]+>/g, "");
+
+  it("reads as \"Reputation\" and the score", () => {
+    const html = reputationBadgeHtml(1_234);
+
+    expect(read(html)).toBe("Reputation 1,234");
+    expect(html).toContain('title="Reputation 1,234"');
+  });
+
+  it("reads a shortened score whole, and shows it short", () => {
     const html = reputationBadgeHtml(12_500);
 
-    expect(html.replace(/<[^>]+>/g, "")).toBe("Reputation 12.5K");
+    expect(read(html)).toBe("Reputation 12,500");
+    expect(html).toContain('<span aria-hidden="true">12.5K</span>');
     expect(html).toContain('title="Reputation 12,500"');
-    expect(html).toContain('class="sv-reputation-badge-label">Reputation </span>');
   });
 });

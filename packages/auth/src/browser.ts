@@ -5,11 +5,17 @@
 import type { BrowserScriptContext } from "@svartz/core";
 import { PROVIDER_MARKS, type Mark } from "./marks";
 import type { ProviderId } from "./providers";
-import { formatReputation, REPUTATION_BADGE_CLASS, reputationLabel } from "./reputation-badge";
+import { REPUTATION_BADGE_CLASS, reputationBadgeParts, reputationLabel } from "./reputation-badge";
 
 /** An account's reputation as a badge to follow its name, as `reputationBadgeHtml` renders it on the server. */
 export function reputationBadge(score: number): HTMLSpanElement {
-  const badge = element("span", REPUTATION_BADGE_CLASS, element("span", `${REPUTATION_BADGE_CLASS}-label`, "Reputation "), formatReputation(score));
+  const { hidden, shown, shortened } = reputationBadgeParts(score);
+  let visible: Node | string = shown;
+  if (shortened) {
+    visible = element("span", "", shown);
+    (visible as HTMLElement).setAttribute("aria-hidden", "true");
+  }
+  const badge = element("span", REPUTATION_BADGE_CLASS, element("span", `${REPUTATION_BADGE_CLASS}-label`, hidden), visible);
   badge.title = reputationLabel(score);
   return badge;
 }
