@@ -18,6 +18,8 @@ export const upperCase = definePlugin(() => ({
 }));
 ```
 
+A plugin made from options sets `options` to the plain data it was made from, such as its options merged over its defaults. Hooks close over those values, which can't be read from outside, and `@svartz/plugin-history`'s version cache compiles versions again only when a plugin's `options` or code change: a plugin whose output depends on a value it closes over must put it in `options`. Deleting `.svartz/vaults/<id>/cache` forces every version to compile again.
+
 A plugin with `server: { module, options }` answers requests under `/_svartz/<plugin-id>/` at runtime. Its module default-exports a `ServerModuleFactory`; `createServerHandle` builds the SvelteKit `handle` that routes to it. See [server plugins](../../docs/server-plugins.md).
 
 The runner receives one `ResolvedConfig` per vault. `ProcessedFile` carries the candidate note through discovery, frontmatter, publication, route allocation, and transforms. The final `Index` contains published entries, search documents, graph, backlinks, tags, folders, routes, and reachable assets. `createVaultView` exposes that published index to host routes and themes.

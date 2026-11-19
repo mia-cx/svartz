@@ -196,7 +196,9 @@ A cached version is reused only while everything its compile reads is unchanged:
 
 Changing any of these compiles the versions it affects again. Adding, moving or retitling a note, or changing its frontmatter, compiles every version again; editing the body of the note whose versions they are compiles only its new version. Which versions show is decided before the cache is read, on every build, so a version hidden or excluded since is never served from it. The cache holds only versions that showed, and the build removes every entry it didn't use. A version a plugin couldn't read isn't cached, so the next build tries it again.
 
-Deleting the folder is always safe: the next build compiles every version again.
+A plugin's options count through the plugin's `options` field, which every option-taking plugin in `@svartz/plugins` sets. A plugin that keeps the values its output depends on only inside its hooks' closures is invisible to the cache, so changing them reuses stale versions: such a plugin must put them in `options` (see [Create a plugin](../vaults/docs/guides/create-plugin.md)).
+
+Deleting `.svartz/vaults/<id>/cache` is always safe, and forces a full recompile: the next build compiles every version again.
 
 ### Building in CI
 
