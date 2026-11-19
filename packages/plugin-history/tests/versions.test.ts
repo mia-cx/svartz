@@ -293,4 +293,70 @@ describe("previous versions from git", () => {
       /\[history\] vault "blog" shows previous versions, but its repository is a shallow clone .*Fetch the full history: with actions\/checkout, set fetch-depth: 0/,
     );
   });
+
+  // Proves a post's name is read as a name, never a pattern: `a?.md` lists its own versions, not those of `ab.md`,
+  // which the pattern would match.
+  it("reads a post's history by its exact name, wildcards and all", async () => {
+    const repo = await repository();
+    await repo.write("posts/a?.md", post("A question."));
+    await repo.write("posts/ab.md", post("SECRET-OTHER-POST first.", "versions: false"));
+    await repo.commit("Start both");
+    await repo.write("posts/ab.md", post("SECRET-OTHER-POST second.", "versions: false"));
+    await repo.commit("Change the other one");
+    await repo.write("posts/a?.md", post("A better question."));
+    await repo.commit("Reword the question");
+
+    const { versions, page } = await build(repo.vault);
+    const listing = versions.find((route) => route.endsWith("/versions/"))!;
+
+    // Two versions of its own; the commit that changed only the other post isn't one.
+    expect(versions.filter((route) => route.startsWith(listing) && route !== listing)).toHaveLength(2);
+    expect(page(listing)).toContain("Reword the question");
+    expect(page(listing)).not.toContain("Change the other one");
+  });
+
+  // Proves a version whose frontmatter the build couldn't read never shows: such a version may say `draft: true`
+  // beside a value that breaks the block, and the build would refuse the note.
+  it("never shows a version whose frontmatter can't be read", async () => {
+    const repo = await repository();
+    await repo.write("posts/hello.md", post("Public first."));
+    await repo.commit("Publish it");
+    await repo.write("posts/hello.md", post("SECRET-UNREADABLE draft.", "versions: true\ndraft: true\ntitle: Broken: colon: here"));
+    await repo.commit("Draft a change");
+    await repo.write("posts/hello.md", post("Public again."));
+    await repo.commit("Publish again");
+
+    const { versions, everything } = await build(repo.vault);
+
+    expect(versions.filter((route) => route !== "/posts/hello/versions/")).toHaveLength(2);
+    expect(everything).not.toContain("SECRET-UNREADABLE");
+  });
+
+  // Proves an old version a plugin can't read doesn't stop the build, since it can't be edited: its page shows its
+  // changes and says it can't be shown as it read. A fatal error still stops the build.
+  it("shows an old version a plugin can't read without its rendered page, unless the error is fatal", async () => {
+    const repo = await repository();
+    await repo.write("posts/hello.md", post("BREAKS-THE-PLUGIN once."));
+    await repo.commit("Write it");
+    await repo.write("posts/hello.md", post("Fine now."));
+    await repo.commit("Fix it");
+    /** A plugin that fails on any file holding the marker, fatally or not. */
+    const breaking = (fatal: boolean) => ({
+      id: "breaking",
+      transformOfm: {
+        options: { fatal },
+        run: (ctx: PluginContext) => {
+          if (ctx.files.some(({ content }) => content.includes("BREAKS-THE-PLUGIN"))) throw new Error("can't read this");
+        },
+      },
+    });
+
+    const { page } = await build(repo.vault, [history({ source: "git" }), breaking(false)]);
+    const shas = (await exec("git", ["-C", repo.root, "log", "--format=%h", "--abbrev=7"])).stdout.trim().split("\n");
+
+    expect(page(`/posts/hello/versions/${shas[1]}/`)).toContain("This version can't be shown as it read. Its changes are above.");
+    expect(page(`/posts/hello/versions/${shas[1]}/`)).toContain("<ins>BREAKS-THE-PLUGIN once.</ins>");
+    expect(page(`/posts/hello/versions/${shas[0]}/`)).not.toContain("can't be shown as it read");
+    await expect(build(repo.vault, [history({ source: "git" }), breaking(true)])).rejects.toThrow();
+  });
 });

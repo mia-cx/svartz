@@ -54,7 +54,8 @@ export async function commitsOf(root: string, path: string): Promise<Commit[]> {
   // then the file's status and its path, or for a rename or copy its old path and then its new one.
   const { stdout } = await exec(
     "git",
-    ["-C", root, "-c", "core.quotePath=false", "log", "--follow", "--no-merges", "-z", "--format=%H%x00%aN%x00%aI%x00%B", "--name-status", "--", path],
+    // A literal pathspec: `?`, `*` and `[` in a note's name name only that file, never others they would match.
+    ["-C", root, "--literal-pathspecs", "-c", "core.quotePath=false", "log", "--follow", "--no-merges", "-z", "--format=%H%x00%aN%x00%aI%x00%B", "--name-status", "--", path],
     { maxBuffer: MAX_LOG_BYTES },
   );
   const fields = stdout.split("\0");

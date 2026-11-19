@@ -13,7 +13,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { matchThemeRoute, type IndexEntry, type PluginContext, type ProcessedFile, type SvartzTheme } from "@svartz/core";
+import { matchThemeRoute, PluginAggregateError, type IndexEntry, type PluginContext, type ProcessedFile, type SvartzTheme } from "@svartz/core";
 import { compileNoteVersion, keepsAttachment, publishedAttachments, publishesNote } from "@svartz/plugins";
 import { extractFrontmatter } from "@svartz/plugins/routes";
 import { diffLines } from "./diff";
@@ -53,7 +53,9 @@ interface Shown {
 function isPublic(ctx: PluginContext, path: string, markdown: string): boolean {
   if (!/\.md$/i.test(path)) return false;
   try {
-    const { frontmatter } = extractFrontmatter(markdown);
+    const { frontmatter, bodyMarkdown } = extractFrontmatter(markdown);
+    // A block that was there but read as nothing: the build refuses such a note, so the version can't say it's public.
+    if (frontmatter === undefined && bodyMarkdown !== markdown) return false;
     return publishesNote(ctx.config, path, frontmatter) && frontmatter?.password_group === undefined;
   } catch {
     return false;
@@ -230,7 +232,7 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
       const newer = listed[position - 1];
       const older = listed[position + 1];
       const candidates = await candidatesAt(version, list);
-      let compiled;
+      let compiled: Awaited<ReturnType<typeof compileNoteVersion>> | undefined;
       try {
         compiled = await compileNoteVersion(ctx, note, version, {
           attachments: candidates.files,
@@ -239,9 +241,15 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
           moved: new Map([...candidates.snapshots].map(([path, { url }]) => [path, url])),
         });
       } catch (error) {
-        throw new Error(`[history] couldn't build the version of "${note.path}" in vault "${vault}" at ${version.commit.sha}`, { cause: error });
+        const where = `the version of "${note.path}" in vault "${vault}" at ${version.commit.sha}`;
+        // An old version can't be edited to fix what a plugin couldn't read in it: its page shows its changes without
+        // the rendered page, and the build goes on. A fatal error still stops the build, as it does for a note.
+        if (!(error instanceof PluginAggregateError) || error.errors.some(({ fatal }) => fatal)) {
+          throw new Error(`[history] couldn't build ${where}`, { cause: error });
+        }
+        console.warn(`[history] showing ${where} without its rendered page: ${error.errors.map(({ message }) => message).join("; ")}`);
       }
-      for (const path of compiled.attachments) {
+      for (const path of compiled?.attachments ?? []) {
         const snapshot = candidates.snapshots.get(path);
         const sourcePath = candidates.files.find((file) => file.path === path)?.sourcePath;
         if (snapshot) fromGit.set(snapshot.key, snapshot.blob);
@@ -253,10 +261,10 @@ export async function emitVersions(ctx: PluginContext, maxVersions: number): Pro
         // The version before the oldest listed one has no page.
         before: before && describe(before, older && `../${short(older)}/`),
         hunks: diffLines(before?.markdown ?? "", version.markdown),
-        rendered: BODY,
+        rendered: compiled ? BODY : undefined,
         links: { note: TO_NOTE, versions: "../", ...(newer ? { newer: `../${short(newer)}/` } : {}), ...(older ? { older: `../${short(older)}/` } : {}) },
       });
-      add(`${list}${short(version)}/`, page, note, compiled.markup);
+      add(`${list}${short(version)}/`, page, note, compiled?.markup);
     }
     linked.push(note.href);
   }

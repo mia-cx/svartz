@@ -57,7 +57,8 @@ export function versionPage({ title, version, before, hunks, rendered, links }: 
   readonly before: Version | undefined;
   /** The source's changes since `before`; `undefined` when there are too many to show. */
   readonly hunks: readonly Hunk[] | undefined;
-  readonly rendered: string;
+  /** The version as it read, rendered; `undefined` when the build couldn't render it, which the page says. */
+  readonly rendered: string | undefined;
   readonly links: { readonly note: string; readonly versions: string; readonly newer?: string; readonly older?: string };
 }): VersionsPage {
   const revision = (label: string, shown: Version | undefined) => `<div class="sv-history-revision">
@@ -84,7 +85,7 @@ ${source}
 </section>
 <section class="sv-history-section" aria-labelledby="sv-history-rendered">
 <h2 id="sv-history-rendered">The page at ${escape(date)}</h2>
-<div class="sv-prose sv-history-rendered">${rendered}</div>
+${rendered === undefined ? "<p>This version can't be shown as it read. Its changes are above.</p>" : `<div class="sv-prose sv-history-rendered">${rendered}</div>`}
 </section>
 <nav class="sv-history-pager" aria-label="Versions">${pager.join("")}</nav>
 </div>`,
