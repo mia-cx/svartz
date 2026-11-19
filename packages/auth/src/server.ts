@@ -13,6 +13,7 @@
  * - `POST account/profile/`, `account/unlink/`, `account/sign-out-everywhere/` and `account/link/<provider>/` change the
  *   signed-in account and redirect back to its `/-/account/` page, which this module also renders.
  * - `GET users/<handle>/` answers a public profile and reputation score, redirecting an old handle to the current one.
+ * - `GET reputation/?page=<path>` answers the reputation of the account whose user page is at `path`, for that page.
  * - `GET viewer/` answers the signed-in handle and whether the dashboard has a panel for them, for the site's links.
  * - `POST people/…` changes grants and roles from the dashboard's People & permissions panel (`people-panel.ts`).
  * - `POST reputation/…` sets reputation's points and thresholds, and gives kudos (`reputation-panel.ts`).
@@ -35,6 +36,7 @@ import { chooserPage, expiredPage } from "./chooser";
 import { DASHBOARD_PAGE, dashboardPage, openableSections } from "./dashboard";
 import { usePermissions } from "./grants";
 import { peoplePanel, peopleRoute } from "./people-panel";
+import { personByHandle } from "./people";
 import { handleScore, standingOf } from "./reputation";
 import { kudosPanel, reputationPanel, reputationRoute } from "./reputation-panel";
 import { handleFrom, HANDLE_PROBLEM, isHandle, typedHandle } from "./handle";
@@ -329,6 +331,20 @@ function userPageView(pages: UserPages | undefined, current: string, handles: re
   return vault === context.vault.id ? { missing: `${folder}/${current}` } : undefined;
 }
 
+/**
+ * `GET reputation/?page=<path>`: for the user page at `path` (below the deployment base), its owner's current handle
+ * and score, and to the owner alone the next threshold too; `null` for any other page.
+ */
+async function userPageStanding(request: Request, url: URL, context: ServerContext, pages: UserPages | undefined): Promise<Response> {
+  const page = url.searchParams.get("page");
+  const handle = pages && page ? Object.keys(pages).find((candidate) => pages[candidate] === page) : undefined;
+  const db = handle === undefined ? undefined : await accountsDatabase(context.env);
+  const owner = db && handle !== undefined ? await personByHandle(db, handle) : undefined;
+  if (!db || !owner) return json(null);
+  const [{ score, next }, viewer] = await Promise.all([standingOf(db, owner.id), readAccount(request, context.env)]);
+  return json({ handle: owner.handle, score, ...viewer?.id === owner.id && next && { next } });
+}
+
 /** `path` with the account page's `status` query, and the provider or typed values it concerns. */
 function withStatus(path: string, url: URL, status: StatusCode, provider?: ProviderId, typed: Record<string, string> = {}): string {
   const target = new URL(path, url.origin);
@@ -521,6 +537,10 @@ const authServer: ServerModuleFactory<AuthServerOptions, AuthServerData | undefi
     if (account) return accountRoute(request, url, context, account[1], account[2]);
     if (path === "/viewer/") {
       return request.method === "GET" ? viewer(request, context) : failure(405, "method_not_allowed", "Use GET.", { allow: "GET" });
+    }
+    if (path === "/reputation/") {
+      if (request.method !== "GET") return failure(405, "method_not_allowed", "Use GET.", { allow: "GET" });
+      return userPageStanding(request, url, context, runsSignIn ? pages : builtUserPages());
     }
     const people = await peopleRoute(request, path, context, vaultsOf(context)) ?? await reputationRoute(request, path, context);
     if (people) return people;

@@ -1,6 +1,7 @@
 import "../src/browser.css";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { mount } from "../src/browser";
 import { kudosPage, reputationPage } from "../src/reputation-page";
 
 const SETTINGS = { edit: 1, page: 5, agreement: 0.5, kudos: 5, declined: 0, dailyLimit: 100 };
@@ -64,5 +65,29 @@ describe("the Reputation panel", () => {
         expect(target.getBoundingClientRect().height, target.outerHTML).toBeGreaterThanOrEqual(24);
       }
     }
+  });
+});
+
+describe("a user page", () => {
+  // Proves story 28 in the browser: a user page shows its owner's reputation in the page actions, and no other page asks.
+  it("shows its owner's reputation in the page actions", async () => {
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+      const url = String(input);
+      asked.push(url);
+      return Response.json(url.includes("/reputation/") ? { handle: "ada", score: 12.5, next: { role: "editors", score: 20 } } : null);
+    });
+    const config = { endpoint: "/notes/_svartz/auth", mountPath: "/notes", providers: [], userPages: "/notes/users/" };
+    document.body.innerHTML = `<main><div class="sv-page-actions"><span data-svartz-region="page-actions"></span></div></main>`;
+
+    const unmountGarden = mount("/notes/garden/", config);
+    const unmountAda = mount("/notes/users/ada/", config);
+
+    await expect.element(page.getByText("Reputation: 12.5 points · 20 points for editors")).toBeVisible();
+    expect(asked.filter((url) => url.includes("/reputation/"))).toEqual(["/notes/_svartz/auth/reputation/?page=%2Fnotes%2Fusers%2Fada%2F"]);
+    unmountAda();
+    unmountGarden();
+    expect(document.querySelector(".sv-reputation")).toBeNull();
+    vi.unstubAllGlobals();
   });
 });

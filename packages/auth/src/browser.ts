@@ -20,6 +20,8 @@ export interface SignInConfig {
   /** Enabled providers, in the order the dialog lists them. */
   readonly providers: readonly SignInProvider[];
   readonly privacyNotice?: string;
+  /** The folder of user pages, below the deployment base, such as `/notes/users/`; only on the vault that holds them. */
+  readonly userPages?: string;
 }
 
 const TRIGGER = "[data-svartz-sign-in]";
@@ -167,12 +169,40 @@ function showViewerLinks(home: string): () => void {
   };
 }
 
+type Standing = { readonly score: number; readonly next?: { readonly role: string; readonly score: number } } | null;
+
+const points = new Intl.NumberFormat("en", { maximumFractionDigits: 2 });
+const pointsText = (score: number) => `${points.format(score)} ${score === 1 ? "point" : "points"}`;
+
+/**
+ * On a user page, show its owner's reputation in the page actions, and to the owner their next threshold. Answers
+ * what removes it.
+ */
+function showReputation(home: string, page: string): () => void {
+  let shown: HTMLElement | undefined;
+  let gone = false;
+  fetch(`${home}/_svartz/auth/reputation/?page=${encodeURIComponent(page)}`, { headers: { accept: "application/json" } })
+    .then((response) => response.ok ? response.json() as Promise<Standing> : null)
+    .then((standing) => {
+      const region = document.querySelector('[data-svartz-region="page-actions"]');
+      if (gone || !standing || !region) return;
+      const next = standing.next ? ` · ${pointsText(standing.next.score)} for ${standing.next.role}` : "";
+      shown = element("span", "sv-reputation", `Reputation: ${pointsText(standing.score)}${next}`);
+      region.append(shown);
+    })
+    .catch((cause: unknown) => console.error("[svartz:auth] couldn't read this page's reputation", cause));
+  return () => {
+    gone = true;
+    shown?.remove();
+  };
+}
+
 /**
  * Browser script entry: remember the vault's config, open the dialog from `data-svartz-sign-in` elements, and link a
  * signed-in reader to their account and the dashboard. The build doesn't know a host app's `paths.base`, so the routes
  * get the deployment base here, from `context`.
  */
-export function mount(_pathname: string, options: SignInConfig, { base }: BrowserScriptContext = { base: "" }): () => void {
+export function mount(pathname: string, options: SignInConfig, { base }: BrowserScriptContext = { base: "" }): () => void {
   config = { ...options, endpoint: `${base}${options.endpoint}` };
   const onClick = (event: MouseEvent) => {
     if (!(event.target instanceof Element) || !event.target.closest(TRIGGER)) return;
@@ -181,8 +211,14 @@ export function mount(_pathname: string, options: SignInConfig, { base }: Browse
   };
   document.addEventListener("click", onClick);
   const hideViewerLinks = showViewerLinks(`${base}${options.mountPath}`);
+  // Only pages in the user page folder can be one; the server decides which are.
+  const page = pathname.slice(base.length);
+  const hideReputation = options.userPages && page.startsWith(options.userPages) && page !== options.userPages
+    ? showReputation(`${base}${options.mountPath}`, page)
+    : () => {};
   return () => {
     hideViewerLinks();
+    hideReputation();
     document.removeEventListener("click", onClick);
     // The dialog lives on <body>, outside the page, so client-side navigation alone would leave it open
     // over the next page with this page's returnTo. Removing it (rather than close()) skips the focus

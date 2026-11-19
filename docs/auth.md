@@ -211,6 +211,7 @@ Under `<base><mount>/_svartz/auth/`, where `<base>` is the deployment base path,
 | `POST account/sign-out-everywhere/` | Ends every session of the signed-in account, this one included, then redirects to the account page. |
 | `POST account/link/<provider>/?returnTo=<path>` | Starts linking another provider to the signed-in account. Only the callback vault answers it. |
 | `GET users/<handle>/` | The public profile and [reputation](#reputation) score, `{ handle, name, avatarUrl, reputation }`, or a 308 from an old handle to the current one's URL. |
+| `GET reputation/?page=<path>` | For the user page at `path`, below the deployment base: `{ handle, score }` of its owner, with `next`, `{ role, score }`, when the owner asks. `null` for any other page. |
 | `GET viewer/` | `{ handle, dashboard }` for a signed-in account, where `dashboard` says whether [the dashboard](#the-dashboard) has a panel for them; `null` otherwise. |
 | `POST people/grant/` | Sets the grant of `permission` for an account (`actor-type=account`, `actor=<handle>`) or a role (`actor-type=role`, `actor=<name>`) to `value` (`allow`, `deny` or `unset`), on the object `scope` (`site` or `vault:<id>`) and `path` (empty, a folder ending in `/`, or a page) name, or `object` names whole. Redirects to People & permissions. |
 | `POST people/role/` | Creates the role `name`, then redirects to People & permissions. |
@@ -400,7 +401,7 @@ Each account has a reputation score, which grows as its work lands and others va
 
 The score is the sum of the account's entries in a ledger, `auth_reputation` in `SVARTZ_DB`. The database refuses to change or delete an entry, so nothing rewrites a score's history: taking points back is a further entry. Each entry is for one event, such as one merged pull request, and an event is recorded once however often it is reported, so a repeated webhook delivery or a poll that reads it again changes nothing.
 
-Readers see their score and their next threshold on [the account page](#the-account-page). Anyone can read an account's score from `GET users/<handle>/`.
+Readers see their score and their next threshold on [the account page](#the-account-page). An account's [user page](#user-pages) shows its score beside the page's actions, such as "Reputation: 12 points", to everyone, and the next threshold to the account itself: "Reputation: 12 points · 20 points for editors". Anyone can read an account's score from `GET users/<handle>/`.
 
 ### Weights
 

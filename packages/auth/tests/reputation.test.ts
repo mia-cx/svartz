@@ -21,11 +21,18 @@ afterEach(async () => {
   await Promise.all(disposers.splice(0).map((dispose) => dispose()));
 });
 
-/** A vault at /notes with auth on a fresh D1 (GitHub user 1 is the admin), and a `probe` plugin answering `can()`. */
-async function site() {
+async function createDatabase(): Promise<Database> {
   const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
   disposers.push(() => miniflare.dispose());
-  const db = await miniflare.getD1Database("SVARTZ_DB") as unknown as Database;
+  return await miniflare.getD1Database("SVARTZ_DB") as unknown as Database;
+}
+
+/**
+ * A vault at /notes with auth (GitHub user 1 is the admin), holding the user pages `userPages` names, and a `probe`
+ * plugin answering `can()`. A fresh D1 unless given `db`.
+ */
+async function site({ db: given, userPages = {} }: { db?: Database; userPages?: Record<string, string> } = {}) {
+  const db = given ?? await createDatabase();
   const probe = (): ServerHandler => async (request, context) =>
     Response.json(await can(await readAccount(request, context.env), "guestbook:entries:delete", { vault: "notes" }, context.env));
   const server = createServer({
@@ -34,8 +41,8 @@ async function site() {
     servers: [
       {
         id: "auth", eager: true, pages: ["account", "dashboard"], load: () => import("../src/server"),
-        options: { providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } }, admins: [`github:${ADMIN}`], permissions: PERMISSIONS },
-        data: { permissions: [], paths: [] },
+        options: { providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } }, admins: [`github:${ADMIN}`], permissions: PERMISSIONS, userPageVault: "notes" },
+        data: { permissions: [], paths: [], userPages },
       },
       { id: "probe", load: async () => ({ default: probe }) },
     ],
@@ -61,7 +68,7 @@ async function site() {
   const score = async (handle: string) => (await (await request(`${AUTH}/users/${handle}/`)).json() as { reputation: number }).reputation;
   const mayDelete = async (cookies: string[]) => (await request("/notes/_svartz/probe/", { cookies })).json();
   const id = async (handle: string) => (await rows(`SELECT id FROM auth_accounts WHERE handle = '${handle}'`))[0]!.id as string;
-  return { request, page, post, env, rows, score, mayDelete, id };
+  return { db, request, page, post, env, rows, score, mayDelete, id };
 }
 type Site = Awaited<ReturnType<typeof site>>;
 
@@ -259,5 +266,27 @@ describe("kudos", () => {
     expect(await auditLog(tour, "auth:kudos:give")).toEqual([{ actor_handle: "mod", target: "ada", detail: { reason: "Fixed every broken link.", points: 5 } }]);
     expect(text(await tour.page(`${DASHBOARD}auth/kudos/`, mod))).toContain("Give an account 5 points for good work.");
     expect(text(await tour.page("/notes/-/account/", ada))).toContain("Reputation 5 points At 20 points, you get the editors role.");
+  });
+});
+
+describe("a user page's reputation", () => {
+  // Proves story 28: an account's user page shows its score to anyone, and its next threshold to the account alone.
+  it("answers the page owner's score, and their next threshold only to them", async () => {
+    const first = await site();
+    const root = await signUp(first, ADMIN, "root");
+    const ada = await signUp(first, 2, "ada");
+    await first.post("people/role", root, { name: "editors" });
+    await first.post("reputation/threshold", root, { role: "editors", score: "20" });
+    await postReputation(first.env, { kind: "page", to: { identity: "github:2" }, ref: "test:commit:1" });
+    // Ada has written her page since, and the site rebuilt.
+    const tour = await site({ db: first.db, userPages: { ada: "/notes/users/ada/" } });
+    const standing = async (page: string, cookies: string[] = []) =>
+      (await tour.request(`${AUTH}/reputation/?page=${encodeURIComponent(page)}`, { cookies })).json();
+
+    expect(await standing("/notes/users/ada/")).toEqual({ handle: "ada", score: 5 });
+    expect(await standing("/notes/users/ada/", root)).toEqual({ handle: "ada", score: 5 });
+    expect(await standing("/notes/users/ada/", ada)).toEqual({ handle: "ada", score: 5, next: { role: "editors", score: 20 } });
+    expect(await standing("/notes/users/root/")).toBeNull();
+    expect(await standing("/notes/garden/")).toBeNull();
   });
 });

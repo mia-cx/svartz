@@ -31,6 +31,8 @@ describe("the auth plugin", () => {
       mountPath: "/notes",
       providers: [{ id: "github", label: "GitHub" }],
       privacyNotice: "/privacy/",
+      // The vault holds user pages, so its pages there show their owner's reputation.
+      userPages: "/notes/users/",
     });
   });
 
