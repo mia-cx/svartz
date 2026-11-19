@@ -118,6 +118,12 @@ describe("a page with comments, read signed out", () => {
       expect(cardOf(dewPoint!).querySelector(".sv-annotations-who")!.textContent).toContain("Ada Lovelace Reputation 1,234");
       expect(cardOf(dewPoint!).querySelector(".sv-reputation-badge")!.getAttribute("title")).toBe("Reputation 1,234");
       expect(cardOf(pressure!).querySelector(".sv-reputation-badge")).toBeNull();
+      // On the name's line, not a line of its own.
+      dewPoint!.click();
+      const name = cardOf(dewPoint!).querySelector(".sv-annotations-name")!.getBoundingClientRect();
+      const badge = cardOf(dewPoint!).querySelector(".sv-reputation-badge")!.getBoundingClientRect();
+      expect(badge.left).toBeGreaterThan(name.left);
+      expect(Math.abs(badge.bottom - name.bottom)).toBeLessThan(name.height / 2);
     } finally {
       globalThis.fetch = realFetch;
     }

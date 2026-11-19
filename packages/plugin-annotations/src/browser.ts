@@ -169,13 +169,15 @@ function avatar({ name, avatarUrl }: Identity): HTMLElement {
   return fallback;
 }
 
-function author(identity: Identity): HTMLElement {
+/** Who wrote a comment: their name, with their account's reputation on the same line when they have one, then their handle. */
+function author(identity: Identity, reputation: number | undefined): HTMLElement {
   const name = identity.profileUrl ? create("a", "sv-annotations-name", identity.name) : create("span", "sv-annotations-name", identity.name);
   if (name instanceof HTMLAnchorElement) {
     name.href = identity.profileUrl!;
     name.rel = "ugc nofollow noopener";
   }
-  const who = create("span", "sv-annotations-who", name);
+  const line = reputation === undefined ? name : create("span", "sv-annotations-name-line", name, " ", reputationBadge(reputation));
+  const who = create("span", "sv-annotations-who", line);
   if (identity.handle) who.append(create("span", "sv-annotations-handle", `@${identity.handle}`));
   return who;
 }
@@ -196,9 +198,7 @@ function agreedBy(people: readonly Identity[], viewer: string | undefined): stri
 function byline(comment: Comment): HTMLElement {
   const time = create("time", "sv-annotations-time", new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(comment.createdAt)));
   time.dateTime = comment.createdAt;
-  const who = author(comment.author);
-  if (comment.reputation !== undefined) who.firstElementChild!.after(" ", reputationBadge(comment.reputation));
-  return create("div", "sv-annotations-byline", avatar(comment.author), who, time);
+  return create("div", "sv-annotations-byline", avatar(comment.author), author(comment.author, comment.reputation), time);
 }
 
 function card(comment: Comment, id: string, ...footer: HTMLElement[]): HTMLElement {
