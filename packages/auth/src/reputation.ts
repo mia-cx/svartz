@@ -172,13 +172,6 @@ export async function scoreOf(db: Database, account: string): Promise<number> {
   return rounded(row?.score ?? 0);
 }
 
-/** The score of the account that holds `handle`; 0 for one that has none, or no account. */
-export async function handleScore(db: Database, handle: string): Promise<number> {
-  const { results: [row] } = await db.prepare(`SELECT COALESCE(SUM(r.points), 0) AS score FROM auth_handles h
-    JOIN auth_reputation r ON r.account_id = h.account_id WHERE h.handle = ?`).bind(handle).all<{ score: number }>();
-  return rounded(row?.score ?? 0);
-}
-
 /** Who an entry credits: an account by its id, or the account a provider account (`github:583231`) is linked to. */
 export type Recipient = { readonly account: string } | { readonly identity: string };
 

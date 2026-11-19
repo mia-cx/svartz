@@ -59,7 +59,9 @@ An account's name links to its [user page](auth.md#user-pages), or to its contri
 
 `/-/contributions/<handle>/` lists the changes the site's records say an account made, by the same rule as above: the saves it committed, and the merge commits of the pull requests it opened, a pull request being the account's that made its first save. It shows them newest first, 50 at a time with **Older edits** behind them, then every page they changed, most recently changed first. Above them is the account's [reputation](auth.md#reputation): its score to everyone, and to the account itself how many points it needs for the next role a threshold gives. An old handle redirects to the current one, and a handle no account ever held answers 404, as does every handle on a site without `SVARTZ_DB`.
 
-An account's [user page](auth.md#user-pages) shows the same below its note, in a Contributions section: the reputation, the latest five changes, up to ten pages they changed, and **All contributions**, which links the page. The section joins the page in the browser, after the element the theme marks `data-svartz-note`, so the page itself stays prerendered.
+An account's [user page](auth.md#user-pages) shows the same below its note, in a Contributions section: the latest five changes, up to ten pages they changed, and **All contributions**, which links the page. The account's reputation is beside the page's actions already, so the section doesn't repeat it.
+
+Wherever history names a site account, its [reputation](auth.md#reputation) shows beside the name. The section joins the page in the browser, after the element the theme marks `data-svartz-note`, so the page itself stays prerendered.
 
 Every account has a contributions page, with a user page or without one. The [account page](auth.md#the-account-page) links the reader's own as **Your contributions**, and history links an account's name to it wherever the account has no user page.
 

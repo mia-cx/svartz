@@ -7,6 +7,7 @@
  * Everything here comes from GitHub's users or the site's readers, so all of it is escaped, and comment text shows as
  * the plain text it was written in: its Markdown is never rendered.
  */
+import { reputationBadgeHtml } from "@svartz/auth/badge";
 import type { PluginPage } from "@svartz/core";
 import type { EditStage } from "./api";
 import { MAX_REPLY_LENGTH } from "./attribution";
@@ -82,8 +83,11 @@ export function listPage({ submissions, here, page, more }: SubmissionList): Plu
   return { title: "My submissions", html: `<div class="sv-account sv-dashboard svartz-submissions-dashboard">\n<h1>My submissions</h1>\n${body}\n</div>` };
 }
 
-/** Who wrote something: a GitHub user by login, or an account the site posted for, by name and role. */
-export type Author = { readonly login: string | null } | { readonly name: string; readonly role: string };
+/**
+ * Who wrote something: a GitHub user by login, or an account the site posted for, by name and role, with its
+ * reputation while the account exists.
+ */
+export type Author = { readonly login: string | null } | { readonly name: string; readonly role: string; readonly reputation?: number };
 
 export interface Comment {
   readonly id: number;
@@ -159,7 +163,8 @@ const REVIEW_TEXT: Readonly<Record<string, string>> = {
 
 function by(author: Author): string {
   if ("login" in author) return `<span class="sv-account-name">${escape(author.login ?? "A deleted GitHub user")}</span>`;
-  return `<span class="sv-account-name">${escape(author.name)}</span> <span class="sv-account-tag">${escape(author.role)}</span>`;
+  const badge = author.reputation === undefined ? "" : ` ${reputationBadgeHtml(author.reputation)}`;
+  return `<span class="sv-account-name">${escape(author.name)}</span>${badge} <span class="sv-account-tag">${escape(author.role)}</span>`;
 }
 
 function when(at: string, url: string): string {

@@ -72,7 +72,7 @@ describe("the Submissions panel", () => {
 
     const listed = text(await site.page("mod", REVIEW_PANEL));
 
-    expect(listed).toMatch(/^Dashboard Submissions Pull request #44 #44 · by octocat on GitHub · updated \w+ \d+, \d{4} · 1 comment In review Guide Edit · #43 · by Grace Hopper @grace · updated \w+ \d+, \d{4} · 1 comment In review$/);
+    expect(listed).toMatch(/^Dashboard Submissions Pull request #44 #44 · by octocat on GitHub · updated \w+ \d+, \d{4} · 1 comment In review Guide Edit · #43 · by Grace Hopper Reputation 0 @grace · updated \w+ \d+, \d{4} · 1 comment In review$/);
     expect(await site.page("reader", REVIEW_PANEL)).toBeNull();
     expect(await site.page("grace", `${REVIEW_PANEL}${guide.number}/`)).toBeNull();
     expect(await site.page("mod", `${REVIEW_PANEL}?page=0`)).toBeNull();
@@ -291,7 +291,7 @@ describe("review actions", () => {
     ]);
     vi.unstubAllGlobals();
     const shown = text(await site.page("mod", `${REVIEW_PANEL}43/`));
-    expect(shown).toContain("Mo Derator reviewer");
+    expect(shown).toContain("Mo Derator Reputation 0 reviewer");
     expect(shown).toContain("Looks right, @⁠octocat.");
     expect(shown).not.toContain("[!NOTE]");
   });
@@ -360,8 +360,8 @@ describe("review actions", () => {
     expect(replay.pending).toEqual([]);
     expect(text(await site.page("mod", REVIEW_PANEL))).toMatch(/Guide Edit · #43 .* Changes requested$/);
     const shown = text(await site.page("mod", `${REVIEW_PANEL}43/`));
-    expect(shown).toContain("Ada Lovelace admin reviewed");
-    expect(shown).toContain("Mo Derator reviewer reviewed");
+    expect(shown).toContain("Ada Lovelace Reputation 0 admin reviewed");
+    expect(shown).toContain("Mo Derator Reputation 0 reviewer reviewed");
     expect(shown).toContain("Changes requested. Cite it.");
     expect(shown).not.toContain("[!NOTE]");
   });

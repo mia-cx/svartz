@@ -18,7 +18,7 @@
  * opened is nobody's here. Every write checks the request's `Origin`, counts against the reader's rate limit, and
  * re-checks all of this on the server.
  */
-import { can, readAccount, userPageLocation, type Account } from "@svartz/auth/server";
+import { can, findProfiles, readAccount, userPageLocation, type Account } from "@svartz/auth/server";
 import type { DashboardPanel, ServerContext } from "@svartz/core";
 import { pathRoute } from "@svartz/plugins/routes";
 import { MAX_MARKDOWN_BYTES, MAX_NOTE_LENGTH, PLUGIN_ID, type EditResponse, type LinkTarget } from "./api";
@@ -101,23 +101,23 @@ const asPosted = (body: string, header: string | null, typed: string | null): bo
 
 /**
  * Pull request `number`'s conversation from the mirror, in time order, with what the site posted shown as the account
- * that wrote it: the newest {@link MAX_COMMENTS} comments and the first comment of each thread they're in, and whether
- * there are earlier ones. The Submissions review panel shows the same conversation.
+ * that wrote it, with its reputation: the newest {@link MAX_COMMENTS} comments and the first comment of each thread
+ * they're in, and whether there are earlier ones. The Submissions review panel shows the same conversation.
  */
-export async function conversation(mirror: Mirror, number: number): Promise<{ entries: Entry[]; earlier: boolean }> {
+export async function conversation(mirror: Mirror, number: number, env: ServerContext["env"]): Promise<{ entries: Entry[]; earlier: boolean }> {
   const [{ results: reviews }, { results: comments }, { results: [count] }] = await Promise.all([
-    mirror.db.prepare(`SELECT r.state, r.author_login, r.body, r.url, r.submitted_at, p.name, p.role, p.header, p.body AS typed
+    mirror.db.prepare(`SELECT r.state, r.author_login, r.body, r.url, r.submitted_at, p.account, p.name, p.role, p.header, p.body AS typed
       FROM submissions_reviews r LEFT JOIN submissions_posted_reviews p ON p.scope = r.scope AND p.id = r.id
       WHERE r.scope = ? AND r.pull_number = ? AND r.submitted_at IS NOT NULL AND r.state <> 'pending' ORDER BY r.submitted_at, r.id`)
       .bind(mirror.scope, number).all<{
         state: string; author_login: string | null; body: string; url: string; submitted_at: string;
-        name: string | null; role: string | null; header: string | null; typed: string | null;
+        account: string | null; name: string | null; role: string | null; header: string | null; typed: string | null;
       }>(),
     // A thread's first comment says where it is and takes its replies, so it comes along however old it is.
     mirror.db.prepare(`WITH recent AS (SELECT * FROM submissions_comments WHERE scope = ?1 AND pull_number = ?2 AND deleted = 0
         ORDER BY created_at DESC, id DESC LIMIT ?3)
       SELECT c.kind, c.id, c.author_login, c.body, c.path, c.line, c.in_reply_to, c.url, c.created_at,
-        r.name, r.role, r.header, r.body AS typed
+        r.account, r.name, r.role, r.header, r.body AS typed
       FROM (SELECT * FROM recent UNION SELECT * FROM submissions_comments WHERE scope = ?1 AND pull_number = ?2 AND deleted = 0
         AND kind = 'review' AND id IN (SELECT in_reply_to FROM recent WHERE kind = 'review')) c
       LEFT JOIN submissions_replies r ON r.scope = c.scope AND r.kind = c.kind AND r.id = c.id
@@ -126,24 +126,31 @@ export async function conversation(mirror: Mirror, number: number): Promise<{ en
       .all<{
         kind: "issue" | "review"; id: number; author_login: string | null; body: string; path: string | null; line: number | null;
         in_reply_to: number | null; url: string; created_at: string;
-        name: string | null; role: string | null; header: string | null; typed: string | null;
+        account: string | null; name: string | null; role: string | null; header: string | null; typed: string | null;
       }>(),
     mirror.db.prepare("SELECT COUNT(*) AS comments FROM submissions_comments WHERE scope = ? AND pull_number = ? AND deleted = 0")
       .bind(mirror.scope, number).all<{ comments: number }>(),
   ]);
+  // What the site posted names an account; one lookup gives every one of them its reputation, as it stands now.
+  const posted = [...reviews, ...comments].filter((row) => row.account !== null && asPosted(row.body, row.header, row.typed));
+  const profiles = posted.length > 0 ? await findProfiles([...new Set(posted.map(({ account }) => account!))], env) : new Map();
+  const authorOf = (row: { author_login: string | null; account: string | null; name: string | null; role: string | null }, ours: boolean): Author => {
+    if (!ours) return { login: row.author_login };
+    const reputation = profiles.get(row.account!)?.reputation;
+    return { name: row.name!, role: row.role!, ...(reputation === undefined ? {} : { reputation }) };
+  };
   const timeline: Entry[] = reviews
     // A review that only holds diff comments says nothing of its own; its comments show in their threads.
     .filter(({ state, body }) => state !== "commented" || body.trim())
     .map((row) => {
       const ours = asPosted(row.body, row.header, row.typed);
-      const author: Author = ours ? { name: row.name!, role: row.role! } : { login: row.author_login };
-      return { kind: "review", author, state: row.state, body: ours ? row.typed! : row.body, at: row.submitted_at, url: row.url };
+      return { kind: "review", author: authorOf(row, ours), state: row.state, body: ours ? row.typed! : row.body, at: row.submitted_at, url: row.url };
     });
 
   const threads = new Map<number, { path: string | null; line: number | null; comments: Comment[]; open: boolean; at: string }>();
   for (const row of comments) {
     const ours = asPosted(row.body, row.header, row.typed);
-    const author: Author = ours ? { name: row.name!, role: row.role! } : { login: row.author_login };
+    const author = authorOf(row, ours);
     const shown: Comment = { id: row.id, author, body: ours ? row.typed! : row.body, at: row.created_at, url: row.url };
     if (row.kind === "issue") {
       timeline.push({ kind: "comment", comment: shown });
@@ -234,7 +241,7 @@ export function createMySubmissions(setup: MySubmissionsSetup) {
     const edit = await readSubmission(mirror, number);
     // Only its owner sees a submission here; anyone else's is no submission at all.
     if (!edit || edit.owner !== `account:${account.id}`) return undefined;
-    const [{ stage }, { entries, earlier }] = await Promise.all([setup.sync.progress(context, mirror, edit), conversation(mirror, number)]);
+    const [{ stage }, { entries, earlier }] = await Promise.all([setup.sync.progress(context, mirror, edit), conversation(mirror, number, context.env)]);
     const query = new URL(request.url).searchParams;
     const code = query.get("status");
     const thread = query.get("thread");

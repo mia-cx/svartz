@@ -127,7 +127,10 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
       const userPage = profile && userPageOf(profile.handle);
       // An account that no longer exists shows as git names the commit.
       const author: Author = profile
-        ? { kind: "account", name: profile.name, handle: profile.handle, href: userPage ? link.userPage(userPage) : link.contributions(profile.handle) }
+        ? {
+          kind: "account", name: profile.name, handle: profile.handle, reputation: profile.reputation,
+          href: userPage ? link.userPage(userPage) : link.contributions(profile.handle),
+        }
         : { kind: "github", name: commit.author.name, login: commit.author.login };
       return { sha: commit.sha, at: commit.committedAt, author, summary: shownSummary(commit) };
     });
@@ -425,12 +428,10 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
     const html = contributionsSection({
       name: account.name,
       handle: account.handle,
-      reputation: await reputationFor(account, request, context),
       changes: (await wikiChanges(made.commits, context)).slice(0, SECTION_CHANGES),
       pages: publishedPages(made.files, context).slice(0, SECTION_PAGES),
       all: urls(context).contributions(account.handle),
     });
-    // What the reader sees depends on who they are: only the account sees its next threshold.
     return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "private, no-store" } });
   }
 

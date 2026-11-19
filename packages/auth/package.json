@@ -25,10 +25,14 @@
       "import": "./dist/browser.js",
       "types": "./dist/browser.d.ts"
     },
+    "./badge": {
+      "import": "./dist/reputation-badge.js",
+      "types": "./dist/reputation-badge.d.ts"
+    },
     "./browser.css": "./dist/browser.css"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/server.ts src/browser.ts --format esm --dts && node -e \"require('node:fs').copyFileSync('src/browser.css', 'dist/browser.css')\"",
+    "build": "tsup src/index.ts src/server.ts src/browser.ts src/reputation-badge.ts --format esm --dts && node -e \"require('node:fs').copyFileSync('src/browser.css', 'dist/browser.css')\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

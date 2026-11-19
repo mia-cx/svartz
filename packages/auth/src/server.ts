@@ -41,7 +41,7 @@ import { usePermissions } from "./grants";
 import { accountGroups, groupsPage, groupsPanel, groupsRoute } from "./groups-routes";
 import { peoplePanel, peopleRoute } from "./people-panel";
 import { personByHandle } from "./people";
-import { handleScore, standingOf, type Standing } from "./reputation";
+import { standingOf, type Standing } from "./reputation";
 import { kudosPanel, reputationPanel, reputationRoute } from "./reputation-panel";
 import { handleFrom, HANDLE_PROBLEM, isHandle, typedHandle } from "./handle";
 import { isProviderId, PROVIDERS, type Identity, type ProviderId } from "./providers";
@@ -51,7 +51,7 @@ import {
 } from "./session";
 import {
   ACCOUNTS_DATABASE_ENV, accountsDatabase, createAccount, endAccountSessions, handlesOf, hasAccount, linkIdentity,
-  profileByHandle, profilesByHandle, profilesById, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity,
+  profileByHandle, profilesByHandle, profilesById, profilesByIdentity, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity,
   updateProfile, type Database, type PublicProfile,
 } from "./store";
 import { builtUserPages, DEFAULT_USER_PAGE_FOLDER, hasUserPage, useUserPages, userPageLocation, type UserPages } from "./user-pages";
@@ -71,7 +71,6 @@ export {
 export { linkedIdentities } from "./identities";
 export { userPageLocation, type UserPageLocation } from "./user-pages";
 export { postReputation, reverseReputation, type Recipient, type ReputationEvent, type Reversal, type Standing, type Threshold } from "./reputation";
-
 /**
  * The public profile of the account that holds or held `handle`, under its current handle; `undefined` when no account
  * ever held it or the site binds no `SVARTZ_DB`. A result whose `handle` differs from the one asked for means the
@@ -93,11 +92,7 @@ export async function findProfileByIdentity(identity: string, env: Readonly<Reco
 /** {@link findProfileByIdentity} for each of `identities` in one D1 call, by identity; identities no account has are absent. */
 export async function findProfilesByIdentity(identities: readonly string[], env: Readonly<Record<string, unknown>>): Promise<Map<string, PublicProfile>> {
   const db = await accountsDatabase(env);
-  if (!db || identities.length === 0) return new Map();
-  const { results } = await db.prepare(`SELECT i.id, a.handle, a.name, a.avatar_url FROM auth_identities i JOIN auth_accounts a ON a.id = i.account_id
-    WHERE i.id IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(identities))
-    .all<{ id: string; handle: string; name: string; avatar_url: string | null }>();
-  return new Map(results.map((row) => [row.id, { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } }]));
+  return db ? profilesByIdentity(db, identities) : new Map();
 }
 
 /**
@@ -158,6 +153,7 @@ export async function findStanding(handle: string, env: Readonly<Record<string, 
     handle: row.handle,
     name: row.name,
     ...row.avatar_url !== null && { avatarUrl: row.avatar_url },
+    reputation: standing.score,
     ...userPage && { userPage },
     standing,
   };
@@ -516,7 +512,7 @@ async function userProfile(handle: string, context: ServerContext): Promise<Resp
   const profile = db && await profileByHandle(db, handle);
   if (!profile) return undefined;
   if (profile.handle !== handle) return redirect(`${context.base}/users/${profile.handle}/`, [], 308);
-  return json({ ...profile, reputation: await handleScore(db, handle) });
+  return json(profile);
 }
 
 /**
