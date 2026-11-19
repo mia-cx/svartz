@@ -201,14 +201,23 @@ Under `<base><mount>/_svartz/auth/`, where `<base>` is the deployment base path,
 | `POST people/role/` | Creates the role `name`, then redirects to People & permissions. |
 | `POST people/member/` | Gives the account `handle` the role `role`, then redirects to People & permissions. |
 | `POST people/member/remove/` | Takes the role `role` from the account `handle`, then redirects to People & permissions. |
+| `POST groups/` | Creates the [group](#groups) `name`, titled `display-name`, owned by the signed-in account, then redirects to its page. |
+| `POST groups/<name>/invite/` | Invites the account `handle`. Owners only. |
+| `POST groups/<name>/uninvite/` | Withdraws the invitation of the account `handle`. Owners withdraw anyone's; an invited account declines its own. |
+| `POST groups/<name>/accept/` | Accepts the signed-in account's own invitation. |
+| `POST groups/<name>/remove/` | Takes the account `handle` out of the group. Owners remove anyone; a member removes themselves to leave. The last owner can't leave. |
+| `POST groups/<name>/promote/` | Makes the member `handle` an owner. Owners only. |
+| `POST groups/link/` | Links the group `group` to the vault, folder or page `scope` and `path` name, then redirects to the Groups panel. |
+| `POST groups/unlink/` | Unlinks the group `group` from `object`, then redirects to the Groups panel. |
 
-Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` and the `account/` routes answer 503. The `account/` routes answer 403 to a request whose `Origin` is missing or another site's, and send a signed-out reader to the account page. The `people/` routes answer 403 to a request whose `Origin` is missing or another site's, and to anyone without `auth:grants:write` on the vault.
+Providers the config doesn't list answer 404. Without `SVARTZ_DB`, `handle/` and the `account/` routes answer 503. The `account/` routes answer 403 to a request whose `Origin` is missing or another site's, and send a signed-out reader to the account page. The `people/` routes answer 403 to a request whose `Origin` is missing or another site's, and to anyone without `auth:grants:write` on the vault. The `groups/` routes answer 403 to a request whose `Origin` is missing or another site's, send a signed-out reader to the account page, and act only as the signed-in account: a group's member routes answer 404 to anyone outside the group and 403 to a member who isn't an owner, and `groups/link/` and `groups/unlink/` answer 403 to anyone without `auth:group-links:write` on the vault.
 
 ## The account page
 
 `<base><mount>/-/account/` is a [plugin page](server-plugins.md#plugin-pages) in the theme's shell where readers manage their account. Signed-in readers reach it from the **Account** link in the site actions, and you can link it from anywhere on the site. It needs `SVARTZ_DB` and the session secret; without them it answers 404. A signed-out reader sees a sign-in link per provider, each returning to the page. A signed-in reader can:
 
 - **Change their display name and handle.** A new handle follows the [handle rules](#first-sign-in). The old one keeps pointing at the account for good: `users/<old>/` redirects to `users/<new>/`, and no other account can take it, though its owner can switch back to it.
+- **Create a [group](#groups)**, see the groups they belong to, and accept or decline invitations to others.
 - **Link another provider.** The provider's sign-in comes back to the account that started it, bound to that browser's session: if the reader signs out or switches accounts meanwhile, nothing is linked. A provider account that already belongs to another account is refused, and stays with that account.
 - **Unlink a provider** while another remains. The one this browser signed in with stays linked; sign in another way to unlink it. Unlinking ends every session that provider signed in. Two browsers unlinking an account's last two providers at once leave one linked.
 - **See their sessions**: the provider each signed in with, when, and which is this browser.
@@ -298,10 +307,9 @@ A grant gives one **actor** one permission on one **object**, set to `allow`, `d
 | Actor | Who |
 | --- | --- |
 | `account` | One account, by its id. |
+| `group` | Every member of the [group](#groups), owners included, by its name. |
 | `role` | Every account that holds the [role](#roles), by its name. |
 | `static` | `guest` or `signed-in`. |
-
-Grants can also name a `group`, which ranks between accounts and roles. Nothing puts an account in a group yet, so those grants match nobody.
 
 | Object | Covers |
 | --- | --- |
@@ -310,9 +318,9 @@ Grants can also name a `group`, which ranks between accounts and roles. Nothing 
 | `folder:<vault>/<path>/` | A folder of a vault and everything in it, such as `folder:notes/garden/`. |
 | `page:<vault>/<slug>` | One page, such as `page:notes/garden/roses`. |
 
-A check on a page consults the page, each folder enclosing it, its vault and the site, in that order, and the first of them with a set grant that applies to the reader decides. Within that object, the most specific actor decides: the account, then its roles, then `signed-in`, then `guest`. Between grants of the same rank, `deny` beats `allow`. With nothing set, the answer is no. So a grant on a page beats any grant on the site, and to keep a page closed to guests but open to signed-in readers, set both actors on it.
+A check on a page consults the page, each folder enclosing it, its vault and the site, in that order, and the first of them with a set grant that applies to the reader decides. Within that object, the most specific actor decides: the account, then its groups, then its roles, then `signed-in`, then `guest`. Between grants of the same rank, `deny` beats `allow`. With nothing set, the answer is no. So a grant on a page beats any grant on the site, and to keep a page closed to guests but open to signed-in readers, set both actors on it.
 
-Two things allow whatever the grants say: the `admin` role, which [bootstrap admins](#bootstrap-admins) hold, and an account's own user page, `users/<handle>` in any vault.
+Three things allow whatever the grants say: the `admin` role, which [bootstrap admins](#bootstrap-admins) hold, an account's own user page, `users/<handle>` in any vault, and, for a group's owners, every object a moderator [linked the group](#linking-a-group) to and everything inside it.
 
 Grants live in `SVARTZ_DB`, in `auth_grants`. Set them on the dashboard, which records each change in [the audit log](#the-audit-log).
 
@@ -321,6 +329,30 @@ Grants live in `SVARTZ_DB`, in `auth_grants`. Set them on the dashboard, which r
 A role is a named actor: give it grants, and every account that holds it gets them. Create roles and choose who holds them on the dashboard. A role's name is 1 to 39 lowercase letters, numbers and hyphens, starting and ending with a letter or number. `Account.roles` lists the roles an account holds, `admin` first.
 
 `admin` is not a stored role. Only [`admins`](#bootstrap-admins) in config grants it: no role can be named `admin`, no account can be added to it, and no grant can name it. Grants on an admin's account are refused too, since an admin may do everything whatever the grants say.
+
+### Groups
+
+A group, such as a wiki's alliance, is an actor that people run themselves. Its members get the group's grants, and a moderator can link it to the pages it looks after, which gives its owners every permission there.
+
+Any signed-in reader creates a group in the Groups section of [their account page](#the-account-page), and owns it. A group has a name and a display name. The name follows the [handle rules](#first-sign-in), is unique, never changes, and can't be `admin`, `guest` or `signed-in`; grants and links name the group by it. The display name is up to 100 characters.
+
+Each group has a page at `<base><mount>/-/groups/<name>/`, which only its members can open; everyone else gets the 404, so nobody outside a group learns who is in it. Members see who belongs to the group, who owns it and where it is linked, and can leave. Owners also:
+
+- **Invite** an account by its handle. The invited account sees the invitation on its account page and joins only by accepting it; until then it isn't a member and holds none of the group's grants. Owners can withdraw an invitation, and the invited account can decline it. Invitations stay open until one of those happens.
+- **Make a member an owner**, so the group has co-owners.
+- **Remove** members and other owners.
+
+A group always keeps at least one owner: the last owner can't leave or be removed until they make someone else an owner. Groups can't be deleted yet.
+
+Membership is read on every check, so a removed member loses the group's grants on their next request.
+
+#### Linking a group
+
+A moderator links a group to a vault, a folder or a page in the dashboard's [Groups panel](#groups-panel). The group's owners then hold every permission on that object and everything inside it, whatever the grants say, as an account does on its own user page. Its other members get only the grants given to the group. A group can't be linked to the whole site.
+
+Linking is as sensitive as granting: it decides who controls those pages. It needs `auth:group-links:write`, which auth declares with no default, so only admins hold it until someone grants it. Every link and unlink is recorded in [the audit log](#the-audit-log).
+
+To give a group's members more trust on its pages, as a wiki gives an alliance on `alliances/<name>/`, grant the group the permission there in [People & permissions](#people--permissions), such as `submissions:commits:write` on the folder, and link the group to it.
 
 ### Checking a permission
 
@@ -352,9 +384,9 @@ Signed-in readers find an **Account** link to [their account page](#the-account-
 
 Auth's own panel, at `/-/dashboard/auth/people/`, manages who may do what:
 
-- **Grants**: set an account's or a role's grant of any permission to allow, deny or unset, on the whole site, a vault, a folder or a page. The picker offers every vault that shares these accounts, and suggests this vault's published folders and pages; a folder ends in `/`, such as `garden/`.
+- **Grants**: set an account's, a role's or a group's grant of any permission to allow, deny or unset, on the whole site, a vault, a folder or a page. The picker offers every vault that shares these accounts, and suggests this vault's published folders and pages; a folder ends in `/`, such as `garden/`.
 - **Roles**: create [roles](#roles), and add accounts to them or remove them.
-- **Check access**: ask whether an account may do something somewhere, and see the grant or rule that decided: a grant and where it sits, a permission's default, the admin role, or an account's own user page.
+- **Check access**: ask whether an account may do something somewhere, and see the grant or rule that decided: a grant and where it sits, a permission's default, the admin role, an account's own user page, or a linked group it owns.
 - **People**: find accounts by the start of their handle or any part of their display name, with the roles each holds.
 - **Permissions**: every permission the site's plugins declare, with its name, description and defaults.
 
@@ -369,9 +401,13 @@ Granting either is as powerful as making someone an admin: `auth:grants:read` sh
 
 The panel's forms post to the routes below and work without JavaScript. Each route checks `auth:grants:write` again, whatever the panel showed.
 
+### Groups panel
+
+Auth's second panel, at `/-/dashboard/auth/groups/`, is where moderators [link groups](#linking-a-group). It lists every group with its owners and the objects it is linked to, each with an Unlink button, above a form that links a group by name to a vault, or a folder or page of one. It opens for holders of `auth:group-links:write`, and its routes check it again.
+
 ## The audit log
 
-Every grant and role change is recorded in `auth_audit` in `SVARTZ_DB`: who made it, what it was, and when. The log is append-only: the database refuses to change or delete an entry. A change and its entry are written in one transaction, so neither lands without the other.
+Every grant, role and group change is recorded in `auth_audit` in `SVARTZ_DB`: who made it, what it was, and when. The log is append-only: the database refuses to change or delete an entry. A change and its entry are written in one transaction, so neither lands without the other.
 
 Server plugins record their own changes, such as a suspension or a resolved report, with `audit(env, entry, changes?)` from `@svartz/auth/server`:
 
