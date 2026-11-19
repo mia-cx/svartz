@@ -27,6 +27,8 @@ import {
   type EditRequest,
   type EditResponse,
   type ErrorResponse,
+  type FollowUpRequest,
+  type FollowUpSourceResponse,
   type NewPageRequest,
   type EditStage,
   type SourceResponse,
@@ -39,10 +41,11 @@ import { wikilinkCompletion } from "./wikilinks";
 
 /**
  * What the panel submits: an edit of a published note, or a new note in one of `folders`. A new note with a `title`
- * keeps it, as the reader's own user page does.
+ * keeps it, as the reader's own user page does. An edit with `pull` is a follow-up to that submission: `page` is then
+ * the file's path inside the vault, and the panel loads and saves it on the submission's branch.
  */
 export type EditorTarget =
-  | { readonly kind: "edit"; readonly page: string }
+  | { readonly kind: "edit"; readonly page: string; readonly pull?: number }
   | { readonly kind: "new"; readonly folders: readonly string[]; readonly title?: string };
 
 export interface EditorInput {
@@ -121,7 +124,11 @@ const UNVERIFIED = "Finish the check that you're human, then open the pull reque
 const DESTINATIONS = {
   commit: { idle: "Publish", sending: "Publishing…", hint: "Goes live once the site rebuilds." },
   "pull-request": { idle: "Open pull request", sending: "Opening pull request…", hint: "Goes to review before it goes live." },
+  "follow-up": { idle: "Add to submission", sending: "Adding to submission…", hint: "Goes to review with your submission." },
 } as const;
+
+/** Where a save goes: as the server decides for a page, or into the submission a follow-up edits. */
+type Destined = Destination | "follow-up";
 
 /** How often an open panel asks how a saved edit is doing. */
 const FOLLOW_INTERVAL_MS = 10_000;
@@ -200,7 +207,7 @@ const modeSwitch = (offered: readonly Mode[]) => `
 const panel = (target: EditorTarget, offered: readonly Mode[]) => `
 <div class="svartz-submissions-panel">
   <header class="svartz-submissions-header">
-    <h2 id="svartz-submissions-title">${target.kind === "edit" ? "Edit page" : "New page"}</h2>${modeSwitch(offered)}
+    <h2 id="svartz-submissions-title">${target.kind === "new" ? "New page" : target.pull === undefined ? "Edit page" : "Edit submission"}</h2>${modeSwitch(offered)}
     <button type="button" class="sv-icon-button" data-close aria-label="Close editor">${CLOSE_ICON}</button>
   </header>
   <form class="svartz-submissions-form" data-kind="${target.kind}" novalidate>
@@ -415,7 +422,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
   function previewSource(): PreviewSource | undefined {
     if (!view) return undefined;
     const markdown = view.state.sliceDoc();
-    if (target.kind === "edit") return { markdown, note: { page: target.page } };
+    if (target.kind === "edit") return { markdown, note: target.pull === undefined ? { page: target.page } : { path: target.page } };
     const name = title?.value.trim() || "Untitled";
     return { markdown, note: { path: `${folder?.value ? `${folder.value}/` : ""}${name}.md` } };
   }
@@ -493,7 +500,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
   /** The loaded source's blob SHA and {@link Draft.sourceHash}: an edit is based on it only while the hashes match. */
   let loaded: { sha: string; hash: string } | undefined;
   /** Where a save goes for this reader, as the server last said; `null` until it says, or when they can't save. */
-  let destination: Destination = null;
+  let destination: Destined = null;
   /**
    * Whether a new page's destination is being asked for its current title and section. The reader can't send until the
    * server says: the button would still promise what the last title got, and a save can go live where that went to review.
@@ -610,7 +617,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     error.replaceChildren();
   }
   /** Say where a save goes, on the button and beside it. */
-  function showDestination(next: Destination) {
+  function showDestination(next: Destined) {
     destination = next;
     hint.textContent = next ? DESTINATIONS[next].hint : "";
     hint.hidden = !next;
@@ -686,6 +693,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     const key = draftSlot(endpoint, target);
     if (target.kind === "edit") {
       const sha = loaded && loaded.hash === sourceHash ? loaded.sha : UNKNOWN_SOURCE;
+      if (target.pull !== undefined) return { route: "follow-up" as const, key, fields: { pull: target.pull, markdown, note: note.value, sha } };
       return { route: "edit" as const, key, fields: { page: target.page, markdown, note: note.value, sha } };
     }
     return { route: "new" as const, key, fields: { folder: folder?.value ?? "", title: title?.value ?? "", markdown, note: note.value } };
@@ -739,7 +747,9 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
       const saved = await request<EditResponse>(`${endpoint}/${submission.route}/`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ submissionId, ...submission.fields, turnstileToken } satisfies EditRequest | NewPageRequest),
+        body: JSON.stringify(submission.route === "follow-up"
+          ? submission.fields satisfies FollowUpRequest
+          : { submissionId, ...submission.fields, turnstileToken } satisfies EditRequest | NewPageRequest),
       });
       // Confirmed only once the reader can see the link: if navigation already closed the panel, the next panel
       // retries under this id and the server answers with the pull request this attempt opened.
@@ -785,7 +795,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     const status = Object.assign(document.createElement("p"), {
       className: "svartz-submissions-opened",
       textContent: saved.kind === "commit"
-        ? "Published. It goes live once the site rebuilds."
+        ? destination === "follow-up" ? "Added to your submission." : "Published. It goes live once the site rebuilds."
         : saved.reason
           ? `${why[saved.reason]} as pull request #${saved.number}.`
           : `Opened pull request #${saved.number}.`,
@@ -922,9 +932,12 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
     }
   }
 
-  async function load(page: string) {
+  async function load(page: string, pull?: number) {
     try {
-      const answer = await request<SourceResponse>(`${endpoint}/source/?page=${encodeURIComponent(page)}`);
+      // A follow-up edits the file as the submission's branch holds it now.
+      const answer = pull === undefined
+        ? await request<SourceResponse>(`${endpoint}/source/?page=${encodeURIComponent(page)}`)
+        : { ...await request<FollowUpSourceResponse>(`${endpoint}/follow-up/source/?pull=${pull}`), destination: "follow-up" as const };
       // Navigation closed the panel while the source loaded; a draft stays saved for the page's next visit.
       if (!dialog.isConnected) return;
       showSource(answer.markdown);
@@ -954,7 +967,7 @@ export function openEditor({ target, endpoint, base, mountContent, pathname, ope
   arrange();
   dialog.showModal();
   if (target.kind === "edit") {
-    void load(target.page);
+    void load(target.page, target.pull);
   } else {
     showSource("");
     // A given title already decides where the page goes.
