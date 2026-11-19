@@ -7,10 +7,11 @@
  * ```
  *
  * The vault needs the submissions plugin with `sync` set, which makes it a Cloudflare vault. A History action joins
- * Edit beside every page with a history.
+ * Edit beside every page with a history, and each account's user page lists its contributions below the note.
  */
 import { fileURLToPath } from "node:url";
-import { definePlugin, getCompilerContributions, type NormalizedSvartzPlugin } from "@svartz/core";
+import type { AuthServerOptions } from "@svartz/auth/server";
+import { definePlugin, getCompilerContributions, type NormalizedSvartzPlugin, type PluginContext, type SvartzPlugin } from "@svartz/core";
 import { commitSource, mirrorsCommits } from "@svartz/plugin-submissions/commits";
 import { publishedAttachments, sharedAttachmentNames } from "@svartz/plugins";
 import { alternateNames } from "@svartz/plugins/routes";
@@ -29,6 +30,17 @@ function fail(message: string): never {
 
 const needsMirror = (vault: string) =>
   `vault "${vault}" enables history without the submissions plugin's GitHub mirror; add submissions({ repo, app, sync: { … } }) to the same vault`;
+
+/**
+ * The folder of user pages below the deployment base, such as `/wiki/users/`, when the vault built by `ctx` holds
+ * them: auth resolves which vault does in `forVault`, into its server options.
+ */
+function userPagesOf(ctx: PluginContext): string | undefined {
+  const plugins = (ctx.plugins ?? ctx.config.plugins ?? []) as readonly (SvartzPlugin | NormalizedSvartzPlugin)[];
+  const options = plugins.find(({ id }) => id === "auth")?.server?.options as AuthServerOptions | undefined;
+  if (!options?.userPages || options.userPageVault !== ctx.config.id) return undefined;
+  return `${ctx.config.mountPath ?? ""}/${options.userPages}/`;
+}
 
 /** Page history and Recent changes, as plugin pages, and a History action on every published Markdown page. */
 export function history(): NormalizedSvartzPlugin {
@@ -65,6 +77,7 @@ export function history(): NormalizedSvartzPlugin {
             sharedNames: sharedAttachmentNames(ctx),
           },
         } satisfies HistoryData);
+        const userPages = userPagesOf(ctx);
         compiler.browserResources.set(PLUGIN_ID, {
           id: PLUGIN_ID,
           kind: "script",
@@ -72,6 +85,7 @@ export function history(): NormalizedSvartzPlugin {
           options: {
             mountPath,
             pages: notes.filter(({ path }) => /\.md$/i.test(path)).map(({ href }) => href),
+            ...(userPages ? { userPages } : {}),
           } satisfies BrowserOptions,
         });
         compiler.browserResources.set(`${PLUGIN_ID}:css`, { id: `${PLUGIN_ID}:css`, kind: "css", importId: STYLESHEET });

@@ -6,9 +6,12 @@ import type { PluginPage } from "@svartz/core";
 import type { Hunk } from "./diff";
 import { escape } from "./html";
 
-/** Who made a change: an account the site vouches for, or a git author with their GitHub login when GitHub knows it. */
+/**
+ * Who made a change: an account the site vouches for, linked to its user page or else its contributions, or a git
+ * author with their GitHub login when GitHub knows it.
+ */
 export type Author =
-  | { readonly kind: "account"; readonly name: string; readonly handle: string }
+  | { readonly kind: "account"; readonly name: string; readonly handle: string; readonly href: string }
   | { readonly kind: "github"; readonly name: string; readonly login: string | null };
 
 /** One change as a page lists it. */
@@ -30,7 +33,7 @@ const plainWhen = (iso: string) => `${dateTime.format(new Date(iso))} UTC`;
 
 function author(who: Author): string {
   if (who.kind === "account") {
-    return `<span class="sv-history-who"><span class="sv-history-name">${escape(who.name)}</span> <span class="sv-history-muted">@${escape(who.handle)}</span></span>`;
+    return `<span class="sv-history-who"><a class="sv-history-name" href="${escape(who.href)}">${escape(who.name)}</a> <span class="sv-history-muted">@${escape(who.handle)}</span></span>`;
   }
   if (!who.login) return `<span class="sv-history-who"><span class="sv-history-name">${escape(who.name)}</span></span>`;
   return `<span class="sv-history-who"><span class="sv-history-name">${escape(who.name)}</span> <a class="sv-history-muted" href="https://github.com/${encodeURIComponent(who.login)}" rel="external noopener">${escape(who.login)} on GitHub</a></span>`;
@@ -171,24 +174,36 @@ export interface WikiChange extends Change {
   readonly pages: ReadonlyArray<{ readonly title: string; readonly page: string; readonly diff: string; readonly history: string }>;
 }
 
-/** Recent changes to the whole wiki, by day, newest first. */
-export function changesPage({ changes, older, unavailable }: { readonly changes: readonly WikiChange[]; readonly older?: string; readonly unavailable: boolean }): PluginPage {
+/**
+ * One change as a list of the wiki's changes shows it: `time`, the pages it changed, who made it unless the list is
+ * one account's (`withAuthor` false), and its summary.
+ */
+function wikiChangeRow(change: WikiChange, time: string, withAuthor: boolean): string {
+  const pages = change.pages.map(({ title, page, diff, history }) =>
+    `<span class="sv-history-page"><a class="sv-history-name" href="${escape(page)}">${escape(title)}</a> <span class="sv-history-muted">(<a href="${escape(diff)}">changes</a>, <a href="${escape(history)}">history</a>)</span></span>`);
+  return `<li class="sv-history-row"><span class="sv-history-what">${time} ${pages.join(" ")} ${withAuthor ? author(change.author) : ""} ${summary(change.summary)}</span></li>`;
+}
+
+/** `changes` in a section per day, newest first, each headed at `level` (2 for `<h2>`). */
+function byDay(changes: readonly WikiChange[], level: 2 | 3, withAuthor: boolean): string[] {
   const days = new Map<string, WikiChange[]>();
   for (const change of changes) {
     const key = change.at.slice(0, 10);
     days.set(key, [...days.get(key) ?? [], change]);
   }
-  const sections = [...days].map(([date, entries], index) => {
-    const rows = entries.map((change) => {
-      const pages = change.pages.map(({ title, page, diff, history }) =>
-        `<span class="sv-history-page"><a class="sv-history-name" href="${escape(page)}">${escape(title)}</a> <span class="sv-history-muted">(<a href="${escape(diff)}">changes</a>, <a href="${escape(history)}">history</a>)</span></span>`);
-      return `<li class="sv-history-row"><span class="sv-history-what"><time class="sv-history-time" datetime="${escape(change.at)}">${escape(`${clock.format(new Date(change.at))} UTC`)}</time> ${pages.join(" ")} ${author(change.author)} ${summary(change.summary)}</span></li>`;
-    });
+  return [...days].map(([date, entries], index) => {
+    const rows = entries.map((change) =>
+      wikiChangeRow(change, `<time class="sv-history-time" datetime="${escape(change.at)}">${escape(`${clock.format(new Date(change.at))} UTC`)}</time>`, withAuthor));
     return `<section class="sv-history-section" aria-labelledby="sv-history-day-${index}">
-<h2 id="sv-history-day-${index}">${escape(day.format(new Date(`${date}T00:00:00Z`)))}</h2>
+<h${level} id="sv-history-day-${index}">${escape(day.format(new Date(`${date}T00:00:00Z`)))}</h${level}>
 <ol class="sv-history-list">${rows.join("")}</ol>
 </section>`;
   });
+}
+
+/** Recent changes to the whole wiki, by day, newest first. */
+export function changesPage({ changes, older, unavailable }: { readonly changes: readonly WikiChange[]; readonly older?: string; readonly unavailable: boolean }): PluginPage {
+  const sections = byDay(changes, 2, true);
   const empty = unavailable
     ? "<p>GitHub isn't answering right now, so changes can't be shown. Try again in a few minutes.</p>"
     : "<p>No changes yet. Changes show here once someone edits a page.</p>";
@@ -200,4 +215,83 @@ ${sections.length ? sections.join("") : empty}
 ${older ? `<nav class="sv-history-pager" aria-label="More changes"><a href="${escape(older)}">Older changes</a></nav>` : ""}
 </div>`,
   };
+}
+
+/** An account's reputation, as its contributions show it. `next` is for the account itself alone. */
+export interface Reputation {
+  readonly score: number;
+  readonly next?: { readonly role: string; readonly score: number };
+}
+
+/** One account's contributions: its changes to published pages, every page they changed, and its reputation. */
+export interface Contributions {
+  readonly name: string;
+  readonly handle: string;
+  readonly reputation: Reputation;
+  readonly changes: readonly WikiChange[];
+  /** Every published page the account's changes changed, most recently changed first. */
+  readonly pages: ReadonlyArray<{ readonly title: string; readonly page: string }>;
+}
+
+const points = new Intl.NumberFormat("en", { maximumFractionDigits: 2 });
+/** `12.5 points`, `1 point`, as the account page counts them. */
+const pointsText = (score: number) => `${points.format(score)} ${score === 1 ? "point" : "points"}`;
+
+function reputation({ score, next }: Reputation): string {
+  const line = `<p class="sv-history-reputation">Reputation: <strong>${escape(pointsText(score))}</strong></p>`;
+  if (!next) return line;
+  return `${line}
+<p class="sv-history-muted">${escape(`${pointsText(next.score - score)} to go: at ${pointsText(next.score)}, you get the ${next.role} role.`)}</p>`;
+}
+
+const pageList = (pages: Contributions["pages"]) =>
+  `<ul class="sv-history-pages">${pages.map(({ title, page }) => `<li><a href="${escape(page)}">${escape(title)}</a></li>`).join("")}</ul>`;
+
+/** An account's contributions page: its reputation, its changes by day, newest first, and the pages they changed. */
+export function contributionsPage(
+  view: Contributions & {
+    /** The account's user page, which its name links to. */
+    readonly userPage?: string;
+    readonly older?: string;
+    /** The site's records couldn't be read. */
+    readonly unavailable: boolean;
+  },
+): PluginPage {
+  const name = view.userPage ? `<a href="${escape(view.userPage)}">${escape(view.name)}</a>` : escape(view.name);
+  const edits = view.changes.length > 0
+    ? byDay(view.changes, 3, false).join("")
+    : `<p>${view.unavailable ? "Edits can't be shown right now. Try again in a few minutes." : "No edits yet."}</p>`;
+  return {
+    title: `Contributions by ${view.name}`,
+    html: `<div class="sv-history">
+<h1>Contributions by ${name} <span class="sv-history-muted">@${escape(view.handle)}</span></h1>
+${reputation(view.reputation)}
+<section class="sv-history-section" aria-labelledby="sv-history-edits">
+<h2 id="sv-history-edits">Edits</h2>
+${edits}
+${view.older ? `<nav class="sv-history-pager" aria-label="More edits"><a href="${escape(view.older)}">Older edits</a></nav>` : ""}
+</section>
+${view.pages.length > 0 ? `<section class="sv-history-section" aria-labelledby="sv-history-pages">
+<h2 id="sv-history-pages">Pages edited</h2>
+${pageList(view.pages)}
+</section>` : ""}
+</div>`,
+  };
+}
+
+/**
+ * The section a user page shows below its note: the account's reputation, its latest changes and the pages they
+ * changed, as many as the caller passes, and a link to `all`, its contributions page.
+ */
+export function contributionsSection(view: Contributions & { readonly all: string }): string {
+  const rows = view.changes.map((change) => wikiChangeRow(change, when(change.at), false));
+  return `<section class="sv-history sv-history-contributions" aria-labelledby="sv-history-contributions">
+<h2 id="sv-history-contributions">Contributions</h2>
+${reputation(view.reputation)}
+${rows.length > 0 ? `<h3>Latest edits</h3>
+<ol class="sv-history-list">${rows.join("")}</ol>` : "<p>No edits yet.</p>"}
+${view.pages.length > 0 ? `<h3>Pages edited</h3>
+${pageList(view.pages)}` : ""}
+<p><a href="${escape(view.all)}">All contributions</a></p>
+</section>`;
 }
