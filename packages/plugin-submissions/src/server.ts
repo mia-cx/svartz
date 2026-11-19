@@ -209,7 +209,7 @@ export async function isVaultSubmission(env: ServerContext["env"], { database, r
   return savedPull({ db, scope: scopeOf(repo, root) }, number);
 }
 
-export { savedEdits, type SavedEdits } from "./saved-edits";
+export { changedFiles, savedEdits, type SavedEdits } from "./saved-edits";
 
 const submissions: ServerModuleFactory<ServerOptions, BuildData> = (options, data) => {
   const pages = new Map(Object.entries(data.pages));
