@@ -637,6 +637,53 @@ describe("POST <id>/hide/", () => {
     expect(await audited(db)).toHaveLength(1);
   });
 
+  // Proves the write decides when two moderators hide at once: the comment is hidden once, on the record once.
+  it.each(["SVARTZ_DB", "DB"])("records one hide when two arrive together, with comments in %s", async (binding) => {
+    const { db } = await database();
+    await seed(db, [{ id: "c1", page: "garden", author: GRACE, body: "Buy pills here.", anchor: anchor("roses", 0), createdAt: "2026-11-02T00:00:00.000Z" }]);
+    // Holds each read of the comment until both requests have read it, as when two moderators click at once.
+    let waiting: Array<() => void> | undefined;
+    const racing: Database = {
+      batch: (statements) => db.batch(statements),
+      prepare(query) {
+        const statement = db.prepare(query);
+        if (!/AS hidden,/.test(query)) return statement;
+        return {
+          ...statement,
+          bind: (...values) => {
+            const bound = statement.bind(...values);
+            return {
+              ...bound,
+              all: async () => {
+                if (waiting) {
+                  const arrived = new Promise<void>((release) => waiting!.push(release));
+                  if (waiting.length === 2) {
+                    waiting.forEach((release) => release());
+                    waiting = undefined;
+                  }
+                  await arrived;
+                }
+                return bound.all();
+              },
+            } as typeof bound;
+          },
+        };
+      },
+    } as Database;
+    const site = createSite({ [binding]: racing, SVARTZ_DB: racing }, { database: binding });
+    const alan = await signIn(site, ALAN);
+    const { results: [account] } = await db.prepare("SELECT account_id FROM auth_identities WHERE id = ?").bind(ALAN.id).all<{ account_id: string }>();
+    await db.prepare("INSERT INTO auth_grants (actor_type, actor_id, object, permission, value, updated_at) VALUES ('account', ?, 'vault:notes', 'annotations:comments:delete', 'allow', ?)")
+      .bind(account!.account_id, "2026-11-19T00:00:00.000Z").run();
+
+    waiting = [];
+    const answers = await Promise.all([hide(site, alan), hide(site, alan)]);
+
+    expect(answers.map(({ status }) => status)).toEqual([303, 303]);
+    expect(await listed(site)).toEqual([]);
+    expect(await audited(db)).toHaveLength(1);
+  });
+
   it.each([
     ["from another site", { origin: "https://evil.test" }, 403],
     ["by a reader who doesn't moderate the page", { as: "ada" }, 403],

@@ -163,7 +163,7 @@ Under `<base><mount>/_svartz/annotations/`:
 | `POST` | Stores a comment, `{ kind: "comment", page, anchor, body }`, for the signed-in reader, and answers `201 { annotation }`. Writing also refreshes the reader's stored identity. |
 | `POST <id>/agree/` | Sets the signed-in reader's **+1** on comment `<id>`: `{ agreed: true }` adds it, `{ agreed: false }` takes it back. Answers `{ agreed, agreements }`, the comment's agreements after the change, oldest first. Sending the same state again changes nothing, so a retry is safe. |
 | `DELETE <id>/` | Deletes annotation `<id>` and its agreements, for its author or a moderator of its page, and answers `204`. A retry finds it gone and answers `404`. |
-| `POST <id>/hide/` | A form post with `returnTo`, a path on this site. Hides comment `<id>` for a moderator of its page, records it in auth's audit log, and redirects to `returnTo` (the vault's home otherwise). Hiding a hidden comment changes nothing. Needs accounts: 503 without `SVARTZ_DB`. |
+| `POST <id>/hide/` | A form post with `returnTo`, a path on this site. Hides comment `<id>` for a moderator of its page, records it in auth's audit log, and redirects to `returnTo` (the vault's home otherwise). Hiding a hidden comment changes and records nothing, even when two moderators hide it at once. Needs accounts: 503 without `SVARTZ_DB`. |
 
 `anchor` is what `describe` returns for the selection: `{ exact, prefix, suffix, start, end }`, where `end - start` is the length of `exact`.
 

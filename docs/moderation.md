@@ -20,7 +20,7 @@ Reports need accounts, so the vault needs `auth` with the [accounts database](au
 
 | Option | Value |
 | --- | --- |
-| `database` | The D1 binding reports are kept in, such as `{ env: "SVARTZ_DB" }`. The plugin creates its tables there on first use, all starting with `moderation_`, so it can share the accounts database. Sharing it lets each resolve or dismiss commit in one transaction with its audit entry; in another database, the entry is written first. |
+| `database` | The D1 binding reports are kept in, such as `{ env: "SVARTZ_DB" }`. The plugin creates its tables there on first use, all starting with `moderation_`, so it can share the accounts database. Sharing it lets each resolve or dismiss commit in one transaction with its audit entry; in another database, the report closes first and reopens if the entry can't be written. |
 | `limits.reportsPerHour` | Reports each reader may send per clock hour. Default 10. Every attempt counts, refused ones included. |
 
 ## Reporting
@@ -47,7 +47,7 @@ A reader's report of a target stays one report while it's open: sending it again
 
 `/-/dashboard/moderation/reports/` lists the open reports, oldest first, each with what it's about as the site knows it now (the page's title, the comment and who wrote it, the account's name, a link to the pull request or commit on GitHub) and the reader's reason. **Closed** lists resolved and dismissed reports with who closed them and when. Moderators never see who sent a report.
 
-- **Resolve** closes a report that was right, once something was done about it. **Dismiss** closes one that needs nothing. A report closes once: the second moderator is told someone was first.
+- **Resolve** closes a report that was right, once something was done about it. **Dismiss** closes one that needs nothing. A report closes once, even when two moderators click at the same moment: the second is told someone was first, and the audit log holds only the first.
 - **Hide comment** hides the reported comment through annotations, for a moderator who holds `annotations:comments:delete` on its page. It stays in the report, marked hidden.
 - **Close submission** closes the reported pull request without merging it, through submissions, for a moderator who holds `submissions:reviews:write`.
 

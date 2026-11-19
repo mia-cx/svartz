@@ -190,8 +190,28 @@ export async function listReports(db: Database, vault: string, open: boolean, li
   return { reports: (rows!.results as ReportRow[]).map(reportOf), open: count.open, closed: count.closed };
 }
 
-/** The statement that closes open report `id` of `vault` as `state`, by the moderator with handle `by`. A closed report stays as it was. */
-export function closeStatement(db: Database, vault: string, id: string, state: Exclude<ReportState, "open">, by: string): Statement {
-  return db.prepare("UPDATE moderation_reports SET state = ?, closed_at = ?, closed_by = ? WHERE id = ? AND vault = ? AND state = 'open'")
-    .bind(state, new Date().toISOString(), by, id, vault);
+/** A moderator's decision on an open report. */
+export interface Closing {
+  readonly vault: string;
+  readonly id: string;
+  readonly state: Exclude<ReportState, "open">;
+  /** The moderator's handle. */
+  readonly by: string;
+  /** ISO 8601. */
+  readonly at: string;
+}
+
+/**
+ * The statement that closes open report `id` of `vault`. On a report already closed it fails, so the batch it runs in
+ * (an audit entry, say) rolls back with it: a closed report would take a state the table's CHECK refuses.
+ */
+export function closeStatement(db: Database, { vault, id, state, by, at }: Closing): Statement {
+  return db.prepare(`UPDATE moderation_reports SET state = CASE state WHEN 'open' THEN ?1 ELSE 'closed already' END, closed_at = ?2, closed_by = ?3
+    WHERE id = ?4 AND vault = ?5`).bind(state, at, by, id, vault);
+}
+
+/** Undo `closing`, for a decision whose audit entry couldn't be written. A report someone closed since stays closed. */
+export async function reopen(db: Database, { vault, id, state, by, at }: Closing): Promise<void> {
+  await db.prepare(`UPDATE moderation_reports SET state = 'open', closed_at = NULL, closed_by = NULL
+    WHERE id = ? AND vault = ? AND state = ? AND closed_at = ? AND closed_by = ?`).bind(id, vault, state, at, by).run();
 }

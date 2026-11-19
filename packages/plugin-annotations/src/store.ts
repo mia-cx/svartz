@@ -318,10 +318,18 @@ export async function readComment(db: Database, vault: string, annotation: strin
   return row && { id: row.id, page: row.page, body: row.body, author: identityOf(row), createdAt: row.created_at, hidden: row.hidden === 1 };
 }
 
-/** The statement that hides `annotation` of `vault` at `at`, for the batch that records who hid it. Hiding twice keeps the first time. */
+/**
+ * The statement that hides `annotation` of `vault` at `at`, for the batch that records who hid it. On a comment already
+ * hidden it fails, so that batch rolls back with it.
+ */
 export function hideStatement(db: Database, vault: string, annotation: string, at: string): Statement {
-  return db.prepare(`INSERT INTO hidden_annotations (annotation_id, hidden_at) SELECT id, ? FROM annotations WHERE id = ? AND vault = ?
-    ON CONFLICT (annotation_id) DO NOTHING`).bind(at, annotation, vault);
+  return db.prepare("INSERT INTO hidden_annotations (annotation_id, hidden_at) SELECT id, ? FROM annotations WHERE id = ? AND vault = ?")
+    .bind(at, annotation, vault);
+}
+
+/** Undo the hide of `annotation` at `at`, for one whose audit entry couldn't be written. */
+export async function unhide(db: Database, annotation: string, at: string): Promise<void> {
+  await db.prepare("DELETE FROM hidden_annotations WHERE annotation_id = ? AND hidden_at = ?").bind(annotation, at).run();
 }
 
 /** Every annotation on `page` of `vault` that isn't hidden, oldest first, with its author and agreements. */

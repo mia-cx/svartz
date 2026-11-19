@@ -24,7 +24,7 @@ import { CONTEXT_LENGTH, type Anchor } from "./anchor";
 import { COMMENT_MAX_LENGTH, QUOTE_MAX_LENGTH } from "./limits";
 import { DELETE_COMMENTS, WRITE_COMMENTS } from "./permissions";
 import {
-  createComment, deleteAnnotation, findAnnotation, hideStatement, listPage, migrate, readComment as storedComment, setAgreement, spendWrite,
+  createComment, deleteAnnotation, findAnnotation, hideStatement, listPage, migrate, readComment as storedComment, setAgreement, spendWrite, unhide,
   type Database, type ReportedComment,
 } from "./store";
 
@@ -343,17 +343,27 @@ async function hide(request: Request, url: URL, context: ServerContext, options:
   const text = await readText(request);
   if (text === undefined) return failure(413, "too_large", "Send only returnTo to hide a comment.");
   const returnTo = sameSitePath(new URLSearchParams(text).get("returnTo"), url, context);
-  if (!comment.hidden) {
-    const change = hideStatement(db, context.vault.id, id, new Date().toISOString());
-    const entry = { actor: account, action: "annotations:comment:hide", target: `annotation:${id}`, detail: { vault: context.vault.id, page: comment.page } };
-    // In the accounts database the hide and its entry commit together; anywhere else the entry lands first.
-    if (options.database.env === ACCOUNTS_DATABASE_ENV) await audit(context.env, entry, [change]);
-    else {
-      await audit(context.env, entry);
-      await change.run();
-    }
+  const back = new Response(null, { status: 303, headers: { location: returnTo, "cache-control": "no-store" } });
+  if (comment.hidden) return back;
+  const at = new Date().toISOString();
+  const entry = { actor: account, action: "annotations:comment:hide", target: `annotation:${id}`, detail: { vault: context.vault.id, page: comment.page } };
+  // Another moderator may have hidden it since the read above. The hide itself fails then, so the write decides.
+  const shared = options.database.env === ACCOUNTS_DATABASE_ENV;
+  try {
+    // In the accounts database the hide and its entry commit together; anywhere else the hide lands first.
+    if (shared) await audit(context.env, entry, [hideStatement(db, context.vault.id, id, at)]);
+    else await hideStatement(db, context.vault.id, id, at).run();
+  } catch (error) {
+    if ((await storedComment(db, context.vault.id, id))?.hidden) return back;
+    throw error;
   }
-  return new Response(null, { status: 303, headers: { location: returnTo, "cache-control": "no-store" } });
+  if (!shared) {
+    await audit(context.env, entry).catch(async (error: unknown) => {
+      await unhide(db, id, at);
+      throw error;
+    });
+  }
+  return back;
 }
 
 /** `/<annotation id>/`, below the plugin's base. */

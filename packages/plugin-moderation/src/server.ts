@@ -15,7 +15,7 @@ import type { EnvReference, ServerContext, ServerModuleFactory } from "@svartz/c
 import { REASON_MAX_LENGTH } from "./api";
 import { panelPath, reportsPanel } from "./panel";
 import { READ_REPORTS, WRITE_REPORTS } from "./permissions";
-import { closeStatement, fileReport, findReport, migrate, spendReport, type Database } from "./store";
+import { closeStatement, fileReport, findReport, migrate, reopen, spendReport, type Database } from "./store";
 import { checkTarget, type BuildData } from "./targets";
 
 export type { BuildData } from "./targets";
@@ -145,18 +145,28 @@ const moderationServer: ServerModuleFactory<ModerationServerOptions, BuildData> 
       status: 303, headers: { location: `${panelPath(context)}?status=${status}#report-${id}`, "cache-control": "no-store" },
     });
     if (report.state !== "open") return back("already-closed");
-    const change = closeStatement(db, context.vault.id, id, state, account.handle);
+    const closing = { vault: context.vault.id, id, state, by: account.handle, at: new Date().toISOString() };
     const entry = {
       actor: account,
       action: `moderation:report:${state === "resolved" ? "resolve" : "dismiss"}`,
       target: `report:${id}`,
       detail: { vault: context.vault.id, target: `${report.target.kind}:${report.target.id}` },
     };
-    // In the accounts database the change and its entry commit together; anywhere else the entry lands first.
-    if (database === ACCOUNTS_DATABASE_ENV) await audit(context.env, entry, [change]);
-    else {
-      await audit(context.env, entry);
-      await change.run();
+    // Another moderator may have closed it since the read above. The close itself fails then, so the write decides.
+    const shared = database === ACCOUNTS_DATABASE_ENV;
+    try {
+      // In the accounts database the close and its entry commit together; anywhere else the close lands first.
+      if (shared) await audit(context.env, entry, [closeStatement(db, closing)]);
+      else await closeStatement(db, closing).run();
+    } catch (error) {
+      if ((await findReport(db, context.vault.id, id))?.state !== "open") return back("already-closed");
+      throw error;
+    }
+    if (!shared) {
+      await audit(context.env, entry).catch(async (error: unknown) => {
+        await reopen(db, closing);
+        throw error;
+      });
     }
     return back(state);
   }
