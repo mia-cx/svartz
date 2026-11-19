@@ -649,6 +649,29 @@ describe("an edit's status", () => {
     expect(requests).toEqual([]);
   });
 
+  it("waits a minute when GitHub says only that a secondary rate limit was exceeded", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const site = await createSite({ live: { environment: "production" } });
+    const ada = await adaCommits(site);
+    let limited = true;
+    const requests = quietGitHub({}, (path) =>
+      path.startsWith("/compare/") && limited ? Response.json({ message: "You have exceeded a secondary rate limit. Please wait a few minutes before you try again." }, { status: 403 }) : undefined);
+    for (const [index, sha] of ["1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222", "3333333333333333333333333333333333333333"].entries()) {
+      await deliver(site, "deployment_status", deploymentStatus({ id: 7 + index, sha, statusId: 70 + index, state: "in_progress" }));
+    }
+    const compares = () => requests.filter((path) => path.includes("/compare/"));
+
+    await status(site, ada);
+    await site.settle();
+    expect(compares()).toHaveLength(1);
+
+    limited = false;
+    vi.setSystemTime(Date.now() + 61_000);
+    await status(site, ada);
+    await site.settle();
+    expect(compares()).toHaveLength(4);
+  });
+
   it.each([
     ["a comparison", "/actions/runs", "/compare/"],
     ["the poll", "/compare/", "/actions/runs"],

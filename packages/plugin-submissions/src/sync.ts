@@ -247,7 +247,7 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
       if (response.status === 404) await writeAncestry(mirror, commit, head, false);
       const status = response.ok ? text(object(await response.json())?.status) : undefined;
       if (status) await writeAncestry(mirror, commit, head, status === "ahead" || status === "identical");
-      const resume = resumeAt(response, Date.now());
+      const resume = await resumeAt(response, Date.now());
       if (resume) return pause(mirror, resume);
     }
   }

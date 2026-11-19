@@ -9,9 +9,10 @@
  * {@link MAX_REQUESTS} lasts, it fills in what the lists leave out: deployments' statuses, which pull requests touch
  * the vault, their reviews, and commits' files. What it doesn't reach waits in the mirror for the next poll.
  *
- * It keeps {@link RATE_LIMIT_RESERVE} requests of GitHub's hourly allowance for saves: below that, or when GitHub says
- * to wait (`Retry-After`, a spent `X-RateLimit-Remaining`), it stops and polls again only after the reset. The pause
- * is kept in D1 and shared with status reads' ancestry checks, which keep the same reserve.
+ * It keeps {@link RATE_LIMIT_RESERVE} requests of GitHub's hourly allowance for saves: below that it stops and polls
+ * again only after the reset, and on a rate limit it waits as GitHub says (`Retry-After`, else the reset when the
+ * allowance is spent, else a minute). The pause is kept in D1 and shared with status reads' ancestry checks, which
+ * keep the same reserve; each reads it before every request.
  */
 import { requestGitHub } from "./github";
 import {
@@ -101,15 +102,27 @@ export async function pause({ db, scope }: Mirror, until: number): Promise<void>
     ON CONFLICT (scope) DO UPDATE SET paused_until = MAX(paused_until, excluded.paused_until)`).bind(scope, until).run();
 }
 
-/** When to ask GitHub again, if its answer says to wait: a `Retry-After`, or an hourly allowance at the reserve. */
-export function resumeAt(response: Response, now: number): number | undefined {
+/**
+ * When to ask GitHub again, if its answer says to wait, by GitHub's rules: after its `Retry-After`; after the reset
+ * when the hourly allowance is at the reserve; after a minute for any other rate limit.
+ */
+export async function resumeAt(response: Response, now: number): Promise<number | undefined> {
   const retryAfter = Number(response.headers.get("retry-after"));
   if (retryAfter > 0) return now + retryAfter * MS_PER_SECOND;
   const remaining = response.headers.get("x-ratelimit-remaining");
-  const limited = response.status === 429 || (response.status === 403 && remaining === "0");
-  if (!limited && (remaining === null || Number(remaining) > RATE_LIMIT_RESERVE)) return undefined;
-  const reset = Number(response.headers.get("x-ratelimit-reset")) * MS_PER_SECOND;
-  return reset > now ? reset : now + POLL_INTERVAL_MS;
+  if (remaining !== null && Number(remaining) <= RATE_LIMIT_RESERVE) {
+    const reset = Number(response.headers.get("x-ratelimit-reset")) * MS_PER_SECOND;
+    return reset > now ? reset : now + POLL_INTERVAL_MS;
+  }
+  return await rateLimited(response) ? now + POLL_INTERVAL_MS : undefined;
+}
+
+/** A 429, or a 403 whose message says a rate limit was exceeded, as a secondary limit's does, not that access is refused. */
+async function rateLimited(response: Response): Promise<boolean> {
+  if (response.status === 429) return true;
+  if (response.status !== 403) return false;
+  const message = text(object(await response.clone().json().catch(() => undefined))?.message);
+  return /rate limit/i.test(message ?? "");
 }
 
 /** The poll ran out of budget, or GitHub said to wait. */
@@ -135,7 +148,7 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
       : [];
     const response = await requestGitHub(await token(), "GET", `/repos/${repo}${path}`, undefined, undefined,
       stored ? { "if-none-match": stored.etag } : {});
-    const resume = resumeAt(response, Date.now());
+    const resume = await resumeAt(response, Date.now());
     if (resume) await pause(mirror, resume);
     if (response.status === 304) return undefined;
     if (response.status === 404) return null;
