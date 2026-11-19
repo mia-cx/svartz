@@ -207,6 +207,26 @@ describe("thresholds", () => {
     expect(await tour.mayDelete(ada)).toBe(true);
   });
 
+  // Proves a threshold is reached at the score the account sees: points of 0.1 and 0.7 make 0.8, though their floating
+  // point sum is 0.7999999999999999.
+  it("give the role at the score shown, to two decimals", async () => {
+    const tour = await site();
+    const root = await signUp(tour, ADMIN, "root");
+    await signUp(tour, 2, "ada");
+    await tour.post("people/role", root, { name: "editors" });
+    await tour.post("reputation/points", root, { edit: "1", page: "0.1", agreement: "0.5", kudos: "0.7", declined: "0", "daily-limit": "100" });
+    await tour.post("reputation/threshold", root, { role: "editors", score: "0.8" });
+
+    await postReputation(tour.env, { kind: "page", to: { identity: "github:2" }, ref: "test:commit:1" });
+    await tour.post("reputation/kudos", root, { handle: "ada", reason: "Thanks." });
+
+    expect(await tour.score("ada")).toBe(0.8);
+    expect(await auditLog(tour, "auth:role:promote")).toEqual([
+      { actor_handle: "auth:reputation", target: "editors", detail: { account: "ada", score: 0.8, threshold: 0.8 } },
+    ]);
+    expect(text(await tour.page(`${DASHBOARD}auth/people/`, root))).toContain("@ada ada By reputation");
+  });
+
   // Proves the panel's bounds: no weight or threshold outside its range, no NaN or infinity, and no threshold for the
   // admin role or a role that doesn't exist; and only someone who may change grants may change any of it.
   it("refuse values out of bounds, the admin role, unknown roles, and anyone who may not change grants", async () => {

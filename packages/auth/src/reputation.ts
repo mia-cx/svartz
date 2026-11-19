@@ -107,10 +107,16 @@ export async function removeThreshold(db: Database, actor: AuditEntry["actor"], 
   return true;
 }
 
+/**
+ * The score of `?1` (every account, when null), at the two decimals entries are stored with: a raw sum such as
+ * 0.1 + 0.7 = 0.7999999999999999 would miss a threshold of 0.8 that the account's page shows as reached.
+ */
+const SCORES = `scores AS (
+    SELECT account_id, ROUND(SUM(points), 2) AS score FROM auth_reputation WHERE ?1 IS NULL OR account_id = ?1 GROUP BY account_id
+  )`;
+
 /** Accounts whose score reaches a threshold whose role they don't hold and reputation never gave them. */
-const DUE = `WITH scores AS (
-    SELECT account_id, SUM(points) AS score FROM auth_reputation WHERE ?1 IS NULL OR account_id = ?1 GROUP BY account_id
-  ), due AS (
+const DUE = `WITH ${SCORES}, due AS (
     SELECT s.account_id, s.score, t.role, t.score AS threshold FROM scores s JOIN auth_reputation_thresholds t ON s.score >= t.score
     WHERE NOT EXISTS (SELECT 1 FROM auth_reputation_promotions p WHERE p.account_id = s.account_id AND p.role = t.role)
       AND NOT EXISTS (SELECT 1 FROM auth_role_members m WHERE m.account_id = s.account_id AND m.role = t.role)
@@ -125,14 +131,12 @@ async function promote(db: Database, account?: string): Promise<void> {
   const at = new Date().toISOString();
   await db.batch([
     db.prepare(`${DUE} INSERT INTO auth_audit (at, actor_id, actor_handle, action, target, detail)
-      SELECT ?2, ?3, ?4, 'auth:role:promote', d.role, json_object('account', a.handle, 'score', round(d.score, 2), 'threshold', d.threshold)
+      SELECT ?2, ?3, ?4, 'auth:role:promote', d.role, json_object('account', a.handle, 'score', d.score, 'threshold', d.threshold)
       FROM due d JOIN auth_accounts a ON a.id = d.account_id`).bind(account ?? null, at, REPUTATION_ACTOR.id, REPUTATION_ACTOR.handle),
     db.prepare(`${DUE} INSERT INTO auth_role_members (role, account_id, added_at) SELECT role, account_id, ?2 FROM due WHERE true
       ON CONFLICT DO NOTHING`).bind(account ?? null, at),
     // The memberships just added are the ones this batch stamped, so the promotion is recorded only where it landed.
-    db.prepare(`WITH scores AS (
-        SELECT account_id, SUM(points) AS score FROM auth_reputation WHERE ?1 IS NULL OR account_id = ?1 GROUP BY account_id
-      )
+    db.prepare(`WITH ${SCORES}
       INSERT INTO auth_reputation_promotions (account_id, role, promoted_at)
       SELECT s.account_id, t.role, ?2 FROM scores s JOIN auth_reputation_thresholds t ON s.score >= t.score
       WHERE EXISTS (SELECT 1 FROM auth_role_members m WHERE m.account_id = s.account_id AND m.role = t.role AND m.added_at = ?2)
