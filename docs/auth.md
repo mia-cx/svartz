@@ -235,3 +235,80 @@ export default guestbook;
 `readSignIn(request, env)` answers `{ account }`, or `{ account: null, reason }` saying why there is none: `"signed-out"`, or `"no-database"` when the site binds no `SVARTZ_DB`. A plugin that needs accounts can answer the second with a 503 naming the binding.
 
 `readIdentity(request, env)` answers the provider account the reader signed in with, or `null`. It works with or without `SVARTZ_DB`, so plugins written before accounts keep working; new plugins should read the account.
+
+## Permissions
+
+Plugins declare what people may do on the site, and check it with `can()`. Admins decide who holds each permission with **grants**; until the dashboard arrives, they set them with Wrangler.
+
+### Declaring permissions
+
+A plugin lists the permissions it checks under `permissions`, each in its own namespace, `<plugin id>:<feature>:<action>`, where the action is `read`, `write` or `delete`:
+
+```ts
+import { definePlugin } from "@svartz/core";
+
+export const guestbook = definePlugin(() => ({
+  id: "guestbook",
+  server: { module: "@acme/svartz-guestbook/server" },
+  permissions: [
+    { slug: "guestbook:entries:write", name: "Sign the guestbook", description: "Add an entry.", defaults: { "signed-in": "allow" } },
+    { slug: "guestbook:entries:delete", name: "Delete any entry", description: "Remove anyone's entry." },
+  ],
+}));
+```
+
+Auth collects every enabled plugin's declarations when the build resolves its config, and fails the build naming the plugin when a slug is malformed or outside the plugin's namespace, a name or description is missing, or a default isn't `"allow"` or `"deny"`. Host vaults share accounts, so they share one catalogue: a permission two host vaults declare must be declared alike.
+
+`defaults` grants the permission on the whole site to the built-in actors, until a stored grant to the same actor on the site replaces it:
+
+- `guest` is everyone, signed in or not.
+- `signed-in` is everyone with an account.
+
+### Grants
+
+A grant gives one **actor** one permission on one **object**, set to `allow`, `deny` or `unset`.
+
+| Actor | Who |
+| --- | --- |
+| `account` | One account, by its id. |
+| `static` | `guest` or `signed-in`. |
+
+Grants can also name a `group` or a `role`, which rank between the two. Nothing puts an account in a group or gives it a role other than `admin` yet, so those grants match nobody.
+
+| Object | Covers |
+| --- | --- |
+| `site` | Every vault. |
+| `vault:<id>` | A vault. |
+| `folder:<vault>/<path>/` | A folder of a vault and everything in it, such as `folder:notes/garden/`. |
+| `page:<vault>/<slug>` | One page, such as `page:notes/garden/roses`. |
+
+A check on a page consults the page, each folder enclosing it, its vault and the site, in that order, and the first of them with a set grant that applies to the reader decides. Within that object, the most specific actor decides: the account, then `signed-in`, then `guest`. Between grants of the same rank, `deny` beats `allow`. With nothing set, the answer is no. So a grant on a page beats any grant on the site, and to keep a page closed to guests but open to signed-in readers, set both actors on it.
+
+Two things allow whatever the grants say: the `admin` role, which [bootstrap admins](#bootstrap-admins) hold, and an account's own user page, `users/<handle>` in any vault.
+
+Grants live in `SVARTZ_DB`, in `auth_grants`. To let one account delete any comment in the `notes` vault:
+
+```sh
+wrangler d1 execute notes --remote --command "INSERT INTO auth_grants (actor_type, actor_id, object, permission, value, updated_at)
+  SELECT 'account', id, 'vault:notes', 'annotations:comments:delete', 'allow', datetime('now') FROM auth_accounts WHERE handle = 'octocat'"
+```
+
+### Checking a permission
+
+```ts
+import type { ServerModuleFactory } from "@svartz/core";
+import { can, readAccount } from "@svartz/auth/server";
+
+const guestbook: ServerModuleFactory = () => async (request, context) => {
+  const reader = await readAccount(request, context.env);
+  const page = new URL(request.url).searchParams.get("page") ?? "";
+  if (!await can(reader, "guestbook:entries:write", { vault: context.vault.id, page }, context.env)) {
+    return Response.json({ error: "forbidden", message: "You can't sign this guestbook." }, { status: 403 });
+  }
+  return Response.json({ signed: true });
+};
+```
+
+`can(account, permission, object, env)` answers whether `account`, or a guest for `null`, holds `permission` on `object`: the site (`{}`), a vault (`{ vault }`), or a page of one (`{ vault, page }`, with the page's slug). It loads every grant that could apply in one query and decides in memory.
+
+It fails closed. Without `SVARTZ_DB` there are no grants and no accounts, so it answers `false`, defaults included; a plugin that must work without accounts decides that case itself, as [annotations](annotations.md#moderating) does. A database error throws. A permission no plugin on the site declares throws too, naming it, and so does every check in code that runs outside `svartzHandle`, since auth registers the catalogue as it starts.

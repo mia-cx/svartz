@@ -27,7 +27,7 @@ Enable it per vault. It needs [`auth`](auth.md) on the same vault, and a Cloudfl
 | --- | --- |
 | `database` | The D1 binding to store annotations in: `{ env: "DB" }`. |
 | `reactions` | Optional. The site's drawn reactions, `[{ id, label, src }]`, in the order readers are offered them. `id` is lowercase letters, digits and hyphens; `label` is what screen readers announce. |
-| `moderators` | Optional. Identity ids, such as `"github:583231"`, that may delete any annotation. See [moderating](#moderating) for finding yours. |
+| `moderators` | Deprecated: grant `annotations:comments:delete` instead. Identity ids, such as `"github:583231"`, that may delete any annotation. See [moderating](#moderating). |
 | `limits` | Optional. `{ writesPerHour }`: write attempts each signed-in reader may make per clock hour. Default 30. See [write limits](#write-limits). |
 
 ## Write limits
@@ -118,7 +118,16 @@ A comment on a passage no longer in the note is deleted the same way from its en
 
 ### Moderating
 
-Moderators see **Delete** on every comment, and delete it from the page itself. To make yourself one, sign in on the site, open `<base><mount>/_svartz/auth/me/`, and copy its `id` into `moderators`:
+Moderators see **Delete** on every comment of a page, and delete it from the page itself. On a site with accounts (`SVARTZ_DB`, see [the accounts database](auth.md#the-accounts-database)), annotations checks two [permissions](auth.md#permissions) on the page:
+
+| Permission | Lets a reader | Default |
+| --- | --- | --- |
+| `annotations:comments:write` | Post comments. | Every signed-in reader. |
+| `annotations:comments:delete` | Delete anyone's comments and reactions, not only their own. | Nobody but admins. |
+
+Grant `annotations:comments:delete` on the site, a vault, a folder or a page to make someone a moderator there, and deny `annotations:comments:write` to stop someone commenting. A refused comment answers 403 and the composer keeps the draft.
+
+`moderators` is deprecated. On a site with accounts, each identity it lists becomes a grant of `annotations:comments:delete` on the vault, once: the first time a signed-in reader loads a page's comments or deletes one after that identity has an account. From then on the grant alone decides, so taking someone off the list removes nothing; change or remove their grant instead. Without `SVARTZ_DB`, nobody has an account, so the list decides and every signed-in reader may comment. To find an id for the list, sign in on the site, open `<base><mount>/_svartz/auth/me/`, and copy its `id`:
 
 ```ts
 annotations({ database: { env: "DB" }, moderators: ["github:583231"] }),
@@ -146,10 +155,10 @@ Under `<base><mount>/_svartz/annotations/`:
 
 | Route | Answers |
 | --- | --- |
-| `GET ?page=<note path>` | `{ annotations, viewer }`: the page's comments and reactions, oldest first, each with its anchor, author and agreements, and `viewer: { id, moderator }` for the signed-in reader, or `null`. Public. |
+| `GET ?page=<note path>` | `{ annotations, viewer }`: the page's comments and reactions, oldest first, each with its anchor, author and agreements, and `viewer`: `null` when signed out, else `{ id, moderator }`, where `moderator` says whether the reader may delete anyone's annotations on this page. Public. |
 | `POST` | Stores a comment, `{ kind: "comment", page, anchor, body }`, for the signed-in reader, and answers `201 { annotation }`. Writing also refreshes the reader's stored identity. |
 | `POST <id>/agree/` | Sets the signed-in reader's **+1** on comment `<id>`: `{ agreed: true }` adds it, `{ agreed: false }` takes it back. Answers `{ agreed, agreements }`, the comment's agreements after the change, oldest first. Sending the same state again changes nothing, so a retry is safe. |
-| `DELETE <id>/` | Deletes annotation `<id>` and its agreements, for its author or a moderator, and answers `204`. A retry finds it gone and answers `404`. |
+| `DELETE <id>/` | Deletes annotation `<id>` and its agreements, for its author or a moderator of its page, and answers `204`. A retry finds it gone and answers `404`. |
 
 `anchor` is what `describe` returns for the selection: `{ exact, prefix, suffix, start, end }`, where `end - start` is the length of `exact`.
 
@@ -163,7 +172,7 @@ Failures answer `{ error, message }`, where `message` is written for the reader:
 | 400 | `invalid_json` | A write body that isn't JSON. |
 | 401 | `signed_out` | A write from a reader who isn't signed in. |
 | 403 | `cross_origin` | A write whose `Origin` header is missing or names another site. |
-| 403 | `forbidden` | A delete by someone who neither wrote the annotation nor moderates. |
+| 403 | `forbidden` | A delete by someone who neither wrote the annotation nor moderates its page, or a comment from a reader denied `annotations:comments:write` there. |
 | 404 | `not_found` | A **+1** or delete on an annotation that isn't in this vault, or was deleted. |
 | 413 | `too_large` | A write body over 32 KiB. |
 | 429 | `rate_limited` | The signed-in reader has spent their write budget. Also includes `retryAfter` in seconds. |
