@@ -355,9 +355,15 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
         }),
       });
       if (result.kind !== "commit") return back(result.kind);
-      await reverseReputation(context.env, owed).catch((error: unknown) => {
+      // Read again now that `restore()` stored what it undid: a merge credited while the commit was made is found here,
+      // and one credited later sees what was stored. Read first or second, every earning ends at zero.
+      const earned = await writer.earnings(undoes).catch((error: unknown) => {
+        console.error(`[history] reverted ${note.path} as ${result.sha} but couldn't read again what the changes since earned`, error);
+        return owed;
+      });
+      await reverseReputation(context.env, earned).catch((error: unknown) => {
         // The page is reverted; only the reputation the undone changes earned stays, and the log says which.
-        console.error(`[history] reverted ${note.path} as ${result.sha} but couldn't take back reputation from ${JSON.stringify(owed)}`, error);
+        console.error(`[history] reverted ${note.path} as ${result.sha} but couldn't take back reputation from ${JSON.stringify(earned)}`, error);
       });
       return redirect(link.history(note, { status: "reverted" }));
     } catch (error) {

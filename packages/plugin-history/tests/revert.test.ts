@@ -335,6 +335,46 @@ describe("reverting a submission the mirror doesn't know merged yet", () => {
     expect(await query(site, "SELECT source, ref, points FROM auth_reputation WHERE account_id = ?", grace.id))
       .toEqual([{ source: "reversal", ref: `submissions:${REPO}:pull:42`, points: 0 }]);
   });
+
+  // Proves a revert takes back a submission whose merge the poll learns and credits while the revert's commit is being
+  // made: after the revert read what the changes earned, before it stored what it undid. Otherwise the submission keeps
+  // its 4 points for content already undone.
+  it("takes back a merge credited while the revert moves the branch", async () => {
+    const site = await createSite();
+    const [ada, grace] = [await site.signUp(ADA), await site.signUp(GRACE)];
+    await site.graceOpensPullRequest(grace);
+    const restored = git("a", 0);
+    await site.push([restored, MERGE]);
+    await site.settle();
+
+    const github = replayGitHub([
+      firstToken,
+      historyExchange(GUIDE_PATH, [MERGE, restored]),
+      contentExchange(GUIDE_PATH, restored.sha, RESTORED),
+      contentExchange(GUIDE_PATH, MERGE.sha, VANDALISED),
+      ...committerExchanges,
+      ...await commitAsAda(RESTORED, VANDALISED, revertMessage(restored.sha, ada.id)),
+    ], INSTALLATION_TOKEN);
+    const replayed = globalThis.fetch;
+    // While GitHub moves the branch to the revert's commit, Grace following her edit runs the poll, which finds #42
+    // merged, counts its lines and credits it.
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      if (init.method === "PATCH" && String(input).endsWith("/git/refs/heads/main")) {
+        pollingGitHub();
+        await site.request(`/wiki/_svartz/submissions/status/?edit=${SUBMISSION_ID}`, { headers: { cookie: grace.cookie } });
+        await site.settle();
+        vi.stubGlobal("fetch", replayed);
+        expect(await query(site, "SELECT source, points FROM auth_reputation WHERE account_id = ?", grace.id)).toEqual([{ source: "edit", points: 4 }]);
+      }
+      return replayed(input, init);
+    });
+    const response = await revert(site, ada.cookie, { revision: restored.sha, head: MERGE.sha, to: MERGE.sha });
+
+    expect(response.headers.get("location")).toBe(`${HISTORY}?status=reverted`);
+    expect(github.pending).toEqual([]);
+    expect(await query(site, "SELECT source, points FROM auth_reputation WHERE account_id = ? ORDER BY id", grace.id))
+      .toEqual([{ source: "edit", points: 4 }, { source: "reversal", points: -4 }]);
+  });
 });
 
 describe("a revert's cost", () => {
@@ -374,6 +414,7 @@ describe("a revert's cost", () => {
     const six = await savedOver(6);
 
     expect(six).toBe(one);
-    expect(six).toBeLessThanOrEqual(14);
+    // Earnings are read twice, before the commit and after `restore()` stores what it undid, in one query each.
+    expect(six).toBe(15);
   });
 });
