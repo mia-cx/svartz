@@ -41,7 +41,8 @@ const MIGRATIONS_TABLE = "submissions_migrations";
 
 /**
  * Each entry is one schema version, applied in order and recorded in {@link MIGRATIONS_TABLE}. Append new versions;
- * never edit an applied one. Two first requests can race to apply a version, so statements must be safe to run twice.
+ * never edit an applied one. Two first requests can race to apply a version: statements should be safe to run twice,
+ * and one that can't be (`ALTER TABLE … ADD COLUMN`) fails the loser's batch, which then finds the version applied.
  */
 const MIGRATIONS: readonly (readonly string[])[] = [
   [
@@ -70,7 +71,6 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       committed_at TEXT NOT NULL,
       url TEXT NOT NULL,
       files TEXT,
-      files_complete INTEGER NOT NULL DEFAULT 1,
       PRIMARY KEY (scope, sha)
     )`,
     `CREATE INDEX IF NOT EXISTS submissions_commits_by_time ON submissions_commits (scope, committed_at)`,
@@ -181,6 +181,12 @@ const MIGRATIONS: readonly (readonly string[])[] = [
       PRIMARY KEY (scope, ancestor, descendant)
     )`,
   ],
+  [
+    // Whether `files` is all of a commit's vault files, or the part GitHub's first page gave.
+    "ALTER TABLE submissions_commits ADD COLUMN files_complete INTEGER NOT NULL DEFAULT 1",
+    // Lists read before were kept without saying which they were: the next polls read them again.
+    "UPDATE submissions_commits SET files = NULL",
+  ],
 ];
 
 const migrated = new WeakMap<Database, Promise<void>>();
@@ -204,10 +210,16 @@ async function applyMigrations(db: Database): Promise<void> {
     const version = index + 1;
     if (applied.has(version)) continue;
     // One batch is one transaction: a version applies whole or not at all.
-    await db.batch([
-      ...statements.map((statement) => db.prepare(statement)),
-      db.prepare(`INSERT OR IGNORE INTO ${MIGRATIONS_TABLE} (version, applied_at) VALUES (?, ?)`).bind(version, new Date().toISOString()),
-    ]);
+    try {
+      await db.batch([
+        ...statements.map((statement) => db.prepare(statement)),
+        db.prepare(`INSERT OR IGNORE INTO ${MIGRATIONS_TABLE} (version, applied_at) VALUES (?, ?)`).bind(version, new Date().toISOString()),
+      ]);
+    } catch (error) {
+      // Another request applied it first.
+      const { results: [done] } = await db.prepare(`SELECT version FROM ${MIGRATIONS_TABLE} WHERE version = ?`).bind(version).all();
+      if (!done) throw error;
+    }
   }
 }
 
