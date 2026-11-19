@@ -1,6 +1,22 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { playwright } from "@vitest/browser-playwright";
+import type { BrowserCommand } from "vitest/node";
 import { defineConfig, type Plugin } from "vitest/config";
+import { createEditsSite, seedEdits, type Viewer } from "./tests/edits-harness";
+
+/**
+ * The Recent edits panel's browser tests render what the real dashboard answers over a seeded mirror on a real D1:
+ * `editsPage` answers a page as one of the harness's viewers. The site starts on the first call.
+ */
+let site: ReturnType<typeof createEditsSite> | undefined;
+const editsSite = () => site ??= createEditsSite().then(async (created) => (await seedEdits(created), created));
+const editsPage: BrowserCommand<[viewer: Viewer, path: string]> = async (_context, viewer, path) => (await editsSite()).page(viewer, path);
+const disposeEditsSite: Plugin = {
+  name: "submissions:dispose-edits-site",
+  async closeBundle() {
+    await (await site)?.dispose();
+  },
+};
 
 /**
  * Micromark's entity decoder in its `worker` build, as tsup bundles the preview worker: its `browser` build needs a
@@ -26,7 +42,7 @@ export default defineConfig({
       },
       {
         // The Split preview's tests render through @svartz/ui's Svelte content components.
-        plugins: [svelte(), workerEntities],
+        plugins: [svelte(), workerEntities, disposeEditsSite],
         optimizeDeps: {
           // Found only once Split starts the worker; bundled up front so Vite doesn't reload the page mid-test.
           include: ["@svartz/plugins/preview"],
@@ -46,6 +62,7 @@ export default defineConfig({
             enabled: true,
             provider: playwright(),
             instances: [{ browser: "chromium", headless: true }],
+            commands: { editsPage },
           },
         },
       },

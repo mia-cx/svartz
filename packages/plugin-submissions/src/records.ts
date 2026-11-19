@@ -36,8 +36,8 @@ export interface CommitRecord {
   readonly authorLogin: string | null;
   readonly committerEmail: string;
   /**
-   * The account its {@link ACCOUNT_TRAILER} trailer names: a claim, never proof. Whoever writes a commit writes its
-   * trailers and its committer too; only `submissions_edits` says which account made a commit.
+   * The account its {@link ACCOUNT_TRAILER} trailer names, kept as a claim only. Whoever makes a commit chooses its
+   * trailer, author and committer, so an account is credited only through `submissions_edits`, the site's own record.
    */
   readonly trailerAccount: string | null;
   readonly committedAt: string;

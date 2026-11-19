@@ -571,11 +571,12 @@ export async function profileByHandle(db: Database, handle: string): Promise<Pub
   return row && { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } };
 }
 
-/** Account `id`'s public profile; `undefined` when there is no such account. */
-export async function profileById(db: Database, id: string): Promise<PublicProfile | undefined> {
-  const { results: [row] } = await db.prepare("SELECT handle, name, avatar_url FROM auth_accounts WHERE id = ?").bind(id)
-    .all<{ handle: string; name: string; avatar_url: string | null }>();
-  return row && { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } };
+/** The accounts with ids `ids`, by id, under their current handles; ids no account has are absent. */
+export async function profilesById(db: Database, ids: readonly string[]): Promise<Map<string, PublicProfile>> {
+  if (ids.length === 0) return new Map();
+  const { results } = await db.prepare("SELECT id, handle, name, avatar_url FROM auth_accounts WHERE id IN (SELECT value FROM json_each(?))")
+    .bind(JSON.stringify(ids)).all<{ id: string; handle: string; name: string; avatar_url: string | null }>();
+  return new Map(results.map((row) => [row.id, { handle: row.handle, name: row.name, ...row.avatar_url !== null && { avatarUrl: row.avatar_url } }]));
 }
 
 /** Sign a cookie from before accounts out for good: its session goes, and the cookie can't start another. */

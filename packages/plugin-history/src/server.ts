@@ -14,7 +14,7 @@
  * commit that changed one. A revision whose frontmatter hid or protected it shows no content.
  */
 import type { PageContext, PageResult, ServerModuleFactory } from "@svartz/core";
-import { findProfileById } from "@svartz/auth/server";
+import { findProfiles } from "@svartz/auth/server";
 import { commitReader, CommitsUnavailable, type Commit, type CommitReader } from "@svartz/plugin-submissions/commits";
 import type { PreviewNote } from "@svartz/plugins/preview";
 import { PLUGIN_ID, type HistoryData } from "./api";
@@ -52,26 +52,24 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
     };
   }
 
-  /** Who made `commit`: the account the site's records name, under its current handle and name, or its git author. */
-  function authors(context: PageContext) {
-    const profiles = new Map<string, ReturnType<typeof findProfileById>>();
-    return async (commit: Commit): Promise<Author> => {
-      const id = commit.account?.id;
-      if (id !== undefined && !profiles.has(id)) profiles.set(id, findProfileById(id, context.env));
-      const profile = id === undefined ? undefined : await profiles.get(id);
+  /**
+   * `commits` as the pages show them. Each is by the account the site's records name, under its current handle and
+   * name, or by its git author.
+   */
+  async function changesOf(commits: readonly Commit[], context: PageContext): Promise<Change[]> {
+    const profiles = await findProfiles([...new Set(commits.flatMap((commit) => commit.account ? [commit.account.id] : []))], context.env);
+    return commits.map((commit) => {
+      const profile = commit.account && profiles.get(commit.account.id);
       // An account that no longer exists shows as git names the commit.
-      if (!profile) return { kind: "github", name: commit.author.name, login: commit.author.login };
-      return { kind: "account", name: profile.name, handle: profile.handle };
-    };
-  }
-
-  async function change(commit: Commit, authorOf: (commit: Commit) => Promise<Author>): Promise<Change> {
-    return { sha: commit.sha, at: commit.committedAt, author: await authorOf(commit), summary: shownSummary(commit) };
+      const author: Author = profile
+        ? { kind: "account", name: profile.name, handle: profile.handle }
+        : { kind: "github", name: commit.author.name, login: commit.author.login };
+      return { sha: commit.sha, at: commit.committedAt, author, summary: shownSummary(commit) };
+    });
   }
 
   async function listPage(note: PreviewNote, page: number, reader: CommitReader, context: PageContext): Promise<PageResult> {
     const link = urls(context);
-    const authorOf = authors(context);
     let commits: readonly Commit[] = [];
     let more = false;
     let unavailable = false;
@@ -82,7 +80,7 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
       unavailable = true;
     }
     reader.refresh();
-    const changes = await Promise.all(commits.map((commit) => change(commit, authorOf)));
+    const changes = await changesOf(commits, context);
     const github = `https://github.com/${repo}/commits/${encodeURIComponent(branch ?? "HEAD")}/${encodeURI(repoPath(note.path))}`;
     return historyPage({
       title: note.title,
@@ -120,7 +118,6 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
 
   async function diff(note: PreviewNote, toSha: string, fromSha: string | null, reader: CommitReader, context: PageContext): Promise<PageResult | undefined> {
     const link = urls(context);
-    const authorOf = authors(context);
     const page = (revisions: Parameters<typeof diffPage>[0]["revisions"], comparison: Comparison) =>
       diffPage({ title: note.title, revisions, comparison, links: { page: link.page(note), history: link.history(note) } });
     let to: Commit | undefined;
@@ -137,12 +134,12 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
       if (!to) return page(undefined, { kind: "unavailable" });
       comparison = { kind: "unavailable" };
     }
-    return page({ from: from && await change(from, authorOf), to: await change(to, authorOf) }, comparison);
+    const [shownTo, shownFrom] = await changesOf(from ? [to, from] : [to], context);
+    return page({ from: shownFrom, to: shownTo! }, comparison);
   }
 
   async function changes(before: string | null, reader: CommitReader, context: PageContext): Promise<PageResult> {
     const link = urls(context);
-    const authorOf = authors(context);
     let page: Awaited<ReturnType<CommitReader["recent"]>> = { commits: [] };
     let unavailable = false;
     try {
@@ -152,15 +149,16 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
       unavailable = true;
     }
     reader.refresh();
-    const listed = await Promise.all(page.commits.map(async (commit): Promise<WikiChange | undefined> => {
+    const shown = await changesOf(page.commits, context);
+    const listed = page.commits.flatMap((commit, index): WikiChange[] => {
       const pages = (commit.files ?? []).flatMap((path) => {
         const note = byPath.get(path);
         return note ? [{ title: note.title, page: link.page(note), diff: link.history(note, { to: commit.sha }), history: link.history(note) }] : [];
       });
-      return pages.length ? { ...await change(commit, authorOf), pages } : undefined;
-    }));
+      return pages.length ? [{ ...shown[index]!, pages }] : [];
+    });
     return changesPage({
-      changes: listed.filter((entry) => entry !== undefined),
+      changes: listed,
       unavailable,
       ...(page.next ? { older: link.changes({ before: page.next }) } : {}),
     });
