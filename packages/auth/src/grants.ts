@@ -97,6 +97,15 @@ export async function explain(db: Database, account: Pick<Account, "id" | "handl
 }
 
 /**
+ * Whether `account` may do `permission` on the grant object `object` itself (`site`, `vault:<id>`, a folder or a
+ * page), given as the objects a check on it consults. For changes that land on an object the form names: the right to
+ * make them is checked where they land, not on the vault the form was sent from.
+ */
+export async function mayOn(db: Database, account: Pick<Account, "id" | "handle" | "roles">, permission: PermissionSlug, chain: readonly string[]): Promise<boolean> {
+  return (await explain(db, account, permission, chain)).value === "allow";
+}
+
+/**
  * Whether `account` (`null` for a guest) may do `permission` on `target`: the site (`{}`), a vault (`{ vault }`), or a
  * page of one (`{ vault, page }`, by the page's slug). Grants on the page, its folders, its vault and the site apply,
  * the most specific first; see `resolve` in `permissions.ts` for the order.

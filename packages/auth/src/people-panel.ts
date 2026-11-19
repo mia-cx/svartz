@@ -12,12 +12,13 @@
 import type { DashboardPanel, ServerContext } from "@svartz/core";
 import { GRANTS_READ, GRANTS_WRITE } from "./auth-permissions";
 import { dashboardPath } from "./dashboard";
-import { can, explain, isDeclared, permissionCatalogue } from "./grants";
+import { can, explain, isDeclared, mayOn, permissionCatalogue } from "./grants";
 import { groupExists, listGroups } from "./groups";
 import { typedHandle } from "./handle";
 import { chainOf, pickedObject, pickerFields } from "./objects";
 import { addMember, createRole, isRoleName, listGrants, listRoles, personByHandle, removeMember, roleExists, searchPeople, setGrant } from "./people";
 import { peoplePage, PEOPLE_TITLE, type Check, type PeopleStatus } from "./people-page";
+import { SITE } from "./permissions";
 import { ADMIN_ROLE, readAccount, readCurrentSession } from "./session";
 import { accountsDatabase } from "./store";
 
@@ -125,6 +126,9 @@ export async function peopleRoute(request: Request, path: string, context: Serve
     const object = pickedObject(sent.scope, sent.path, vaults);
     // A whole object string must name exactly what the picker would: no other vault, no dot segments.
     if (!object || (form?.has("object") && object !== field("object"))) return refuse("object-invalid");
+    // A grant lands on `object`. Holding the permission on this vault, or on a folder a group owns, is no right to
+    // grant on the whole site or in another vault.
+    if (!await mayOn(db, session.account, GRANTS_WRITE, chainOf(object))) return failure(403, "forbidden", "You can't change permissions there.");
     if (actorType === "role") {
       if (named === ADMIN_ROLE) return refuse("admin-role");
       if (!await roleExists(db, named)) return refuse("role-unknown");
@@ -140,6 +144,10 @@ export async function peopleRoute(request: Request, path: string, context: Serve
     }
     return back(context, url, "grant-saved", {}, "grants");
   }
+
+  // Roles are site-wide: who holds one holds its grants everywhere, so only whoever may grant on the whole site
+  // creates roles or changes who is in them.
+  if (!await mayOn(db, session.account, GRANTS_WRITE, [SITE])) return failure(403, "forbidden", "You can't change roles here.");
 
   if (action === "role") {
     const name = field("name").toLowerCase();

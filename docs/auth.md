@@ -417,7 +417,7 @@ It needs two permissions, which auth declares with no defaults, so only admins h
 
 Granting either is as powerful as making someone an admin: `auth:grants:read` shows every account and grant on the site, and whoever holds `auth:grants:write` can grant themselves, or anyone, any permission. Give them only to people you would make admins.
 
-The panel's forms post to the routes below and work without JavaScript. Each route checks `auth:grants:write` again, whatever the panel showed.
+The panel's forms post to the routes below and work without JavaScript. Each route checks `auth:grants:write` again, whatever the panel showed, and checks it where the change lands: a grant needs it on the object the grant is for, and creating a role or changing who holds one needs it on the whole site, since a role's grants reach everywhere. So someone who holds it on one vault, or a group's owner on what the group is linked to, changes grants there and nowhere else.
 
 ### Groups panel
 

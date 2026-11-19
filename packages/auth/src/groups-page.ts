@@ -52,7 +52,9 @@ export type GroupStatus = keyof typeof ACCOUNT_STATUSES | keyof typeof GROUP_STA
 
 /** The status line for `query` from `statuses`, if it carries one of them. */
 function message(statuses: Readonly<Record<string, Status>>, id: string, query: URLSearchParams, group: string) {
-  const status = statuses[query.get("status") ?? ""];
+  const code = query.get("status") ?? "";
+  // Own codes only: `toString` and its kin are on every object, and aren't statuses.
+  const status = Object.hasOwn(statuses, code) ? statuses[code] : undefined;
   if (!status) return undefined;
   const text = status.text(query.get("handle") ?? "", group);
   return {

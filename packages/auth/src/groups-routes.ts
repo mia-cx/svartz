@@ -18,14 +18,14 @@ import { decodeRoutePath, type DashboardPanel, type PageContext, type PageResult
 import { displayName } from "./account";
 import { GROUP_LINKS_WRITE } from "./auth-permissions";
 import { dashboardPath } from "./dashboard";
-import { can } from "./grants";
+import { can, mayOn } from "./grants";
 import {
   accept, createGroup, groupDetail, groupExists, groupsOf, invite, isGroupName, link, listGroups, promote, removeFromGroup,
   standing, uninvite, unlink,
 } from "./groups";
 import { accountGroupsSection, groupPage, groupsPanelPage, GROUPS_TITLE, type GroupStatus } from "./groups-page";
 import { typedHandle } from "./handle";
-import { pickedObject, pickerFields } from "./objects";
+import { chainOf, pickedObject, pickerFields } from "./objects";
 import { personByHandle } from "./people";
 import { SITE } from "./permissions";
 import { readCurrentSession } from "./session";
@@ -83,6 +83,8 @@ export async function groupsRoute(request: Request, path: string, context: Serve
     const object = pickedObject(sent.scope, sent.path, vaults);
     // Only a vault, a folder or a page: an owner of a group linked to the site would hold every permission everywhere.
     if (!object || object === SITE) return to("group-link-invalid", typed);
+    // The link lands on `object`, which may be in another vault than the panel the form came from.
+    if (!await mayOn(db, session.account, GROUP_LINKS_WRITE, chainOf(object))) return failure(403, "forbidden", "You can't link groups there.");
     if (linking === "unlink") {
       // A whole object string must name exactly what the picker would.
       if (object !== field("object")) return to("group-link-invalid", typed);

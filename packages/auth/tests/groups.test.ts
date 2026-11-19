@@ -31,7 +31,7 @@ afterEach(async () => {
  * A vault at /notes with auth (GitHub user 1 is the admin) on a fresh D1, and a `probe` plugin answering
  * `can(reader, guestbook:entries:delete, { vault: "notes", page: ?page })`.
  */
-async function createSite() {
+async function createSite({ vaults = ["notes"] } = {}) {
   const miniflare = new Miniflare({ modules: true, script: "export default {}", d1Databases: ["SVARTZ_DB"] });
   disposers.push(() => miniflare.dispose());
   const db = await miniflare.getD1Database("SVARTZ_DB") as unknown as Database;
@@ -45,7 +45,7 @@ async function createSite() {
         id: "auth", eager: true, pages: ["account", "dashboard", "groups"], load: () => import("../src/server"),
         options: {
           providers: { github: { clientId: "fake-client-id", clientSecret: { env: "PRIVATE_GITHUB_SECRET" } } },
-          admins: [`github:${ADMIN}`], permissions: PERMISSIONS,
+          admins: [`github:${ADMIN}`], permissions: PERMISSIONS, vaults,
         },
         data: { permissions: [], paths: [] },
       },
@@ -274,5 +274,37 @@ describe("a group's grants and links", () => {
       'root auth:group:link folder:notes/alliances/rosarians/ {"group":"rosarians"}',
       'root auth:group:unlink folder:notes/alliances/rosarians/ {"group":"rosarians"}',
     ]);
+  });
+
+  // An owner holds every permission where the group is linked, the one to grant included. That reaches as far as the
+  // link and no further: not the site, not roles, which reach the whole site, and not another vault.
+  it("let an owner grant inside a linked vault, but not on the site, on roles or in another vault", async () => {
+    const site = await createSite({ vaults: ["notes", "docs"] });
+    const root = await signUp(site, ADMIN, "root");
+    const ada = await signUp(site, 2, "ada");
+    await rosarians(site, ada, []);
+    await site.post("link/", root, { group: "rosarians", scope: "vault:notes", path: "" });
+    const people = (route: string, form: Record<string, string>) =>
+      site.request(`${AUTH}/people/${route}`, { method: "POST", cookies: ada, body: new URLSearchParams(form) });
+    const grantSelf = (scope: string, path = "") =>
+      people("grant/", { "actor-type": "account", actor: "ada", permission: "auth:grants:write", scope, path, value: "allow" });
+
+    expect((await grantSelf("site")).status).toBe(403);
+    expect((await grantSelf("vault:docs")).status).toBe(403);
+    expect((await people("role/", { name: "editors" })).status).toBe(403);
+    expect((await site.post("link/", ada, { group: "rosarians", scope: "vault:docs", path: "" })).status).toBe(403);
+
+    expect(await location(grantSelf("vault:notes", "kitchen/"))).toMatch(/status=grant-saved/);
+    expect((await auditLog(site.db)).filter((entry) => entry.startsWith("ada auth:grant"))).toEqual([
+      expect.stringContaining("ada auth:grant:set folder:notes/kitchen/"),
+    ]);
+  });
+
+  it("show no message for a status that only names something every object has", async () => {
+    const site = await createSite();
+    const ada = await signUp(site, 2, "ada");
+    await rosarians(site, ada, []);
+
+    expect(text(await site.page("/notes/-/groups/rosarians/?status=toString", ada))).toContain("The Rosarians");
   });
 });
