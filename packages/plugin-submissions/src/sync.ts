@@ -29,6 +29,7 @@ import {
   readEdit,
   readPull,
   recordEdit,
+  rereadReviews,
   scopeOf,
   workflowSignals,
   writeAncestry,
@@ -109,7 +110,9 @@ const EVENTS: Readonly<Record<string, Event>> = {
     writes(targeting(payload.pull_request, branch), (pull) => writePull(mirror, pull, root === "" ? 1 : null)),
   pull_request_review: (payload, mirror, branch, root) => {
     const pull = targeting(payload.pull_request, branch);
-    return pull ? [writePull(mirror, pull, root === "" ? 1 : null), ...writes(review(payload.review, pull.number), (record) => writeReview(mirror, record))] : [];
+    if (!pull) return [];
+    const record = review(payload.review, pull.number);
+    return [writePull(mirror, pull, root === "" ? 1 : null), ...(record ? [writeReview(mirror, record), rereadReviews(mirror, pull.number)] : [])];
   },
   pull_request_review_comment: (payload, mirror, branch, root) => {
     const pull = targeting(payload.pull_request, branch);

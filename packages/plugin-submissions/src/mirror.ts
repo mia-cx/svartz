@@ -254,13 +254,21 @@ export function writePull({ db, scope }: Mirror, pull: PullRecord, known: 1 | nu
     );
 }
 
-/** A review; once dismissed, it stays dismissed. */
+/**
+ * A review; once dismissed, it stays dismissed. A review carries no time to order its edits by, so a delivery that
+ * writes one also needs {@link rereadReviews}.
+ */
 export function writeReview({ db, scope }: Mirror, review: ReviewRecord): Statement {
   return db.prepare(`INSERT INTO submissions_reviews (scope, id, pull_number, state, author_login, body, commit_sha, url, submitted_at)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
     ON CONFLICT (scope, id) DO UPDATE SET state = excluded.state, body = excluded.body
     WHERE submissions_reviews.state <> 'dismissed'`)
     .bind(scope, review.id, review.pull, review.state, review.author, review.body, review.commit, review.url, review.submittedAt);
+}
+
+/** Have the next poll read pull request `number`'s reviews from GitHub, which settles a delivery that arrived late. */
+export function rereadReviews({ db, scope }: Mirror, number: number): Statement {
+  return db.prepare("UPDATE submissions_pulls SET reviews_synced_at = NULL WHERE scope = ? AND number = ?").bind(scope, number);
 }
 
 /** A comment, unless the mirror holds a newer edit; once deleted, it stays a tombstone. */

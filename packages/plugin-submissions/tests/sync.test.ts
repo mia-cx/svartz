@@ -813,6 +813,30 @@ describe("the reconcile poll", () => {
     expect(await site.rows("SELECT in_vault FROM submissions_pulls")).toEqual([{ in_vault: 1 }]);
   });
 
+  it("reads a pull request's reviews again after a review delivery, which may arrive after a newer edit", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const site = await createSite();
+    const grace = await graceOpensPullRequest(site);
+    const edited = { ...reviewDelivery("edited", "APPROVED").review, body: "Looks right, now that it cites the manual." };
+    quietGitHub({}, (path) => {
+      if (path === "/pulls/42/files") return Response.json([{ filename: "content/guide.md", status: "modified" }]);
+      if (path === "/pulls/42/reviews") return Response.json([edited]);
+      return undefined;
+    });
+    await deliver(site, "pull_request", { action: "opened", number: 42, pull_request: pull(), repository, sender });
+    await status(site, grace);
+    await site.settle();
+    expect(await site.rows("SELECT body FROM submissions_reviews")).toEqual([{ body: edited.body }]);
+
+    // The delivery of the review as first submitted, an hour ago, is retried late.
+    await deliver(site, "pull_request_review", { ...reviewDelivery("submitted", "approved"), pull_request: pull({ updated: at(-3600) }) });
+    vi.setSystemTime(Date.now() + 61_000);
+    await status(site, grace);
+    await site.settle();
+
+    expect(await site.rows("SELECT body FROM submissions_reviews")).toEqual([{ body: edited.body }]);
+  });
+
   it("stops when GitHub's allowance runs low, and polls again only after it resets", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const site = await createSite();
