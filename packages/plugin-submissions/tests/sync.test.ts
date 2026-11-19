@@ -297,7 +297,7 @@ const reviewDelivery = (action: string, state: string) => ({
  * is `ahead` of the commit asked about. `answer` overrides any request it answers, given the path below the
  * repository and the query. Answers every request it gets in `requests`.
  */
-function quietGitHub(compare: Record<string, string> = {}, answer: (path: string, query: URLSearchParams) => Response | undefined = () => undefined) {
+function quietGitHub(compare: Record<string, string> = {}, answer: (path: string, query: URLSearchParams) => Response | Promise<Response> | undefined = () => undefined) {
   const requests: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
@@ -647,6 +647,39 @@ describe("an edit's status", () => {
     await status(site, ada);
     await site.settle();
     expect(requests).toEqual([]);
+  });
+
+  it.each([
+    ["a comparison", "/actions/runs", "/compare/"],
+    ["the poll", "/compare/", "/actions/runs"],
+  ])("stops asking GitHub anything more once %s, while the other is asking, is told to wait", async (_case, held, limited) => {
+    const site = await createSite({ live: { environment: "production" } });
+    const ada = await adaCommits(site);
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => { release = resolve; });
+    let sent!: () => void;
+    const underway = new Promise<void>((resolve) => { sent = resolve; });
+    let first = true;
+    const requests = quietGitHub({}, (path) => {
+      // Told to wait only once the other side's first request is under way, and that one answered only after.
+      if (path.startsWith(limited)) return underway.then(() => Response.json({ message: "You have exceeded a secondary rate limit." }, { status: 403, headers: { "retry-after": "3600" } }));
+      if (!path.startsWith(held) || !first) return undefined;
+      first = false;
+      sent();
+      return answered.then(() => (held === "/compare/" ? Response.json({ status: "diverged" }) : Response.json({ total_count: 0, workflow_runs: [] })));
+    });
+    // Deployed from three later commits, which only GitHub can say hold the edit.
+    for (const [index, sha] of ["1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222", "3333333333333333333333333333333333333333"].entries()) {
+      await deliver(site, "deployment_status", deploymentStatus({ id: 7 + index, sha, statusId: 70 + index, state: "in_progress" }));
+    }
+
+    await status(site, ada);
+    await vi.waitFor(async () => expect((await site.rows("SELECT paused_until FROM submissions_sync"))[0]?.paused_until).toBeGreaterThan(Date.now()));
+    const before = requests.length;
+    release();
+    await site.settle();
+
+    expect(requests.slice(before)).toEqual([]);
   });
 
   it("says a pull request closed without merging is closed", async () => {

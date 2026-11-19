@@ -82,12 +82,14 @@ async function claim({ db, scope }: Mirror, now: number): Promise<{ branch: stri
 }
 
 /** End the poll: it counts as run, failed or not, so an unreachable GitHub isn't asked again at once. */
-async function release({ db, scope }: Mirror, now: number, pausedUntil: number): Promise<void> {
-  await db.prepare("UPDATE submissions_sync SET polled_at = ?, lease_until = 0, paused_until = MAX(paused_until, ?) WHERE scope = ?")
-    .bind(now, pausedUntil, scope).run();
+async function release({ db, scope }: Mirror, now: number): Promise<void> {
+  await db.prepare("UPDATE submissions_sync SET polled_at = ?, lease_until = 0 WHERE scope = ?").bind(now, scope).run();
 }
 
-/** When the scope's reads of GitHub after an answer, the poll's and status reads' alike, may resume; past when they may. */
+/**
+ * When the scope's reads of GitHub after an answer, the poll's and status reads' alike, may resume; past when they
+ * may. Both read it before each request, so a pause either stores holds the other at once, in every worker.
+ */
 export async function readPause({ db, scope }: Mirror): Promise<number> {
   const { results: [row] } = await db.prepare("SELECT paused_until FROM submissions_sync WHERE scope = ?").bind(scope).all<{ paused_until: number }>();
   return row?.paused_until ?? 0;
@@ -119,25 +121,26 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
   const claimed = await claim(mirror, Date.now());
   if (!claimed) return;
   let requests = 0;
-  let pausedUntil = 0;
 
   /**
-   * GET `path` below the repository. `conditional` sends the ETag stored for it and answers `undefined` for a 304;
-   * call {@link remember} with the answer once it is stored. A 404 answers `null`.
+   * GET `path` below the repository, unless the budget is spent or the scope is paused. `conditional` sends the ETag
+   * stored for it and answers `undefined` for a 304; call {@link remember} with the answer once it is stored. A 404
+   * answers `null`.
    */
   async function get(path: string, conditional = false): Promise<{ body: unknown; etag: string | null } | null | undefined> {
-    if (requests >= MAX_REQUESTS || pausedUntil) throw new Stop();
+    if (requests >= MAX_REQUESTS || await readPause(mirror) > Date.now()) throw new Stop();
     requests++;
     const [stored] = conditional
       ? (await mirror.db.prepare("SELECT etag FROM submissions_etags WHERE scope = ? AND path = ?").bind(mirror.scope, path).all<{ etag: string }>()).results
       : [];
     const response = await requestGitHub(await token(), "GET", `/repos/${repo}${path}`, undefined, undefined,
       stored ? { "if-none-match": stored.etag } : {});
-    pausedUntil = resumeAt(response, Date.now()) ?? 0;
+    const resume = resumeAt(response, Date.now());
+    if (resume) await pause(mirror, resume);
     if (response.status === 304) return undefined;
     if (response.status === 404) return null;
     if (!response.ok) {
-      if (pausedUntil) throw new Stop();
+      if (resume) throw new Stop();
       throw new Error(`GitHub answered ${response.status} to GET ${path.split("?")[0]}`);
     }
     return { body: await response.json(), etag: conditional ? response.headers.get("etag") : null };
@@ -207,7 +210,7 @@ export async function reconcile(target: PollTarget, token: () => Promise<string>
   } catch (error) {
     if (!(error instanceof Stop)) console.warn(`[submissions] the GitHub mirror's poll stopped: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
-    await release(mirror, Date.now(), pausedUntil);
+    await release(mirror, Date.now());
   }
 
   async function rows<Row>(sql: string): Promise<Row[]> {

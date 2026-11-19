@@ -232,15 +232,15 @@ export function createSync(options: SyncOptions, setup: SyncSetup) {
   const asked = new Map<string, number>();
 
   /**
-   * Ask GitHub whether each of `heads` contains `commit`, and remember what it says. Like the poll, it waits out a
-   * pause, and an answer saying to wait (or leaving the allowance at the poll's reserve) pauses both.
+   * Ask GitHub whether each of `heads` contains `commit`, and remember what it says. Like the poll, it stops at a
+   * pause before each request, and an answer saying to wait (or leaving the allowance at the poll's reserve) pauses both.
    */
   async function checkAncestry(mirror: Mirror, token: () => Promise<string>, commit: string, heads: readonly string[]): Promise<void> {
     const now = Date.now();
-    if (await readPause(mirror) > now) return;
     for (const [pair, at] of asked) if (at <= now - POLL_INTERVAL_MS) asked.delete(pair);
     const fresh = heads.filter((head) => !asked.has(`${commit}...${head}`)).slice(0, MAX_ANCESTRY_CHECKS);
     for (const head of fresh) {
+      if (await readPause(mirror) > Date.now()) return;
       asked.set(`${commit}...${head}`, now);
       const response = await requestGitHub(await token(), "GET", `/repos/${setup.repo}/compare/${commit}...${head}?per_page=1`);
       // An unknown commit, as after a force push, contains nothing; any other failure is asked again later.
