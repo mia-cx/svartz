@@ -43,6 +43,8 @@
 
 .sv-history h1 a {
 	color: inherit;
+	text-decoration-line: underline;
+	text-decoration-thickness: 0.06em;
 }
 
 .sv-history-list {
@@ -141,6 +143,7 @@
 
 .sv-history-revision {
 	display: grid;
+	align-content: start;
 	gap: var(--sv-space-1, 0.25rem);
 	padding: var(--sv-space-3, 0.75rem);
 	border: var(--sv-rule-width, 1px) solid var(--sv-rule, color-mix(in oklch, CanvasText 15%, Canvas));
@@ -179,6 +182,11 @@
 
 .sv-history-diff tbody + tbody {
 	border-block-start: var(--sv-rule-width, 1px) dashed var(--sv-rule-strong, color-mix(in oklch, CanvasText 30%, Canvas));
+}
+
+/* A blank line keeps its height where line numbers are hidden. */
+.sv-history-diff tr {
+	block-size: 1.5em;
 }
 
 .sv-history-diff td {
