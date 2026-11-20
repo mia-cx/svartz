@@ -70,6 +70,7 @@ afterEach(async () => {
   for (const dispose of disposers.splice(0)) await dispose();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 /**
@@ -298,15 +299,15 @@ describe("My submissions", () => {
   // Proves stories 40 and 42: each account sees its own submissions with their review state, nobody sees anyone
   // else's, and a guest has no panel at all.
   it("lists a reader's own submissions, and only to them", async () => {
+    // The site stamps a save with the time it happens: pin the clock so Grace's is always sent on the same day.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-19T12:00:00Z") });
     const site = await createSite();
     const grace = await graceSubmits(site);
     const ada = await signIn(site, ADA);
     quietGitHub();
     await reviewed(site);
 
-    // The site stamps a save when it happens, so Grace's was sent today.
-    const today = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" }).format(new Date());
-    expect(text(await site.page(MINE, grace))).toBe(`Dashboard My submissions Guide Edit · #42 · sent ${today} · 3 comments Changes requested`);
+    expect(text(await site.page(MINE, grace))).toBe("Dashboard My submissions Guide Edit · #42 · sent Nov 19, 2026 · 3 comments Changes requested");
     expect(text(await site.page(MINE, ada))).toBe("Dashboard My submissions Edits you send for review show up here.");
     expect(await site.page(`${MINE}42/`, ada)).toBeUndefined();
     expect(await site.page(MINE)).toBeUndefined();
