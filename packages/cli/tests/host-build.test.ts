@@ -136,6 +136,9 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   expect(await readFile(path.join(root, ".svelte-kit/keep"), "utf8")).toBe("host state");
   await expect(access(path.join(root, "turbo.json"))).rejects.toMatchObject({ code: "ENOENT" });
   await access(path.join(root, "build/index.js"));
+  // The host's own vaults mount in it; a vault with another target builds with the app Svartz ships.
+  expect(await readFile(path.join(root, ".svartz/vaults/standalone/dist/standalone/index.html"), "utf8")).toContain("Vault content.");
+  await expect(access(path.join(root, "build/client/standalone"))).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readFile(path.join(root, ".svartz/host/runtime.ts"), "utf8")).not.toContain('id: "standalone"');
   const protectedFiles = await readdir(path.join(root, "build/client/work/__svartz/protected"));
   const envelopes = protectedFiles.filter((name) => name.endsWith(".json"));

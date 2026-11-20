@@ -1,6 +1,6 @@
-import StubLayout from '../StubLayout.svelte';
-import StubPage from '../StubPage.svelte';
-import StubNotFoundPage from '../StubNotFoundPage.svelte';
+import StubLayout from './StubLayout.svelte';
+import StubPage from './StubPage.svelte';
+import StubNotFoundPage from './StubNotFoundPage.svelte';
 import { TEST_NOTE_ARTIFACT_KEY, testRoutes } from './shared';
 
 export const theme = {

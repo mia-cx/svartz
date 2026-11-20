@@ -16,6 +16,7 @@ export const USER_FACING = [
     new RegExp(`^${directory}/package\\.json$`),
   ]),
   /^packages\/cli\/template\//,
+  /^packages\/cli\/app\//,
 ];
 
 const DECLARATION = /^['"]?([^'":\s]+)['"]?:\s*(patch|minor|major)\s*$/;

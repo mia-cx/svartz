@@ -8,7 +8,7 @@ How Svartz bridges a single resolved vault build into SvelteKit with `@svartz/vi
 
 ## Overview
 
-`@svartz/vite` integrates with the repository shell or an existing SvelteKit host. It:
+`@svartz/vite` integrates with the app the `svartz` package ships or an existing SvelteKit host. It:
 
 - accepts one CLI-resolved `ResolvedConfig`
 - runs the Svartz pipeline for that vault
@@ -109,15 +109,15 @@ Artifact bridge surface:
 
 This module loads note pages on demand. Direct consumers must call `await prepareNoteArtifact(key)` before `getNoteArtifact(key)`; `hasNoteArtifact(key)` only checks whether the key exists. The generated SvelteKit route does this before rendering through `prepareHostVault(pathname)`. Browser scripts export `mount(pathname)` and may return a disposer. The runtime mounts them on navigation and disposes on route changes or unmount. Rebuilding after a resource is no longer used removes its import.
 
-## Apps Web Route Shells
+## The Shipped App's Routes
 
-`apps/web` keeps static routes under source control.
+The `svartz` package ships the app every vault without a `host` target builds with, in `app/`.
 
-- `src/routes/+page.svelte` is the root runtime shell
-- `src/routes/[...slug]/+page.svelte` is the catch-all runtime shell
-- other static routes still override the catch-all through normal SvelteKit matching
+- `src/routes/[...slug]/+page.svelte` renders every published page
+- `src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/` renders plugin pages under `/-/`
+- in a host app, its own static routes still override the catch-all through normal SvelteKit matching
 
-The shared shell component:
+The shared runtime component:
 
 - resolves the current route through `virtual:svartz/theme`
 - chooses the theme layout via `layoutSlot`
@@ -141,15 +141,7 @@ For a host catch-all route, pass content overrides directly to the package rende
 
 ## Testing
 
-`apps/web` browser tests should not wire the real Svartz Vite plugin into the app config.
-
-Instead:
-
-- keep local ambient declarations for Svartz virtual modules in `apps/web/src/**.d.ts`
-- provide test-only virtual module stubs from `apps/web/vite.config.ts`
-- avoid adding `@svartz/vite` as a direct `apps/web` dependency just to get types
-
-This avoids pulling an extra Vite type graph into the app while still exercising the runtime shell.
+The runtime page's tests live in `@svartz/ui` and don't wire the real Svartz Vite plugin. Each test file mocks `virtual:svartz/host` with a stub one-vault host from `src/lib/runtime/testing/shell/`, so it exercises the runtime without a build.
 
 ## See Also
 

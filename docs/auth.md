@@ -40,13 +40,16 @@ The vault needs a server target (`cloudflare-workers`, `cloudflare-pages` or `no
 
 Bind a D1 database as `SVARTZ_DB`. Auth creates its tables there on the first request that needs them, and upgrades them the same way in later releases; there are no migrations to run. Its tables all start with `auth_`, so other plugins, such as [annotations](annotations.md), can keep theirs in the same database.
 
-```toml
-# wrangler.toml
-[[d1_databases]]
-binding = "SVARTZ_DB"
-database_name = "notes"
-database_id = "<the id `wrangler d1 create notes` printed>"
+On a `cloudflare-workers` vault, bind it in the target, which is the Worker's [Wrangler config](server-plugins.md#deploying-to-cloudflare):
+
+```ts
+target: {
+  type: "cloudflare-workers",
+  d1_databases: [{ binding: "SVARTZ_DB", database_name: "notes", database_id: "<the id `wrangler d1 create notes` printed>" }],
+},
 ```
+
+A host app or a `cloudflare-pages` vault binds it in its own Wrangler config, such as `[[d1_databases]]` in `wrangler.toml`.
 
 The binding has a fixed name, like the session secret, because every server plugin reads accounts from it. Under `svartz dev`, Wrangler's local D1 stands in.
 

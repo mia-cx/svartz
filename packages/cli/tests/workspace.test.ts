@@ -1,8 +1,9 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { resolveAppLocation } from "../src/workspace";
+import { resolveAppLocation, SHIPPED_APP_ROOT } from "../src/workspace";
 
 const roots: string[] = [];
 
@@ -43,17 +44,18 @@ it.each(["vite.config.cjs", "vite.config.cts"])("recognizes a host using %s", as
   });
 });
 
-it("keeps the repository shell at apps/web", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "svartz-repo-shell-"));
+it("builds with the app Svartz ships when the project has no SvelteKit app", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "svartz-no-app-"));
   roots.push(root);
-  await mkdir(path.join(root, "apps", "web"), { recursive: true });
-  await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "workspace" }));
-  await writeFile(path.join(root, "apps", "web", "vite.config.ts"), "export default {};\n");
+  // A Vite project that isn't SvelteKit is no host either.
+  await writeFile(path.join(root, "package.json"), JSON.stringify({ devDependencies: { vite: "^8.0.0" } }));
+  await writeFile(path.join(root, "vite.config.js"), "export default {};\n");
 
   expect(resolveAppLocation(root)).toEqual({
-    appRoot: path.join(root, "apps", "web"),
+    appRoot: SHIPPED_APP_ROOT,
     projectRoot: root,
     hostApp: false,
-    viteConfigPath: path.join(root, "apps", "web", "vite.config.ts"),
+    viteConfigPath: path.join(SHIPPED_APP_ROOT, "vite.config.js"),
   });
+  expect(existsSync(path.join(SHIPPED_APP_ROOT, "src", "routes", "[...slug]", "+page.svelte"))).toBe(true);
 });

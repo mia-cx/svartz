@@ -69,7 +69,7 @@ function createTurboRunScript(taskNames: readonly string[]): string {
 function getBuildTaskInputs(config: ResolvedConfigSet, vaultId: string, vaultPath: string): string[] {
   const relativeVaultPath = toPosixPath(path.relative(config.configDir, vaultPath));
   return [
-    "apps/web/**",
+    "packages/cli/app/**",
     "package.json",
     "pnpm-lock.yaml",
     "svartz.config.*",

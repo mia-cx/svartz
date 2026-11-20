@@ -1,10 +1,10 @@
 /**
- * A real `svartz build` of the standalone shell for a Node target with the plugin, served over HTTP.
+ * A real `svartz build` with the app Svartz ships for a Node target with the plugin, served over HTTP.
  * Follows packages/cli/tests/server-build.test.ts.
  */
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -41,11 +41,6 @@ async function readTree(directory: string): Promise<string[]> {
 beforeAll(async () => {
   // SvelteKit writes relative imports from the kit dir; macOS's /var symlink would break them.
   root = await realpath(await mkdtemp(path.join(os.tmpdir(), "svartz-submissions-build-")));
-  await cp(path.join(workspaceRoot, "apps/web"), path.join(root, "apps/web"), {
-    recursive: true,
-    filter: (source) => !/[\\/](?:node_modules|\.svelte-kit|build)$/.test(source),
-  });
-  await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "apps/web/node_modules"), "dir");
   await mkdir(path.join(root, "vault"));
   await writeFile(path.join(root, "vault/index.md"), "# Home\n");
   await writeFile(path.join(root, "vault/guide.md"), "---\ntitle: Guide\n---\n\nSet up the wiki.\n");

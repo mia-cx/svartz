@@ -30,11 +30,13 @@ npx svartz@latest init
 npm run dev
 ```
 
-The initializer creates a small SvelteKit 3 shell, `svartz.config.ts`, and `vault/index.md`. It uses npm by default and an existing project's package manager when one is declared. `npm run build` creates the static site; `npm run preview` serves the built output.
+The initializer creates `svartz.config.ts` and `vault/index.md`, and nothing else: the `svartz` package ships the app every vault builds with. It uses npm by default and an existing project's package manager when one is declared. `npm run build` creates the static site; `npm run preview` serves the built output.
+
+One config can publish several sites. Each vault picks its own theme and target, so two `cloudflare-workers` vaults deploy as two Workers on their own domains; see [several sites from one config](packages/cli/README.md#several-sites-from-one-config).
 
 For build and test automation, copy the [GitHub Actions example](docs/ci.md) into the new project.
 
-In an existing SvelteKit app, the same command adds Svartz dependencies, configuration, and a Vite wrapper while preserving routes, layouts, adapter, and existing scripts. It adds `svartz:dev`, `svartz:build`, and `svartz:preview` scripts. Existing vault definitions remain in their config; `init` does not replace them. Use `--no-install` or `--no-git` when you want to handle those steps yourself.
+An existing SvelteKit app can also mount vaults in its own routes, for content inside an app that is otherwise not a Svartz site. There, the same command adds Svartz dependencies, configuration, and a Vite wrapper while preserving routes, layouts, adapter, and existing scripts. It adds `svartz:dev`, `svartz:build`, and `svartz:preview` scripts. Existing vault definitions remain in their config; `init` does not replace them. Use `--no-install` or `--no-git` when you want to handle those steps yourself.
 
 Configure [vault mounts and canonical routes](docs/routes.md) when an existing app serves notes under paths such as `/journal`.
 One SvelteKit host can [compose multiple mounted vaults](docs/host-vaults.md) in a single build.
@@ -47,13 +49,13 @@ pnpm exec svartz build --vault docs
 pnpm exec svartz dev --vault docs
 ```
 
-- `svartz build` builds every configured vault. In a SvelteKit host, all vaults share one build even when `--vault` is given.
+- `svartz build` builds every configured vault. Host vaults share one build in the host app, even when `--vault` names one of them; every other vault builds on its own.
 - Vault artifacts live under `.svartz/vaults/<vault-id>`. A host app's adapter decides its site output path.
 - Standalone vault builds keep SvelteKit internals under `.svartz/vaults/<vault-id>/.svelte-kit`.
 
 ### Managed Turbo tasks
 
-For this repository's `apps/web` shell, the CLI also syncs root-level Turbo/package automation for the configured vaults:
+In a Turborepo workspace such as this one, the CLI also syncs root-level Turbo/package automation for the configured vaults:
 
 - Root `package.json` scripts are managed under the `svartz:*` namespace.
 - Root `turbo.json` tasks are managed under `//#svartz:*`.
@@ -71,16 +73,16 @@ pnpm svartz:preview
 ## Theme Resolution
 
 - `@svartz/theme-minimal` is the built-in fallback theme used when config does not specify one.
-- Any other configured theme is resolved from the active app/workspace root, so published themes can be installed at the workspace root without becoming dependencies of `@svartz/vite`.
+- Any other configured theme is resolved from the project root, beside `svartz.config.ts`, so published themes are ordinary dependencies of the project.
 - During `svartz dev`, source aliasing only applies to theme packages that resolve to a local workspace package; published themes are loaded from their installed package entry instead.
-- Tailwind source scanning is generated per vault by the CLI: `apps/web` and initialized hosts import a virtual CSS bridge, and the CLI writes that file with `@source` directives for the resolved theme and its component-library dependencies. Host builds include the Tailwind entry so packed theme utilities reach emitted CSS. The CLI ships the forms and typography plugins that entry loads; hosts provide only `tailwindcss` 4.
+- Tailwind source scanning is generated per vault by the CLI: the shipped app and initialized hosts import a virtual CSS bridge, and the CLI writes that file with `@source` directives for the resolved theme and its component-library dependencies. Host builds include the Tailwind entry so packed theme utilities reach emitted CSS. The CLI ships the forms and typography plugins that entry loads; hosts provide only `tailwindcss` 4.
 
 ## Dev Watch Contract
 
 `svartz dev` uses two watch modes on purpose:
 
 - Vault content changes: `@svartz/vite` rebuilds the Svartz pipeline in-process, rewrites the generated runtime bridge modules, and triggers a browser full reload.
-- Config, `apps/web/vite.config.ts`, active theme code, and best-effort workspace package source changes: the CLI rebuilds affected workspace packages if needed and restarts the dev runner cleanly.
+- Config, the app's Vite config, active theme code, and best-effort workspace package source changes: the CLI rebuilds affected workspace packages if needed and restarts the dev runner cleanly.
 
 Current behavior is correctness-first:
 
@@ -90,10 +92,7 @@ Current behavior is correctness-first:
 
 ## Test Fixtures
 
-`apps/web` no longer uses giant inline string-literal virtual modules for Vitest.
-
-- Test runtime fixtures live in `apps/web/src/lib/svartz/testing/fixtures/`.
-- `apps/web/vite.config.ts` aliases `virtual:svartz/theme` and `virtual:svartz/artifacts` to those files only in Vitest mode.
+The runtime page's tests render against a stub one-vault host in `packages/ui/src/lib/runtime/testing/shell/`, which each test file mocks in for `virtual:svartz/host`.
 
 Host apps and themes can read the published [vault view](docs/vault-view.md) from `virtual:svartz/artifacts`.
 - `@svartz/vite` tests cover vault change classification, rebuild triggering, and browser full-reload signaling.

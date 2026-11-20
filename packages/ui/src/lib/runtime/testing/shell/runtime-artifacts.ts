@@ -1,4 +1,4 @@
-import StubPage from '../StubPage.svelte';
+import StubPage from './StubPage.svelte';
 import { TEST_NOTE_ARTIFACT_KEY, testIndex } from './shared';
 
 export const artifacts = new Map([

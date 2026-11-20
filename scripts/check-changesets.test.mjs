@@ -58,9 +58,10 @@ test('changedChangesets keeps .changeset markdown but not README or config', () 
 	);
 });
 
-test('isUserFacing covers public source, types, manifests, and the CLI template', () => {
+test('isUserFacing covers public source, types, manifests, the CLI template and the shipped app', () => {
   for (const file of ['packages/core/src/index.ts', 'packages/ui/src/lib/Button.svelte',
-    'packages/cli/src/init.ts', 'packages/cli/template/gitignore', 'themes/wiki/src/lib/index.ts',
+    'packages/cli/src/init.ts', 'packages/cli/template/gitignore', 'packages/cli/app/vite.config.js',
+    'themes/wiki/src/lib/index.ts',
     'packages/vite/types/virtual-modules.d.ts', 'themes/wiki/types/index.d.ts',
     'packages/ui/package.json', 'themes/wiki/package.json']) {
     assert.ok(isUserFacing(file), file);

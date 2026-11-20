@@ -75,7 +75,7 @@ describe("svartz CLI", () => {
       await writeFile(notePath, "<h1 class='standalone-tone'>Standalone style</h1><style>.standalone-tone { color: rgb(12, 34, 56); }</style>\n");
       await writeFile(otherPath, "<h1 class='unrelated-tone'>Unrelated style</h1><style>.unrelated-tone { color: rgb(78, 90, 12); }</style>\n");
       await run(process.execPath, ["packages/cli/dist/index.js", "build", "--vault", "docs"]);
-      const manifest = JSON.parse(await readFile(getGeneratedHostStylesPath(getGeneratedHostRegistryPath(ROOT), "docs"), "utf8")) as {
+      const manifest = JSON.parse(await readFile(getGeneratedHostStylesPath(getGeneratedHostRegistryPath(resolve(ROOT, ".svartz/vaults/docs")), "docs"), "utf8")) as {
         shared: string[]; notes: Record<string, string[]>;
       };
       const styles = [...manifest.shared, ...manifest.notes["pages/standalone-style.svelte"]!];
@@ -108,7 +108,7 @@ describe("svartz CLI", () => {
       };\n`);
       await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
       for (const id of ["docs", "other"]) {
-        const manifest = JSON.parse(await readFile(getGeneratedHostStylesPath(getGeneratedHostRegistryPath(ROOT), id), "utf8")) as {
+        const manifest = JSON.parse(await readFile(getGeneratedHostStylesPath(getGeneratedHostRegistryPath(resolve(ROOT, ".svartz/vaults", id)), id), "utf8")) as {
           shared: string[]; notes: Record<string, string[]>;
         };
         const styles = [...manifest.shared, ...manifest.notes["pages/multi-vault-style.svelte"]!];
@@ -237,7 +237,7 @@ describe("svartz CLI", () => {
       const html = await readFile(resolve(DIST_ROOT, "blog/index.html"), "utf8");
       expect(html).toContain("Svartz Documentation Vault");
       expect(html).toContain('href="https://example.test/site/blog/"');
-      const registry = await readFile(resolve(ROOT, ".svartz/host/runtime.ts"), "utf8");
+      const registry = await readFile(resolve(ROOT, ".svartz/vaults/docs/.svartz/host/runtime.ts"), "utf8");
       expect(registry).toContain('basePath: "/site"');
     } finally {
       await rm(configPath, { force: true });
