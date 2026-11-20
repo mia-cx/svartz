@@ -70,6 +70,7 @@ afterEach(async () => {
   for (const dispose of disposers.splice(0)) await dispose();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 /**
@@ -298,6 +299,8 @@ describe("My submissions", () => {
   // Proves stories 40 and 42: each account sees its own submissions with their review state, nobody sees anyone
   // else's, and a guest has no panel at all.
   it("lists a reader's own submissions, and only to them", async () => {
+    // The site stamps a save with the time it happens: pin the clock so Grace's is always sent on the same day.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-19T12:00:00Z") });
     const site = await createSite();
     const grace = await graceSubmits(site);
     const ada = await signIn(site, ADA);
