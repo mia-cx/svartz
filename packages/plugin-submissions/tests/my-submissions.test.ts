@@ -304,7 +304,9 @@ describe("My submissions", () => {
     quietGitHub();
     await reviewed(site);
 
-    expect(text(await site.page(MINE, grace))).toBe("Dashboard My submissions Guide Edit · #42 · sent Nov 19, 2026 · 3 comments Changes requested");
+    // The site stamps a save when it happens, so Grace's was sent today.
+    const today = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" }).format(new Date());
+    expect(text(await site.page(MINE, grace))).toBe(`Dashboard My submissions Guide Edit · #42 · sent ${today} · 3 comments Changes requested`);
     expect(text(await site.page(MINE, ada))).toBe("Dashboard My submissions Edits you send for review show up here.");
     expect(await site.page(`${MINE}42/`, ada)).toBeUndefined();
     expect(await site.page(MINE)).toBeUndefined();
