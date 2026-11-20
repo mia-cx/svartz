@@ -23,7 +23,7 @@ async function importWrangler(appRoot: string): Promise<Wrangler> {
   try {
     entry = createRequire(join(appRoot, "package.json")).resolve("wrangler");
   } catch (cause) {
-    throw new Error(`[svartz:dev] Server plugins read local Cloudflare bindings through Wrangler. Add wrangler to the devDependencies of ${appRoot}.`, { cause });
+    throw new Error(`[svartz:dev] Server plugins read local Cloudflare bindings through Wrangler. Install wrangler in the project (it resolves from ${appRoot}).`, { cause });
   }
   return await import(pathToFileURL(entry).href) as Wrangler;
 }

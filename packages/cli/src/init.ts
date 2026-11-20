@@ -75,7 +75,7 @@ export class InitConflictError extends Data.TaggedError("InitConflictError")<{
 
 /** The existing project cannot be integrated without a manual layout change. */
 export class InitLayoutError extends Data.TaggedError("InitLayoutError")<{
-  readonly reason: "missing-kit" | "unsupported-vite" | "unsupported-tailwind" | "unsupported-node";
+  readonly reason: "unsupported-vite" | "unsupported-tailwind" | "unsupported-node";
   readonly message: string;
 }> {}
 
@@ -142,27 +142,14 @@ const command = (
       }),
   });
 
-async function templateFiles(
-  directory = templateRoot,
-  relative = "",
-): Promise<string[]> {
-  const entries = (await readdir(directory, { withFileTypes: true }))
-    .filter((entry) => relative || entry.name !== KIT2_TEMPLATE_DIRNAME);
-  const files = await Promise.all(
-    entries.map(async (entry) => {
-      const name = path.join(relative, entry.name);
-      return entry.isDirectory()
-        ? templateFiles(path.join(directory, entry.name), name)
-        : [name];
-    }),
-  );
-  return files.flat().sort();
-}
+/** A new project's files: a config and a vault. It builds with the app Svartz ships, so it needs no app of its own. */
+const NEW_PROJECT_FILES = ["gitignore", configName, path.join("vault", "index.md")] as const;
+/** Where the config template names its vault's target: `host` in an existing app, `static` in a new project. */
+const TARGET_PLACEHOLDER = "__SVARTZ_TARGET__";
 
 const PAGE_ROUTE_FILES = ["+page.svelte", "+page.ts", "+page.server.ts"] as const;
-/** Files only SvelteKit 2 hosts get; a new project runs SvelteKit 3, so its scaffold leaves them out. */
-const KIT2_TEMPLATE_DIRNAME = "sveltekit-2";
-const kit2TemplateRoot = path.join(templateRoot, KIT2_TEMPLATE_DIRNAME);
+/** Files only SvelteKit 2 hosts get. */
+const kit2TemplateRoot = path.join(templateRoot, "sveltekit-2");
 
 /**
  * The param matcher files the plugin page route needs that the host lacks, as `[destination, template]` pairs:
@@ -229,26 +216,15 @@ function freshManifest(root: string): Manifest {
     private: true,
     type: "module",
     scripts: {
-      dev: "svartz dev --vault notes",
-      build: "svartz build --vault notes",
-      preview: "svartz preview --vault notes",
-      prepare: "svelte-kit sync",
+      dev: "svartz dev",
+      build: "svartz build",
+      preview: "svartz preview",
     },
     engines: { node: SCAFFOLD_NODE },
     devDependencies: {
       "@svartz/config": "latest",
-      "@svartz/theme-minimal": "latest",
-      "@svartz/ui": "latest",
-      "@svartz/vite": "latest",
       svartz: "latest",
-      "@sveltejs/adapter-static": "^4.0.1",
-      "@sveltejs/kit": "^3.3.1",
-      "@sveltejs/vite-plugin-svelte": "^7.3.1",
-      "@tailwindcss/vite": "^4.1.18",
-      mdsvex: "^0.12.6",
-      svelte: "^5.58.0",
       tailwindcss: "^4.1.18",
-      typescript: "^6.0.3",
       vite: "^8.3.8",
     },
   };
@@ -616,7 +592,8 @@ const initProjectEffect = (
         const siteName = existingManifest?.name ?? packageName(root);
         const config = (yield* operation("read config template", () =>
           readFile(path.join(templateRoot, configName), "utf8"),
-        )).replace("__SVARTZ_SITE_NAME__", JSON.stringify(siteName));
+        )).replace("__SVARTZ_SITE_NAME__", JSON.stringify(siteName))
+          .replace(TARGET_PLACEHOLDER, "'host'");
         const starterNote = path.join(vaultPath, "index.md");
         yield* operation("write Svartz config", () =>
           writeNewFile(path.join(root, configName), config),
@@ -697,15 +674,8 @@ const initProjectEffect = (
       return { kind: "integrated", packageManager: manager };
     }
 
-    if (existingConfig) {
-      if (existsSync(location.viteConfigPath))
-        return { kind: "already-configured", packageManager: manager };
-      return yield* new InitLayoutError({
-        reason: "missing-kit",
-        message:
-          "Cannot initialize: Svartz config exists, but no SvelteKit app was found. No files changed.",
-      });
-    }
+    // Without a SvelteKit app, a config is all a project needs: Svartz builds it with the app it ships.
+    if (existingConfig) return { kind: "already-configured", packageManager: manager };
 
     const nodeVersion = options.nodeVersion ?? process.versions.node;
     if (!runsScaffold(nodeVersion))
@@ -714,9 +684,7 @@ const initProjectEffect = (
         message: `Cannot initialize: a new Svartz project runs SvelteKit 3, which needs Node ${SCAFFOLD_NODE}; this is Node ${nodeVersion}. No files changed.`,
       });
 
-    const files = yield* operation("list scaffold templates", () =>
-      templateFiles(),
-    );
+    const files = NEW_PROJECT_FILES;
     const destinationName = (name: string) =>
       name === "gitignore" ? ".gitignore" : name;
     const destinations = [...files.map(destinationName), "package.json"];
@@ -735,7 +703,8 @@ const initProjectEffect = (
     for (const name of files) {
       const content = (yield* operation(`read ${name} template`, () =>
         readFile(path.join(templateRoot, name), "utf8"),
-      )).replaceAll("__SVARTZ_SITE_NAME__", JSON.stringify(siteName));
+      )).replaceAll("__SVARTZ_SITE_NAME__", JSON.stringify(siteName))
+        .replace(TARGET_PLACEHOLDER, "'static'");
       yield* operation(`write ${destinationName(name)}`, () =>
         writeNewFile(path.join(root, destinationName(name)), content),
       );

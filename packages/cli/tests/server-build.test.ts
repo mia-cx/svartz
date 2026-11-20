@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runBuild } from "./helpers/build-process";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
-const cli = path.join(workspaceRoot, "packages/cli/dist/index.js");
+const cliPackage = path.join(workspaceRoot, "packages/cli");
 const HANDLER_MARKER = "svartz-hello-handler";
 const PAGE_MARKER = "svartz-greeter-page";
 const BUILD_TIMEOUT = 240_000;
@@ -18,6 +18,8 @@ const unicodeNotes = [["café", "Prerendered café note."], ["日本語", "Prere
 const dashNotes = [["-/guide", "Prerendered dash guide."], ["guides/-/example", "Prerendered nested dash note."]] as const;
 
 let root: string;
+/** This file's own copy of the `svartz` package, so tests that edit its app's routes edit no one else's. */
+let cli: string;
 
 async function freePort(): Promise<number> {
   const server = createServer();
@@ -93,12 +95,16 @@ beforeAll(async () => {
   // SvelteKit writes relative imports from the kit dir; macOS's /var symlink would break them.
   root = await realpath(await mkdtemp(path.join(os.tmpdir(), "svartz-server-build-")));
   await writeFile(path.join(root, "package.json"), '{"type":"module"}\n');
-  // The standalone shell is the repository's apps/web; copy it so each build owns its .svelte-kit.
-  await cp(path.join(workspaceRoot, "apps/web"), path.join(root, "apps/web"), {
-    recursive: true,
-    filter: (source) => !/[\\/](?:node_modules|\.svelte-kit|build)$/.test(source),
-  });
-  await symlink(path.join(workspaceRoot, "apps/web/node_modules"), path.join(root, "apps/web/node_modules"), "dir");
+  const svartzPackage = path.join(root, "svartz-package");
+  for (const directory of ["dist", "app"]) {
+    await cp(path.join(cliPackage, directory), path.join(svartzPackage, directory), {
+      recursive: true,
+      filter: (source) => !source.includes(`${path.sep}node_modules`),
+    });
+  }
+  await cp(path.join(cliPackage, "package.json"), path.join(svartzPackage, "package.json"));
+  await symlink(path.join(cliPackage, "node_modules"), path.join(svartzPackage, "node_modules"), "dir");
+  cli = path.join(svartzPackage, "dist/index.js");
   await mkdir(path.join(root, "vault"));
   await mkdir(path.join(root, "plugins"));
   await writeFile(path.join(root, "vault/source.md"), "---\nslug: guide\n---\n# Guide\n\nPublished guide. Read [[other]].\n");
@@ -168,7 +174,7 @@ describe("standalone builds with a server plugin", () => {
   it.each([true, false])("negotiates prerendered pages in Node (server plugin %s)", async (serverPlugin) => {
     const prefix = serverPlugin ? "" : "/site/docs";
     // Exercise generated host loaders too, under a deployment base and vault mount.
-    const catchall = path.join(root, "apps/web/src/routes/[...slug]");
+    const catchall = path.join(root, "svartz-package/app/src/routes/[...slug]");
     const originalLoad = await readFile(path.join(catchall, "+page.ts"));
     if (!serverPlugin) {
       for (const name of ["+page.ts", "+page.server.ts"]) {
@@ -321,7 +327,7 @@ describe("standalone builds with a server plugin", () => {
 
   // Pages skips the worker for excluded paths, and those follow the routes' trailingSlash rather than Svartz's hrefs.
   it("routes slashless prerendered pages through the Pages worker", async () => {
-    const layout = path.join(root, "apps/web/src/routes/+layout.ts");
+    const layout = path.join(root, "svartz-package/app/src/routes/+layout.ts");
     const original = await readFile(layout, "utf8");
     await writeFile(layout, original.replace("'always'", "'never'"));
     try {

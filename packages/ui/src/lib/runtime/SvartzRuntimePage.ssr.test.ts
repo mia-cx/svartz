@@ -1,6 +1,9 @@
 import { render } from 'svelte/server';
-import { describe, expect, it } from 'vitest';
-import SvartzRuntimePage from '@svartz/ui/runtime';
+import { describe, expect, it, vi } from 'vitest';
+import SvartzRuntimePage from './SvartzRuntimePage.svelte';
+
+// A one-vault host with stub theme pages, as a standalone build generates.
+vi.mock('virtual:svartz/host', () => import('./testing/shell/runtime-host'));
 
 describe('SvartzRuntimePage SSR', () => {
 	it('renders the layout and note content without a loading placeholder', () => {

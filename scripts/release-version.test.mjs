@@ -24,7 +24,7 @@ for (const target of ['@svartz/core', '@svartz/theme-wiki']) {
     const fixture = await mkdtemp(join(tmpdir(), 'svartz-version-test-'));
     t.after(() => rm(fixture, { recursive: true, force: true }));
     for (const file of ['package.json', 'pnpm-workspace.yaml', '.changeset/config.json',
-      'apps/web/package.json', 'packages/reference/package.json',
+      'packages/reference/package.json',
       ...RELEASE_PACKAGES.map(([, directory]) => `${directory}/package.json`),
       ...RELEASE_PACKAGES.filter(([, directory]) => directory.startsWith('themes/'))
         .map(([, directory]) => `${directory}/src/lib/manifest.ts`)]) {
@@ -36,7 +36,7 @@ for (const target of ['@svartz/core', '@svartz/theme-wiki']) {
     run('git', ['add', '.']);
     run('git', ['-c', 'user.name=Release test', '-c', 'user.email=release@example.test',
       '-c', 'commit.gpgsign=false', 'commit', '-m', 'fixture']);
-    const privateBefore = await readFile(join(fixture, 'apps/web/package.json'), 'utf8');
+    const privateBefore = await readFile(join(fixture, 'packages/reference/package.json'), 'utf8');
     await writeFile(join(fixture, '.changeset/test.md'), `---\n"${target}": patch\n---\n\nRelease fixture.\n`);
     const cli = join(root, 'node_modules/@changesets/cli/bin.js');
     run(process.execPath, [cli, 'version']);
@@ -45,7 +45,7 @@ for (const target of ['@svartz/core', '@svartz/theme-wiki']) {
     const before = readReleasePackages(root)[0].version;
     const expected = before.split('.').map((part, i) => i === 2 ? String(Number(part) + 1) : part).join('.');
     assert.ok(current.every(({ version }) => version === expected));
-    assert.equal(await readFile(join(fixture, 'apps/web/package.json'), 'utf8'), privateBefore);
+    assert.equal(await readFile(join(fixture, 'packages/reference/package.json'), 'utf8'), privateBefore);
     for (const { directory } of current) {
       assert.ok(changelogSection(await readFile(join(fixture, directory, 'CHANGELOG.md'), 'utf8'), expected));
       const manifest = JSON.parse(await readFile(join(fixture, directory, 'package.json'), 'utf8'));

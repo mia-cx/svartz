@@ -1,6 +1,6 @@
 # `@svartz/vite`
 
-The Vite plugin runs one resolved vault through `@svartz/plugins` and writes its runtime artifacts under `.svartz/vaults/<id>/artifacts`. The CLI composes several vault plugins into one existing SvelteKit host build, or uses the repository's static `apps/web` shell. A host keeps its routes, layouts, adapter, scripts, and `.svelte-kit` directory.
+The Vite plugin runs one resolved vault through `@svartz/plugins` and writes its runtime artifacts under `.svartz/vaults/<id>/artifacts`. The CLI composes several host vault plugins into one existing SvelteKit host build, and builds every other vault on its own with the app the `svartz` package ships. A host keeps its routes, layouts, adapter, scripts, and `.svelte-kit` directory.
 
 The CLI injects `svartz()` during build and dev. A host with Svartz virtual imports also wraps its Vite export so SvelteKit's secondary build sees the same aliases:
 
@@ -13,7 +13,9 @@ export default withSvartzHost(defineConfig({ plugins: [sveltekit()] }));
 ```
 
 `svartz init` adds that wrapper without replacing the host's Vite expression. A manual SvelteKit route wins over a vault URL at the same path.
-The repository's standalone `apps/web` shell loads the same CSS collector from a CLI-generated module during a Svartz build. It does not depend on `@svartz/vite` directly.
+The app the `svartz` package ships loads the same CSS collector from a CLI-generated module during a Svartz build. It does not depend on `@svartz/vite` directly.
+
+`svartz({ projectRoot })` names the directory holding `svartz.config.ts`. Themes and Wrangler resolve from it, which matters when the Vite root is the shipped app inside `node_modules`. `wranglerDir` points the dev server at a vault's generated Wrangler config instead of the one beside the config.
 
 ## Runtime modules
 

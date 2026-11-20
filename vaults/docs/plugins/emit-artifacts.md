@@ -8,4 +8,4 @@ title: Emit Artifacts
 
 `.svx` notes compile with mdsvex and may contain authored Svelte. `.md` and `.mdx` compile as Markdown into inert HTML in a Svelte page component. The emitter uses only remark and rehype plugins contributed by active transform hooks. It does not add math, syntax, or GFM itself.
 
-The artifact set is rebuilt for each run, so removed notes and feature resources leave the output. The emitter runs after indexing and must not write into `apps/web/src/routes`. See [[guides/runtime-vite-integration]].
+The artifact set is rebuilt for each run, so removed notes and feature resources leave the output. The emitter runs after indexing and must not write into the app's `src/routes`. See [[guides/runtime-vite-integration]].

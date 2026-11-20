@@ -85,7 +85,8 @@ const WranglerTriggersSchema = Schema.Struct({
 
 /**
  * Wrangler config fields shared by root and env.<name>.
- * Covers inheritable and non-inheritable keys from the config; no nested env.
+ * Covers inheritable and non-inheritable keys from the config; no nested env. A `cloudflare-workers` target is its
+ * Worker's Wrangler config, and decoding drops keys this doesn't list, so every binding a Worker can take is here.
  */
 const WranglerConfigFieldsSchema = Schema.Struct({
   name: Schema.optional(Schema.String),
@@ -126,6 +127,13 @@ const WranglerConfigFieldsSchema = Schema.Struct({
   queues: Schema.optional(Schema.Unknown),
   workflows: Schema.optional(Schema.Array(Schema.Unknown)),
   tail_consumers: Schema.optional(Schema.Array(Schema.Unknown)),
+  d1_databases: Schema.optional(Schema.Array(Schema.Unknown)),
+  hyperdrive: Schema.optional(Schema.Array(Schema.Unknown)),
+  analytics_engine_datasets: Schema.optional(Schema.Array(Schema.Unknown)),
+  send_email: Schema.optional(Schema.Array(Schema.Unknown)),
+  ai: Schema.optional(Schema.Unknown),
+  browser: Schema.optional(Schema.Unknown),
+  version_metadata: Schema.optional(Schema.Unknown),
 });
 
 const WranglerEnvRecordSchema = Schema.Record({

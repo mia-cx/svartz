@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import module, { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -11,8 +11,8 @@ import { runBuild } from "./helpers/build-process";
 const execFileAsync = promisify(execFile);
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
 const cli = path.join(workspaceRoot, "packages/cli/dist/index.js");
-const shell = path.join(workspaceRoot, "apps/web");
-const wranglerBin = path.join(shell, "node_modules/.bin/wrangler");
+const cliPackage = path.join(workspaceRoot, "packages/cli");
+const wranglerBin = path.join(cliPackage, "node_modules/.bin/wrangler");
 const BUILD_TIMEOUT = 240_000;
 const HANDLER_MARKER = "svartz-hello-handler";
 const roots: string[] = [];
@@ -25,7 +25,7 @@ interface DevWorker {
 
 // Wrangler's local runner: it bundles the worker from its own location, as a deploy does, and serves it in workerd.
 const { unstable_dev } = (await import(
-  pathToFileURL(createRequire(path.join(shell, "package.json")).resolve("wrangler")).href
+  pathToFileURL(createRequire(path.join(cliPackage, "package.json")).resolve("wrangler")).href
 )) as { unstable_dev: (script: string, options: Record<string, unknown>) => Promise<DevWorker> };
 
 afterEach(async () => {
@@ -107,18 +107,12 @@ describe("standalone Cloudflare builds", () => {
   it.each(["cloudflare-workers", "cloudflare-pages"])("serves a %s build in workerd", async (type) => {
     const root = await tempRoot(type);
     await writeFile(path.join(root, "package.json"), '{"type":"module"}\n');
-    // The standalone shell is the repository's apps/web; copy it so this build owns its .svelte-kit.
-    await cp(shell, path.join(root, "apps/web"), {
-      recursive: true,
-      filter: (source) => !/[\\/](?:node_modules|\.svelte-kit|build)$/.test(source),
-    });
-    await symlink(path.join(shell, "node_modules"), path.join(root, "apps/web/node_modules"), "dir");
     await writeConfig(root, { mountPath: "", target: { type } });
     await runBuild([cli, "build", "--config", path.join(root, "svartz.config.ts")], { cwd: root, timeout: BUILD_TIMEOUT - 30_000 });
 
     const vaultRoot = path.join(root, ".svartz/vaults/site");
     const output = path.join(vaultRoot, ".svelte-kit/cloudflare");
-    // Workers take the shell's wrangler.jsonc setting; Pages sends to its worker what `_routes.json` includes.
+    // Workers run first, as the vault's generated Wrangler config says; Pages sends to its worker what `_routes.json` includes.
     const routes = type === "cloudflare-pages"
       ? JSON.parse(await readFile(path.join(output, "_routes.json"), "utf8")) as { include: string[]; exclude: string[] }
       : undefined;
@@ -133,7 +127,62 @@ describe("standalone Cloudflare builds", () => {
       [200, "text/markdown", expect.stringContaining("Linked page.")],
     ]);
     // The deploy docs/server-plugins.md describes.
-    if (type === "cloudflare-workers") await bundle(path.join(vaultRoot, "wrangler.jsonc"), path.join(root, "deploy"));
+    if (type === "cloudflare-workers") await bundle(path.join(vaultRoot, "wrangler.json"), path.join(root, "deploy"));
+  }, BUILD_TIMEOUT);
+
+  // Proves one config deploys two sites: each vault gets its own Worker, domain, bindings and theme.
+  it("builds two Workers vaults from one config, each its own Worker with its own theme", async () => {
+    const root = await tempRoot("two-workers");
+    await mkdir(path.join(root, "wplace"));
+    await writeFile(path.join(root, "wplace/index.md"), "# Wplace\n\nUnofficial developer docs.\n");
+    await writeFile(path.join(root, "svartz.config.ts"), `export default ${JSON.stringify({
+      version: "1.0.0",
+      vaults: [
+        {
+          id: "docs",
+          path: "vault",
+          theme: path.join(workspaceRoot, "themes/docs"),
+          site: { title: "Docs" },
+          target: { type: "cloudflare-workers", routes: [{ pattern: "docs.example.com", custom_domain: true }] },
+        },
+        {
+          id: "wplace",
+          path: "wplace",
+          theme: path.join(workspaceRoot, "themes/wiki"),
+          site: { title: "Wplace" },
+          target: {
+            type: "cloudflare-workers",
+            name: "wplace-docs",
+            routes: [{ pattern: "wplace.example.com", custom_domain: true }],
+            d1_databases: [{ binding: "SVARTZ_DB", database_name: "wplace", database_id: "00000000-0000-0000-0000-000000000000" }],
+          },
+        },
+      ],
+    })};\n`);
+    await runBuild([cli, "build", "--config", path.join(root, "svartz.config.ts")], { cwd: root, timeout: BUILD_TIMEOUT - 30_000 });
+
+    const deployed = await Promise.all(["docs", "wplace"].map(async (id) => {
+      const vaultRoot = path.join(root, ".svartz/vaults", id);
+      const config = path.join(vaultRoot, "wrangler.json");
+      await bundle(config, path.join(root, "deploy", id));
+      return {
+        wrangler: JSON.parse(await readFile(config, "utf8")) as Record<string, unknown>,
+        page: await readFile(path.join(vaultRoot, ".svelte-kit/cloudflare/index.html"), "utf8"),
+      };
+    }));
+    const [docs, wplace] = deployed;
+    expect(docs!.wrangler).toMatchObject({ name: "docs", routes: [{ pattern: "docs.example.com", custom_domain: true }] });
+    expect(docs!.wrangler).not.toHaveProperty("d1_databases");
+    expect(wplace!.wrangler).toMatchObject({
+      name: "wplace-docs",
+      routes: [{ pattern: "wplace.example.com", custom_domain: true }],
+      d1_databases: [{ binding: "SVARTZ_DB", database_name: "wplace" }],
+    });
+    // The docs theme frames pages in its `docs` layout; the wiki theme shows category pills.
+    expect(docs!.page).toContain('class="docs ');
+    expect(docs!.page).not.toContain("category-pills");
+    expect(wplace!.page).toContain("category-pills");
+    expect(wplace!.page).not.toContain('class="docs ');
   }, BUILD_TIMEOUT);
 });
 

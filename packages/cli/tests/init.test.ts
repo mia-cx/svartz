@@ -38,7 +38,7 @@ it("uses a command shim for Windows package managers but the Git executable for 
   expect(commandExecutable("bun", "win32")).toBe("bun");
 });
 
-it("initializes the invocation directory with an editable shell and vault", async () => {
+it("initializes the invocation directory with a config and a vault, and no app", async () => {
   const root = await fixture();
   const { stdout } = await execFileAsync(
     process.execPath,
@@ -50,36 +50,19 @@ it("initializes the invocation directory with an editable shell and vault", asyn
   const manifest = JSON.parse(
     await readFile(path.join(root, "package.json"), "utf8"),
   );
-  expect(manifest.scripts).toMatchObject({
-    dev: "svartz dev --vault notes",
-    build: "svartz build --vault notes",
-  });
+  expect(manifest.scripts).toMatchObject({ dev: "svartz dev", build: "svartz build" });
   expect(manifest.devDependencies).toHaveProperty("svartz", "latest");
-  expect(await readFile(path.join(root, "svartz.config.ts"), "utf8")).toContain(
-    "path: 'vault'",
-  );
+  expect(manifest.devDependencies).not.toHaveProperty("@sveltejs/kit");
+  const config = await readFile(path.join(root, "svartz.config.ts"), "utf8");
+  expect(config).toContain("path: 'vault'");
+  expect(config).toContain("target: { type: 'static' }");
   expect(await readFile(path.join(root, "vault/index.md"), "utf8")).toContain(
     "# Welcome",
   );
   expect(await readFile(path.join(root, ".gitignore"), "utf8")).toContain(
     "node_modules",
   );
-  await expect(access(path.join(root, "src/routes/+page.svelte"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-  expect(await readFile(path.join(root, "src/routes/[...slug]/+page.svelte"), "utf8"))
-    .toContain("virtual:svartz/tailwind-sources.css");
-  expect(await readFile(path.join(root, "src/routes/+layout.svelte"), "utf8"))
-    .not.toContain("layout.css");
-  await access(path.join(root, "src/routes/[...slug]/+page.ts"));
-  await access(path.join(root, "src/routes/[...slug]/+page.server.ts"));
-  // A new project runs SvelteKit 3, which reads its matchers from src/params.ts, never SvelteKit 2's src/params/.
-  expect(await readFile(path.join(root, "src/params.ts"), "utf8")).toContain("defineParams");
-  await expect(access(path.join(root, "src/params"))).rejects.toMatchObject({ code: "ENOENT" });
-  await expect(access(path.join(root, "sveltekit-2"))).rejects.toMatchObject({ code: "ENOENT" });
-  await expect(access(path.join(root, ".git"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
+  expect((await readdir(root)).sort()).toEqual([".gitignore", "package.json", "svartz.config.ts", "vault"]);
 });
 
 it("adds configuration to an existing Kit app without changing its routes or build script", async () => {
@@ -741,15 +724,11 @@ it("preserves an old generated page when its loader was customized", async () =>
   expect(await readFile(pagePath, "utf8")).toBe(oldPage);
 });
 
-it("reports an existing config without a Kit app instead of replacing it", async () => {
+it("leaves an existing config without a Kit app as it is", async () => {
   const root = await fixture();
   await writeFile(path.join(root, "svartz.config.mjs"), "export default {};\n");
-  const failure = await initProject({ cwd: root, install: false, git: false }).catch((cause: unknown) => cause);
-  expect(failure).toBeInstanceOf(InitLayoutError);
-  expect(failure).toMatchObject({ reason: "missing-kit", message: expect.stringContaining("no SvelteKit app was found") });
-  await expect(access(path.join(root, "package.json"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
+  expect((await initProject({ cwd: root, install: false, git: false })).kind).toBe("already-configured");
+  expect(await readdir(root)).toEqual(["svartz.config.mjs"]);
 });
 
 it("refuses a new project on a Node that SvelteKit 3 can't run, before writing anything", async () => {
@@ -779,12 +758,12 @@ it("reports every new-project conflict before writing anything", async () => {
 
 it("rejects a file-valued template ancestor before writing scaffold files", async () => {
   const root = await fixture();
-  await writeFile(path.join(root, "src"), "owned file\n");
+  await writeFile(path.join(root, "vault"), "owned file\n");
 
   await expect(initProject({ cwd: root, install: false, git: false }))
-    .rejects.toThrow("src");
+    .rejects.toThrow("vault");
   await expect(access(path.join(root, ".gitignore"))).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await readFile(path.join(root, "src"), "utf8")).toBe("owned file\n");
+  expect(await readFile(path.join(root, "vault"), "utf8")).toBe("owned file\n");
 });
 
 it("leaves an unsupported host Vite config untouched", async () => {

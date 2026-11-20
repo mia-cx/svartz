@@ -1,7 +1,10 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import SvartzRuntimePage from '@svartz/ui/runtime';
+import SvartzRuntimePage from './SvartzRuntimePage.svelte';
+
+// A one-vault host with stub theme pages, as a standalone build generates.
+vi.mock('virtual:svartz/host', () => import('./testing/shell/runtime-host'));
 
 describe('/+page.svelte', () => {
 	it('renders the runtime layout and page from virtual modules', async () => {
