@@ -12,6 +12,8 @@ import { extractDescription } from "./internal/parse";
 import { deriveTitle } from "./internal/slug";
 
 export const DERIVED_PROPERTIES = "svartz:derivedProperties";
+/** The filename stem of a folder note, `index` or `_index`, which names its folder. */
+const FOLDER_NOTE = /^_?index$/i;
 export type DerivedProperties = WeakMap<ProcessedFile, {
   original: Record<string, unknown>;
   generated: Record<string, unknown>;
@@ -38,10 +40,11 @@ export const transformDescription = definePlugin(() => ({
 
         const existingTitle = file.frontmatter[titleField];
         if (typeof existingTitle !== "string" || existingTitle.length === 0) {
-          const filename = file.path.split("/").pop() ?? "Untitled";
-          file.frontmatter[titleField] = deriveTitle(
-            filename.replace(/\.[^.]+$/, ""),
-          );
+          const segments = file.path.split("/");
+          const stem = (segments.pop() ?? "Untitled").replace(/\.[^.]+$/, "");
+          // A folder note (`Guides/index.md`) takes its folder's name, as Obsidian shows it.
+          const folder = FOLDER_NOTE.test(stem) ? segments.at(-1) : undefined;
+          file.frontmatter[titleField] = deriveTitle(folder ?? stem);
           generated[titleField] = file.frontmatter[titleField];
         }
 
