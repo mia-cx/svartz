@@ -107,6 +107,23 @@ describe("/-/history/<page>", () => {
     expect(github.requests).toHaveLength(2);
   });
 
+  // Proves the last page reaches change 1,000 and no further: a full page 10 links to GitHub for older changes.
+  it("sends readers to GitHub after the tenth page", async () => {
+    const site = await createSite();
+    const commits = Array.from({ length: 100 }, (_, index): TestCommit => ({
+      sha: (index + 1).toString(16).padStart(40, "0"), message: "Edit the guide", at: -index, author: GRACE, committer: GITHUB_WEB, files: [GUIDE_PATH],
+    }));
+    replayGitHub([firstToken, historyExchange(GUIDE_PATH, commits, { page: 10 })], INSTALLATION_TOKEN);
+
+    const last = await site.page(`${HISTORY}?page=10`);
+    await site.settle();
+
+    expect(rows(last)).toHaveLength(100);
+    expect(last?.html).toContain(">Older changes on GitHub<");
+    expect(last?.html).not.toContain("page=11");
+    expect(last?.html).toContain(`href="${HISTORY}?page=9">Newer changes`);
+  });
+
   // Proves a revision parameter reaches only commits on the content branch, and a page parameter only published pages.
   it.each([
     ["a hidden note", "/wiki/-/history/secret/"],
