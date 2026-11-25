@@ -1,5 +1,41 @@
 # @svartz/vite
 
+## 2.5.0
+
+### Minor Changes
+
+- e44be06: A server plugin can start before everything else. With `server: { module, eager: true }`, its factory runs before the site answers its first request at runtime (a page, a plugin or one of the app's own routes), instead of on its own first request. Use it for a plugin whose factory sets up what other code reads. `@svartz/auth` is eager, so accounts are always read with the deployed `admins`.
+- 03747e2: Server plugins can render pages inside the theme's shell. A plugin claims page names with `server: { module, pages: ["greet"] }`, and its factory returns `{ handle, page }`: `page` answers each request under `<mount>/-/greet/` with a title and HTML, which the theme's default layout renders as its body, beside the explorer and under the header and search. Plugin pages render on every request and are never cached or prerendered; notes stay prerendered, and `/_svartz/<id>/` stays raw HTTP. A static vault with a plugin page fails the build, naming the vault and the plugin.
+
+  The standalone shell renders plugin pages through a new `src/routes/[...mount=svartzMount]/-/[...page=svartzPage]/` route. Its param matchers, `isPluginPageMount` and `isPluginPageName` from `virtual:svartz/host`, send it only the page names claimed by the plugins of the vault at that mount, so a note in a folder named `-` stays a prerendered note, also under a name only another vault claims. A vault that publishes a note under a claimed name fails the build, naming the note. `npx svartz init` adds the route and its matchers (`src/params.ts` on SvelteKit 3, `src/params/` on SvelteKit 2) to host apps with a server adapter. A host app's build fails when a vault claims pages and no route renders them; run `npx svartz init`, or copy the route from the host vaults guide. The route renders `SvartzPluginPage` from `@svartz/ui/runtime` with what `svartzPage` from `virtual:svartz/server` answers.
+
+- a863185: Plugins can declare permissions and check them with one call. A plugin lists what it checks under `permissions`, as `namespace:feature:action` slugs with a name, a description and optional defaults for the built-in actors `guest` (everyone) and `signed-in` (everyone with an account). Auth collects the declarations at build time, a theme preset's plugins included, and fails the build on a malformed one. Build hooks can read every plugin the build runs as `ctx.plugins`.
+
+  `can(account, permission, object, env)` from `@svartz/auth/server` answers whether an account, or a guest, holds a permission on the site, a vault or a page. Grants live in `SVARTZ_DB` and give an actor `allow`, `deny` or `unset` on an object: the most specific object with a grant that applies decides, then the most specific actor, and a deny beats an allow between equals. Admins are allowed everything, and every account everything on its own `users/<handle>` page. Without `SVARTZ_DB`, `can()` answers `false`.
+
+  Annotations now declares `annotations:comments:write`, which every signed-in reader holds by default, and `annotations:comments:delete`, which lets a reader delete anyone's annotations on a page. On a site with accounts, each identity in the `moderators` option becomes a grant of `annotations:comments:delete` on the vault once its owner has an account, and the grant decides from then on. `moderators` is deprecated; grant the permission instead. Sites without `SVARTZ_DB` keep using the list.
+
+### Patch Changes
+
+- a1a928c: A standalone `cloudflare-workers` build now produces a worker that Wrangler can bundle and deploy. Before, the worker imported its server by a path that held only from `apps/web/.svelte-kit`, the symlink the CLI puts in place during a build, so bundling `.svartz/vaults/<id>/.svelte-kit/cloudflare/_worker.js` failed with `Could not resolve`. The build now copies `apps/web/wrangler.jsonc` to `.svartz/vaults/<id>/wrangler.jsonc` and builds against that copy, so the worker resolves its imports from where it lands. Deploy with `npx wrangler deploy` from `.svartz/vaults/<id>`.
+
+  The deployed worker also serves Svartz's own static files, such as each page's `.md` copy and attachments. Workers run the worker ahead of every asset, and SvelteKit's worker served only SvelteKit's files, so a request negotiated to Markdown was redirected to a copy that answered 404.
+
+- Updated dependencies [34fe812]
+- Updated dependencies [142f796]
+- Updated dependencies [e44be06]
+- Updated dependencies [35ef566]
+- Updated dependencies [5178445]
+- Updated dependencies [03747e2]
+- Updated dependencies [a863185]
+- Updated dependencies [0661dc3]
+- Updated dependencies [3a2a761]
+- Updated dependencies [72e30fc]
+- Updated dependencies [b0548e3]
+  - @svartz/core@2.5.0
+  - @svartz/plugins@2.5.0
+  - @svartz/theme-minimal@2.5.0
+
 ## 2.4.0
 
 ### Minor Changes

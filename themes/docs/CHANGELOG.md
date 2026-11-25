@@ -1,5 +1,19 @@
 # @svartz/theme-docs
 
+## 2.5.0
+
+### Patch Changes
+
+- Updated dependencies [34fe812]
+- Updated dependencies [142f796]
+- Updated dependencies [e44be06]
+- Updated dependencies [5178445]
+- Updated dependencies [03747e2]
+- Updated dependencies [a863185]
+  - @svartz/core@2.5.0
+  - @svartz/ui@2.5.0
+  - @svartz/theme-minimal@2.5.0
+
 ## 2.4.0
 
 ### Minor Changes
