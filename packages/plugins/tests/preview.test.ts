@@ -55,6 +55,14 @@ describe("renderPreview", () => {
     expect(html).toContain('<td><img src="/docs/wiki/Assets/chart.png" alt="A chart"></td>');
   });
 
+  it("keeps an escaped pipe inside a table alias in its cell, and the next cell intact", async () => {
+    const html = await render("| Who | Chart | After |\n| - | - | - |\n| [[Ada\\|One\\|Two]] | ![[chart.png\\|Rain\\|Sun]] | kept |\n");
+
+    expect(html).toContain('<td><a href="/docs/wiki/people/ada-lovelace/">One|Two</a></td>');
+    expect(html).toContain('<td><img src="/docs/wiki/Assets/chart.png" alt="Rain|Sun"></td>');
+    expect(html).toContain("<td>kept</td>");
+  });
+
   it("shows a wikilink to no published note unresolved, as the site does", async () => {
     expect(await render("See [[Charles Babbage]].")).toContain(
       '<span class="svartz-unresolved-link" role="link" aria-disabled="true">Charles Babbage</span>',

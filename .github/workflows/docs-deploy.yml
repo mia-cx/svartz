@@ -11,7 +11,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: docs-deploy
+  # Per ref, so a skipped dispatch from another branch never cancels a production deploy.
+  group: docs-deploy-${{ github.ref }}
   cancel-in-progress: true
 
 defaults:

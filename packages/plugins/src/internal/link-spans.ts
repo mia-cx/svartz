@@ -9,6 +9,7 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { SKIP, visit } from "unist-util-visit";
+import { splitAlias } from "./attachments";
 
 // The renderer's grammar, GFM tables included, so a backtick in one table cell never pairs with one in the next.
 const markdownParser = unified().use(remarkParse).use(remarkGfm);
@@ -87,14 +88,13 @@ function collectLinkSpans(markdown: string, roamReserved = false): PositionedLin
       for (const match of markdown.slice(start, end).matchAll(wikilinkRegex)) {
         const offset = start + match.index!;
         if (markdown[offset - 1] === "!" || isEscaped(markdown, offset)) continue;
-        // Inside a table, Obsidian escapes the alias separator as `\|`.
-        const [targetWithSection, ...labelParts] = match[1]!.split(/\\?\|/);
-        const [target, section] = targetWithSection!.split("#");
+        const [targetWithSection, label] = splitAlias(match[1]!);
+        const [target, section] = targetWithSection.split("#");
         if (roamReserved && isRoamMarker(markdown, offset, offset + match[0].length, target ?? "")) continue;
         if (target?.startsWith("http://") || target?.startsWith("https://")) continue;
         links.push({
           raw: match[0], target: target ?? "", section: section || undefined,
-          label: labelParts.length ? labelParts.join("|") : undefined, type: "wikilink",
+          label, type: "wikilink",
           start: offset, end: offset + match[0].length,
         });
       }
