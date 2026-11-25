@@ -1,5 +1,5 @@
 import type { ProcessedFile } from "@svartz/core";
-import { fileToSlug, normalizeSlugSegment } from "./slug";
+import { fileToSlug, isFolderNote, normalizeSlugSegment } from "./slug";
 
 const NOTE_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
 
@@ -30,14 +30,20 @@ export function markdownHref(slug: string, mountPath = ""): string {
   return `${mountPath}/${routeSlug(slug)}.md`;
 }
 
-/** The route a note's filename asks for: `people/Ada Lovelace.md` → `people/ada-lovelace`. */
+/** A note's slug from its path, where every folder note (`Guides/Guides.md` too) is its folder's `index`. */
+function sourceSlug(path: string): string {
+  const slug = fileToSlug(path);
+  return isFolderNote(path) ? slug.replace(/[^/]+$/, "index") : slug;
+}
+
+/** The route a note's filename asks for: `people/Ada Lovelace.md` → `people/ada-lovelace`, `Guides/Guides.md` → `guides`. */
 export function pathRoute(path: string): string {
-  return routeSlug(fileToSlug(path));
+  return routeSlug(sourceSlug(path));
 }
 
 /** The route a note asks for before {@link allocateRoutes} settles clashes: its frontmatter `slug`, else its filename's. */
 export function requestedSlug(file: Pick<ProcessedFile, "path" | "frontmatter">): string {
-  const source = fileToSlug(file.path);
+  const source = sourceSlug(file.path);
   if (!file.frontmatter || !("slug" in file.frontmatter)) return routeSlug(source);
 
   const value = file.frontmatter.slug;

@@ -14,12 +14,13 @@ const titlesOf = (paths: string[], frontmatter: Record<string, unknown> = {}) =>
 };
 
 it("titles a folder note after its folder and other notes after their filename", () => {
-  expect(titlesOf(["Guides/index.md", "Work/Tastebase/_index.md", "Guides/Setup Notes.md", "index.md"])).toEqual([
-    "Guides",
-    "Tastebase",
-    "Setup Notes",
-    "index",
-  ]);
+  expect(titlesOf([
+    "Guides/index.md",
+    "Work/Tastebase/_index.md",
+    "Field Guides/field-guides.md",
+    "Guides/Setup Notes.md",
+    "index.md",
+  ])).toEqual(["Guides", "Tastebase", "Field Guides", "Setup Notes", "index"]);
 });
 
 it("keeps a folder note's own title", () => {

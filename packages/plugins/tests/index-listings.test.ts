@@ -41,6 +41,8 @@ it.each([
   ["index.md", true],
   ["_index.md", false],
   ["_index.md", true],
+  ["Guides.md", false],
+  ["Guides.md", true],
 ])("lists physical folder members for %s (root collision: %s)", (filename, rootCollision) => {
   for (const reservedRoutes of [new Set<string>(), new Set(["guides"])]) {
     const files = [

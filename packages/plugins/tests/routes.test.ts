@@ -84,6 +84,7 @@ describe("canonical route allocation", () => {
   it.each([
     "index.md", "index.mdx", "index.svx", "_index.md", "_index.mdx", "_index.svx",
     "guides/index.md", "guides/index.mdx", "guides/_index.md", "guides/_index.mdx", "guides/Index?.md",
+    "guides/guides.md", "Field Guides/field-guides.mdx",
   ])("rejects slug on folder note %s", (path) => {
     const file = note(path);
     file.frontmatter = { slug: "setup" };
@@ -386,6 +387,19 @@ describe("canonical route allocation", () => {
     expect(reading.content).toContain('<a href="../../../moderation/">root</a>');
     // Wikilinks keep vault-wide resolution, where the root note owns its authored name.
     expect(reading.content).toContain('<a href="../../../moderation/">moderation</a>');
+  });
+
+  it("gives a note named after its folder the folder's URL, where wikilinks to its name still find it", () => {
+    const ctx = context([
+      note("Guides/Guides.md", "Start here"),
+      note("Guides/setup.md", "[[Guides]]"),
+      note("Notes/Notebook.md", "Not its folder's name"),
+    ]);
+    parseFrontmatter().parseFrontmatter!.run(ctx);
+    allocateRoutesPlugin().allocateRoutes!.run(ctx);
+    resolveLinks().resolveLinks!.run(ctx);
+    expect(ctx.files.map((file) => file.slug)).toEqual(["guides", "guides/setup", "notes/notebook"]);
+    expect(ctx.files[1]!.content).toContain('<a href="../">Guides</a>');
   });
 
   it("resolves Markdown link paths from the physical folder after a frontmatter slug moves the note", () => {
