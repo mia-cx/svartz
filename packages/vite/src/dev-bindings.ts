@@ -32,13 +32,15 @@ interface Wrangler {
   ): Record<string, unknown>;
 }
 
-/** The shape `unstable_getVarsForDev` wraps each value in since Wrangler 4.164; earlier releases return it bare. */
-const VAR_BINDING_TYPES = new Set(["plain_text", "json", "secret_text"]);
-
-function varValue(binding: unknown): unknown {
-  const wrapped = typeof binding === "object" && binding !== null && "type" in binding && "value" in binding &&
-    VAR_BINDING_TYPES.has(binding.type as string);
-  return wrapped ? binding.value : binding;
+/**
+ * The local secrets among what `unstable_getVarsForDev` loaded over `vars`. Before Wrangler 4.164 it answers
+ * `{ ...vars, ...secrets }`, so a configured var comes back as the same value and each secret as a string; since, it
+ * wraps every entry as `{ type, value }`. Configured vars are already on the platform env either way.
+ */
+function loadedSecrets(loaded: Record<string, unknown>, vars: LocalVarsConfig["vars"]): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(loaded)
+    .filter(([name, binding]) => binding !== vars[name])
+    .map(([name, binding]) => [name, typeof binding === "string" ? binding : (binding as { value: unknown }).value]));
 }
 
 type BindingsSlot = { [DEV_BINDINGS]?: DevBindings };
@@ -72,7 +74,7 @@ async function startPlatform(
   const local = wrangler.unstable_getVarsForDev(join(projectRoot, "wrangler.json"), undefined, vars, environment, true, secrets);
   const platform = await start();
   return {
-    env: { ...platform.env, ...Object.fromEntries(Object.entries(local).map(([name, binding]) => [name, varValue(binding)])) },
+    env: { ...platform.env, ...loadedSecrets(local, vars) },
     dispose: () => platform.dispose(),
   };
 }

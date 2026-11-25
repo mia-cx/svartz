@@ -7,8 +7,8 @@ import { serveDevBindings } from "../src/dev-bindings";
 type WranglerStub = {
   calls: Record<string, unknown>[];
   failDispose: boolean;
-  /** What `unstable_getVarsForDev` answers for GREETING, or `undefined` to make it throw. */
-  greeting?: unknown;
+  /** The Wrangler release `unstable_getVarsForDev` answers like, or `undefined` to make it throw. */
+  shape?: "bare" | "wrapped";
 };
 type Slot = { [key: symbol]: (() => Promise<Readonly<Record<string, unknown>>>) | undefined } & { __wranglerStub?: WranglerStub };
 
@@ -27,15 +27,23 @@ async function appWithWranglerStub(): Promise<string> {
   await writeFile(join(wrangler, "index.js"), `export async function getPlatformProxy(options) {
     const stub = globalThis.__wranglerStub;
     stub.calls.push(options);
-    return { env: { DB: "local" }, dispose: async () => { if (stub.failDispose) throw new Error("dispose failed"); } };
+    return { env: { DB: "local", ...VARS }, dispose: async () => { if (stub.failDispose) throw new Error("dispose failed"); } };
   }
+  // A JSON var shaped exactly like Wrangler's own wrapper.
+  const VARS = { GREETING: "hello", FLAGS: { type: "json", value: { enabled: true } } };
+  const SECRETS = { PRIVATE_SECRET: "from-dev-vars" };
   export function unstable_readConfig() {
-    return { vars: { GREETING: "hello" } };
+    return { vars: VARS };
   }
-  export function unstable_getVarsForDev() {
-    const { greeting } = globalThis.__wranglerStub;
-    if (greeting === undefined) throw new Error("could not read .dev.vars");
-    return { GREETING: greeting };
+  export function unstable_getVarsForDev(_configPath, _envFiles, vars) {
+    const { shape } = globalThis.__wranglerStub;
+    if (shape === undefined) throw new Error("could not read .dev.vars");
+    if (shape === "bare") return { ...vars, ...SECRETS };
+    const wrap = (type) => ([name, value]) => [name, { type, value }];
+    return Object.fromEntries([
+      ...Object.entries(vars).map(([name, value]) => wrap(typeof value === "string" ? "plain_text" : "json")([name, value])),
+      ...Object.entries(SECRETS).map(wrap("secret_text")),
+    ]);
   }\n`);
   return dir;
 }
@@ -65,7 +73,7 @@ describe("dev bindings", () => {
     process.env.CLOUDFLARE_ENV = "staging";
     const stop = serveDevBindings(root, root);
 
-    expect(await slot[DEV_BINDINGS]!()).toEqual({ DB: "local" });
+    expect(await slot[DEV_BINDINGS]!()).toEqual({ DB: "local", GREETING: "hello", FLAGS: { type: "json", value: { enabled: true } } });
     expect(slot.__wranglerStub!.calls).toEqual([expect.objectContaining({ environment: "staging", configPath: join(root, "wrangler.json") })]);
     await stop();
   });
@@ -79,15 +87,17 @@ describe("dev bindings", () => {
     expect(slot[DEV_BINDINGS]).toBeUndefined();
   });
 
-  // Wrangler 4.164 wraps each value as `{ type, value }`; earlier 4.x releases return it bare.
-  it.each([
-    ["bare", "hello"],
-    ["wrapped", { type: "plain_text", value: "hello" }],
-  ])("reads a generated config's project variables when Wrangler returns them %s", async (_shape, greeting) => {
-    slot.__wranglerStub!.greeting = greeting;
+  // Wrangler 4.164 wraps each value as `{ type, value }`; earlier 4.x releases return vars and secrets bare.
+  it.each(["bare", "wrapped"] as const)("adds a generated config's project secrets when Wrangler returns them %s", async (shape) => {
+    slot.__wranglerStub!.shape = shape;
     const stop = serveDevBindings(await generatedConfigDir(), root);
 
-    expect(await slot[DEV_BINDINGS]!()).toEqual({ DB: "local", GREETING: "hello" });
+    expect(await slot[DEV_BINDINGS]!()).toEqual({
+      DB: "local",
+      GREETING: "hello",
+      FLAGS: { type: "json", value: { enabled: true } },
+      PRIVATE_SECRET: "from-dev-vars",
+    });
     await stop();
   });
 
