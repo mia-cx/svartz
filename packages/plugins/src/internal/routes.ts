@@ -71,14 +71,17 @@ function exactName(file: ProcessedFile, slug: string): boolean {
 const folderOf = (path: string): string => path.replaceAll("\\", "/").replace(/\/?[^/]*$/, "");
 
 /**
- * The path each file of `group` sorts by. Each folder's files keep the places their paths give them among other
- * folders' files, and fill those places in {@link folderNoteRank} order. So `index` beats `_index`, and `_index` beats
- * the folder's namesake, inside one folder. Files from different folders keep the order their paths give them.
+ * The path each file of `group` sorts by. A folder's folder notes keep the places their paths give them among the
+ * group's other files, and fill those places in {@link folderNoteRank} order. So `index` beats `_index`, and `_index`
+ * beats the folder's namesake, inside one folder. Every other file keeps its own path: ordinary notes that normalize
+ * to the same URL (`Guides/#index.md`), and notes in other folders, keep the order their paths give them.
  */
 function sortPaths(group: readonly ProcessedFile[]): Map<ProcessedFile, string> {
+  const keys = new Map(group.map((file) => [file, file.path]));
   const folders = new Map<string, ProcessedFile[]>();
-  for (const file of group) folders.set(folderOf(file.path), [...folders.get(folderOf(file.path)) ?? [], file]);
-  const keys = new Map<ProcessedFile, string>();
+  for (const file of group.filter((candidate) => isFolderNote(candidate.path))) {
+    folders.set(folderOf(file.path), [...folders.get(folderOf(file.path)) ?? [], file]);
+  }
   for (const files of folders.values()) {
     const places = files.map((file) => file.path).sort((left, right) => left.localeCompare(right));
     [...files]

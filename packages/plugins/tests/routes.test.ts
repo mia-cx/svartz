@@ -126,6 +126,13 @@ describe("canonical route allocation", () => {
     expect(files.map((file) => file.slug)).toEqual(slugs);
   });
 
+  // `#index.md` normalizes to the folder's URL without being a folder note, so it keeps the place its path gives it.
+  it("leaves an ordinary note out of the ranking when it wants a folder's URL", () => {
+    const files = [note("Guides/#index.md"), note("Guides/index.md"), note("guides/index.md")];
+    allocateRoutes([...files].reverse());
+    expect(files.map((file) => file.slug)).toEqual(["guides", "guides-3", "guides-2"]);
+  });
+
   it("allows the same explicit segment in different folders", () => {
     const files = [note("guides/first.md"), note("notes/second.md")];
     for (const file of files) file.frontmatter = { slug: "setup" };
