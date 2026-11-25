@@ -70,15 +70,21 @@ function exactName(file: ProcessedFile, slug: string): boolean {
 /** An `index` or `_index` note, as opposed to a folder note named after its folder. */
 const INDEX_NOTE = /(?:^|[\\/])_?index\.[^\\/.]+$/i;
 
+/** A file's folder, as written: `Guides/Guides.md` → `Guides`. */
+const folderOf = (path: string): string => path.replaceAll("\\", "/").replace(/\/?[^/]*$/, "");
+
 /**
- * Fail when a folder has both kinds of folder note, `Guides/index.md` and `Guides/Guides.md`: both would introduce
- * `guides/`, and no URL for the other could be predicted from its path alone.
+ * Fail when one folder has both kinds of folder note, `Guides/index.md` and `Guides/Guides.md`: both would introduce
+ * `guides/`, and no URL for the other could be predicted from its path alone. Folder notes of different folders that
+ * normalize to one URL (`Field Guides/`, `Field-Guides/`) settle like any other clash.
  */
 function rejectRivalFolderNotes(group: readonly ProcessedFile[]): void {
-  const index = group.find((file) => INDEX_NOTE.test(file.path));
-  const named = group.find((file) => isFolderNote(file.path) && !INDEX_NOTE.test(file.path));
-  if (index && named) {
-    throw new Error(`${index.path} and ${named.path} both introduce their folder. Keep one, or rename ${named.path}.`);
+  for (const index of group.filter((file) => INDEX_NOTE.test(file.path))) {
+    const named = group.find((file) =>
+      isFolderNote(file.path) && !INDEX_NOTE.test(file.path) && folderOf(file.path) === folderOf(index.path));
+    if (named) {
+      throw new Error(`${index.path} and ${named.path} both introduce their folder. Keep one, or rename ${named.path}.`);
+    }
   }
 }
 

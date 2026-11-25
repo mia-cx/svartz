@@ -106,6 +106,12 @@ describe("canonical route allocation", () => {
     );
   });
 
+  it("settles folder notes of different folders that share a URL like any other clash", () => {
+    const files = [note("Field Guides/index.md"), note("Field-Guides/Field-Guides.md")];
+    allocateRoutes(files);
+    expect(files.map((file) => file.slug)).toEqual(["field-guides", "field-guides-2"]);
+  });
+
   it("allows the same explicit segment in different folders", () => {
     const files = [note("guides/first.md"), note("notes/second.md")];
     for (const file of files) file.frontmatter = { slug: "setup" };

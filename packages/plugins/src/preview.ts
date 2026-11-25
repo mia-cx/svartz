@@ -66,22 +66,26 @@ type Attachment = (target: string) => { readonly path: string; readonly href: st
 
 /**
  * `markdown` as the build hands it to the Markdown compiler, for a preview of the note `sourceSlug`. Links resolve from
- * `linkFrom`, the note's key among `options.notes`.
+ * `from.slug`, the note's key among `from.sources`, the notes plus a new note's own file.
  */
 function prepare(
   markdown: string,
   options: PreviewOptions,
   sourceSlug: string,
-  linkFrom: string,
+  from: { readonly slug: string; readonly sources: readonly { readonly slug: string; readonly path: string }[] },
   attachment: Attachment,
   generated: Set<string>,
 ): string {
   const { notes, linkResolution, base } = options;
-  const slugMap = buildSlugMap(notes);
+  // As in the build, a new note's own path names it: `[[Guides/Guides]]` in `Guides/Guides.md` is a link to itself.
+  const slugMap = buildSlugMap(from.sources);
   const slugs = notes.map((note) => note.slug);
   const hrefs = new Map(notes.map((note) => [note.slug, note.href]));
-  const resolve = (link: Pick<PositionedLink, "target" | "type">) =>
-    resolveLink({ raw: "", ...link }, slugMap, slugs, linkResolution, linkFrom, notes);
+  // A link to the new note itself shows unresolved: the build settles its URL only once it is published.
+  const resolve = (link: Pick<PositionedLink, "target" | "type">) => {
+    const slug = resolveLink({ raw: "", ...link }, slugMap, slugs, linkResolution, from.slug, from.sources);
+    return slug === NEW_NOTE ? null : slug;
+  };
   const url = (slug: string, section?: string) => {
     const href = `${base}${hrefs.get(slug)}${section ? `#${new GithubSlugger().slug(section)}` : ""}`;
     generated.add(href);
@@ -139,13 +143,11 @@ export async function renderPreview(markdown: string, options: PreviewOptions): 
   };
 
   const processor = markdownProcessor([remarkGfm]);
-  const href = note?.href ?? routeHref(sourceSlug, mountPath);
-  // A new note joins the notes links resolve against under a key no slug can be, so links resolve from its own file
-  // even when its path's slug names another note, and links to it point where it will publish.
-  const linkFrom = note?.slug ?? NEW_NOTE;
-  const linkable = note ? options : { ...options, notes: [...notes, { slug: NEW_NOTE, path, href, title: "" }] };
-  const tree = await processor.run(processor.parse(prepare(markdown, linkable, sourceSlug, linkFrom, attachment, generated))) as Root;
-  const page = new URL(`${base}${href}`, "https://preview.invalid");
+  // A new note's file joins the sources links resolve from under a key no slug can be, so they resolve from its own
+  // folder even when its path's slug names another note.
+  const from = note ? { slug: note.slug, sources: notes } : { slug: NEW_NOTE, sources: [...notes, { slug: NEW_NOTE, path }] };
+  const tree = await processor.run(processor.parse(prepare(markdown, options, sourceSlug, from, attachment, generated))) as Root;
+  const page = new URL(`${base}${note?.href ?? routeHref(sourceSlug, mountPath)}`, "https://preview.invalid");
   visit(tree, "element", (node) => {
     for (const name of ["href", "src"] as const) {
       const value = node.properties[name];
