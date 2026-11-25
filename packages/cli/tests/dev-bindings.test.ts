@@ -201,13 +201,18 @@ describe("svartz dev hands server plugins the vault's Wrangler bindings", () => 
     }, DEV_TIMEOUT);
   }
 
+  // CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false turns off only Wrangler's `.env` fallback, never `.dev.vars`.
   it("reads the Wrangler environment CLOUDFLARE_ENV names, with the project's .dev.vars for it", async () => {
     const root = await createProject("svartz-dev-bindings-env-");
     await writeFile(path.join(root, ".dev.vars.staging"), "PRIVATE_SECRET=from-dev-vars-staging\n");
     const staging = { ...GUESTBOOK_BINDINGS, vars: { GREETING: "from-staging" } };
     await writeConfig(root, { target: { type: "cloudflare-workers", ...GUESTBOOK_BINDINGS, env: { staging } } });
 
-    const dev = await startDev(root, "/", { ...process.env, CLOUDFLARE_ENV: "staging" });
+    const dev = await startDev(root, "/", {
+      ...process.env,
+      CLOUDFLARE_ENV: "staging",
+      CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false",
+    });
     try {
       expect(await guestbook(`${dev.origin}/_svartz/guestbook/`))
         .toMatchObject({ vars: "from-staging", secret: "from-dev-vars-staging" });
