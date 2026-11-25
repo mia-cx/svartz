@@ -3,7 +3,7 @@ title: "Blog"
 description: "Publish long-form posts with bylines, covers, and a dated archive."
 ---
 
-Try the [Plot 14 demo](https://blog.demo.svartz.mia.cx). Install `@svartz/theme-blog` and configure `svartz.config.ts`:
+Try the [Plot 14 demo](https://blog.demo.svartz.dev). Install `@svartz/theme-blog` and configure `svartz.config.ts`:
 
 ```ts
 import { defineConfig } from "@svartz/config";

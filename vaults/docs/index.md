@@ -17,9 +17,9 @@ See [[start/installation|Installation]] for Node.js requirements, [[start/first-
 
 | Site | Theme |
 | --- | --- |
-| [Backyard Weather Station](https://minimal.demo.svartz.mia.cx) | Minimal |
-| [Lanternfall Wiki](https://wiki.demo.svartz.mia.cx) | Wiki |
-| [Plot 14](https://blog.demo.svartz.mia.cx) | Blog |
-| [Core package docs](https://docs.demo.svartz.mia.cx) | Docs |
-| [Harbour Shelter API](https://api.demo.svartz.mia.cx) | API docs |
-| [Harbour developer docs](https://reference.demo.svartz.mia.cx) | API and MCP docs |
+| [Backyard Weather Station](https://minimal.demo.svartz.dev) | Minimal |
+| [Lanternfall Wiki](https://wiki.demo.svartz.dev) | Wiki |
+| [Plot 14](https://blog.demo.svartz.dev) | Blog |
+| [Core package docs](https://docs.demo.svartz.dev) | Docs |
+| [Harbour Shelter API](https://api.demo.svartz.dev) | API docs |
+| [Harbour developer docs](https://reference.demo.svartz.dev) | API and MCP docs |

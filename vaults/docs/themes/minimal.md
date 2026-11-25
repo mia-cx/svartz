@@ -4,7 +4,7 @@ order: 2
 description: "Publish a browsable Obsidian vault with search, backlinks, and a graph."
 ---
 
-Try the [Backyard Weather Station demo](https://minimal.demo.svartz.mia.cx). Minimal is Svartz's default. To configure it explicitly in `svartz.config.ts`:
+Try the [Backyard Weather Station demo](https://minimal.demo.svartz.dev). Minimal is Svartz's default. To configure it explicitly in `svartz.config.ts`:
 
 ```ts
 import { defineConfig } from "@svartz/config";

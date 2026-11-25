@@ -3,7 +3,7 @@ title: "Wiki"
 description: "Organize articles into sections with categories, infoboxes, and recent changes."
 ---
 
-Try the [Lanternfall Wiki](https://wiki.demo.svartz.mia.cx). Install `@svartz/theme-wiki` and configure `svartz.config.ts`:
+Try the [Lanternfall Wiki](https://wiki.demo.svartz.dev). Install `@svartz/theme-wiki` and configure `svartz.config.ts`:
 
 ```ts
 import { defineConfig } from "@svartz/config";

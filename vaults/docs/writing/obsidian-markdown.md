@@ -27,4 +27,4 @@ Use a blockquote for a callout:
 
 Code keeps its original text, even where it contains Markdown markers. Mermaid renders in the browser. Footnotes, task lists, tables, and strikethrough need no extra plugin. Inline tags join frontmatter tags in tag listings. Links in code do not enter the link graph.
 
-Open the [minimal demo](https://minimal.demo.svartz.mia.cx) for working examples, or see its [callouts note](https://minimal.demo.svartz.mia.cx/reference/callouts/).
+Open the [minimal demo](https://minimal.demo.svartz.dev) for working examples, or see its [callouts note](https://minimal.demo.svartz.dev/reference/callouts/).

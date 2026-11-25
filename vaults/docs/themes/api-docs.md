@@ -3,7 +3,7 @@ title: "API docs"
 description: "Document REST, GraphQL, and WebSocket APIs from note metadata."
 ---
 
-Try the [Harbour Shelter API demo](https://api.demo.svartz.mia.cx). Install `@svartz/theme-api-docs` and configure `svartz.config.ts`:
+Try the [Harbour Shelter API demo](https://api.demo.svartz.dev). Install `@svartz/theme-api-docs` and configure `svartz.config.ts`:
 
 ```ts
 import { defineConfig } from "@svartz/config";

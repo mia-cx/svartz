@@ -3,7 +3,7 @@ import { presentation } from "@svartz/plugins";
 import cli from "./packages/cli/package.json" with { type: "json" };
 
 /** Svartz's own docs, and one demo per first-party theme, each a Worker on its own domain. */
-const DOCS_DOMAIN = "svartz.mia.cx";
+const DOCS_DOMAIN = "svartz.dev";
 const GITHUB = "https://github.com/mia-cx/svartz";
 
 const worker = (name: string, domain: string) => ({
@@ -12,7 +12,7 @@ const worker = (name: string, domain: string) => ({
   routes: [{ pattern: domain, custom_domain: true }],
 });
 
-/** A theme demo: `wiki` deploys as `svartz-demo-wiki` at `wiki.demo.svartz.mia.cx`. */
+/** A theme demo: `wiki` deploys as `svartz-demo-wiki` at `wiki.demo.svartz.dev`. */
 const demo = (theme: string) => ({
   target: worker(`svartz-demo-${theme}`, `${theme}.demo.${DOCS_DOMAIN}`),
   url: `https://${theme}.demo.${DOCS_DOMAIN}`,

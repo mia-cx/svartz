@@ -3,7 +3,7 @@ title: "MCP docs"
 description: "Document MCP tools, input and output schemas, and tools/call examples."
 ---
 
-Try the [combined Harbour reference demo](https://reference.demo.svartz.mia.cx). Install `@svartz/theme-mcp-docs` and configure `svartz.config.ts`:
+Try the [combined Harbour reference demo](https://reference.demo.svartz.dev). Install `@svartz/theme-mcp-docs` and configure `svartz.config.ts`:
 
 ```ts
 import { defineConfig } from "@svartz/config";

@@ -3,7 +3,7 @@ title: "Docs"
 description: "Publish guides and one reference page per exported package symbol."
 ---
 
-Try the [package docs demo](https://docs.demo.svartz.mia.cx). Install `@svartz/theme-docs` and configure `svartz.config.ts`:
+Try the [package docs demo](https://docs.demo.svartz.dev). Install `@svartz/theme-docs` and configure `svartz.config.ts`:
 
 ```ts
 import { defineConfig } from "@svartz/config";
