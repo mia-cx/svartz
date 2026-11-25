@@ -8,10 +8,21 @@ const DOCS_DOMAIN = "svartz.dev";
 const DOCS_MIRRORS = ["svartz.com", "svartz.app"];
 const GITHUB = "https://github.com/mia-cx/svartz";
 
+/**
+ * A Worker answering on `domains`. Its `staging` environment deploys `<name>-staging` on the first domain moved below
+ * `staging.svartz.dev`: `wiki.demo.svartz.dev` stages at `wiki.demo.staging.svartz.dev`. Pages keep their production
+ * canonical URLs, so search engines never index staging.
+ */
 const worker = (name: string, ...domains: string[]) => ({
   type: "cloudflare-workers" as const,
   name,
   routes: domains.map((pattern) => ({ pattern, custom_domain: true })),
+  env: {
+    staging: {
+      name: `${name}-staging`,
+      routes: [{ pattern: domains[0]!.replace(DOCS_DOMAIN, `staging.${DOCS_DOMAIN}`), custom_domain: true }],
+    },
+  },
 });
 
 /** A theme demo: `wiki` deploys as `svartz-demo-wiki` at `wiki.demo.svartz.dev`. */

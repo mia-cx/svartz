@@ -41,11 +41,12 @@ Svartz publishes Obsidian vaults as SvelteKit sites, in the spirit of Quartz: on
 - The `svartz` package ships the app every non-`host` vault builds with (#415), so any repository builds sites from a config alone, and a host app's config can add standalone vaults beside its host vaults. A `cloudflare-workers` target is that vault's Worker config: its own name, routes and bindings. Caelestis's docs are the first project to move off host mode onto it, with a second vault on its own domain.
 - SvelteKit 2 and 3 hosts both build and render Svartz pages; index-only hosts import `virtual:svartz/index`. The workspace's own apps and `svartz init` run SvelteKit 3 (#336); published libraries use only APIs both majors share.
 - Waiting on Mia: the reaction drawings (#281) that unblock reactions (#270, #271, #276, #277), the mia.cx sign-in notice (#282), and whether Bluesky sign-in (#254) becomes an auth provider.
-- Svartz documents itself with Svartz, as Quartz does (#423). `vaults/docs` is the public site at svartz.dev, on `@svartz/theme-docs`. Each first-party theme has a live demo built from a showcase vault at `<theme>.demo.svartz.dev`. Each is a Worker, deployed from the default branch. `docs/` at the root still holds the contributor-facing feature docs the site was written from.
+- Svartz documents itself with Svartz, as Quartz does (#423). `vaults/docs` is the public site at svartz.dev, on `@svartz/theme-docs`. Each first-party theme has a live demo built from a showcase vault at `<theme>.demo.svartz.dev`. Each is a Worker. Pushes to `main` deploy staging (`staging.svartz.dev`). Production deploys when a release publishes, so the public docs describe what npm serves (Mia, November 2026). `docs/` at the root still holds the contributor-facing feature docs the site was written from.
 - Logitland's docs (staging.logit.land/docs) consume the published API and MCP themes as a `theme.base` list.
 
 ## Decisions
 
+- `main` is Svartz on SvelteKit, and the default branch. The original Quartz fork lives on `quartz-preact` (Mia, November 2026).
 - Every default theme extends theme-minimal; a separate reference shell was a mistake because it dropped minimal's explorer (Mia, October 2026).
 - In a composed site, one shell styles every page; a page's theme renders its body and right column, never the whole chrome, so navigation never jumps.
 - Themes may swap any region, the explorer included; swapped regions receive minimal's shell state so behaviour stays inherited.

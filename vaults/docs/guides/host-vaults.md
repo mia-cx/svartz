@@ -48,4 +48,4 @@ Use a server adapter, then add `svartzHandle` first in `src/hooks.server.ts`. Fo
 export { svartzHandle as handle } from "virtual:svartz/server";
 ```
 
-If your app already has a handle, use `sequence(svartzHandle, handleApp)` from `@sveltejs/kit/hooks`. Init adds the dynamic `[...mount=svartzMount]/-/[...page=svartzPage]/` route and its parameter matchers for supported server adapters. If you kept your own files, see the [route and matcher source](https://github.com/mia-cx/svartz/blob/sveltekit-rewrite/docs/host-vaults.md#plugin-pages) to integrate them. See [[plugins/server-plugins|Server plugins]] for runtime routes, prerendering, and dev bindings.
+If your app already has a handle, use `sequence(svartzHandle, handleApp)` from `@sveltejs/kit/hooks`. Init adds the dynamic `[...mount=svartzMount]/-/[...page=svartzPage]/` route and its parameter matchers for supported server adapters. If you kept your own files, see the [route and matcher source](https://github.com/mia-cx/svartz/blob/main/docs/host-vaults.md#plugin-pages) to integrate them. See [[plugins/server-plugins|Server plugins]] for runtime routes, prerendering, and dev bindings.

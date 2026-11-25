@@ -24,7 +24,7 @@ Publish a build manifest and a runtime entry, or point `theme.base` at a local t
 
 A component loader is `{ default: Component }` or a function that resolves to it. Standard layout slots after the two required ones are `root`, `tagPage`, `folderPage`, `feedPage`, and `notFoundPage`; themes can name additional slots. Named component entries include `callout`, `codeBlock`, `image`, `link`, `embed`, `backlinks`, `graphPanel`, `searchBox`, `toc`, and `noteHeader`.
 
-A route has a required `id` and `pattern`, and can choose `layoutSlot` or `component`, `priority`, `prerender`, and `meta`. See the [theme source types and matcher](https://github.com/mia-cx/svartz/tree/sveltekit-rewrite/packages/core/src/theme) for signatures and matching rules.
+A route has a required `id` and `pattern`, and can choose `layoutSlot` or `component`, `priority`, `prerender`, and `meta`. See the [theme source types and matcher](https://github.com/mia-cx/svartz/tree/main/packages/core/src/theme) for signatures and matching rules.
 
 ## Extend or compose
 
