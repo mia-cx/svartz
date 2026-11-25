@@ -90,18 +90,25 @@ export const resolveLink = (
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0]!;
 
+  // Rank by where files sit, not by URL: a folder note's URL drops its own name, `Guides/Guides.md` at `guides`.
+  const locations = new Map(sources.map((entry) => [entry.slug, entry.path]));
+  const located = (slug: string): string => {
+    const path = locations.get(slug);
+    return path ? fileToSlug(path) : slug;
+  };
   if (strategy === "closest") {
+    const from = located(sourceSlug);
     return [...candidates].sort((a, b) => {
-      const depthDiff = sharedDepth(sourceSlug, b) - sharedDepth(sourceSlug, a);
+      const depthDiff = sharedDepth(from, located(b)) - sharedDepth(from, located(a));
       if (depthDiff !== 0) return depthDiff;
-      const depth = byPathDepth(a, b);
+      const depth = byPathDepth(located(a), located(b));
       return depth !== 0 ? depth : a.localeCompare(b);
     })[0]!;
   }
 
   // shallowest
   return [...candidates].sort(
-    (a, b) => byPathDepth(a, b) || a.localeCompare(b),
+    (a, b) => byPathDepth(located(a), located(b)) || a.localeCompare(b),
   )[0]!;
 };
 

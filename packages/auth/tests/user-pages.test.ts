@@ -150,3 +150,15 @@ describe("user pages in a host app with several vaults", () => {
     expect(await ask(request, "journal", "users/octocat", legacy)).toEqual({ handle: "octocat-2", allowed: false });
   });
 });
+
+describe("handles free of user pages", () => {
+  // `<folder>/<name>.md` named after its folder is that folder's own note, so it can never be the user page of @<name>.
+  it("keeps the user page folder's own name from any account", async () => {
+    const { useUserPages, userPageFree } = await import("../src/user-pages");
+    useUserPages({ vault: "wiki", folder: "wiki/people" });
+
+    expect(userPageFree({}, "people")).toBe(false);
+    expect(userPageFree({ ada: "/wiki/people/ada/" }, "ada")).toBe(false);
+    expect(userPageFree({}, "ada")).toBe(true);
+  });
+});

@@ -24,7 +24,7 @@ import type {
 import { countWords, extractDescription, stripMarkdownToText } from "./internal/parse";
 import { normalizeDateTime, publicationOverride } from "./internal/datetime";
 import { allocateRedirects, alternateNames, markdownHref, routeHref } from "./internal/routes";
-import { normalizeSlugSegment } from "./internal/slug";
+import { isFolderNote, normalizeSlugSegment } from "./internal/slug";
 import { portableMarkdown } from "./internal/agent-markdown";
 import { createAssetResolver } from "./internal/asset-references";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
@@ -80,8 +80,6 @@ function folderSlugsFromPath(path: string): string[] {
   return segments.map((_, index) => segments.slice(0, index + 1).join("/"));
 }
 
-/** A folder's own note: `guides/index.md` or `guides/_index.md` names and introduces `guides`. */
-const INDEX_FILE = /(?:^|[\\/])_?index\.[^\\/]+$/i;
 
 function folderTitle(slug: string): string {
   return slug
@@ -302,7 +300,7 @@ export const indexContent = definePlugin(() => ({
           // A folder note names its folder. When two (`index.md`, `index.mdx`) share
           // one, the one that kept the folder's URL wins.
           const own = folderSlugs.at(-1);
-          if (own && INDEX_FILE.test(file.path) && (file.slug === own || !folderNotes.has(own))) {
+          if (own && isFolderNote(file.path) && (file.slug === own || !folderNotes.has(own))) {
             folderNotes.set(own, { slug: file.slug, title: typeof fmTitle === "string" && fmTitle.length > 0 ? fmTitle : undefined });
           }
         }

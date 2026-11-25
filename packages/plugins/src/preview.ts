@@ -16,8 +16,7 @@ import { attachmentResolver, encodeAttachmentPath, renderAssetEmbed, splitEmbedI
 import { findLinkSpans, replaceEmbeds, type PositionedLink } from "./internal/link-spans";
 import { markdownProcessor } from "./internal/markdown-processor";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
-import { routeHref } from "./internal/routes";
-import { fileToSlug } from "./internal/slug";
+import { pathRoute, routeHref } from "./internal/routes";
 import { transformMarkdown } from "./internal/ofm";
 
 /** A published note a preview's links can name. */
@@ -53,6 +52,8 @@ export interface PreviewOptions {
 const FRONTMATTER = /^(---|\+\+\+)\s*\r?\n([\s\S]*?)\r?\n\1\s*(?:\r?\n|$)/;
 /** A URL with a scheme, or protocol-relative: it leaves the site. */
 const EXTERNAL = /^(?:[a-z][a-z\d+.-]*:|\/\/)/i;
+/** The key a new, unpublished note goes by among the notes links resolve against; no slug contains a NUL. */
+const NEW_NOTE = "\u0000new-note";
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({
@@ -63,14 +64,25 @@ function escapeHtml(value: string): string {
 /** The attachment a link target names: its vault path, and the URL the build publishes it at. */
 type Attachment = (target: string) => { readonly path: string; readonly href: string } | undefined;
 
-/** `markdown` as the build hands it to the Markdown compiler, for a preview of the note `sourceSlug`. */
-function prepare(markdown: string, options: PreviewOptions, sourceSlug: string, attachment: Attachment, generated: Set<string>): string {
+/**
+ * `markdown` as the build hands it to the Markdown compiler, for a preview of the note `sourceSlug`. Links resolve from
+ * `from.slug`, the note's key among `from.sources`, the notes plus a new note's own file.
+ */
+function prepare(
+  markdown: string,
+  options: PreviewOptions,
+  sourceSlug: string,
+  from: { readonly slug: string; readonly sources: readonly { readonly slug: string; readonly path: string }[] },
+  attachment: Attachment,
+  generated: Set<string>,
+): string {
   const { notes, linkResolution, base } = options;
-  const slugMap = buildSlugMap(notes);
+  // As in the build, a new note's own path names it: `[[Guides/Guides]]` in `Guides/Guides.md` is a link to itself.
+  const slugMap = buildSlugMap(from.sources);
   const slugs = notes.map((note) => note.slug);
   const hrefs = new Map(notes.map((note) => [note.slug, note.href]));
   const resolve = (link: Pick<PositionedLink, "target" | "type">) =>
-    resolveLink({ raw: "", ...link }, slugMap, slugs, linkResolution, sourceSlug, notes);
+    resolveLink({ raw: "", ...link }, slugMap, slugs, linkResolution, from.slug, from.sources);
   const url = (slug: string, section?: string) => {
     const href = `${base}${hrefs.get(slug)}${section ? `#${new GithubSlugger().slug(section)}` : ""}`;
     generated.add(href);
@@ -84,10 +96,13 @@ function prepare(markdown: string, options: PreviewOptions, sourceSlug: string, 
     const label = escapeHtml(link.label ?? link.target);
     const asset = link.type === "wikilink" ? attachment(link.section ? `${link.target}#${link.section}` : link.target)?.href : undefined;
     const slug = asset === undefined ? resolve(link) : null;
-    const href = asset ?? (slug !== null ? url(slug, link.section) : undefined);
+    // A link to the new note itself, wikilink or Markdown, shows unresolved: the build settles its URL only once it
+    // is published.
+    const self = slug === NEW_NOTE;
+    const href = asset ?? (slug !== null && !self ? url(slug, link.section) : undefined);
     const html = href !== undefined
       ? `<a href="${escapeHtml(href)}">${label}</a>`
-      : link.type === "wikilink"
+      : link.type === "wikilink" || self
       ? `<span class="svartz-unresolved-link" role="link" aria-disabled="true">${label}</span>`
       : undefined;
     return html === undefined ? content : content.slice(0, link.start) + html + content.slice(link.end);
@@ -100,7 +115,8 @@ function prepare(markdown: string, options: PreviewOptions, sourceSlug: string, 
     const asset = attachment(target);
     if (asset !== undefined) return renderAssetEmbed(asset.href, asset.path, alias);
     const slug = resolve({ target, type: "wikilink" });
-    if (slug === null) return `\`${raw}\``;
+    // An embed of the new note itself, like any unresolved embed, shows as written.
+    if (slug === null || slug === NEW_NOTE) return `\`${raw}\``;
     const title = alias ?? notes.find((note) => note.slug === slug)!.title;
     return `<div class="svartz-embed" data-embed="${escapeHtml(slug)}"><p class="svartz-embed-source"><a href="${escapeHtml(url(slug, section))}">${escapeHtml(title)}</a></p></div>`;
   });
@@ -114,7 +130,8 @@ function prepare(markdown: string, options: PreviewOptions, sourceSlug: string, 
 export async function renderPreview(markdown: string, options: PreviewOptions): Promise<string> {
   const { notes, path, base, mountPath } = options;
   const note = notes.find((candidate) => candidate.path === path);
-  const sourceSlug = note?.slug ?? fileToSlug(path);
+  // A new note publishes where its path asks, `Guides/Guides.md` at its folder's URL, so URLs it makes start there.
+  const sourceSlug = note?.slug ?? pathRoute(path);
   const resolveAttachment = attachmentResolver(options.attachments, options.sharedNames);
   // URLs the preview wrote itself: they name pages and attachments already, so the pass below leaves them alone.
   const generated = new Set<string>();
@@ -127,7 +144,10 @@ export async function renderPreview(markdown: string, options: PreviewOptions): 
   };
 
   const processor = markdownProcessor([remarkGfm]);
-  const tree = await processor.run(processor.parse(prepare(markdown, options, sourceSlug, attachment, generated))) as Root;
+  // A new note's file joins the sources links resolve from under a key no slug can be, so they resolve from its own
+  // folder even when its path's slug names another note.
+  const from = note ? { slug: note.slug, sources: notes } : { slug: NEW_NOTE, sources: [...notes, { slug: NEW_NOTE, path }] };
+  const tree = await processor.run(processor.parse(prepare(markdown, options, sourceSlug, from, attachment, generated))) as Root;
   const page = new URL(`${base}${note?.href ?? routeHref(sourceSlug, mountPath)}`, "https://preview.invalid");
   visit(tree, "element", (node) => {
     for (const name of ["href", "src"] as const) {

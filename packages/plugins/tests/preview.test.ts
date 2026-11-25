@@ -137,3 +137,35 @@ describe("renderPreview", () => {
     expect(html).toContain("<code>![[plan.png]]</code>");
   });
 });
+
+describe("renderPreview of a new folder note", () => {
+  it("resolves its relative URLs from the folder's URL, where `Guides/Guides.md` publishes", async () => {
+    const html = await render("[Contact](../contact/) #ideas", { path: "Guides/Guides.md" });
+    expect(html).toContain('href="/docs/wiki/contact/"');
+    expect(html).toContain('href="/docs/wiki/tags/ideas/"');
+  });
+
+  // The build settles a new note's URL only once it is published: a root `Guides.md` may keep `/guides/`.
+  it("shows a link to itself unresolved rather than to the page holding its URL", async () => {
+    const root = { slug: "guides", path: "Guides.md", href: "/wiki/guides/", title: "Guides" };
+    const html = await render("[[Guides/Guides]] [Self](Guides.md)\n\n![[Guides/Guides|Me]]", {
+      path: "Guides/Guides.md",
+      notes: [...OPTIONS.notes, root],
+    });
+    expect(html.match(/svartz-unresolved-link/g)).toHaveLength(2);
+    expect(html).toContain("<code>![[Guides/Guides|Me]]</code>");
+    expect(html).not.toContain("href=");
+  });
+
+  // `Guides/Guides/Guides.md` holds `guides/guides`, the slug of the new note's own path.
+  it("resolves its Markdown links from the folder its file sits in", async () => {
+    const notes = [
+      ...OPTIONS.notes,
+      { slug: "guides/setup", path: "Guides/Setup.md", href: "/wiki/guides/setup/", title: "Setup" },
+      { slug: "guides/guides", path: "Guides/Guides/Guides.md", href: "/wiki/guides/guides/", title: "Guides" },
+      { slug: "guides/guides/setup", path: "Guides/Guides/Setup.md", href: "/wiki/guides/guides/setup/", title: "Setup" },
+    ];
+    const html = await render("[Setup](Setup.md)", { path: "Guides/Guides.md", notes });
+    expect(html).toContain('href="/docs/wiki/guides/setup/"');
+  });
+});

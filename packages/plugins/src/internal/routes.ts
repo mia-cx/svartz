@@ -1,5 +1,5 @@
 import type { ProcessedFile } from "@svartz/core";
-import { fileToSlug, normalizeSlugSegment } from "./slug";
+import { fileToSlug, isFolderNote, normalizeSlugSegment } from "./slug";
 
 const NOTE_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
 
@@ -30,14 +30,21 @@ export function markdownHref(slug: string, mountPath = ""): string {
   return `${mountPath}/${routeSlug(slug)}.md`;
 }
 
-/** The route a note's filename asks for: `people/Ada Lovelace.md` → `people/ada-lovelace`. */
+/** A note's slug from its path, where every folder note (`Guides/Guides.md` too) is its folder's `index`. */
+function sourceSlug(path: string): string {
+  const slug = fileToSlug(path);
+  // Its last segment, by either separator, as `isFolderNote` reads the path.
+  return isFolderNote(path) ? slug.replace(/[^/\\]+$/, "index") : slug;
+}
+
+/** The route a note's filename asks for: `people/Ada Lovelace.md` → `people/ada-lovelace`, `Guides/Guides.md` → `guides`. */
 export function pathRoute(path: string): string {
-  return routeSlug(fileToSlug(path));
+  return routeSlug(sourceSlug(path));
 }
 
 /** The route a note asks for before {@link allocateRoutes} settles clashes: its frontmatter `slug`, else its filename's. */
 export function requestedSlug(file: Pick<ProcessedFile, "path" | "frontmatter">): string {
-  const source = fileToSlug(file.path);
+  const source = sourceSlug(file.path);
   if (!file.frontmatter || !("slug" in file.frontmatter)) return routeSlug(source);
 
   const value = file.frontmatter.slug;
@@ -58,6 +65,27 @@ export function requestedSlug(file: Pick<ProcessedFile, "path" | "frontmatter">)
 function exactName(file: ProcessedFile, slug: string): boolean {
   const sourceStem = file.path.slice(0, -file.extension!.length).toLowerCase();
   return sourceStem === slug;
+}
+
+/** An `index` or `_index` note, as opposed to a folder note named after its folder. */
+const INDEX_NOTE = /(?:^|[\\/])_?index\.[^\\/.]+$/i;
+
+/** A file's folder, as written: `Guides/Guides.md` → `Guides`. */
+const folderOf = (path: string): string => path.replaceAll("\\", "/").replace(/\/?[^/]*$/, "");
+
+/**
+ * Fail when one folder has both kinds of folder note, `Guides/index.md` and `Guides/Guides.md`: both would introduce
+ * `guides/`, and no URL for the other could be predicted from its path alone. Folder notes of different folders that
+ * normalize to one URL (`Field Guides/`, `Field-Guides/`) settle like any other clash.
+ */
+function rejectRivalFolderNotes(group: readonly ProcessedFile[]): void {
+  for (const index of group.filter((file) => INDEX_NOTE.test(file.path))) {
+    const named = group.find((file) =>
+      isFolderNote(file.path) && !INDEX_NOTE.test(file.path) && folderOf(file.path) === folderOf(index.path));
+    if (named) {
+      throw new Error(`${index.path} and ${named.path} both introduce their folder. Keep one, or rename ${named.path}.`);
+    }
+  }
 }
 
 /** Assign canonical slugs before links, giving explicit slugs priority over filenames. */
@@ -81,6 +109,8 @@ export function allocateRoutes(
     group.push(file);
     groups.set(slug, group);
   }
+
+  for (const group of groups.values()) rejectRivalFolderNotes(group);
 
   const claimedSlugs = new Set(groups.keys());
   const allocated = new Set<string>();

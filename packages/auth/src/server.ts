@@ -54,7 +54,7 @@ import {
   profileByHandle, profilesByHandle, profilesById, profilesByIdentity, SESSION_MAX_AGE_SECONDS, signInsOf, startSession, suggestHandle, unlinkIdentity,
   updateProfile, type Database, type PublicProfile,
 } from "./store";
-import { builtUserPages, DEFAULT_USER_PAGE_FOLDER, hasUserPage, useUserPages, userPageLocation, type UserPages } from "./user-pages";
+import { builtUserPages, DEFAULT_USER_PAGE_FOLDER, hasUserPage, useUserPages, userPageFree, userPageLocation, type UserPages } from "./user-pages";
 
 export type { Identity, ProviderId } from "./providers";
 export type { Account, SignIn, SignedOutReason } from "./session";
@@ -383,7 +383,7 @@ async function chooseHandle(request: Request, url: URL, context: ServerContext, 
   const handle = typedHandle(String(form?.get("handle") ?? ""));
   if (!isHandle(handle)) return show(handle, HANDLE_PROBLEM);
   // A user page nobody holds the handle of would become this account's.
-  const sid = hasUserPage(pages, handle) ? "taken" : await createAccount(db, identity, handle);
+  const sid = !userPageFree(pages, handle) ? "taken" : await createAccount(db, identity, handle);
   if (sid === "linked") return spent();
   if (sid === "taken") {
     const free = await suggestHandle(db, handle, pages);
@@ -470,7 +470,7 @@ async function changeProfile({ request, url, context, db, session }: AccountChan
   if (!name) return back("name-invalid");
   if (!isHandle(handle)) return back("handle-invalid");
   // A user page is its owner's whatever their handle: a handle with a page the account never held isn't free to take.
-  if (hasUserPage(pages, handle) && !(await handlesOf(db, session.account.id)).includes(handle)) return back("handle-taken");
+  if (!userPageFree(pages, handle) && !(await handlesOf(db, session.account.id)).includes(handle)) return back("handle-taken");
   return back(await updateProfile(db, session.account.id, { name, handle }) === "saved" ? "saved" : "handle-taken");
 }
 

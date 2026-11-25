@@ -45,3 +45,10 @@ export const builtUserPages = (): UserPages | undefined => built;
 
 /** Whether `pages` holds a user page for `handle`; own keys only, so `constructor` is no page. */
 export const hasUserPage = (pages: UserPages, handle: string): boolean => Object.hasOwn(pages, handle);
+
+/**
+ * Whether a new account may take `handle` as far as user pages go: no page holds it, and it isn't the user page
+ * folder's own name, since `users/users.md` is the `users` folder's own note rather than a user page.
+ */
+export const userPageFree = (pages: UserPages, handle: string): boolean =>
+  !hasUserPage(pages, handle) && handle !== location.folder.split("/").pop();

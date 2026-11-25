@@ -14,7 +14,7 @@ export interface UiFolderEntry {
 	readonly noteCount: number;
 	/** Final slugs of the published notes physically inside the folder, nested ones included. */
 	readonly noteSlugs: readonly string[];
-	/** Slug of the folder note (`index.md` or `_index.md`), which a URL collision may have suffixed. */
+	/** Slug of the folder note (`index.md`, `_index.md`, or one named after its folder), which a URL collision may have suffixed. */
 	readonly noteSlug?: string;
 	readonly href: string;
 }
@@ -71,7 +71,7 @@ const parentFolder = (folder: string) => (folder.includes('/') ? folder.slice(0,
 export interface FolderLayout<T> {
 	/** The folder the note's file sits in, or `undefined` at the vault root. */
 	folderOf(slug: string): string | undefined;
-	/** The folder's own note, its `index.md` or `_index.md`. */
+	/** The folder's own note, its `index.md`, `_index.md`, or note named after it. */
 	noteOf(folder: string): T | undefined;
 }
 
