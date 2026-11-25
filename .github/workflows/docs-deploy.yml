@@ -25,9 +25,11 @@ permissions:
   contents: read
 
 concurrency:
-  # Per ref and environment, so a skipped dispatch from another branch never cancels a deploy.
+  # Per ref and environment, so a skipped dispatch from another branch never cancels a deploy. A newer staging push
+  # replaces an older one, but production queues: a stale run waits and then fails its release check, never cutting a
+  # valid rollout short.
   group: docs-deploy-${{ github.ref }}-${{ inputs.environment || 'staging' }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ (inputs.environment || 'staging') != 'production' }}
 
 defaults:
   run:
@@ -73,6 +75,14 @@ jobs:
       - run: pnpm build
       # On a clean install the CLI isn't built when pnpm links bins, so run its entry directly.
       - run: node packages/cli/dist/index.js build:all
+      - name: Check there are Workers to deploy
+        run: |
+          shopt -s nullglob
+          configs=("$GITHUB_WORKSPACE"/.svartz/vaults/*/wrangler.json)
+          if [ ${#configs[@]} -eq 0 ]; then
+            echo "::error::This commit builds no cloudflare-workers vaults, so there is nothing to deploy. Releases up to svartz@2.5.0 predate the Worker docs; production first deploys from the release after them."
+            exit 1
+          fi
       - name: Keep staging out of search engines
         if: env.TARGET != 'production'
         run: |
