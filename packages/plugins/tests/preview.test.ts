@@ -140,7 +140,14 @@ describe("renderPreview", () => {
 
 describe("renderPreview of a new folder note", () => {
   it("resolves its relative URLs from the folder's URL, where `Guides/Guides.md` publishes", async () => {
-    const html = await render("[Contact](../contact/)", { path: "Guides/Guides.md" });
+    const html = await render("[Contact](../contact/) #ideas", { path: "Guides/Guides.md" });
     expect(html).toContain('href="/docs/wiki/contact/"');
+    expect(html).toContain('href="/docs/wiki/tags/ideas/"');
+  });
+
+  it("resolves its Markdown links from the folder its file sits in", async () => {
+    const setup = { slug: "guides/setup", path: "Guides/Setup.md", href: "/wiki/guides/setup/", title: "Setup" };
+    const html = await render("[Setup](Setup.md)", { path: "Guides/Guides.md", notes: [...OPTIONS.notes, setup] });
+    expect(html).toContain('href="/docs/wiki/guides/setup/"');
   });
 });

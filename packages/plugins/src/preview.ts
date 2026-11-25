@@ -63,14 +63,24 @@ function escapeHtml(value: string): string {
 /** The attachment a link target names: its vault path, and the URL the build publishes it at. */
 type Attachment = (target: string) => { readonly path: string; readonly href: string } | undefined;
 
-/** `markdown` as the build hands it to the Markdown compiler, for a preview of the note `sourceSlug`. */
-function prepare(markdown: string, options: PreviewOptions, sourceSlug: string, attachment: Attachment, generated: Set<string>): string {
+/**
+ * `markdown` as the build hands it to the Markdown compiler, for a preview of the note `sourceSlug`. Links resolve from
+ * `linkFrom`: its slug, or for a new note the slug of its path, which link resolution reads as where it sits.
+ */
+function prepare(
+  markdown: string,
+  options: PreviewOptions,
+  sourceSlug: string,
+  linkFrom: string,
+  attachment: Attachment,
+  generated: Set<string>,
+): string {
   const { notes, linkResolution, base } = options;
   const slugMap = buildSlugMap(notes);
   const slugs = notes.map((note) => note.slug);
   const hrefs = new Map(notes.map((note) => [note.slug, note.href]));
   const resolve = (link: Pick<PositionedLink, "target" | "type">) =>
-    resolveLink({ raw: "", ...link }, slugMap, slugs, linkResolution, sourceSlug, notes);
+    resolveLink({ raw: "", ...link }, slugMap, slugs, linkResolution, linkFrom, notes);
   const url = (slug: string, section?: string) => {
     const href = `${base}${hrefs.get(slug)}${section ? `#${new GithubSlugger().slug(section)}` : ""}`;
     generated.add(href);
@@ -114,7 +124,8 @@ function prepare(markdown: string, options: PreviewOptions, sourceSlug: string, 
 export async function renderPreview(markdown: string, options: PreviewOptions): Promise<string> {
   const { notes, path, base, mountPath } = options;
   const note = notes.find((candidate) => candidate.path === path);
-  const sourceSlug = note?.slug ?? fileToSlug(path);
+  // A new note publishes where its path asks, `Guides/Guides.md` at its folder's URL, so URLs it makes start there.
+  const sourceSlug = note?.slug ?? pathRoute(path);
   const resolveAttachment = attachmentResolver(options.attachments, options.sharedNames);
   // URLs the preview wrote itself: they name pages and attachments already, so the pass below leaves them alone.
   const generated = new Set<string>();
@@ -127,9 +138,9 @@ export async function renderPreview(markdown: string, options: PreviewOptions): 
   };
 
   const processor = markdownProcessor([remarkGfm]);
-  const tree = await processor.run(processor.parse(prepare(markdown, options, sourceSlug, attachment, generated))) as Root;
-  // A new note publishes where its path asks, `Guides/Guides.md` at its folder's URL; relative URLs resolve from there.
-  const page = new URL(`${base}${note?.href ?? routeHref(pathRoute(path), mountPath)}`, "https://preview.invalid");
+  const linkFrom = note?.slug ?? fileToSlug(path);
+  const tree = await processor.run(processor.parse(prepare(markdown, options, sourceSlug, linkFrom, attachment, generated))) as Root;
+  const page = new URL(`${base}${note?.href ?? routeHref(sourceSlug, mountPath)}`, "https://preview.invalid");
   visit(tree, "element", (node) => {
     for (const name of ["href", "src"] as const) {
       const value = node.properties[name];
