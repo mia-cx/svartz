@@ -100,23 +100,10 @@ describe("canonical route allocation", () => {
     expect(() => allocateRoutes(files, new Set(["guides/set-up"]))).toThrow(/Conflicting slug/);
   });
 
-  it.each(["index.md", "_index.md"])("keeps the folder's URL for %s over a note named after the folder", (filename) => {
-    const files = [note("guides/guides.md"), note(`guides/${filename}`)];
-    allocateRoutes(files);
-    // The same-name note keeps the URL it had before it counted as a folder note.
-    expect(files.map((file) => file.slug)).toEqual(["guides/guides", "guides"]);
-  });
-
-  it("leaves ties without a same-name note as they were", () => {
-    const files = [note("Field-Guide/index.md"), note("Field Guide.md")];
-    allocateRoutes(files);
-    expect(files.map((file) => file.slug)).toEqual(["field-guide-2", "field-guide"]);
-  });
-
-  it("gives the folder's URL to any other note that already claimed it", () => {
-    const files = [note("Guides/Guides.md"), note("Guides?.md")];
-    allocateRoutes(files);
-    expect(files.map((file) => file.slug)).toEqual(["guides/guides", "guides"]);
+  it.each(["index.md", "_index.md"])("fails when %s and a note named after the folder both introduce it", (filename) => {
+    expect(() => allocateRoutes([note("Guides/Guides.md"), note(`Guides/${filename}`)])).toThrow(
+      `Guides/${filename} and Guides/Guides.md both introduce their folder. Keep one, or rename Guides/Guides.md.`,
+    );
   });
 
   it("allows the same explicit segment in different folders", () => {

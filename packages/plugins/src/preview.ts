@@ -17,7 +17,6 @@ import { findLinkSpans, replaceEmbeds, type PositionedLink } from "./internal/li
 import { markdownProcessor } from "./internal/markdown-processor";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
 import { pathRoute, routeHref } from "./internal/routes";
-import { fileToSlug } from "./internal/slug";
 import { transformMarkdown } from "./internal/ofm";
 
 /** A published note a preview's links can name. */
@@ -53,6 +52,8 @@ export interface PreviewOptions {
 const FRONTMATTER = /^(---|\+\+\+)\s*\r?\n([\s\S]*?)\r?\n\1\s*(?:\r?\n|$)/;
 /** A URL with a scheme, or protocol-relative: it leaves the site. */
 const EXTERNAL = /^(?:[a-z][a-z\d+.-]*:|\/\/)/i;
+/** The key a new, unpublished note goes by among the notes links resolve against; no slug contains a NUL. */
+const NEW_NOTE = "\u0000new-note";
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({
@@ -65,7 +66,7 @@ type Attachment = (target: string) => { readonly path: string; readonly href: st
 
 /**
  * `markdown` as the build hands it to the Markdown compiler, for a preview of the note `sourceSlug`. Links resolve from
- * `linkFrom`: its slug, or for a new note the slug of its path, which link resolution reads as where it sits.
+ * `linkFrom`, the note's key among `options.notes`.
  */
 function prepare(
   markdown: string,
@@ -138,9 +139,13 @@ export async function renderPreview(markdown: string, options: PreviewOptions): 
   };
 
   const processor = markdownProcessor([remarkGfm]);
-  const linkFrom = note?.slug ?? fileToSlug(path);
-  const tree = await processor.run(processor.parse(prepare(markdown, options, sourceSlug, linkFrom, attachment, generated))) as Root;
-  const page = new URL(`${base}${note?.href ?? routeHref(sourceSlug, mountPath)}`, "https://preview.invalid");
+  const href = note?.href ?? routeHref(sourceSlug, mountPath);
+  // A new note joins the notes links resolve against under a key no slug can be, so links resolve from its own file
+  // even when its path's slug names another note, and links to it point where it will publish.
+  const linkFrom = note?.slug ?? NEW_NOTE;
+  const linkable = note ? options : { ...options, notes: [...notes, { slug: NEW_NOTE, path, href, title: "" }] };
+  const tree = await processor.run(processor.parse(prepare(markdown, linkable, sourceSlug, linkFrom, attachment, generated))) as Root;
+  const page = new URL(`${base}${href}`, "https://preview.invalid");
   visit(tree, "element", (node) => {
     for (const name of ["href", "src"] as const) {
       const value = node.properties[name];

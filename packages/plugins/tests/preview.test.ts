@@ -145,9 +145,15 @@ describe("renderPreview of a new folder note", () => {
     expect(html).toContain('href="/docs/wiki/tags/ideas/"');
   });
 
+  // `Guides/Guides/Guides.md` holds `guides/guides`, the slug of the new note's own path.
   it("resolves its Markdown links from the folder its file sits in", async () => {
-    const setup = { slug: "guides/setup", path: "Guides/Setup.md", href: "/wiki/guides/setup/", title: "Setup" };
-    const html = await render("[Setup](Setup.md)", { path: "Guides/Guides.md", notes: [...OPTIONS.notes, setup] });
+    const notes = [
+      ...OPTIONS.notes,
+      { slug: "guides/setup", path: "Guides/Setup.md", href: "/wiki/guides/setup/", title: "Setup" },
+      { slug: "guides/guides", path: "Guides/Guides/Guides.md", href: "/wiki/guides/guides/", title: "Guides" },
+      { slug: "guides/guides/setup", path: "Guides/Guides/Setup.md", href: "/wiki/guides/guides/setup/", title: "Setup" },
+    ];
+    const html = await render("[Setup](Setup.md)", { path: "Guides/Guides.md", notes });
     expect(html).toContain('href="/docs/wiki/guides/setup/"');
   });
 });

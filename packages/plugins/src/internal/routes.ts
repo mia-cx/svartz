@@ -67,12 +67,20 @@ function exactName(file: ProcessedFile, slug: string): boolean {
   return sourceStem === slug;
 }
 
+/** An `index` or `_index` note, as opposed to a folder note named after its folder. */
+const INDEX_NOTE = /(?:^|[\\/])_?index\.[^\\/.]+$/i;
+
 /**
- * A note named after its folder (`Guides/Guides.md`), not `index` or `_index`. It asks for its folder's URL but yields
- * it to any other claimant, so a vault's URLs from before it counted as a folder note stay put.
+ * Fail when a folder has both kinds of folder note, `Guides/index.md` and `Guides/Guides.md`: both would introduce
+ * `guides/`, and no URL for the other could be predicted from its path alone.
  */
-const sameNameNote = (file: ProcessedFile): boolean =>
-  isFolderNote(file.path) && !/(?:^|[\\/])_?index\.[^\\/.]+$/i.test(file.path);
+function rejectRivalFolderNotes(group: readonly ProcessedFile[]): void {
+  const index = group.find((file) => INDEX_NOTE.test(file.path));
+  const named = group.find((file) => isFolderNote(file.path) && !INDEX_NOTE.test(file.path));
+  if (index && named) {
+    throw new Error(`${index.path} and ${named.path} both introduce their folder. Keep one, or rename ${named.path}.`);
+  }
+}
 
 /** Assign canonical slugs before links, giving explicit slugs priority over filenames. */
 export function allocateRoutes(
@@ -96,6 +104,8 @@ export function allocateRoutes(
     groups.set(slug, group);
   }
 
+  for (const group of groups.values()) rejectRivalFolderNotes(group);
+
   const claimedSlugs = new Set(groups.keys());
   const allocated = new Set<string>();
   const losers: { file: ProcessedFile; slug: string }[] = [];
@@ -106,7 +116,6 @@ export function allocateRoutes(
     const group = groups.get(slug)!.sort((left, right) =>
       Number(right === explicit) - Number(left === explicit) ||
       Number(exactName(right, slug)) - Number(exactName(left, slug)) ||
-      Number(sameNameNote(left)) - Number(sameNameNote(right)) ||
       left.path.localeCompare(right.path),
     );
     if (reserved.has(slug === "index" ? "" : slug)) {
@@ -123,13 +132,6 @@ export function allocateRoutes(
     Number(right.file === explicitClaims.get(right.slug)) - Number(left.file === explicitClaims.get(left.slug)) ||
     left.file.path.localeCompare(right.file.path),
   )) {
-    // A note named after its folder that loses the folder's URL keeps the one its filename gives, `guides/guides`.
-    const named = routeSlug(fileToSlug(file.path));
-    if (sameNameNote(file) && !claimedSlugs.has(named) && !allocated.has(named) && !reserved.has(named)) {
-      file.slug = named;
-      allocated.add(named);
-      continue;
-    }
     for (let suffix = 2; ; suffix++) {
       const candidate = `${slug}-${suffix}`;
       if (claimedSlugs.has(candidate) || allocated.has(candidate) || reserved.has(candidate)) continue;
