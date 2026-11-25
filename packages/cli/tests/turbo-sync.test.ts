@@ -26,7 +26,6 @@ async function createWorkspaceFixture() {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "svartz-turbo-sync-"));
   tempDirs.push(workspaceRoot);
 
-  await mkdir(path.join(workspaceRoot, "apps", "web"), { recursive: true });
   await mkdir(path.join(workspaceRoot, "vaults", "docs"), { recursive: true });
   await mkdir(path.join(workspaceRoot, "vaults", "obsidian-journal"), { recursive: true });
   await mkdir(path.join(workspaceRoot, "vaults", "vault"), { recursive: true });
@@ -135,7 +134,7 @@ describe("managed Turbo sync", () => {
     });
     expect(turboJson.tasks["//#svartz:build:docs"]).toEqual({
       inputs: [
-        "apps/web/**",
+        "packages/cli/app/**",
         "package.json",
         "pnpm-lock.yaml",
         "svartz.config.*",
@@ -146,7 +145,7 @@ describe("managed Turbo sync", () => {
     });
     expect(turboJson.tasks["//#svartz:build:obsidian-journal"]).toEqual({
       inputs: [
-        "apps/web/**",
+        "packages/cli/app/**",
         "package.json",
         "pnpm-lock.yaml",
         "svartz.config.*",

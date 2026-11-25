@@ -17,7 +17,7 @@ Run `pnpm changeset` for a public package change.
 Select the affected package and describe the user-visible change.
 Commit the generated `.changeset/*.md` file with the implementation.
 
-CI requires a changeset for public `packages/*/src/**`, `packages/cli/template/**`, and `themes/*/src/**` changes.
+CI requires a changeset for public `packages/*/src/**`, `packages/cli/template/**`, `packages/cli/app/**`, and `themes/*/src/**` changes.
 The `no changeset` label exempts changes that need no release note.
 CI still validates added or modified changesets when that label is present.
 

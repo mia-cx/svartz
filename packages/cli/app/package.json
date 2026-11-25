@@ -1,0 +1,9 @@
+{
+  "name": "svartz-app",
+  "private": true,
+  "type": "module",
+  "//": "Never installed: vite-plugin-svelte reads these names to bundle Svelte libraries into the server build.",
+  "dependencies": {
+    "@svartz/ui": "*"
+  }
+}

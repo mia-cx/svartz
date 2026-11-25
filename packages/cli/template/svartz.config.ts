@@ -6,7 +6,7 @@ export default defineConfig({
   vaults: [{
     id: 'notes',
     path: 'vault',
-    target: { type: 'host' },
+    target: { type: __SVARTZ_TARGET__ },
     site: { title: __SVARTZ_SITE_NAME__ }
   }]
 });

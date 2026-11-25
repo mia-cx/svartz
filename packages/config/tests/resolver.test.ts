@@ -111,6 +111,13 @@ describe("resolveConfigPaths", () => {
     };
     await expect(resolveConfig(config, PKG_ROOT)).rejects.toThrow(VaultBuildRootConflict);
   });
+  it.each(["dist", "../dist"])("rejects outDir %s, whose parent holds the project", async (outDir) => {
+    const config: SvartzConfig = {
+      version: "1.0.0",
+      vaults: [{ id: "docs", path: "tests/fixtures/valid-vault", outDir, target: { type: "static" } }],
+    };
+    await expect(resolveConfig(config, PKG_ROOT)).rejects.toThrow(VaultPathInvalid);
+  });
   it("rejects build roots that meet through a symlink ancestor", async () => {
     const root = await mkdtemp(resolve(tmpdir(), "svartz-build-roots-"));
     try {

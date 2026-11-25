@@ -76,7 +76,7 @@
     },
     "//#svartz:build:docs": {
       "inputs": [
-        "apps/web/**",
+        "packages/cli/app/**",
         "package.json",
         "pnpm-lock.yaml",
         "svartz.config.*",
@@ -100,7 +100,7 @@
     },
     "//#svartz:build:showcase": {
       "inputs": [
-        "apps/web/**",
+        "packages/cli/app/**",
         "package.json",
         "pnpm-lock.yaml",
         "svartz.config.*",
@@ -124,7 +124,7 @@
     },
     "//#svartz:build:showcase-wiki": {
       "inputs": [
-        "apps/web/**",
+        "packages/cli/app/**",
         "package.json",
         "pnpm-lock.yaml",
         "svartz.config.*",
@@ -148,7 +148,7 @@
     },
     "//#svartz:build:showcase-blog": {
       "inputs": [
-        "apps/web/**",
+        "packages/cli/app/**",
         "package.json",
         "pnpm-lock.yaml",
         "svartz.config.*",
@@ -172,7 +172,7 @@
     },
     "//#svartz:build:showcase-docs": {
       "inputs": [
-        "apps/web/**",
+        "packages/cli/app/**",
         "package.json",
         "pnpm-lock.yaml",
         "svartz.config.*",
@@ -196,7 +196,7 @@
     },
     "//#svartz:build:showcase-api": {
       "inputs": [
-        "apps/web/**",
+        "packages/cli/app/**",
         "package.json",
         "pnpm-lock.yaml",
         "svartz.config.*",
@@ -220,7 +220,7 @@
     },
     "//#svartz:build:showcase-reference": {
       "inputs": [
-        "apps/web/**",
+        "packages/cli/app/**",
         "package.json",
         "pnpm-lock.yaml",
         "svartz.config.*",

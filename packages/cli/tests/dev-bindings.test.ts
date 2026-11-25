@@ -3,7 +3,7 @@ import { createServer } from "node:net";
 import { once } from "node:events";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
-import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -11,7 +11,7 @@ import { afterAll, describe, expect, it } from "vitest";
 const execFileAsync = promisify(execFile);
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
 const cli = path.join(workspaceRoot, "packages/cli/dist/index.js");
-const shellModules = path.join(workspaceRoot, "apps/web/node_modules");
+const wranglerBin = path.join(workspaceRoot, "packages/cli/node_modules/.bin/wrangler");
 // The host test's app runs SvelteKit 2 with `svelte.config.js`.
 const kit2Toolchain = path.join(import.meta.dirname, "fixtures/sveltekit-2-host/node_modules");
 const DEV_TIMEOUT = 240_000;
@@ -41,8 +41,17 @@ async function freePort(): Promise<number> {
   return address.port;
 }
 
-/** A fresh project directory holding a `guestbook` server plugin, a Wrangler config with the D1 binding `DB`, and `.dev.vars`. */
-async function createProject(prefix: string, wranglerConfig: Record<string, unknown>): Promise<string> {
+/** The guestbook's bindings: a var and the D1 database `DB`. */
+const GUESTBOOK_BINDINGS = {
+  vars: { GREETING: "from-wrangler" },
+  d1_databases: [{ binding: "DB", database_name: "guestbook", database_id: "00000000-0000-0000-0000-000000000000" }],
+};
+
+/**
+ * A fresh project directory holding a `guestbook` server plugin, `.dev.vars` and `.env`, and, given `wranglerConfig`,
+ * a Wrangler config with {@link GUESTBOOK_BINDINGS}.
+ */
+async function createProject(prefix: string, wranglerConfig?: Record<string, unknown>): Promise<string> {
   // SvelteKit writes relative imports from the kit dir; macOS's /var symlink would break them.
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), prefix)));
   roots.push(root);
@@ -50,13 +59,16 @@ async function createProject(prefix: string, wranglerConfig: Record<string, unkn
   await writeFile(path.join(root, "vault/index.md"), "# Guestbook\n");
   await writeFile(path.join(root, "guestbook.mjs"), GUESTBOOK);
   await writeFile(path.join(root, ".dev.vars"), "PRIVATE_SECRET=from-dev-vars\n");
-  await writeFile(path.join(root, "wrangler.jsonc"), `// Bindings for svartz dev\n${JSON.stringify({
-    name: "guestbook",
-    compatibility_date: "2026-03-03",
-    vars: { GREETING: "from-wrangler" },
-    d1_databases: [{ binding: "DB", database_name: "guestbook", database_id: "00000000-0000-0000-0000-000000000000" }],
-    ...wranglerConfig,
-  }, null, 2)}\n`);
+  // SvelteKit 3's `$env/dynamic/private` holds only declared variables, so `.env` reaches plugins through svartz dev.
+  await writeFile(path.join(root, ".env"), "PRIVATE_DOTENV_TOKEN=from-dotenv\n");
+  if (wranglerConfig) {
+    await writeFile(path.join(root, "wrangler.jsonc"), `// Bindings for svartz dev\n${JSON.stringify({
+      name: "guestbook",
+      compatibility_date: "2026-03-03",
+      ...GUESTBOOK_BINDINGS,
+      ...wranglerConfig,
+    }, null, 2)}\n`);
+  }
   return root;
 }
 
@@ -109,10 +121,10 @@ async function guestbook(url: string, body?: string) {
   return await response.json() as { entries: string[]; dotenv: unknown; vars: unknown; secret: unknown };
 }
 
-/** The entries `wrangler d1 execute --local` reads from the project's local D1. */
-async function localEntries(root: string): Promise<string[]> {
-  const { stdout } = await execFileAsync(path.join(shellModules, ".bin/wrangler"), [
-    "d1", "execute", "DB", "--local", "--json", "--command", "SELECT body FROM entries ORDER BY id",
+/** The entries `wrangler d1 execute --local` reads from the local D1 of the Wrangler config at `config`. */
+async function localEntries(root: string, config = "wrangler.jsonc"): Promise<string[]> {
+  const { stdout } = await execFileAsync(wranglerBin, [
+    "d1", "execute", "DB", "--local", "--json", "--config", config, "--command", "SELECT body FROM entries ORDER BY id",
   ], { cwd: root, env: { ...process.env, CI: "1" } });
   const [result] = JSON.parse(stdout) as Array<{ results: Array<{ body: string }> }>;
   return result?.results.map((row) => row.body) ?? [];
@@ -122,7 +134,7 @@ afterAll(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-it("hands a Node vault's plugins the shell's .env and process env under svartz dev", async () => {
+it("hands a Node vault's plugins the project's .env and process env under svartz dev", async () => {
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "svartz-dev-dotenv-")));
   roots.push(root);
   await mkdir(path.join(root, "vault"));
@@ -131,13 +143,8 @@ it("hands a Node vault's plugins the shell's .env and process env under svartz d
     dotenv: context.env.PRIVATE_DOTENV_TOKEN ?? null,
     process: context.env.PRIVATE_PROCESS_TOKEN ?? null,
   });\n`);
-  await cp(path.join(workspaceRoot, "apps/web"), path.join(root, "apps/web"), {
-    recursive: true,
-    filter: (source) => !/[\\/](?:node_modules|\.svelte-kit|build|\.wrangler|\.env)$/.test(source),
-  });
-  await symlink(shellModules, path.join(root, "apps/web/node_modules"), "dir");
   // SvelteKit 3's `$env/dynamic/private` holds only declared variables, so `.env` reaches plugins through svartz dev.
-  await writeFile(path.join(root, "apps/web/.env"), "PRIVATE_DOTENV_TOKEN=from-dotenv\n");
+  await writeFile(path.join(root, ".env"), "PRIVATE_DOTENV_TOKEN=from-dotenv\n");
   await writeFile(path.join(root, "svartz.config.ts"), `export default ${JSON.stringify({
     version: "1.0.0",
     vaults: [{
@@ -158,24 +165,17 @@ it("hands a Node vault's plugins the shell's .env and process env under svartz d
   }
 }, DEV_TIMEOUT);
 
-describe("svartz dev hands server plugins the project's Wrangler bindings", () => {
+describe("svartz dev hands server plugins the vault's Wrangler bindings", () => {
+  // A Workers vault's target is its Wrangler config; a Pages vault reads the project's.
   const targets = [
-    ["cloudflare-workers", { main: ".svelte-kit/cloudflare/_worker.js" }],
-    ["cloudflare-pages", { pages_build_output_dir: ".svelte-kit/cloudflare" }],
+    ["cloudflare-workers", undefined, { type: "cloudflare-workers", ...GUESTBOOK_BINDINGS }, ".svartz/vaults/site/wrangler.json"],
+    ["cloudflare-pages", { pages_build_output_dir: ".svelte-kit/cloudflare" }, { type: "cloudflare-pages" }, "wrangler.jsonc"],
   ] as const;
 
-  for (const [type, wranglerConfig] of targets) {
+  for (const [type, wranglerConfig, target, config] of targets) {
     it(`persists a ${type} vault's D1 rows across restarts, where wrangler d1 execute --local reads them`, async () => {
       const root = await createProject("svartz-dev-bindings-", wranglerConfig);
-      // The standalone shell is the repository's apps/web; copy it so the session owns its .svelte-kit.
-      await cp(path.join(workspaceRoot, "apps/web"), path.join(root, "apps/web"), {
-        recursive: true,
-        filter: (source) => !/[\\/](?:node_modules|\.svelte-kit|build|\.wrangler|\.env)$/.test(source),
-      });
-      await symlink(shellModules, path.join(root, "apps/web/node_modules"), "dir");
-      // The dev server runs in the shell, so its `.env` is the one SvelteKit reads.
-      await writeFile(path.join(root, "apps/web/.env"), "PRIVATE_DOTENV_TOKEN=from-dotenv\n");
-      await writeConfig(root, { target: { type } });
+      await writeConfig(root, { target });
 
       const first = await startDev(root, "/");
       try {
@@ -197,9 +197,47 @@ describe("svartz dev hands server plugins the project's Wrangler bindings", () =
         await second.stop();
       }
 
-      expect(await localEntries(root)).toEqual(["first entry", "after restart"]);
+      expect(await localEntries(root, config)).toEqual(["first entry", "after restart"]);
     }, DEV_TIMEOUT);
   }
+
+  // CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false turns off only Wrangler's `.env` fallback, never `.dev.vars`.
+  it("reads the Wrangler environment CLOUDFLARE_ENV names, with the project's .dev.vars for it", async () => {
+    const root = await createProject("svartz-dev-bindings-env-");
+    await writeFile(path.join(root, ".dev.vars.staging"), "PRIVATE_SECRET=from-dev-vars-staging\n");
+    const staging = { ...GUESTBOOK_BINDINGS, vars: { GREETING: "from-staging" } };
+    await writeConfig(root, { target: { type: "cloudflare-workers", ...GUESTBOOK_BINDINGS, env: { staging } } });
+
+    const dev = await startDev(root, "/", {
+      ...process.env,
+      CLOUDFLARE_ENV: "staging",
+      CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false",
+    });
+    try {
+      expect(await guestbook(`${dev.origin}/_svartz/guestbook/`))
+        .toMatchObject({ vars: "from-staging", secret: "from-dev-vars-staging" });
+    } finally {
+      await dev.stop();
+    }
+  }, DEV_TIMEOUT);
+
+  it("falls back to the project's .env.<env>, keeping only the secrets the target requires", async () => {
+    const root = await createProject("svartz-dev-bindings-dotenv-env-");
+    await rm(path.join(root, ".dev.vars"));
+    await writeFile(path.join(root, ".env"), "PRIVATE_SECRET=from-env\n");
+    // Vite reads `.env.<mode>`, not `.env.<CLOUDFLARE_ENV>`, so these reach plugins only through Wrangler.
+    await writeFile(path.join(root, ".env.staging"), "PRIVATE_SECRET=from-env-staging\nPRIVATE_DOTENV_TOKEN=undeclared\n");
+    const staging = { ...GUESTBOOK_BINDINGS, secrets: { required: ["PRIVATE_SECRET"] } };
+    await writeConfig(root, { target: { type: "cloudflare-workers", ...GUESTBOOK_BINDINGS, env: { staging } } });
+
+    const dev = await startDev(root, "/", { ...process.env, CLOUDFLARE_ENV: "staging" });
+    try {
+      expect(await guestbook(`${dev.origin}/_svartz/guestbook/`))
+        .toMatchObject({ secret: "from-env-staging", dotenv: null });
+    } finally {
+      await dev.stop();
+    }
+  }, DEV_TIMEOUT);
 
   it("serves a host vault the same D1 the host app's own routes read through adapter-cloudflare", async () => {
     const root = await createProject("svartz-dev-bindings-host-", { main: ".svelte-kit/cloudflare/_worker.js" });
@@ -218,7 +256,6 @@ describe("svartz dev hands server plugins the project's Wrangler bindings", () =
       "export default withSvartzHost(defineConfig({ plugins: [sveltekit()] }));",
     ].join("\n"));
     await writeFile(path.join(root, "svelte.config.js"), "import adapter from '@sveltejs/adapter-cloudflare';\nexport default { kit: { adapter: adapter() } };\n");
-    await writeFile(path.join(root, ".env"), "PRIVATE_DOTENV_TOKEN=from-dotenv\n");
     await writeFile(path.join(root, "src/app.html"), "<!doctype html><html lang=\"en\"><head>%sveltekit.head%</head><body><div style=\"display: contents\">%sveltekit.body%</div></body></html>\n");
     await writeFile(path.join(root, "src/hooks.server.ts"),
       "import { svartzHandle } from 'virtual:svartz/server';\nexport const handle = svartzHandle;\n");

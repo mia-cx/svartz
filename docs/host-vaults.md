@@ -16,7 +16,7 @@ export default defineConfig({
 });
 ```
 
-`svartz build` composes every host vault into one SvelteKit build. `svartz dev` serves them in one process. `--vault <id>` still validates the named vault, but a host build includes all configured vaults because they share one output. `npx svartz init` adds the Svartz catchall if the app has none. It preserves an existing catchall and all manual routes. A manual route such as `src/routes/journal/about/+page.svelte` takes priority over the vault page at that URL.
+`svartz build` composes every host vault into one SvelteKit build. `svartz dev` serves them in one process. `--vault <id>` still validates the named vault, but a host build includes all host vaults because they share one output. A vault with any other target in the same config builds on its own with the app Svartz ships, as it would in a project without an app, and `--vault <id>` builds just that one. `npx svartz init` adds the Svartz catchall if the app has none. It preserves an existing catchall and all manual routes. A manual route such as `src/routes/journal/about/+page.svelte` takes priority over the vault page at that URL.
 
 Each vault gets its own theme, publication filter, generated artifacts, and asset URL namespace. A file named `image.png` in both vaults is served at `/journal/image.png` and `/work/image.png`. Overlapping mounts, including `/` beside `/journal`, fail config loading. Output roots must also stay separate, even when an existing or dangling symlink makes two configured paths point to the same directory. Filesystem failures while checking those roots return a tagged `VaultBuildRootResolutionFailed` error.
 

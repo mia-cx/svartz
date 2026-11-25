@@ -126,6 +126,8 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   let kitBasePath: string | undefined;
   let hostAdapter: string | undefined;
   let kit3 = false;
+  // Themes and Wrangler come from the project's install, which for the app Svartz ships isn't the Vite root's.
+  const projectRoot = () => options.projectRoot ?? context.root;
   // The SvelteKit and platform the server registry runs under.
   const serverRuntime = () => {
     const target = context.config.target.type;
@@ -272,7 +274,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
 
   async function executePipeline(changeEvent?: ChangeEvent): Promise<void> {
     theme = await loadThemeModule(
-      (id) => import(id), context.config, context.root, selectedThemeSources(context.config),
+      (id) => import(id), context.config, projectRoot(), selectedThemeSources(context.config),
     );
     plugins = resolveRuntimePlugins(context.config, theme, hostAdapter);
     const runnerContext = createRunnerContext();
@@ -420,7 +422,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     async configResolved(resolved) {
       context = createSvartzViteContext(options, resolved);
       kitBasePath = svelteKitPaths(resolved.define)?.base;
-      themeImport = resolveThemeRuntimeImport(context.config, context.root, selectedThemeSources(context.config));
+      themeImport = resolveThemeRuntimeImport(context.config, projectRoot(), selectedThemeSources(context.config));
       if (context.config.target.type === "host") hostAdapter = await readHostAdapterName(context.root, resolved.plugins);
       kit3 = isSvelteKit3(context.root);
     },
@@ -461,7 +463,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       const { cloudflare } = serverRuntime();
       const dotenv = kit3 ? loadEnv(server.config.mode, readKitEnvDir(server.config.plugins), "") : {};
       const stopDevBindings = cloudflare || kit3
-        ? serveDevBindings(options.projectRoot ?? context.root, context.root, { wrangler: cloudflare, dotenv })
+        ? serveDevBindings(options.wranglerDir ?? projectRoot(), projectRoot(), { wrangler: cloudflare, dotenv })
         : undefined;
       server.watcher.add(context.config.path);
       if (context.config.site.favicon) server.watcher.add(context.config.site.favicon);

@@ -162,27 +162,28 @@ Never put a secret in options. Name its environment variable with `{ env: "NAME"
 
 ## Bindings under `svartz dev`
 
-A vault that deploys to Cloudflare (`cloudflare-workers`, `cloudflare-pages`, or `host` in an app on `@sveltejs/adapter-cloudflare`) reads its bindings in dev from the Wrangler config beside `svartz.config.ts`: `wrangler.json`, `wrangler.jsonc` or `wrangler.toml`.
+A vault that deploys to Cloudflare reads its bindings in dev from its Wrangler config. A `cloudflare-workers` vault's target is that config, so the bindings it deploys with are the ones `svartz dev` hands plugins:
 
-```jsonc
-// wrangler.jsonc
-{
-  "name": "wiki",
-  "compatibility_date": "2026-03-03",
-  "vars": { "GREETING": "Hi" },
-  "d1_databases": [{ "binding": "DB", "database_name": "wiki", "database_id": "<id>" }]
-}
+```ts
+// svartz.config.ts
+target: {
+  type: "cloudflare-workers",
+  vars: { GREETING: "Hi" },
+  d1_databases: [{ binding: "DB", database_name: "wiki", database_id: "<id>" }],
+},
 ```
 
-On the first plugin request, `svartz dev` starts Wrangler's local platform and adds its bindings, `vars` and `.dev.vars` secrets to `context.env`, over the dev server's environment variables of the same name. A plugin then reads `context.env.DB` as it would in production. To use a Wrangler environment's bindings, set `CLOUDFLARE_ENV` to its name, as you would for `wrangler dev`. A host app that picks an environment in its adapter options sets `CLOUDFLARE_ENV` too, so its routes and its plugins read the same bindings.
+A `cloudflare-pages` vault, or a `host` vault in an app on `@sveltejs/adapter-cloudflare`, reads the Wrangler config beside `svartz.config.ts` instead: `wrangler.json`, `wrangler.jsonc` or `wrangler.toml`.
 
-Local data lives in `.wrangler/state` beside the Wrangler config and survives restarts. Inspect or seed it from the same directory:
+On the first plugin request, `svartz dev` starts Wrangler's local platform and adds its bindings, `vars` and `.dev.vars` secrets to `context.env`, over the dev server's environment variables of the same name. Keep `.dev.vars` beside `svartz.config.ts` in every case. A plugin then reads `context.env.DB` as it would in production. To use a Wrangler environment's bindings, set `CLOUDFLARE_ENV` to its name, as you would for `wrangler dev`; plugins then read `.dev.vars.<name>` when it exists. A host app that picks an environment in its adapter options sets `CLOUDFLARE_ENV` too, so its routes and its plugins read the same bindings.
+
+Local data lives in `.wrangler/state` beside the Wrangler config and survives restarts: `.svartz/vaults/<id>/.wrangler/state` for a `cloudflare-workers` vault. Inspect or seed it through the same config:
 
 ```sh
-npx wrangler d1 execute DB --local --command "SELECT * FROM entries"
+npx wrangler d1 execute DB --local --config .svartz/vaults/<id>/wrangler.json --command "SELECT * FROM entries"
 ```
 
-The app needs `wrangler` installed; the standalone shell has it. Without a Wrangler config, `context.env` holds only the dev server's environment variables.
+The project needs `wrangler` installed. Without a Wrangler config, `context.env` holds only the dev server's environment variables.
 
 ## Build data
 
@@ -226,21 +227,20 @@ Notes, lists and theme pages are still prerendered and served as static files. A
 
 A `host` vault uses the host app's adapter, which must not be `@sveltejs/adapter-static`, and the app adds `svartzHandle` to its hooks. See [server plugins in a host app](host-vaults.md#server-plugins).
 
-`svartzHandle`, from the server-only module `virtual:svartz/server`, is the SvelteKit `handle` that routes plugin requests. The standalone shell's `src/hooks.server.ts` runs it before its own handle. The same module exports `svartzPage`, which the plugin page route's server `load` calls. Each vault's pair is built with `createServer` from `@svartz/core`; a host app's runs every host vault's in turn.
+`svartzHandle`, from the server-only module `virtual:svartz/server`, is the SvelteKit `handle` that routes plugin requests. The app Svartz ships uses it as its `handle`. The same module exports `svartzPage`, which the plugin page route's server `load` calls. Each vault's pair is built with `createServer` from `@svartz/core`; a host app's runs every host vault's in turn.
 
 ### Deploying to Cloudflare
 
-A Cloudflare build writes its worker and static files to `.svartz/vaults/<id>/.svelte-kit/cloudflare/`. A `cloudflare-workers` build also copies the standalone shell's `apps/web/wrangler.jsonc` to `.svartz/vaults/<id>/wrangler.jsonc`, and its `main` and `assets.directory` point at that output. Set the Worker's `name`, bindings and `vars` in `apps/web/wrangler.jsonc`; the next build copies them. Relative paths in it resolve from the vault's directory.
+A Cloudflare build writes its worker and static files to `.svartz/vaults/<id>/.svelte-kit/cloudflare/`. A `cloudflare-workers` build also writes the Worker's Wrangler config to `.svartz/vaults/<id>/wrangler.json`, from the vault's target: its `name` (the vault's id when unset), `routes`, bindings, `vars` and every other key but `type`. Its `main` and `assets.directory` point at the build's output, so a target can't set `main`. Relative paths in it resolve from the vault's directory. Each `cloudflare-workers` vault is its own Worker, so vaults in one config deploy to their own domains.
 
-Deploy from the vault's directory, where `npx` finds the shell's Wrangler:
+Deploy with the project's Wrangler:
 
 ```sh
-cd .svartz/vaults/<id>
-npx wrangler deploy                                                    # cloudflare-workers
-npx wrangler pages deploy .svelte-kit/cloudflare --project-name <name> # cloudflare-pages
+npx wrangler deploy --config .svartz/vaults/<id>/wrangler.json                                   # cloudflare-workers
+npx wrangler pages deploy .svartz/vaults/<id>/.svelte-kit/cloudflare --project-name <name>       # cloudflare-pages
 ```
 
-Set secrets the same way, such as `npx wrangler secret put PRIVATE_HELLO_TOKEN`.
+Set secrets the same way, such as `npx wrangler secret put PRIVATE_HELLO_TOKEN --config .svartz/vaults/<id>/wrangler.json`.
 
 ## Signed-in readers
 
