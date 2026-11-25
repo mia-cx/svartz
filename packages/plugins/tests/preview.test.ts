@@ -137,3 +137,10 @@ describe("renderPreview", () => {
     expect(html).toContain("<code>![[plan.png]]</code>");
   });
 });
+
+describe("renderPreview of a new folder note", () => {
+  it("resolves its relative URLs from the folder's URL, where `Guides/Guides.md` publishes", async () => {
+    const html = await render("[Contact](../contact/)", { path: "Guides/Guides.md" });
+    expect(html).toContain('href="/docs/wiki/contact/"');
+  });
+});

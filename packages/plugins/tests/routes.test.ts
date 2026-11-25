@@ -7,7 +7,7 @@ import { resolveLinks } from "../src/resolve-links";
 import { allocateRoutesPlugin } from "../src/allocate-routes";
 import { indexContent } from "../src/index-content";
 import { emitDiscovery } from "../src/emit-discovery";
-import { allocateRedirects, allocateRoutes } from "../src/internal/routes";
+import { allocateRedirects, allocateRoutes, pathRoute } from "../src/internal/routes";
 import { fileToSlug } from "../src/internal/slug";
 
 const note = (path: string, content = ""): ProcessedFile => ({
@@ -84,7 +84,7 @@ describe("canonical route allocation", () => {
   it.each([
     "index.md", "index.mdx", "index.svx", "_index.md", "_index.mdx", "_index.svx",
     "guides/index.md", "guides/index.mdx", "guides/_index.md", "guides/_index.mdx", "guides/Index?.md",
-    "guides/guides.md", "Field Guides/field-guides.mdx",
+    "guides/guides.md", "Field Guides/Field Guides.mdx",
   ])("rejects slug on folder note %s", (path) => {
     const file = note(path);
     file.frontmatter = { slug: "setup" };
@@ -402,6 +402,28 @@ describe("canonical route allocation", () => {
     expect(ctx.files[1]!.content).toContain('<a href="../">Guides</a>');
   });
 
+  it("ranks closest wikilinks by where folder notes sit, not by their shorter URLs", () => {
+    const linked = (files: ProcessedFile[], from: string) => {
+      const ctx = context(files);
+      parseFrontmatter().parseFrontmatter!.run(ctx);
+      allocateRoutesPlugin().allocateRoutes!.run(ctx);
+      resolveLinks().resolveLinks!.run(ctx);
+      return ctx.files.find((file) => file.path === from)!.content;
+    };
+    // To a folder note: its own folder's, not the one in a subfolder.
+    expect(linked([
+      note("Work/Guides/Guides.md", "Main"),
+      note("Work/Guides/Drafts/Guides.md", "Draft"),
+      note("Work/Guides/Start.md", "[[Guides]]"),
+    ], "Work/Guides/Start.md")).toContain('<a href="../">Guides</a>');
+    // From a folder note: a note beside it, not one in another folder.
+    expect(linked([
+      note("Guides/Guides.md", "[[Setup]]"),
+      note("Guides/Setup.md", "Setup"),
+      note("Archive/Setup.md", "Archived"),
+    ], "Guides/Guides.md")).toContain('<a href="setup/">Setup</a>');
+  });
+
   it("resolves Markdown link paths from the physical folder after a frontmatter slug moves the note", () => {
     const moved = note("guides/setup.md", "[next](next.md)");
     moved.content = "---\nslug: start\n---\n[next](next.md)";
@@ -411,5 +433,16 @@ describe("canonical route allocation", () => {
     resolveLinks().resolveLinks!.run(ctx);
     expect(moved.slug).toBe("guides/start");
     expect(moved.content).toContain('<a href="../next/">next</a>');
+  });
+});
+
+describe("folder notes", () => {
+  it.each([
+    ["Guides/Guides.md", "guides"],
+    ["C/C#.md", "c/c"],
+    // Discovery's paths use backslashes on Windows; a folder note there still never takes the vault home.
+    ["Guides\\Guides.md", "guides\\index"],
+  ])("routes %s to %s", (path, route) => {
+    expect(pathRoute(path)).toBe(route);
   });
 });

@@ -17,10 +17,11 @@ it("titles a folder note after its folder and other notes after their filename",
   expect(titlesOf([
     "Guides/index.md",
     "Work/Tastebase/_index.md",
-    "Field Guides/field-guides.md",
+    "Field Guides/Field Guides.md",
+    "C/C#.md",
     "Guides/Setup Notes.md",
     "index.md",
-  ])).toEqual(["Guides", "Tastebase", "Field Guides", "Setup Notes", "index"]);
+  ])).toEqual(["Guides", "Tastebase", "Field Guides", "C#", "Setup Notes", "index"]);
 });
 
 it("keeps a folder note's own title", () => {

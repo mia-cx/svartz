@@ -5,7 +5,7 @@
  */
 import { handleFrom, numbered } from "./handle";
 import type { Identity } from "./providers";
-import { hasUserPage, type UserPages } from "./user-pages";
+import { userPageFree, type UserPages } from "./user-pages";
 
 /**
  * The D1 binding accounts live in. A fixed name, like `PRIVATE_SVARTZ_SESSION_SECRET`, because every server plugin
@@ -487,7 +487,7 @@ async function isTaken(db: Database, handle: string): Promise<boolean> {
  */
 export async function suggestHandle(db: Database, base: string, pages: UserPages): Promise<string> {
   let candidate = base;
-  for (let n = 2; hasUserPage(pages, candidate) || await isTaken(db, candidate); n++) candidate = numbered(base, n);
+  for (let n = 2; !userPageFree(pages, candidate) || await isTaken(db, candidate); n++) candidate = numbered(base, n);
   return candidate;
 }
 

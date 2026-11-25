@@ -33,7 +33,8 @@ export function markdownHref(slug: string, mountPath = ""): string {
 /** A note's slug from its path, where every folder note (`Guides/Guides.md` too) is its folder's `index`. */
 function sourceSlug(path: string): string {
   const slug = fileToSlug(path);
-  return isFolderNote(path) ? slug.replace(/[^/]+$/, "index") : slug;
+  // Its last segment, by either separator, as `isFolderNote` reads the path.
+  return isFolderNote(path) ? slug.replace(/[^/\\]+$/, "index") : slug;
 }
 
 /** The route a note's filename asks for: `people/Ada Lovelace.md` → `people/ada-lovelace`, `Guides/Guides.md` → `guides`. */

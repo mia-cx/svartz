@@ -16,7 +16,7 @@ import { attachmentResolver, encodeAttachmentPath, renderAssetEmbed, splitEmbedI
 import { findLinkSpans, replaceEmbeds, type PositionedLink } from "./internal/link-spans";
 import { markdownProcessor } from "./internal/markdown-processor";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
-import { routeHref } from "./internal/routes";
+import { pathRoute, routeHref } from "./internal/routes";
 import { fileToSlug } from "./internal/slug";
 import { transformMarkdown } from "./internal/ofm";
 
@@ -128,7 +128,8 @@ export async function renderPreview(markdown: string, options: PreviewOptions): 
 
   const processor = markdownProcessor([remarkGfm]);
   const tree = await processor.run(processor.parse(prepare(markdown, options, sourceSlug, attachment, generated))) as Root;
-  const page = new URL(`${base}${note?.href ?? routeHref(sourceSlug, mountPath)}`, "https://preview.invalid");
+  // A new note publishes where its path asks, `Guides/Guides.md` at its folder's URL; relative URLs resolve from there.
+  const page = new URL(`${base}${note?.href ?? routeHref(pathRoute(path), mountPath)}`, "https://preview.invalid");
   visit(tree, "element", (node) => {
     for (const name of ["href", "src"] as const) {
       const value = node.properties[name];

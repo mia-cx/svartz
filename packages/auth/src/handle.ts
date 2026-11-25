@@ -6,7 +6,8 @@
  * A handle also names its user page's address exactly, so it avoids every spelling the route builder rewrites in a
  * file name (`@svartz/plugins`' `fileToSlug` and `routeSlug`): a run of hyphens collapses into one (`a--b` would be
  * `a-b`'s page), a trailing `_index` loses its underscore (`ada_index` would be `adaindex`'s), and `index` is its
- * folder's own page. Submissions' tests check the rule against those helpers.
+ * folder's own page. Submissions' tests check the rule against those helpers. The user page folder's own name is a
+ * folder note too (`users/users.md`), which depends on configuration, so `userPageFree` keeps it from accounts.
  */
 
 export const HANDLE_MAX_LENGTH = 39;
