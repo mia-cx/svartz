@@ -67,8 +67,12 @@ function exactName(file: ProcessedFile, slug: string): boolean {
   return sourceStem === slug;
 }
 
-/** An `index` or `_index` note, which keeps its folder's URL over a note named after the folder. */
-const indexNote = (file: ProcessedFile): boolean => /(?:^|[\\/])_?index\.[^\\/.]+$/i.test(file.path);
+/**
+ * A note named after its folder (`Guides/Guides.md`), not `index` or `_index`. It asks for its folder's URL but yields
+ * it to any other claimant, so a vault's URLs from before it counted as a folder note stay put.
+ */
+const sameNameNote = (file: ProcessedFile): boolean =>
+  isFolderNote(file.path) && !/(?:^|[\\/])_?index\.[^\\/.]+$/i.test(file.path);
 
 /** Assign canonical slugs before links, giving explicit slugs priority over filenames. */
 export function allocateRoutes(
@@ -102,7 +106,7 @@ export function allocateRoutes(
     const group = groups.get(slug)!.sort((left, right) =>
       Number(right === explicit) - Number(left === explicit) ||
       Number(exactName(right, slug)) - Number(exactName(left, slug)) ||
-      Number(indexNote(right)) - Number(indexNote(left)) ||
+      Number(sameNameNote(left)) - Number(sameNameNote(right)) ||
       left.path.localeCompare(right.path),
     );
     if (reserved.has(slug === "index" ? "" : slug)) {
@@ -121,8 +125,7 @@ export function allocateRoutes(
   )) {
     // A note named after its folder that loses the folder's URL keeps the one its filename gives, `guides/guides`.
     const named = routeSlug(fileToSlug(file.path));
-    const sameName = isFolderNote(file.path) && !indexNote(file);
-    if (sameName && !claimedSlugs.has(named) && !allocated.has(named) && !reserved.has(named)) {
+    if (sameNameNote(file) && !claimedSlugs.has(named) && !allocated.has(named) && !reserved.has(named)) {
       file.slug = named;
       allocated.add(named);
       continue;

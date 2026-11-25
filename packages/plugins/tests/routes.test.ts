@@ -107,6 +107,18 @@ describe("canonical route allocation", () => {
     expect(files.map((file) => file.slug)).toEqual(["guides/guides", "guides"]);
   });
 
+  it("leaves ties without a same-name note as they were", () => {
+    const files = [note("Field-Guide/index.md"), note("Field Guide.md")];
+    allocateRoutes(files);
+    expect(files.map((file) => file.slug)).toEqual(["field-guide-2", "field-guide"]);
+  });
+
+  it("gives the folder's URL to any other note that already claimed it", () => {
+    const files = [note("Guides/Guides.md"), note("Guides?.md")];
+    allocateRoutes(files);
+    expect(files.map((file) => file.slug)).toEqual(["guides/guides", "guides"]);
+  });
+
   it("allows the same explicit segment in different folders", () => {
     const files = [note("guides/first.md"), note("notes/second.md")];
     for (const file of files) file.frontmatter = { slug: "setup" };
