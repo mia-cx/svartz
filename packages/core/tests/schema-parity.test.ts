@@ -165,6 +165,25 @@ describe("schema parity: normalization output", () => {
     expect(normalized.contractVersion).toBe("1.0.0");
   });
 
+  it("loads a plugin on the same contract major, or one that declares none", () => {
+    expect(normalizePlugin({ id: "newer-minor", contractVersion: "1.4.2" }).contractVersion).toBe("1.4.2");
+    expect(normalizePlugin({ id: "undeclared" }).contractVersion).toBeUndefined();
+  });
+
+  it.each(["2.0.0", "0.9.0"])("fails a plugin declaring contract %s, naming it, its version and the contract", (version) => {
+    let error: unknown;
+    try {
+      normalizePlugin({ id: "from-elsewhere", contractVersion: version });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(PluginValidationError);
+    expect((error as PluginValidationError).pluginId).toBe("from-elsewhere");
+    expect((error as Error).message).toBe(
+      `Plugin "from-elsewhere" declares contractVersion ${version}, but this Svartz runs contract 1.0.0. Use a release of the plugin built for contract 1.x.`,
+    );
+  });
+
   it("disabled flag is preserved", () => {
     const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const normalized = normalizePlugin({

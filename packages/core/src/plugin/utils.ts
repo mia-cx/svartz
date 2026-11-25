@@ -8,6 +8,22 @@ import type {
 import { STAGE_NAMES } from "./types";
 import { PluginValidationError } from "./errors";
 import { validatePluginShape, warnUnknownPluginKeys } from "./schema";
+import { CONTRACT_VERSION } from "../theme/types";
+
+const contractMajor = (version: string): string => version.split(".")[0]!;
+
+/**
+ * A plugin declaring another contract major was written against hooks and context this Svartz doesn't offer, so it
+ * fails here, by name, before any hook runs. A plugin without `contractVersion` loads.
+ */
+function requireContractMajor(plugin: SvartzPlugin): void {
+  if (plugin.contractVersion === undefined) return;
+  if (contractMajor(plugin.contractVersion) === contractMajor(CONTRACT_VERSION)) return;
+  throw new PluginValidationError({
+    pluginId: plugin.id,
+    message: `Plugin "${plugin.id}" declares contractVersion ${plugin.contractVersion}, but this Svartz runs contract ${CONTRACT_VERSION}. Use a release of the plugin built for contract ${contractMajor(CONTRACT_VERSION)}.x.`,
+  });
+}
 
 /**
  * Feature toggle: when true, use Effect Schema decode path.
@@ -147,6 +163,8 @@ function normalizePlugin(plugin: SvartzPlugin): NormalizedSvartzPlugin {
     legacyValidatePlugin(plugin);
     legacyWarnUnknownKeys(plugin);
   }
+
+  requireContractMajor(plugin);
 
   if (plugin.disabled && hasHooks(plugin)) {
     console.warn(
