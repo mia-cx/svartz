@@ -134,7 +134,7 @@ Two holders need no grant, and no deny stops them: admins everywhere, and every 
 `moderators` is deprecated. On a site with accounts, each identity it lists becomes a grant of `annotations:comments:delete` on the vault, once: the first time a signed-in reader loads a page's comments or deletes one after that identity has an account. From then on the grant alone decides, so taking someone off the list removes nothing; change or remove their grant instead. Without `SVARTZ_DB`, nobody has an account, so the list decides and every signed-in reader may comment. To find an id for the list, sign in on the site, open `<base><mount>/_svartz/auth/me/`, and copy its `id`:
 
 ```ts
-annotations({ database: { env: "DB" }, moderators: ["github:583231"] }),
+annotations({ database: { env: "DB" }, moderators: ["github:<numeric-user-id>"] }),
 ```
 
 The id is the provider and its stable account number, never a username, so it survives a rename.

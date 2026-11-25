@@ -13,7 +13,11 @@ import { chromium } from "playwright";
 
 const execFileAsync = promisify(execFile);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const DIST_ROOT = resolve(ROOT, ".svartz/vaults/docs/dist");
+/** A small static vault of the tests' own, so the repo's published vaults can change freely. */
+const FIXTURE = "packages/cli/tests/fixtures/static-vault";
+const VAULT_ID = "static-e2e";
+const VAULT_ROOT = resolve(ROOT, ".svartz/vaults", VAULT_ID);
+const DIST_ROOT = resolve(VAULT_ROOT, "dist");
 const DIST_INDEX_PATH = resolve(DIST_ROOT, "index.html");
 const DIST_NOT_FOUND_PATH = resolve(DIST_ROOT, "404.html");
 const DIST_SITEMAP_PATH = resolve(DIST_ROOT, "sitemap.xml");
@@ -28,6 +32,20 @@ async function run(command: string, args: string[]) {
 
 async function pnpm(args: string[]) {
   await run("corepack", ["pnpm", ...args]);
+}
+
+/** Builds the fixture vault as a static site, with `vault` overriding its config. */
+async function buildFixture(vault: Record<string, unknown> = {}) {
+  const configPath = resolve(ROOT, ".svartz-fixture-e2e.config.ts");
+  try {
+    await writeFile(configPath, `export default ${JSON.stringify({
+      version: "1.0.0",
+      vaults: [{ id: VAULT_ID, path: FIXTURE, target: { type: "static" }, site: { title: "Fixture" }, ...vault }],
+    })};\n`);
+    await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
+  } finally {
+    await rm(configPath, { force: true });
+  }
 }
 
 describe("svartz CLI", () => {
@@ -53,11 +71,11 @@ describe("svartz CLI", () => {
   );
 
   it(
-    "builds prerendered docs from a clean output directory",
+    "builds a prerendered static vault from a clean output directory",
     async () => {
       await rm(DIST_ROOT, { recursive: true, force: true });
 
-      await run(process.execPath, ["packages/cli/dist/index.js", "build", "--vault", "docs"]);
+      await buildFixture();
 
       await expect(access(DIST_INDEX_PATH)).resolves.toBeUndefined();
       await expect(access(DIST_NOT_FOUND_PATH)).resolves.toBeUndefined();
@@ -79,13 +97,13 @@ describe("svartz CLI", () => {
   );
 
   it("links styled notes in the standalone shell without loading JavaScript", async () => {
-    const notePath = resolve(ROOT, "vaults/docs/standalone-style.svx");
-    const otherPath = resolve(ROOT, "vaults/docs/unrelated-style.svx");
+    const notePath = resolve(ROOT, FIXTURE, "standalone-style.svx");
+    const otherPath = resolve(ROOT, FIXTURE, "unrelated-style.svx");
     try {
       await writeFile(notePath, "<h1 class='standalone-tone'>Standalone style</h1><style>.standalone-tone { color: rgb(12, 34, 56); }</style>\n");
       await writeFile(otherPath, "<h1 class='unrelated-tone'>Unrelated style</h1><style>.unrelated-tone { color: rgb(78, 90, 12); }</style>\n");
-      await run(process.execPath, ["packages/cli/dist/index.js", "build", "--vault", "docs"]);
-      const manifest = JSON.parse(await readFile(getGeneratedHostStylesPath(getGeneratedHostRegistryPath(resolve(ROOT, ".svartz/vaults/docs")), "docs"), "utf8")) as {
+      await buildFixture();
+      const manifest = JSON.parse(await readFile(getGeneratedHostStylesPath(getGeneratedHostRegistryPath(VAULT_ROOT), VAULT_ID), "utf8")) as {
         shared: string[]; notes: Record<string, string[]>;
       };
       const styles = [...manifest.shared, ...manifest.notes["pages/standalone-style.svelte"]!];
@@ -106,16 +124,17 @@ describe("svartz CLI", () => {
 
   it("links CSS for every standalone vault built in one CLI process", async () => {
     const configPath = resolve(ROOT, ".svartz-multi-style-e2e.config.ts");
-    const notePath = resolve(ROOT, "vaults/docs/multi-vault-style.svx");
+    const notePath = resolve(ROOT, FIXTURE, "multi-vault-style.svx");
+    const ids = [VAULT_ID, `${VAULT_ID}-other`];
     try {
       await writeFile(notePath, "<h1 class='multi-tone'>Styled vault</h1><style>.multi-tone { color: rgb(12, 34, 56); }</style>\n");
       await writeFile(configPath, `export default {
         version: "1.0.0",
-        vaults: ["docs", "other"].map((id) => ({ id, path: "vaults/docs",
+        vaults: ${JSON.stringify(ids)}.map((id) => ({ id, path: "${FIXTURE}",
           target: { type: "static" }, site: { title: id, url: "https://example.test" } })),
       };\n`);
       await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
-      for (const id of ["docs", "other"]) {
+      for (const id of ids) {
         const manifest = JSON.parse(await readFile(getGeneratedHostStylesPath(getGeneratedHostRegistryPath(resolve(ROOT, ".svartz/vaults", id)), id), "utf8")) as {
           shared: string[]; notes: Record<string, string[]>;
         };
@@ -191,59 +210,41 @@ describe("svartz CLI", () => {
   });
 
   it("builds social images and favicon variants for a static vault", async () => {
-    const configPath = resolve(ROOT, ".svartz-images-e2e.config.ts");
-    try {
-      await writeFile(configPath, `export default {
-        version: "1.0.0",
-        vaults: [{ id: "docs", path: "vaults/docs",
-          target: { type: "static", basePath: "/site" }, site: { title: "Docs", url: "https://example.test/site" } }],
-      };\n`);
-      await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
-      await access(resolve(DIST_ROOT, "__svartz/social/index.png"));
-      await access(resolve(DIST_ROOT, "__svartz/favicon.svg"));
-      await access(resolve(DIST_ROOT, "__svartz/favicon-32.png"));
-      await access(resolve(DIST_ROOT, "__svartz/apple-touch-icon.png"));
-      await access(DIST_NOT_FOUND_PATH);
-      await access(resolve(ROOT, ".svartz/vaults/docs/artifacts/runtime-theme.ts"));
-      await access(resolve(ROOT, ".svartz/vaults/docs/artifacts/runtime-artifacts.ts"));
-      const html = await readFile(resolve(DIST_ROOT, "index.html"), "utf8");
-      expect(html).toContain("https://example.test/site/__svartz/social/index.png");
-      expect(html).toContain('<link rel="canonical" href="https://example.test/site/"');
-      expect(html).toContain('property="og:url" content="https://example.test/site/"');
-      expect(html).toContain('href="https://example.test/site/__svartz/favicon.svg"');
-      expect(html).not.toContain("/site/site/");
-      expect(html).toContain('property="og:title"');
-      expect(html).toContain("Svartz Documentation Vault");
-      const noteHtml = await readFile(resolve(DIST_ROOT, "guides/create-plugin/index.html"), "utf8");
-      expect(noteHtml).toContain('<link rel="canonical" href="https://example.test/site/guides/create-plugin/"');
-      expect(noteHtml).toContain('property="og:image" content="https://example.test/site/__svartz/social/guides/create-plugin.png"');
-      expect(noteHtml).not.toContain("/site/site/");
-      const sitemap = await readFile(DIST_SITEMAP_PATH, "utf8");
-      expect(sitemap).toContain("<loc>https://example.test/site/</loc>");
-      expect(sitemap).toContain("<loc>https://example.test/site/tags/guides/</loc>");
-      expect(sitemap).not.toContain("404.html");
-    } finally {
-      await rm(configPath, { force: true });
-    }
+    await buildFixture({ target: { type: "static", basePath: "/site" }, site: { title: "Docs", url: "https://example.test/site" } });
+    await access(resolve(DIST_ROOT, "__svartz/social/index.png"));
+    await access(resolve(DIST_ROOT, "__svartz/favicon.svg"));
+    await access(resolve(DIST_ROOT, "__svartz/favicon-32.png"));
+    await access(resolve(DIST_ROOT, "__svartz/apple-touch-icon.png"));
+    await access(DIST_NOT_FOUND_PATH);
+    await access(resolve(VAULT_ROOT, "artifacts/runtime-theme.ts"));
+    await access(resolve(VAULT_ROOT, "artifacts/runtime-artifacts.ts"));
+    const html = await readFile(resolve(DIST_ROOT, "index.html"), "utf8");
+    expect(html).toContain("https://example.test/site/__svartz/social/index.png");
+    expect(html).toContain('<link rel="canonical" href="https://example.test/site/"');
+    expect(html).toContain('property="og:url" content="https://example.test/site/"');
+    expect(html).toContain('href="https://example.test/site/__svartz/favicon.svg"');
+    expect(html).not.toContain("/site/site/");
+    expect(html).toContain('property="og:title"');
+    expect(html).toContain("Static fixture home");
+    const noteHtml = await readFile(resolve(DIST_ROOT, "guides/create-plugin/index.html"), "utf8");
+    expect(noteHtml).toContain('<link rel="canonical" href="https://example.test/site/guides/create-plugin/"');
+    expect(noteHtml).toContain('property="og:image" content="https://example.test/site/__svartz/social/guides/create-plugin.png"');
+    expect(noteHtml).not.toContain("/site/site/");
+    const sitemap = await readFile(DIST_SITEMAP_PATH, "utf8");
+    expect(sitemap).toContain("<loc>https://example.test/site/</loc>");
+    expect(sitemap).toContain("<loc>https://example.test/site/tags/guides/</loc>");
+    expect(sitemap).not.toContain("404.html");
   }, 240_000);
 
   it("renders a mounted static vault below a standalone deployment base", async () => {
-    const configPath = resolve(ROOT, ".svartz-mounted-base-e2e.config.ts");
-    try {
-      await writeFile(configPath, `export default {
-        version: "1.0.0",
-        vaults: [{ id: "docs", path: "vaults/docs", mountPath: "/blog",
-          target: { type: "static", basePath: "/site" }, site: { title: "Docs", url: "https://example.test/site" } }],
-      };\n`);
-      await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
-      const html = await readFile(resolve(DIST_ROOT, "blog/index.html"), "utf8");
-      expect(html).toContain("Svartz Documentation Vault");
-      expect(html).toContain('href="https://example.test/site/blog/"');
-      const registry = await readFile(resolve(ROOT, ".svartz/vaults/docs/.svartz/host/runtime.ts"), "utf8");
-      expect(registry).toContain('basePath: "/site"');
-    } finally {
-      await rm(configPath, { force: true });
-    }
+    await buildFixture({
+      mountPath: "/blog", target: { type: "static", basePath: "/site" }, site: { title: "Docs", url: "https://example.test/site" },
+    });
+    const html = await readFile(resolve(DIST_ROOT, "blog/index.html"), "utf8");
+    expect(html).toContain("Static fixture home");
+    expect(html).toContain('href="https://example.test/site/blog/"');
+    const registry = await readFile(resolve(VAULT_ROOT, ".svartz/host/runtime.ts"), "utf8");
+    expect(registry).toContain('basePath: "/site"');
   }, 240_000);
 
   it("publishes a post's previous versions from git on a static vault, and nothing until a post opts in", async () => {

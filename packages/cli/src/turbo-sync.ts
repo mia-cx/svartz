@@ -78,8 +78,15 @@ function getBuildTaskInputs(config: ResolvedConfigSet, vaultId: string, vaultPat
   ];
 }
 
-function getBuildTaskOutputs(config: ResolvedConfigSet, outDir: string): string[] {
-  return [`${toPosixPath(path.relative(config.configDir, outDir))}/**`];
+/**
+ * What a vault's build leaves to deploy, so a cache hit restores it: `outDir`, or for a Worker, the adapter's bundle and
+ * the Wrangler config beside it in the build root.
+ */
+function getBuildTaskOutputs(config: ResolvedConfigSet, vault: ResolvedConfigSet["vaults"][number]): string[] {
+  const outDir = toPosixPath(path.relative(config.configDir, vault.outDir));
+  if (vault.target.type !== "cloudflare-workers") return [`${outDir}/**`];
+  const buildRoot = path.posix.dirname(outDir);
+  return [`${buildRoot}/.svelte-kit/cloudflare/**`, `${buildRoot}/wrangler.json`];
 }
 
 function createManagedScripts(config: ResolvedConfigSet): Record<string, string> {
@@ -112,7 +119,7 @@ function createManagedTurboTasks(config: ResolvedConfigSet): Record<string, Turb
           turboTaskName(buildTaskName(vault.id)),
           {
             inputs: getBuildTaskInputs(config, vault.id, vault.path),
-            outputs: getBuildTaskOutputs(config, vault.outDir),
+            outputs: getBuildTaskOutputs(config, vault),
           } satisfies TurboTask,
         ],
         [

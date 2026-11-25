@@ -38,7 +38,7 @@ A host that lists notes or links their published Markdown, and never renders a S
 {/each}
 ```
 
-`markdownHref` is set when the vault publishes Markdown with `index: { markdown: true }`. This is the supported way into a SvelteKit 3 host: `svartz build` builds, prerenders, and adapts it.
+`markdownHref` is set for every public note unless the vault turns `discovery.llms` off. This is the supported way into a SvelteKit 3 host: `svartz build` builds, prerenders, and adapts it.
 
 During `svartz dev`, edits to a local workspace theme rebuild that theme package before the host restarts. This keeps package exports pointing at `dist` in sync with source edits.
 

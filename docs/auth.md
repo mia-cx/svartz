@@ -20,7 +20,7 @@ export default defineConfig({
         github: { clientId: "Iv23liExample", clientSecret: { env: "PRIVATE_GITHUB_CLIENT_SECRET" } },
       },
       privacyNotice: "/privacy/",
-      admins: ["github:583231"],
+      admins: ["github:<numeric-user-id>"],
     })],
   }],
 });

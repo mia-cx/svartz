@@ -62,11 +62,20 @@ export const encodeAttachmentPath = (path: string): string => path.split("/").ma
 /** The `?query` or `#fragment` an authored link target ends with, which its resolved URL keeps. */
 export const urlSuffix = (target: string): string => /[?#].*$/.exec(target)?.[0] ?? "";
 
+/**
+ * A wikilink's `target|alias`, split at the first separator. Inside a table Obsidian escapes it as `\|`; any later
+ * pipe stays as written, so GFM keeps an escaped one inside its cell.
+ */
+export function splitAlias(inner: string): [target: string, alias: string | undefined] {
+  const separator = /\\?\|/.exec(inner);
+  return separator ? [inner.slice(0, separator.index), inner.slice(separator.index + separator[0].length)] : [inner, undefined];
+}
+
 /** `![[target#section|alias]]`'s parts, trimmed. */
 export function splitEmbedInner(inner: string): { target: string; section?: string; alias?: string } {
-  const [targetWithSection, ...labelParts] = inner.split("|");
-  const alias = labelParts.length > 0 ? labelParts.join("|").trim() : undefined;
-  const [target, section] = targetWithSection!.split("#");
+  const [targetWithSection, label] = splitAlias(inner);
+  const alias = label?.trim();
+  const [target, section] = targetWithSection.split("#");
   return {
     target: target?.trim() ?? "",
     section: section?.trim() || undefined,

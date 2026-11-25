@@ -19,7 +19,7 @@ export default defineConfig({
 | Right | Local graph (the expand button opens the whole vault), contents with scroll tracking, backlinks |
 | Lists | `/tags/`, `/tags/:tag/`, `/folders/`, `/folders/:path/`, `/feed/`, and a 404 page |
 
-The explorer lists folders, then notes, each by title. An `order` number in a note's frontmatter sorts it first, lowest first; a folder takes the `order` of its folder note (`index.md` or `_index.md`).
+The explorer lists folders, then notes, each by title. An `order` number in a note's frontmatter sorts it first, lowest first; a folder takes the `order` of its folder note (`index.md`, `_index.md`, or a note named after its folder).
 
 Page actions are Copy page and View as Markdown, followed by any a plugin adds, such as Edit. Site actions, such as New page, come only from plugins; with none, nothing shows. Plugins fill both through their browser scripts ([Create a plugin](../../vaults/docs/guides/create-plugin.md#add-actions-to-every-page)), and every theme that extends minimal keeps them.
 
