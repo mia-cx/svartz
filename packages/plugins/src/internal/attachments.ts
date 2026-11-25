@@ -62,9 +62,9 @@ export const encodeAttachmentPath = (path: string): string => path.split("/").ma
 /** The `?query` or `#fragment` an authored link target ends with, which its resolved URL keeps. */
 export const urlSuffix = (target: string): string => /[?#].*$/.exec(target)?.[0] ?? "";
 
-/** `![[target#section|alias]]`'s parts, trimmed. */
+/** `![[target#section|alias]]`'s parts, trimmed. Inside a table, Obsidian escapes the separator as `\|`. */
 export function splitEmbedInner(inner: string): { target: string; section?: string; alias?: string } {
-  const [targetWithSection, ...labelParts] = inner.split("|");
+  const [targetWithSection, ...labelParts] = inner.split(/\\?\|/);
   const alias = labelParts.length > 0 ? labelParts.join("|").trim() : undefined;
   const [target, section] = targetWithSection!.split("#");
   return {

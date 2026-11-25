@@ -48,6 +48,13 @@ describe("renderPreview", () => {
     expect(html).toContain('<a href="/docs/wiki/people/ada-lovelace/">her</a>');
   });
 
+  it("links and embeds with an alias inside a table, where Obsidian escapes the pipe", async () => {
+    const html = await render("| Who | Chart |\n| - | - |\n| [[Ada\\|the countess]] | ![[chart.png\\|A chart]] |\n");
+
+    expect(html).toContain('<td><a href="/docs/wiki/people/ada-lovelace/">the countess</a></td>');
+    expect(html).toContain('<td><img src="/docs/wiki/Assets/chart.png" alt="A chart"></td>');
+  });
+
   it("shows a wikilink to no published note unresolved, as the site does", async () => {
     expect(await render("See [[Charles Babbage]].")).toContain(
       '<span class="svartz-unresolved-link" role="link" aria-disabled="true">Charles Babbage</span>',

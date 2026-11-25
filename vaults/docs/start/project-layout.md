@@ -20,7 +20,7 @@ vault/
 
 | Path | Contents |
 | --- | --- |
-| `svartz.config.ts` | Vault IDs, source paths, themes, and targets. See the [[reference/configuration|configuration reference]]. |
+| `svartz.config.ts` | Vault IDs, source paths, themes, and targets. See the [[reference/configuration\|configuration reference]]. |
 | `vault/` | Notes and their attachments. Open this folder in Obsidian. |
 | `.svartz/vaults/<id>/` | Standalone build workspace, generated artifacts, and adapter output. Do not edit it. |
 | `.svartz/host/` | Generated registry in a SvelteKit host project. |

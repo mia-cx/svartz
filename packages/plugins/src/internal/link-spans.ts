@@ -87,7 +87,8 @@ function collectLinkSpans(markdown: string, roamReserved = false): PositionedLin
       for (const match of markdown.slice(start, end).matchAll(wikilinkRegex)) {
         const offset = start + match.index!;
         if (markdown[offset - 1] === "!" || isEscaped(markdown, offset)) continue;
-        const [targetWithSection, ...labelParts] = match[1]!.split("|");
+        // Inside a table, Obsidian escapes the alias separator as `\|`.
+        const [targetWithSection, ...labelParts] = match[1]!.split(/\\?\|/);
         const [target, section] = targetWithSection!.split("#");
         if (roamReserved && isRoamMarker(markdown, offset, offset + match[0].length, target ?? "")) continue;
         if (target?.startsWith("http://") || target?.startsWith("https://")) continue;

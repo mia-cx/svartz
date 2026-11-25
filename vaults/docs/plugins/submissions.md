@@ -34,7 +34,7 @@ For pull requests, supply a fine-grained token with read/write Contents and Pull
 | `token` | `{ env: string }`. Defaults to `SVARTZ_GITHUB_TOKEN` when no App is set. |
 | `app` | `{ id: string \| number; privateKey: { env: string }; installation?: number }`. No App by default; the installation is looked up if omitted. Set this or `token`, not both. |
 | `mode` | `"permission"` (default), `"pull-request"`, or `"commit"`. |
-| `signIn.required` | Boolean, default `false`. Requires [[plugins/auth|auth]] when enabled. |
+| `signIn.required` | Boolean, default `false`. Requires [[plugins/auth\|auth]] when enabled. |
 | `guard.turnstile` | Optional `{ siteKey: string; secret: { env: string } }`. Skipped when sign-in is required. |
 | `guard.rateLimit` | `{ limit: number; period: number }`, default 10 attempts per 3600 seconds per account or IP. |
 | `sync.database`, `sync.webhookSecret` | Optional sync settings. Both take `{ env: string }` for the D1 binding and the webhook secret name. |

@@ -24,7 +24,7 @@ export default defineConfig({
               clientSecret: { env: "PRIVATE_GITHUB_CLIENT_SECRET" },
             },
           },
-          admins: ["github:583231"],
+          admins: ["github:<numeric-user-id>"],
           privacyNotice: "/privacy/",
         }),
       ],

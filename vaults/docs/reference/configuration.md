@@ -15,7 +15,7 @@ Export the result of `defineConfig()` from `@svartz/config`. The CLI looks for `
 | `defaults` | Optional object of the vault options below. It does not set `id`, `path`, or `target`. |
 | `build.concurrency` | Number, default 10. |
 | `build.maxRetries` | Number, default 3. |
-| `passwordGroups` | Map of group names to `{ env: string }`; group names use letters, digits, `_`, or `-`. The values live in the build environment. See [[writing/encrypted-notes|Encrypted notes]]. |
+| `passwordGroups` | Map of group names to `{ env: string }`; group names use letters, digits, `_`, or `-`. The values live in the build environment. See [[writing/encrypted-notes\|Encrypted notes]]. |
 
 ## Vault options
 
@@ -31,7 +31,7 @@ Export the result of `defineConfig()` from `@svartz/config`. The CLI looks for `
 | `site` | Public site details; see below. |
 | `discovery` | Feed, sitemap, social images, Markdown, favicon, and date source options; see below. |
 | `index.markdown` | Boolean, default `false`. Include each public note's portable Markdown body as `entry.markdown` in the published index. |
-| `analytics` | Provider settings; default off. A vault setting replaces the default object. See [[plugins/analytics|Analytics]]. |
+| `analytics` | Provider settings; default off. A vault setting replaces the default object. See [[plugins/analytics\|Analytics]]. |
 | `plugins` | List of plugin objects; default empty. Merge by ID. Add `{ id, disabled: true }` to remove a matching plugin. |
 | `outDir` | Output path string, default `.svartz/vaults/<id>/dist`. Separate vault outputs cannot overlap. |
 
@@ -43,7 +43,7 @@ A vault's scalar settings take precedence over `defaults`. Svartz shallow-merges
 | --- | --- |
 | `static` | `basePath?: string`; default root. |
 | `node` | `basePath?: string`; default root. |
-| `cloudflare-workers` | [[reference/wrangler|Wrangler fields]] inline; build owns the entry and asset directory. |
+| `cloudflare-workers` | [[reference/wrangler\|Wrangler fields]] inline; build owns the entry and asset directory. |
 | `cloudflare-pages` | `projectName?: string`. Name an existing Pages project when deploying. |
 | `host` | None. Use the app's adapter and deployment base. |
 

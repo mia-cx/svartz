@@ -79,7 +79,7 @@ async function createWorkspaceFixture() {
 
 function createResolvedConfig(
   workspaceRoot: string,
-  vaults: ReadonlyArray<{ id: string; themeBase?: string }>,
+  vaults: ReadonlyArray<{ id: string; themeBase?: string; target?: string }>,
 ): ResolvedConfigSet {
   return {
     version: "1.0.0",
@@ -92,6 +92,7 @@ function createResolvedConfig(
       id: vault.id,
       path: path.join(workspaceRoot, "vaults", vault.id),
       outDir: path.join(workspaceRoot, ".svartz", "vaults", vault.id, "dist"),
+      target: { type: vault.target ?? "static" },
       theme: {
         base: vault.themeBase ?? "@svartz/theme-minimal",
       },
@@ -163,6 +164,19 @@ describe("managed Turbo sync", () => {
       cache: false,
       persistent: true,
     });
+  });
+
+  it("caches a Worker vault's bundle and Wrangler config, which its deploy reads", async () => {
+    const { workspaceRoot } = await createWorkspaceFixture();
+    await syncManagedTurboFiles(createResolvedConfig(workspaceRoot, [{ id: "docs", target: "cloudflare-workers" }]));
+
+    const turboJson = JSON.parse(await readFile(path.join(workspaceRoot, "turbo.json"), "utf8")) as {
+      tasks: Record<string, Record<string, unknown>>;
+    };
+    expect(turboJson.tasks["//#svartz:build:docs"]!.outputs).toEqual([
+      ".svartz/vaults/docs/.svelte-kit/cloudflare/**",
+      ".svartz/vaults/docs/wrangler.json",
+    ]);
   });
 
   it("prunes stale managed entries while preserving unmanaged ones", async () => {

@@ -30,7 +30,7 @@ The shell puts search and folders on the left, the note in the middle, and the g
 | `tokens` | Map of design token names to values; theme defaults apply when absent. |
 | `logo` | `{ src: string; dark?: string; alt?: string }`; no logo by default. |
 | `footer.links` | Map of labels to URLs; no extra links by default. |
-| `comments` | Giscus settings; off unless configured. See the [[reference/configuration|configuration reference]]. |
+| `comments` | Giscus settings; off unless configured. See the [[reference/configuration\|configuration reference]]. |
 
 In frontmatter, use a number for `order` to place a note before unordered notes in the explorer. Lower comes first. A folder uses its folder note's order. Use `comments: false` to hide Giscus for a note. Other [[writing/frontmatter|standard fields]] work without theme-specific metadata.
 
