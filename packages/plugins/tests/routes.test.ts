@@ -100,6 +100,13 @@ describe("canonical route allocation", () => {
     expect(() => allocateRoutes(files, new Set(["guides/set-up"]))).toThrow(/Conflicting slug/);
   });
 
+  it.each(["index.md", "_index.md"])("keeps the folder's URL for %s over a note named after the folder", (filename) => {
+    const files = [note("guides/guides.md"), note(`guides/${filename}`)];
+    allocateRoutes(files);
+    // The same-name note keeps the URL it had before it counted as a folder note.
+    expect(files.map((file) => file.slug)).toEqual(["guides/guides", "guides"]);
+  });
+
   it("allows the same explicit segment in different folders", () => {
     const files = [note("guides/first.md"), note("notes/second.md")];
     for (const file of files) file.frontmatter = { slug: "setup" };

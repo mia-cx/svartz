@@ -300,7 +300,7 @@ export const indexContent = definePlugin(() => ({
           // A folder note names its folder. When two (`index.md`, `index.mdx`) share
           // one, the one that kept the folder's URL wins.
           const own = folderSlugs.at(-1);
-          if (own && isFolderNote(file.path) &&(file.slug === own || !folderNotes.has(own))) {
+          if (own && isFolderNote(file.path) && (file.slug === own || !folderNotes.has(own))) {
             folderNotes.set(own, { slug: file.slug, title: typeof fmTitle === "string" && fmTitle.length > 0 ? fmTitle : undefined });
           }
         }

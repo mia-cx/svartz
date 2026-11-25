@@ -67,6 +67,9 @@ function exactName(file: ProcessedFile, slug: string): boolean {
   return sourceStem === slug;
 }
 
+/** An `index` or `_index` note, which keeps its folder's URL over a note named after the folder. */
+const indexNote = (file: ProcessedFile): boolean => /(?:^|[\\/])_?index\.[^\\/.]+$/i.test(file.path);
+
 /** Assign canonical slugs before links, giving explicit slugs priority over filenames. */
 export function allocateRoutes(
   files: readonly ProcessedFile[],
@@ -99,6 +102,7 @@ export function allocateRoutes(
     const group = groups.get(slug)!.sort((left, right) =>
       Number(right === explicit) - Number(left === explicit) ||
       Number(exactName(right, slug)) - Number(exactName(left, slug)) ||
+      Number(indexNote(right)) - Number(indexNote(left)) ||
       left.path.localeCompare(right.path),
     );
     if (reserved.has(slug === "index" ? "" : slug)) {
@@ -115,6 +119,14 @@ export function allocateRoutes(
     Number(right.file === explicitClaims.get(right.slug)) - Number(left.file === explicitClaims.get(left.slug)) ||
     left.file.path.localeCompare(right.file.path),
   )) {
+    // A note named after its folder that loses the folder's URL keeps the one its filename gives, `guides/guides`.
+    const named = routeSlug(fileToSlug(file.path));
+    const sameName = isFolderNote(file.path) && !indexNote(file);
+    if (sameName && !claimedSlugs.has(named) && !allocated.has(named) && !reserved.has(named)) {
+      file.slug = named;
+      allocated.add(named);
+      continue;
+    }
     for (let suffix = 2; ; suffix++) {
       const candidate = `${slug}-${suffix}`;
       if (claimedSlugs.has(candidate) || allocated.has(candidate) || reserved.has(candidate)) continue;
