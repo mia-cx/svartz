@@ -39,6 +39,6 @@ Add `history()` alongside [[plugins/submissions|submissions]] with `sync` enable
 | `/-/changes/` | Recent changes from the mirror. Link it from navigation if you want readers to find it there. |
 | `/-/contributions/<handle>/` | Changes the site attributes to an account, when the accounts database is bound. |
 
-History does not show drafts, private revisions, or protected pages. Live mode follows the file at its current path; it does not follow renames. It fetches up to 1,100 revisions for one page (11 GitHub pages of 100 commits). The mirror's backfill limits how far Recent changes and account contributions reach. Account attribution comes from site save records, not commit authorship or trailers.
+History does not show drafts, private revisions, or protected pages. Live mode follows the file at its current path; it does not follow renames. It lists up to 1,000 revisions for one page, 100 at a time (`?page=1` to `?page=10`), then links to the rest on GitHub. The mirror's backfill limits how far Recent changes and account contributions reach. Account attribution comes from site save records, not commit authorship or trailers.
 
 Reverting needs a GitHub App, accounts, and `history:reverts:write`. It creates a new commit and requires the branch's current state to match what the moderator reviewed.

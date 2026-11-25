@@ -23,7 +23,7 @@ const historyHtml = () => historyPage({
   changes: CHANGES,
   unavailable: false,
   previousOf: (index) => CHANGES[index + 1]?.sha,
-  links: { page: "/wiki/guide/", history: HISTORY, changes: "/wiki/-/changes/", older: `${HISTORY}?page=1` },
+  links: { page: "/wiki/guide/", history: HISTORY, changes: "/wiki/-/changes/", older: `${HISTORY}?page=2` },
 }).html;
 
 afterEach(() => {

@@ -69,7 +69,8 @@ describe("/-/history/<page>", () => {
     await site.settle();
     expect(github.pending).toEqual([]);
     replayGitHub([historyExchange(GUIDE_PATH, [older], { page: 2 })], INSTALLATION_TOKEN);
-    const back = await site.page(`${HISTORY}?page=1`);
+    // Pages count from 1, as GitHub's do: the first is the history page itself, and `?page=2` the next.
+    const back = await site.page(`${HISTORY}?page=2`);
 
     expect(first?.title).toBe("History of Guide");
     expect(rows(first)).toEqual([
@@ -99,7 +100,7 @@ describe("/-/history/<page>", () => {
     ], INSTALLATION_TOKEN);
 
     expect(rows(await site.page(HISTORY))).toEqual(["19 Nov 2026, 10:00 UTC Grace Hopper grace on GitHub"]);
-    const paused = await site.page(`${HISTORY}?page=1`);
+    const paused = await site.page(`${HISTORY}?page=2`);
     await site.settle();
 
     expect(text(paused!.html)).toContain("GitHub isn't answering right now, so this page's changes can't be shown.");
@@ -112,6 +113,7 @@ describe("/-/history/<page>", () => {
     ["a page that isn't published", "/wiki/-/history/nowhere/"],
     ["a revision that isn't a commit id", `${HISTORY}?to=HEAD~1`],
     ["a page number past the cap", `${HISTORY}?page=11`],
+    ["page 0, since pages count from 1", `${HISTORY}?page=0`],
     ["a commit GitHub doesn't hold on the branch, as a fork's", `${HISTORY}?to=${"f".repeat(40)}`],
   ])("answers 404 for %s", async (_case, path) => {
     const site = await createSite();
