@@ -1,10 +1,34 @@
 ---
-title: Create Theme
+title: "Create a theme"
+description: "Extend minimal with a layout, regions, or a metadata-driven renderer."
 ---
 
-# Create a theme
+Start with a minimal extension. Give the browser and Node entries the same identity. In your browser entry:
 
-A Svartz theme supplies SvelteKit layouts, route pages, and optional content components. The five first-party themes in `themes/` are working examples: `minimal`, `wiki`, `blog`, `docs`, and `api-docs`. Visual styles belong to the theme; note parsing belongs to plugins.
+```ts
+import { composeThemes, definePageRenderer, type ThemeExtension } from "@svartz/theme-minimal/runtime";
+import RecipePage from "./RecipePage.svelte";
+
+export const extensions: ThemeExtension[] = [{
+  id: "@example/theme-recipes",
+  name: "recipes",
+  renderers: [definePageRenderer({
+    id: "recipe",
+    detect: (properties) => typeof properties.recipe === "string" ? properties.recipe : undefined,
+    body: RecipePage,
+  })],
+  chrome: { graph: false },
+}];
+
+export default (config: Parameters<typeof composeThemes>[1]) =>
+  composeThemes(extensions, config, { id: "@example/theme-recipes" });
+```
+
+Export a build entry with the same IDs and names, its build plugins and capabilities, and no Svelte component imports. Use the Node entry of `@svartz/theme-minimal` there. Export `./runtime` from the package for the browser entry. Set `theme.base` to the package or a path relative to the config.
+
+A renderer reads frontmatter in `detect`. Return `undefined` for a note it does not own. Return typed data for a match, or throw an error for invalid metadata. The body gets the entry, data, shared shell, and the parent snippets. Render the note's `children` where its prose belongs, and `actions` if you split out the page head. If the layout uses a dynamic component, bind it to a local component variable before rendering it.
+
+For broader changes, replace a region or the frame. Use the shell's explorer, drawer, contents, and page navigation instead of recalculating them. Keep `PageActions` in a replaced page head and `SiteActions` in the navigation so plugin actions still appear. See the [[reference/theme-contract|theme contract]] for slots and the [[themes/choosing-and-composing|composition rules]].
 
 ## Manifest
 
@@ -33,7 +57,7 @@ export default defineTheme({
 });
 ```
 
-`defaultPage` and `notePage` are required. The `note` route must contain `:slug`. Other routes can use `component` and `layoutSlot`. Component references may be `{ default: Component }` or `() => import('./Component.svelte')`. Svartz loads lazy references before SSR and hydration. An import without a default component fails with the theme ID and slot.
+`defaultPage` and `notePage` are required. The `note` route must contain `:slug`. A route may specify `component` or `layoutSlot`. Component references may be `{ default: Component }` or `() => import('./Component.svelte')`. Svartz loads lazy references before SSR and hydration. An import without a default component fails with the theme ID and slot.
 
 `components` holds shared theme components and the five content slots: `callout`, `codeBlock`, `image`, `link`, and `embed`. A host app can override those five content slots. Host wins, then theme, then the built-in HTML renderer. Layouts and route pages remain theme-owned. Content components receive typed `ContentComponentProps` from `@svartz/ui/runtime`, including `tag`, `attributes`, `text`, slot-specific fields, and a Svelte 5 `children` snippet. Render `{@render children?.()}` to keep nested links and images overridable. The `codeBlock` slot wraps a whole element: a highlighted `<figure>` arrives as `tag: "figure"` with its contents in `children`, and a bare `<pre>` arrives as `tag: "pre"` with the `<pre>` itself in `children`, so Svelte keeps the code's whitespace. Render `children` inside your wrapper; don't recreate the `<pre>`.
 
@@ -72,7 +96,7 @@ Markdown `.md` and `.mdx` files compile to inert content. Write a `.svx` note wh
 
 Content plugins contribute remark or rehype steps and optional CSS, assets, or browser scripts. Browser script modules export `mount(pathname)` and may return a cleanup function. Svartz calls cleanup on navigation, vault changes, and unmount. Do not attach global listeners at module import time.
 
-Plugins mount actions into two regions a theme renders from `@svartz/ui` (see [[guides/create-plugin#Add actions to every page]]):
+Plugins mount actions into two regions a theme renders from `@svartz/ui` (see [[guides/create-plugin#Add actions to every page|browser actions]]):
 
 - `<PageActions href={entry.markdownHref} />` in every note's header, even when `markdownHref` is unset. It holds Copy page, View as Markdown, and the page-actions region.
 - `<SiteActions />` once on every page, in the rail or site navigation, inside the phone drawer.
@@ -80,7 +104,3 @@ Plugins mount actions into two regions a theme renders from `@svartz/ui` (see [[
 Render each exactly once per page and let Svelte leave them empty: plugins own their children. Both take no space while empty, and base.css styles the links and buttons plugins mount in them like Copy page.
 
 Plugins that work on the note itself, such as annotations, find its body by `data-svartz-note`. Put `data-svartz-note={entry.slug}` on the one element that wraps the rendered note, and leave it off list pages and password-protected notes (`entry.locked`, or a `password_group` property once unlocked). A theme that extends minimal inherits this from minimal's layout, home page included: its `home` page receives the home note's body already marked in `children`, so it renders `children` and adds no marker of its own.
-
-## Best practices
-
-Keep layouts and route pages in the theme. Use content components for the five Markdown slots. Keep custom note logic in `.svx` files. Test both SSR output and navigation when a theme adds browser scripts. Make every page in `runtime.ts` eager: a lazy page that shares modules with eager ones stalls the Vite build (#62).
