@@ -91,8 +91,9 @@ export const resolveLink = (
   if (candidates.length === 1) return candidates[0]!;
 
   // Rank by where files sit, not by URL: a folder note's URL drops its own name, `Guides/Guides.md` at `guides`.
+  const locations = new Map(sources.map((entry) => [entry.slug, entry.path]));
   const located = (slug: string): string => {
-    const path = sources.find((entry) => entry.slug === slug)?.path;
+    const path = locations.get(slug);
     return path ? fileToSlug(path) : slug;
   };
   if (strategy === "closest") {
