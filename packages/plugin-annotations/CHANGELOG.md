@@ -1,5 +1,14 @@
 # @svartz/plugin-annotations
 
+## 2.6.0
+
+### Patch Changes
+
+- Updated dependencies [1ddaf7e]
+- Updated dependencies [ba0f490]
+  - @svartz/auth@2.6.0
+  - @svartz/core@2.6.0
+
 ## 2.5.0
 
 ### Minor Changes
