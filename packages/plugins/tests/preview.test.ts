@@ -148,9 +148,9 @@ describe("renderPreview of a new folder note", () => {
   // The build settles a new note's URL only once it is published: a root `Guides.md` may keep `/guides/`.
   it("shows a link to itself unresolved rather than to the page holding its URL", async () => {
     const root = { slug: "guides", path: "Guides.md", href: "/wiki/guides/", title: "Guides" };
-    const html = await render("[[Guides/Guides]]", { path: "Guides/Guides.md", notes: [...OPTIONS.notes, root] });
-    expect(html).toContain("svartz-unresolved-link");
-    expect(html).not.toContain('href="/docs/wiki/guides/"');
+    const html = await render("[[Guides/Guides]] [Self](Guides.md)", { path: "Guides/Guides.md", notes: [...OPTIONS.notes, root] });
+    expect(html.match(/svartz-unresolved-link/g)).toHaveLength(2);
+    expect(html).not.toContain("href=");
   });
 
   // `Guides/Guides/Guides.md` holds `guides/guides`, the slug of the new note's own path.

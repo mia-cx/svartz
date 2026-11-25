@@ -81,11 +81,8 @@ function prepare(
   const slugMap = buildSlugMap(from.sources);
   const slugs = notes.map((note) => note.slug);
   const hrefs = new Map(notes.map((note) => [note.slug, note.href]));
-  // A link to the new note itself shows unresolved: the build settles its URL only once it is published.
-  const resolve = (link: Pick<PositionedLink, "target" | "type">) => {
-    const slug = resolveLink({ raw: "", ...link }, slugMap, slugs, linkResolution, from.slug, from.sources);
-    return slug === NEW_NOTE ? null : slug;
-  };
+  const resolve = (link: Pick<PositionedLink, "target" | "type">) =>
+    resolveLink({ raw: "", ...link }, slugMap, slugs, linkResolution, from.slug, from.sources);
   const url = (slug: string, section?: string) => {
     const href = `${base}${hrefs.get(slug)}${section ? `#${new GithubSlugger().slug(section)}` : ""}`;
     generated.add(href);
@@ -99,10 +96,13 @@ function prepare(
     const label = escapeHtml(link.label ?? link.target);
     const asset = link.type === "wikilink" ? attachment(link.section ? `${link.target}#${link.section}` : link.target)?.href : undefined;
     const slug = asset === undefined ? resolve(link) : null;
-    const href = asset ?? (slug !== null ? url(slug, link.section) : undefined);
+    // A link to the new note itself, wikilink or Markdown, shows unresolved: the build settles its URL only once it
+    // is published.
+    const self = slug === NEW_NOTE;
+    const href = asset ?? (slug !== null && !self ? url(slug, link.section) : undefined);
     const html = href !== undefined
       ? `<a href="${escapeHtml(href)}">${label}</a>`
-      : link.type === "wikilink"
+      : link.type === "wikilink" || self
       ? `<span class="svartz-unresolved-link" role="link" aria-disabled="true">${label}</span>`
       : undefined;
     return html === undefined ? content : content.slice(0, link.start) + html + content.slice(link.end);
