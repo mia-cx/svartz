@@ -433,7 +433,8 @@ it("builds and serves two isolated vaults inside one existing host", async () =>
   const rebuiltIndex = await readFile(path.join(root, ".svartz/vaults/notes/artifacts/index.ts"), "utf8");
   expect(rebuiltIndex).not.toContain('"slug": "guides/deep", "title": "Deep"');
   expect(rebuiltIndex).not.toContain('"/blog/folders/guides/deep/"');
-}, 180_000);
+  // A host build, a dev server, a production server and a browser: about 40s locally, but over 130s on CI runners.
+}, 300_000);
 
 it("routes server plugins through svartzHandle for every host vault, and fails a host that can't run them", async () => {
   // SvelteKit writes relative imports from the kit dir; macOS's /var symlink would break them.
