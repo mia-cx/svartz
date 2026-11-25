@@ -29,7 +29,16 @@ interface Wrangler {
     env: string | undefined,
     silent: boolean,
     secrets: LocalVarsConfig["secrets"],
-  ): Record<string, { readonly value: unknown }>;
+  ): Record<string, unknown>;
+}
+
+/** The shape `unstable_getVarsForDev` wraps each value in since Wrangler 4.164; earlier releases return it bare. */
+const VAR_BINDING_TYPES = new Set(["plain_text", "json", "secret_text"]);
+
+function varValue(binding: unknown): unknown {
+  const wrapped = typeof binding === "object" && binding !== null && "type" in binding && "value" in binding &&
+    VAR_BINDING_TYPES.has(binding.type as string);
+  return wrapped ? binding.value : binding;
 }
 
 type BindingsSlot = { [DEV_BINDINGS]?: DevBindings };
@@ -47,7 +56,8 @@ async function importWrangler(appRoot: string): Promise<Wrangler> {
 /**
  * Wrangler's platform for the config at `configPath`. Wrangler reads local secrets (`.dev.vars`, `.env`) beside its
  * config, so for a config outside `projectRoot`, such as the one a build generates, its loader runs again from the
- * project, where they live. Copying them beside the config instead would put secrets into the build.
+ * project, where they live. Copying them beside the config instead would put secrets into the build. They load first,
+ * so a failure leaves no proxy running.
  */
 async function startPlatform(
   wrangler: Wrangler,
@@ -56,12 +66,13 @@ async function startPlatform(
   environment: string | undefined,
   persistPath: string,
 ): Promise<PlatformProxy> {
-  const platform = await wrangler.getPlatformProxy({ configPath, environment, persist: { path: persistPath } });
-  if (resolve(configPath, "..") === resolve(projectRoot)) return platform;
+  const start = () => wrangler.getPlatformProxy({ configPath, environment, persist: { path: persistPath } });
+  if (resolve(configPath, "..") === resolve(projectRoot)) return await start();
   const { vars, secrets } = wrangler.unstable_readConfig({ config: configPath, env: environment }, { hideWarnings: true });
   const local = wrangler.unstable_getVarsForDev(join(projectRoot, "wrangler.json"), undefined, vars, environment, true, secrets);
+  const platform = await start();
   return {
-    env: { ...platform.env, ...Object.fromEntries(Object.entries(local).map(([name, binding]) => [name, binding.value])) },
+    env: { ...platform.env, ...Object.fromEntries(Object.entries(local).map(([name, binding]) => [name, varValue(binding)])) },
     dispose: () => platform.dispose(),
   };
 }

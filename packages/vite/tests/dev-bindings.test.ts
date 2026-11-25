@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { serveDevBindings } from "../src/dev-bindings";
 
-type WranglerStub = { calls: Record<string, unknown>[]; failDispose: boolean };
+type WranglerStub = {
+  calls: Record<string, unknown>[];
+  failDispose: boolean;
+  /** What `unstable_getVarsForDev` answers for GREETING, or `undefined` to make it throw. */
+  greeting?: unknown;
+};
 type Slot = { [key: symbol]: (() => Promise<Readonly<Record<string, unknown>>>) | undefined } & { __wranglerStub?: WranglerStub };
 
 const slot = globalThis as Slot;
@@ -23,7 +28,23 @@ async function appWithWranglerStub(): Promise<string> {
     const stub = globalThis.__wranglerStub;
     stub.calls.push(options);
     return { env: { DB: "local" }, dispose: async () => { if (stub.failDispose) throw new Error("dispose failed"); } };
+  }
+  export function unstable_readConfig() {
+    return { vars: { GREETING: "hello" } };
+  }
+  export function unstable_getVarsForDev() {
+    const { greeting } = globalThis.__wranglerStub;
+    if (greeting === undefined) throw new Error("could not read .dev.vars");
+    return { GREETING: greeting };
   }\n`);
+  return dir;
+}
+
+/** A Wrangler config outside the project, as a vault build generates. */
+async function generatedConfigDir(): Promise<string> {
+  const dir = join(root, ".svartz/vaults/site");
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "wrangler.json"), "{}");
   return dir;
 }
 
@@ -56,5 +77,26 @@ describe("dev bindings", () => {
 
     await expect(stop()).rejects.toThrow("dispose failed");
     expect(slot[DEV_BINDINGS]).toBeUndefined();
+  });
+
+  // Wrangler 4.164 wraps each value as `{ type, value }`; earlier 4.x releases return it bare.
+  it.each([
+    ["bare", "hello"],
+    ["wrapped", { type: "plain_text", value: "hello" }],
+  ])("reads a generated config's project variables when Wrangler returns them %s", async (_shape, greeting) => {
+    slot.__wranglerStub!.greeting = greeting;
+    const stop = serveDevBindings(await generatedConfigDir(), root);
+
+    expect(await slot[DEV_BINDINGS]!()).toEqual({ DB: "local", GREETING: "hello" });
+    await stop();
+  });
+
+  it("starts no proxy when the project variables fail to load", async () => {
+    const stop = serveDevBindings(await generatedConfigDir(), root);
+
+    await expect(slot[DEV_BINDINGS]!()).rejects.toThrow("could not read .dev.vars");
+    await expect(slot[DEV_BINDINGS]!()).rejects.toThrow("could not read .dev.vars");
+    expect(slot.__wranglerStub!.calls).toEqual([]);
+    await stop();
   });
 });
