@@ -5,7 +5,7 @@
 
 A note named exactly after its folder is that folder's note, as with Obsidian's folder notes: `Guides/Guides.md` publishes at `/guides/`, names and introduces the `Guides` listing, and can't set `slug`, as `Guides/index.md` and `Guides/_index.md` do. Wikilinks to `[[Guides]]` still find it, and the `closest` and `shallowest` link strategies rank notes by where their files sit, not by their URLs.
 
-A folder can have one kind of folder note: a folder holding both `Guides/index.md` and `Guides/Guides.md` now fails the build, naming both files. Keep one, or rename the other.
+When a folder holds more than one folder note, `index` comes first, then `_index`, then the note named after the folder. The first present takes the folder's URL, title and `order`, and the others take numbered URLs (`/guides-2/`), as in any collision.
 
 A note named after its folder that sets `slug` now fails the build, as other folder notes do: `Guides/Guides.md` with `slug: overview` used to publish at `/guides/overview/`. Before upgrading, remove its `slug`. If the old URL must keep working, add it as an alias: `aliases: [guides/overview]`.
 

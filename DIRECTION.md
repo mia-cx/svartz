@@ -50,7 +50,7 @@ Svartz publishes Obsidian vaults as SvelteKit sites, in the spirit of Quartz: on
 - In a composed site, one shell styles every page; a page's theme renders its body and right column, never the whole chrome, so navigation never jumps.
 - Themes may swap any region, the explorer included; swapped regions receive minimal's shell state so behaviour stays inherited.
 - List pages belong to the first theme; a folder note's `theme:` picks its folder's list page.
-- Conflicts fail the build with the page path rather than choosing silently.
+- Conflicts fail the build with the page path rather than choosing silently. Notes that want the same URL are the exception: a fixed order settles them, and the others take numbered URLs. Within one folder, `index` comes first, then `_index`, then the note named after the folder (Mia, November 2026).
 - The config file format keeps its own major (`CONFIG_FORMAT_MAJOR`), separate from the package major, so a package major never breaks existing configs.
 - Reference pages show only what the frontmatter states: a page without `operation` stays a guide, and no method is inferred from a title.
 - The submissions editor keeps one CodeMirror document for every mode; Rich text is not ProseMirror or Milkdown, because those rebuild Markdown on save and rewrite what they don't model (November 2026).

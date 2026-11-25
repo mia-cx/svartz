@@ -99,6 +99,30 @@ it("names the index file that kept the folder's URL as the folder note", () => {
   }
 });
 
+it("names the strongest folder note when a root note holds the folder's URL: _index before the folder's namesake", () => {
+  const files = [
+    { path: "guides.md", slug: "guides", extension: ".md", content: "# Root", frontmatter: { title: "Root guide" } },
+    { path: "Guides/Guides.md", slug: "guides", extension: ".md", content: "# Named", frontmatter: { title: "Named" } },
+    { path: "Guides/_index.md", slug: "guides", extension: ".md", content: "# Underscore", frontmatter: { title: "Underscore" } },
+  ];
+  allocateRoutes(files, new Set());
+  for (const ordered of [files, [...files].reverse()]) {
+    const ctx = {
+      config: {
+        id: "blog", mountPath: "/blog", theme: { base: "minimal" },
+        frontmatter: { titleField: "title", tagsField: "tags", aliasesField: "aliases", descriptionField: "description", createdAtField: "created_at", updatedAtField: "updated_at", publishedField: "published_at" },
+        discovery: { dateSources: ["filesystem"] },
+      } as ResolvedConfig,
+      files: ordered,
+      meta: new Map(),
+    } as unknown as PluginContext;
+    indexContent().indexContent!.run(ctx);
+    const folder = ctx.index!.folders.find((item) => item.slug === "guides")!;
+    expect(folder.noteSlug).toBe(files.find((file) => file.path === "Guides/_index.md")!.slug);
+    expect(folder.title).toBe("Underscore");
+  }
+});
+
 it("deduplicates frontmatter and inline tags without splitting case variants", () => {
   const ctx = {
     config: {

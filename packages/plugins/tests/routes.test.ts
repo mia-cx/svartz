@@ -100,10 +100,14 @@ describe("canonical route allocation", () => {
     expect(() => allocateRoutes(files, new Set(["guides/set-up"]))).toThrow(/Conflicting slug/);
   });
 
-  it.each(["index.md", "_index.md"])("fails when %s and a note named after the folder both introduce it", (filename) => {
-    expect(() => allocateRoutes([note("Guides/Guides.md"), note(`Guides/${filename}`)])).toThrow(
-      `Guides/${filename} and Guides/Guides.md both introduce their folder. Keep one, or rename Guides/Guides.md.`,
-    );
+  it.each([false, true])("gives a folder's URL to index, then _index, then its namesake, numbering the rest (reversed: %s)", (reverse) => {
+    const files = [note("Guides/index.md"), note("Guides/_index.md"), note("Guides/Guides.md")];
+    allocateRoutes(reverse ? [...files].reverse() : files);
+    expect(files.map((file) => file.slug)).toEqual(["guides", "guides-2", "guides-3"]);
+
+    const rest = [note("Guides/_index.md"), note("Guides/Guides.md")];
+    allocateRoutes(reverse ? [...rest].reverse() : rest);
+    expect(rest.map((file) => file.slug)).toEqual(["guides", "guides-2"]);
   });
 
   it("settles folder notes of different folders that share a URL like any other clash", () => {

@@ -1,5 +1,5 @@
 import type { ProcessedFile } from "@svartz/core";
-import { fileToSlug, isFolderNote, normalizeSlugSegment } from "./slug";
+import { fileToSlug, folderNoteRank, isFolderNote, normalizeSlugSegment } from "./slug";
 
 const NOTE_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
 
@@ -67,28 +67,10 @@ function exactName(file: ProcessedFile, slug: string): boolean {
   return sourceStem === slug;
 }
 
-/** An `index` or `_index` note, as opposed to a folder note named after its folder. */
-const INDEX_NOTE = /(?:^|[\\/])_?index\.[^\\/.]+$/i;
-
-/** A file's folder, as written: `Guides/Guides.md` → `Guides`. */
-const folderOf = (path: string): string => path.replaceAll("\\", "/").replace(/\/?[^/]*$/, "");
-
 /**
- * Fail when one folder has both kinds of folder note, `Guides/index.md` and `Guides/Guides.md`: both would introduce
- * `guides/`, and no URL for the other could be predicted from its path alone. Folder notes of different folders that
- * normalize to one URL (`Field Guides/`, `Field-Guides/`) settle like any other clash.
+ * Assign canonical slugs before links, giving explicit slugs priority over filenames. Among folder notes that want one
+ * URL, `index` beats `_index` beats a note named after its folder ({@link folderNoteRank}); the rest are numbered.
  */
-function rejectRivalFolderNotes(group: readonly ProcessedFile[]): void {
-  for (const index of group.filter((file) => INDEX_NOTE.test(file.path))) {
-    const named = group.find((file) =>
-      isFolderNote(file.path) && !INDEX_NOTE.test(file.path) && folderOf(file.path) === folderOf(index.path));
-    if (named) {
-      throw new Error(`${index.path} and ${named.path} both introduce their folder. Keep one, or rename ${named.path}.`);
-    }
-  }
-}
-
-/** Assign canonical slugs before links, giving explicit slugs priority over filenames. */
 export function allocateRoutes(
   files: readonly ProcessedFile[],
   reservedPaths: ReadonlySet<string> = new Set(),
@@ -110,8 +92,6 @@ export function allocateRoutes(
     groups.set(slug, group);
   }
 
-  for (const group of groups.values()) rejectRivalFolderNotes(group);
-
   const claimedSlugs = new Set(groups.keys());
   const allocated = new Set<string>();
   const losers: { file: ProcessedFile; slug: string }[] = [];
@@ -122,6 +102,7 @@ export function allocateRoutes(
     const group = groups.get(slug)!.sort((left, right) =>
       Number(right === explicit) - Number(left === explicit) ||
       Number(exactName(right, slug)) - Number(exactName(left, slug)) ||
+      folderNoteRank(left.path) - folderNoteRank(right.path) ||
       left.path.localeCompare(right.path),
     );
     if (reserved.has(slug === "index" ? "" : slug)) {
@@ -136,6 +117,7 @@ export function allocateRoutes(
   for (const { file, slug } of losers.sort((left, right) =>
     left.slug.localeCompare(right.slug) ||
     Number(right.file === explicitClaims.get(right.slug)) - Number(left.file === explicitClaims.get(left.slug)) ||
+    folderNoteRank(left.file.path) - folderNoteRank(right.file.path) ||
     left.file.path.localeCompare(right.file.path),
   )) {
     for (let suffix = 2; ; suffix++) {

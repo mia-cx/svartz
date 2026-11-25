@@ -24,7 +24,7 @@ import type {
 import { countWords, extractDescription, stripMarkdownToText } from "./internal/parse";
 import { normalizeDateTime, publicationOverride } from "./internal/datetime";
 import { allocateRedirects, alternateNames, markdownHref, routeHref } from "./internal/routes";
-import { isFolderNote, normalizeSlugSegment } from "./internal/slug";
+import { folderNoteRank, isFolderNote, normalizeSlugSegment } from "./internal/slug";
 import { portableMarkdown } from "./internal/agent-markdown";
 import { createAssetResolver } from "./internal/asset-references";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
@@ -146,7 +146,7 @@ export const indexContent = definePlugin(() => ({
       const search: SearchDocument[] = [];
       const tagCounts = new Map<string, number>();
       const folderMembers = new Map<string, string[]>();
-      const folderNotes = new Map<string, { slug: string; title?: string }>();
+      const folderNotes = new Map<string, { slug: string; rank: number; title?: string }>();
       const noteRouteSet = new Set<string>();
       const publicAssetPaths = ctx.meta.get("svartz:publicAssetPaths") as ReadonlySet<string> | undefined;
       const assetRecords = ctx.files
@@ -297,11 +297,14 @@ export const indexContent = definePlugin(() => ({
             members.push(file.slug);
             folderMembers.set(folderSlug, members);
           }
-          // A folder note names its folder. When two (`index.md`, `index.mdx`) share
-          // one, the one that kept the folder's URL wins.
+          // A folder note names its folder. When several share one, the one that kept the folder's URL wins; when
+          // another note holds that URL, the strongest by `folderNoteRank` does.
           const own = folderSlugs.at(-1);
-          if (own && isFolderNote(file.path) && (file.slug === own || !folderNotes.has(own))) {
-            folderNotes.set(own, { slug: file.slug, title: typeof fmTitle === "string" && fmTitle.length > 0 ? fmTitle : undefined });
+          const rank = folderNoteRank(file.path);
+          const current = own ? folderNotes.get(own) : undefined;
+          if (own && isFolderNote(file.path) &&
+            (!current || file.slug === own || (current.slug !== own && rank < current.rank))) {
+            folderNotes.set(own, { slug: file.slug, rank, title: typeof fmTitle === "string" && fmTitle.length > 0 ? fmTitle : undefined });
           }
         }
 
