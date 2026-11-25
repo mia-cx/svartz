@@ -7,11 +7,12 @@ Shared plugin and theme contracts, resolved vault types, route matching, publica
 `definePlugin(factory)` validates and normalizes a `SvartzPlugin`. `createCorePlugins()` lives in `@svartz/plugins`; configured plugins can replace or disable its defaults by ID. Hooks run in the order in `STAGE_NAMES`, with `pre`, default, and `post` tiers inside each stage. The main transform hooks are `transformOfm`, `transformGfm`, `transformToc`, `transformDescription`, `transformSyntax`, `transformLatex`, and `transformEmbeds`. `emitArtifacts` is the final output hook. `handleChange` receives vault file events in dev mode.
 
 ```ts
-import { CONTRACT_VERSION, definePlugin } from '@svartz/core';
+import { definePlugin } from '@svartz/core';
 
 export const upperCase = definePlugin(() => ({
   id: 'example:uppercase',
-  contractVersion: CONTRACT_VERSION,
+  // The contract this release was written for, as a literal: the core a host resolves may be newer.
+  contractVersion: '1.0.0',
   transformDescription(ctx) {
     for (const file of ctx.files) file.content = file.content.toUpperCase();
   }
@@ -29,13 +30,14 @@ The runner receives one `ResolvedConfig` per vault. `ProcessedFile` carries the 
 `defineTheme(manifest | factory)` validates an `SvartzTheme`. A theme supplies layouts, route definitions, optional component slots, and optional plugin presets. `ThemeComponentLoader` accepts an eager Svelte module or a lazy import function. The runtime awaits lazy entries before server rendering and hydration. See [`@svartz/ui`](../ui/README.md) for the SvelteKit route handoff.
 
 ```ts
-import { CONTRACT_VERSION, defineTheme } from '@svartz/core';
+import { defineTheme } from '@svartz/core';
 import SiteLayout from './SiteLayout.svelte';
 
 export default defineTheme({
   id: 'example:theme',
   version: '1.0.0',
-  contractVersion: CONTRACT_VERSION,
+  // The contract this release was written for, as a literal: the core a host resolves may be newer.
+  contractVersion: '1.0.0',
   layouts: {
     defaultPage: { default: SiteLayout },
     notePage: { default: SiteLayout }
