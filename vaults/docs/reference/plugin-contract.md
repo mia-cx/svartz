@@ -3,7 +3,7 @@ title: "Plugin contract"
 description: "Look up plugin fields, pipeline stages, and compiler contributions."
 ---
 
-A `SvartzPlugin` has a unique `id`. The runner checks an optional `contractVersion` against the major supported by `@svartz/core` (currently 1). Use `definePlugin(factory)` to type a plugin factory.
+A `SvartzPlugin` has a unique `id` and an optional `contractVersion` string. Use `definePlugin(factory)` to type a plugin factory.
 
 | Optional field | Use |
 | --- | --- |
@@ -11,8 +11,8 @@ A `SvartzPlugin` has a unique `id`. The runner checks an optional `contractVersi
 | `forVault({ vault, vaults })` | Resolve the plugin once per vault after all vaults resolve. Return the plugin for that vault; throw to fail config resolution. |
 | `options` | Plain data that affects build output, used to invalidate compiled Git versions. |
 | `reads` | Build input paths, relative to the vault or absolute, included in Git version cache checks. |
-| `server` | `{ module, options?, eager?, pages? }` for [[plugins/server-plugins]]. |
-| `permissions` | Declarations collected by [[plugins/auth]]: `slug`, `name`, `description`, optional `defaults` and `administrative`. |
+| `server` | `{ module, options?, eager?, pages? }` for [[plugins/server-plugins|server plugins]]. |
+| `permissions` | Declarations collected by [[plugins/auth|auth]]: `slug`, `name`, `description`, optional `defaults` and `administrative`. |
 
 Permission slugs are `<plugin>:<feature>:<action>`, with `read`, `write`, or `delete` as the action. Defaults map `guest` and `signed-in` to `allow` or `deny`. Administrative permissions cannot come from ownership. A declaration does not enforce access; the handler checks it via `can()`.
 

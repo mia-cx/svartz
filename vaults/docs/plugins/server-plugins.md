@@ -7,14 +7,27 @@ Use a `node`, `cloudflare-workers`, or `cloudflare-pages` target, or a [[guides/
 
 ## Answer a request
 
-Register the module on the vault's plugin. The module path is absolute, a `file:` URL, or a package specifier.
+Register the module on the vault's plugin in `svartz.config.ts`. The module path is absolute, a `file:` URL, or a package specifier.
 
 ```ts
-// Add to the vault's plugins array in svartz.config.ts
-{
-  id: "hello",
-  server: { module: new URL("./server/hello.ts", import.meta.url).href },
-},
+import { defineConfig } from "@svartz/config";
+
+export default defineConfig({
+  version: "1.0.0",
+  vaults: [
+    {
+      id: "notes",
+      path: "vault",
+      target: { type: "node" },
+      plugins: [
+        {
+          id: "hello",
+          server: { module: new URL("./server/hello.ts", import.meta.url).href },
+        },
+      ],
+    },
+  ],
+});
 ```
 
 ```ts
@@ -47,7 +60,7 @@ Pass plain JSON in `server.options`. Refer to secrets as `{ env: "PRIVATE_HELLO_
 | `base` | Answering plugin's route prefix, without a trailing slash |
 | `waitUntil(promise)` | Continue work after sending the response |
 | `dashboard()` | Registered panels; does not check permission |
-| `path` | On a page or panel: the path relative to its root |
+| `path` | Path relative to the page or panel root |
 
 In dev, Workers use the target's Wrangler bindings. Pages and Cloudflare hosts read `wrangler.json`, `wrangler.jsonc`, or `wrangler.toml` beside the config. Put local secrets in `.dev.vars` there. `CLOUDFLARE_ENV` selects named Wrangler bindings and `.dev.vars.<name>` when present. Data in local Wrangler state survives restarts. See [[reference/wrangler|Wrangler settings]].
 

@@ -3,16 +3,28 @@ title: "API docs"
 description: "Document REST, GraphQL, and WebSocket APIs from note metadata."
 ---
 
-Try the [Harbour Shelter API demo](https://api.demo.svartz.mia.cx). Install `@svartz/theme-api-docs` and set:
+Try the [Harbour Shelter API demo](https://api.demo.svartz.mia.cx). Install `@svartz/theme-api-docs` and configure `svartz.config.ts`:
 
 ```ts
-theme: {
-  base: "@svartz/theme-api-docs",
-  baseUrl: "https://api.example.com/v2",
-  graphqlEndpoint: "https://api.example.com/graphql",
-  version: "v2",
-  routes: { folders: "reference" },
-},
+import { defineConfig } from "@svartz/config";
+
+export default defineConfig({
+  version: "1.0.0",
+  vaults: [
+    {
+      id: "api",
+      path: "vault",
+      target: { type: "static" },
+      theme: {
+        base: "@svartz/theme-api-docs",
+        baseUrl: "https://api.example.com/v2",
+        graphqlEndpoint: "https://api.example.com/graphql",
+        version: "v2",
+        routes: { folders: "reference" },
+      },
+    },
+  ],
+});
 ```
 
 `baseUrl` defaults to `https://api.example.com`. `graphqlEndpoint` defaults to `<baseUrl>/graphql`. Both are strings. Optional `version` and `nav` add a badge and header links. The theme builds on [[themes/minimal|minimal's explorer and list routes]].

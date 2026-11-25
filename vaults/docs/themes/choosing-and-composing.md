@@ -5,13 +5,25 @@ description: "Select a theme per vault, or use several renderers on one site."
 
 Install the theme package with npm. Set the vault's `theme` to its package name or an object with `base` and its settings. When you omit `theme`, Svartz uses [[themes/minimal|minimal]]. The package can also be a project-relative theme path.
 
-To put HTTP and MCP reference in one vault, install both packages and set:
+To put HTTP and MCP reference in one vault, try the [Harbour developer docs demo](https://reference.demo.svartz.mia.cx). Install both packages and configure `svartz.config.ts`:
 
 ```ts
-theme: {
-  base: ["@svartz/theme-api-docs", "@svartz/theme-mcp-docs"],
-  baseUrl: "https://api.example.com",
-},
+import { defineConfig } from "@svartz/config";
+
+export default defineConfig({
+  version: "1.0.0",
+  vaults: [
+    {
+      id: "reference",
+      path: "vault",
+      target: { type: "static" },
+      theme: {
+        base: ["@svartz/theme-api-docs", "@svartz/theme-mcp-docs"],
+        baseUrl: "https://api.example.com",
+      },
+    },
+  ],
+});
 ```
 
 The first theme supplies the site style and default renderer. The other settings go to every theme in the array. A note picks its theme in this order:

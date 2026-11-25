@@ -17,15 +17,26 @@ Set `target: { type: "node" }`. Run `node .svartz/vaults/notes/dist/index.js` to
 
 ## Cloudflare Workers
 
-Give each vault its own Worker name and route:
+Give each vault its own Worker name and route in `svartz.config.ts`:
 
 ```ts
-target: {
-  type: "cloudflare-workers",
-  name: "garden-notes",
-  routes: [{ pattern: "notes.example.com", custom_domain: true }],
-},
-site: { url: "https://notes.example.com" },
+import { defineConfig } from "@svartz/config";
+
+export default defineConfig({
+  version: "1.0.0",
+  vaults: [
+    {
+      id: "notes",
+      path: "vault",
+      site: { url: "https://notes.example.com" },
+      target: {
+        type: "cloudflare-workers",
+        name: "garden-notes",
+        routes: [{ pattern: "notes.example.com", custom_domain: true }],
+      },
+    },
+  ],
+});
 ```
 
 After building, deploy with the Wrangler file for that vault:

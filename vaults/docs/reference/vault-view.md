@@ -34,7 +34,7 @@ export const load: PageServerLoad = ({ url }) => {
 
 ## Index-only hosts
 
-`virtual:svartz/index` exports `vaults` as records with `id`, `mountPath`, `basePath`, `index`, and `siteConfig`. It has no page-runtime or theme import. The index entry's `href` already includes the mount but not `basePath`. When [[reference/configuration|index.markdown]] is enabled, you can link copies through `entry.markdownHref`. Check that it exists before linking.
+`virtual:svartz/index` exports `vaults` as records with `id`, `mountPath`, `basePath`, `index`, and `siteConfig`. It has no page-runtime or theme import. The index entry's `href` already includes the mount but not `basePath`. When `discovery.llms.enabled` is on (the default), each public, unprotected note exposes `entry.markdownHref` pointing to its emitted `.md` copy. Set `index: { markdown: true }` on the vault to also include each public note's portable Markdown body as `entry.markdown` directly on the index entry.
 
 ```svelte
 <script lang="ts">

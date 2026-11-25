@@ -6,14 +6,26 @@ description: "Set Worker names, routes, assets, environments, and bindings per v
 A `cloudflare-workers` target is that vault's Wrangler config. Apart from `type` and the build-owned fields below, settings pass through into `.svartz/vaults/<id>/wrangler.json` in the default layout. Svartz types common keys and Wrangler validates the result, including newer keys Svartz doesn't type yet.
 
 ```ts
-target: {
-  type: "cloudflare-workers",
-  name: "garden-notes",
-  workers_dev: false,
-  routes: [{ pattern: "notes.example.com", custom_domain: true }],
-  vars: { SITE_LABEL: "Garden notes" },
-  d1_databases: [{ binding: "SVARTZ_DB", database_name: "garden-notes", database_id: "<id>" }],
-},
+import { defineConfig } from "@svartz/config";
+
+export default defineConfig({
+  version: "1.0.0",
+  vaults: [
+    {
+      id: "notes",
+      path: "vault",
+      site: { url: "https://notes.example.com" },
+      target: {
+        type: "cloudflare-workers",
+        name: "garden-notes",
+        workers_dev: false,
+        routes: [{ pattern: "notes.example.com", custom_domain: true }],
+        vars: { SITE_LABEL: "Garden notes" },
+        d1_databases: [{ binding: "SVARTZ_DB", database_name: "garden-notes", database_id: "<id>" }],
+      },
+    },
+  ],
+});
 ```
 
 ## Routes and environments
@@ -54,4 +66,4 @@ npx wrangler deploy --config .svartz/vaults/notes/wrangler.json
 npx wrangler secret put PRIVATE_EXAMPLE_TOKEN --config .svartz/vaults/notes/wrangler.json
 ```
 
-Use the same generated config and `--env` for a named environment. Do not commit secrets to `vars`. For `svartz dev`, put `.dev.vars` next to `svartz.config.ts`; set `CLOUDFLARE_ENV` for a named environment. Add bindings to the target for Workers, or the project's Wrangler file for Pages and Cloudflare hosts. See [[plugins/server-plugins|Server plugins]] for local bindings and [[start/deploying|Deploy your site]] for Pages.
+Use the same generated config and `--env` for a named environment. Do not commit secrets to `vars`. For `svartz dev`, put `.dev.vars` next to `svartz.config.ts`; set `CLOUDFLARE_ENV` for a named environment. Add bindings to the target for Workers, or the project's Wrangler file for Pages and Cloudflare hosts. See [[plugins/server-plugins|Server plugins]] for local bindings and [[start/deploying|Deploy a vault]] for Pages.

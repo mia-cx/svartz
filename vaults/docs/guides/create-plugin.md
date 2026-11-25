@@ -36,4 +36,4 @@ First-party themes expose `[data-svartz-region="page-actions"]` in note headers 
 
 The note body has `data-svartz-note` with the note slug. In a custom host rendering more than one `SvartzNoteContent`, use the `context.note` element when supplied. Append UI after the body rather than replacing its DOM. To render HTML with the active theme's content components, use `context.mountContent?.(element)`, call `render(html)`, and call `destroy()` in cleanup. Set the `sv-prose` class on the container for prose styles.
 
-Test a hook with `runStages` and a focused `PluginContext`. For compiler changes, also check the resulting artifact: `.md` and `.mdx` keep authored Svelte inert, while `.svx` may execute it. See the [[reference/plugin-contract|contract]] for hook ordering or [[plugins/server-plugins|Server plugins]] for requests and pages.
+Test a hook with `runStages` and a focused `PluginContext`. For compiler changes, check the resulting artifact so `.md` and `.mdx` keep authored Svelte inert while `.svx` executes it. See the [[reference/plugin-contract|plugin contract]] for hook ordering or [[plugins/server-plugins|Server plugins]] for requests and pages.

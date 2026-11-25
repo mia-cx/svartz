@@ -15,7 +15,7 @@ Direct matches take precedence over the fallback. Use full vault paths when two 
 
 ## Give a page a URL
 
-Svartz normalizes folder and file names into URL segments. For example, `Guides/Setup Notes.md` usually lives at `/guides/setup-notes/`. Add `slug: setup` for `/guides/setup/`. The slug must be a nonempty segment. It cannot contain slashes, normalize to `index`, or consist only of dots. Folder notes cannot set it.
+Svartz normalizes folder and file names into URL segments. For example, `Guides/Setup Notes.md` publishes at `/guides/setup-notes/`. Add `slug: setup` for `/guides/setup/`. The slug must be a nonempty segment. It cannot contain slashes, normalize to `index`, or consist only of dots. Folder notes cannot set it.
 
 Two explicit slugs that claim the same URL fail the build. Filename collisions receive numeric suffixes, with an exact filename winning over one that normalizes to the same path. A host's authored static route has priority, even over an explicit slug.
 
@@ -23,6 +23,6 @@ Use `aliases`, `alias`, or `permalink` to keep an old address as a redirect. Red
 
 ## Give a folder a landing page
 
-Use `Guides/index.md`, `Guides/_index.md`, or `Guides/Guides.md`. Use one folder note per folder; competing folder notes fail the build. The folder note lives at `/guides/`. The default folder listing is a separate page at `/folders/guides/`.
+Create `Guides/index.md`, `Guides/_index.md`, or `Guides/Guides.md` (matching the folder name case-sensitively). Use one folder note per folder. Mixing `index.md` or `_index.md` with a same-named note such as `Guides/Guides.md` fails the build. The folder note lives at `/guides/`. The default folder listing is a separate page at `/folders/guides/`.
 
 A [[guides/host-vaults|host mount]] prefixes vault routes. A [[start/deploying|deployment base]] applies to the whole app and is separate.

@@ -3,12 +3,45 @@ title: "Annotations"
 description: "Let readers comment on a selected passage."
 ---
 
-Run `npm install -D @svartz/plugin-annotations @svartz/auth`. Import `annotations` from `@svartz/plugin-annotations` and add `annotations({ database: { env: "SVARTZ_DB" } })` to the vault's `plugins` next to [[plugins/auth|auth]]. Use Workers, Pages, or a Cloudflare SvelteKit host; the plugin needs D1. It creates its tables on first use.
+Run `npm install -D @svartz/plugin-annotations @svartz/auth` and add `annotations()` alongside [[plugins/auth|auth]] in `svartz.config.ts`:
+
+```ts
+import { defineConfig } from "@svartz/config";
+import { auth } from "@svartz/auth";
+import { annotations } from "@svartz/plugin-annotations";
+
+export default defineConfig({
+  version: "1.0.0",
+  vaults: [
+    {
+      id: "notes",
+      path: "vault",
+      target: {
+        type: "cloudflare-workers",
+        d1_databases: [{ binding: "SVARTZ_DB", database_name: "notes", database_id: "<id>" }],
+      },
+      plugins: [
+        auth({
+          providers: {
+            github: {
+              clientId: "Iv23liExample",
+              clientSecret: { env: "PRIVATE_GITHUB_CLIENT_SECRET" },
+            },
+          },
+        }),
+        annotations({ database: { env: "SVARTZ_DB" } }),
+      ],
+    },
+  ],
+});
+```
+
+Use Workers, Pages, or a Cloudflare SvelteKit host; the plugin needs D1 and creates its tables on first use.
 
 | Option | Type | Default |
 | --- | --- | --- |
 | `database` | `{ env: string }`, naming a D1 binding | Required |
-| `reactions` | List of `{ id: string; label: string; src: string }` | Empty |
+| `reactions` | List of `{ id: string; label: string; src: string }`; accepted in config, while runtime currently supports comments and `+1` agreements | Empty |
 | `moderators` | List of identity IDs; prefer a permission grant | Empty |
 | `limits.writesPerHour` | Positive integer | 30 per reader per clock hour |
 

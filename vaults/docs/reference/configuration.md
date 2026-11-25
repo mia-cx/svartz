@@ -3,7 +3,7 @@ title: "Configuration reference"
 description: "Look up every root and vault setting, its default, and how it merges."
 ---
 
-Export the result of `defineConfig()` from `@svartz/config`. The CLI looks for `svartz.config.ts`, `svartz.config.mjs`, or `svartz.config.js`. Use ESM for `.js` (the nearest `package.json` has `"type": "module"`). Use `--config <path>` to select a file. Relative vault, output, favicon, and local theme paths resolve from that file's directory.
+Export the result of `defineConfig()` from `@svartz/config`. The CLI looks for `svartz.config.ts`, `svartz.config.mjs`, `svartz.config.js`, `.svartzrc.ts`, `.svartzrc.mjs`, or `.svartzrc.js`. Use ESM for `.js` (the nearest `package.json` has `"type": "module"`). Use `--config <path>` or `SVARTZ_CONFIG` to select a file or directory. Relative vault, output, favicon, and local theme paths resolve from the config file's directory.
 
 ## Root
 
@@ -15,7 +15,7 @@ Export the result of `defineConfig()` from `@svartz/config`. The CLI looks for `
 | `defaults` | Optional object of the vault options below. It does not set `id`, `path`, or `target`. |
 | `build.concurrency` | Number, default 10. |
 | `build.maxRetries` | Number, default 3. |
-| `passwordGroups` | Map of group names to `{ env: string }`; group names use letters, digits, `_`, or `-`. The values live in the build environment. See [[writing/encrypted-notes]]. |
+| `passwordGroups` | Map of group names to `{ env: string }`; group names use letters, digits, `_`, or `-`. The values live in the build environment. See [[writing/encrypted-notes|Encrypted notes]]. |
 
 ## Vault options
 
@@ -30,8 +30,8 @@ Export the result of `defineConfig()` from `@svartz/config`. The CLI looks for `
 | `frontmatter` | Object of field names; see below. |
 | `site` | Public site details; see below. |
 | `discovery` | Feed, sitemap, social images, Markdown, favicon, and date source options; see below. |
-| `index.markdown` | Boolean, default `false`. Include note Markdown in the published index. |
-| `analytics` | Provider settings; default off. A vault setting replaces the default object. See [[plugins/analytics]]. |
+| `index.markdown` | Boolean, default `false`. Include each public note's portable Markdown body as `entry.markdown` in the published index. |
+| `analytics` | Provider settings; default off. A vault setting replaces the default object. See [[plugins/analytics|Analytics]]. |
 | `plugins` | List of plugin objects; default empty. Merge by ID. Add `{ id, disabled: true }` to remove a matching plugin. |
 | `outDir` | Output path string, default `.svartz/vaults/<id>/dist`. Separate vault outputs cannot overlap. |
 
@@ -43,28 +43,30 @@ A vault's scalar settings take precedence over `defaults`. Svartz shallow-merges
 | --- | --- |
 | `static` | `basePath?: string`; default root. |
 | `node` | `basePath?: string`; default root. |
-| `cloudflare-workers` | [[reference/wrangler]] inline; build owns the entry and asset directory. |
+| `cloudflare-workers` | [[reference/wrangler|Wrangler fields]] inline; build owns the entry and asset directory. |
 | `cloudflare-pages` | `projectName?: string`. Name an existing Pages project when deploying. |
 | `host` | None. Use the app's adapter and deployment base. |
 
-See [[start/deploying|Deploy your site]] for output locations and commands.
+See [[start/deploying|Deploy a vault]] for output locations and commands.
 
 ## Theme
 
 The shorthand `theme: "@svartz/theme-wiki"` sets `base`. In object form, `base` is a string or a nonempty list of strings, with the first selecting the composed site's frame and styles. Other settings pass through to the selected theme. See [[themes|Themes]] for their options and [[themes/choosing-and-composing|composition]] for renderer routing.
 
-Shared `recentNotes` fields are `enabled?: boolean`, `limit?: positive integer`, `showTags?: boolean`, and `linkToMore?: string`. Themes choose whether and where to show the list. Themes also accept record-shaped Tailwind theme scales such as `colors` and `fontFamily` where supported. See the [scale keys](https://github.com/mia-cx/svartz/blob/sveltekit-rewrite/packages/core/src/tailwind/schema.ts).
+The schema also accepts `recentNotes` (`enabled?: boolean`, `limit?: positive integer`, `showTags?: boolean`, `linkToMore?: string`) and record-shaped Tailwind [scale keys](https://github.com/mia-cx/svartz/blob/sveltekit-rewrite/packages/core/src/tailwind/schema.ts) such as `colors` and `fontFamily` for custom themes that read them. First-party themes style through `tokens` and do not read `recentNotes` or Tailwind scale keys.
 
 `theme.comments` enables the Giscus integration. Supply strings `repo`, `repoId`, `category`, and `categoryId` from [Giscus](https://giscus.app/). The repository needs GitHub Discussions and the Giscus app.
 
-| Optional key | Type |
-| --- | --- |
-| `enabled` | Boolean |
-| `mapping` | `"url"`, `"title"`, `"og:title"`, `"specific"`, `"number"`, or `"pathname"` |
-| `term` | Nonempty string, required for `"specific"` or `"number"` |
-| `strict`, `reactionsEnabled` | Booleans |
-| `inputPosition` | `"top"` or `"bottom"` |
-| `lang`, `lightTheme`, `darkTheme` | Strings |
+| Optional key | Type | Default |
+| --- | --- | --- |
+| `enabled` | Boolean | `true` |
+| `mapping` | `"url"`, `"title"`, `"og:title"`, `"specific"`, `"number"`, or `"pathname"` | `"pathname"` |
+| `term` | Nonempty string, required for `"specific"` or `"number"` | Unset |
+| `strict` | Boolean | `false` |
+| `reactionsEnabled` | Boolean | `true` |
+| `inputPosition` | `"top"` or `"bottom"` | `"bottom"` |
+| `lang` | String | `"en"` |
+| `lightTheme`, `darkTheme` | Strings | `"light"`, `"dark"` |
 
 Use [[writing/frontmatter|frontmatter]] to control comments on a note.
 

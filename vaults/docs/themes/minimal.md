@@ -3,10 +3,22 @@ title: "Minimal"
 description: "Publish a browsable Obsidian vault with search, backlinks, and a graph."
 ---
 
-Try the [Backyard Weather Station demo](https://minimal.demo.svartz.mia.cx). Minimal is Svartz's default. To select it explicitly, set:
+Try the [Backyard Weather Station demo](https://minimal.demo.svartz.mia.cx). Minimal is Svartz's default. To configure it explicitly in `svartz.config.ts`:
 
 ```ts
-theme: { base: "@svartz/theme-minimal", routes: { feed: "updates" } },
+import { defineConfig } from "@svartz/config";
+
+export default defineConfig({
+  version: "1.0.0",
+  vaults: [
+    {
+      id: "notes",
+      path: "vault",
+      target: { type: "static" },
+      theme: { base: "@svartz/theme-minimal", routes: { feed: "updates" } },
+    },
+  ],
+});
 ```
 
 The shell puts search and folders on the left, the note in the middle, and the graph, contents, and backlinks on the right. It renders home and note pages, tags, folders, a chronological feed, and a 404. Search opens with Ctrl+K or Command+K. On a narrow screen the explorer moves into a drawer.
@@ -17,7 +29,7 @@ The shell puts search and folders on the left, the note in the middle, and the g
 | `tokens` | Map of design token names to values; theme defaults apply when absent. |
 | `logo` | `{ src: string; dark?: string; alt?: string }`; no logo by default. |
 | `footer.links` | Map of labels to URLs; no extra links by default. |
-| `comments` | Giscus settings; off unless configured. See [[reference/configuration]]. |
+| `comments` | Giscus settings; off unless configured. See the [[reference/configuration|configuration reference]]. |
 
 In frontmatter, use a number for `order` to place a note before unordered notes in the explorer. Lower comes first. A folder uses its folder note's order. Use `comments: false` to hide Giscus for a note. Other [[writing/frontmatter|standard fields]] work without theme-specific metadata.
 

@@ -3,7 +3,26 @@ title: "Roam Markdown"
 description: "Render common Roam Research syntax in a vault."
 ---
 
-Run `npm install -D @svartz/plugins`, import `roamFlavoredMarkdown` from `@svartz/plugins`, and add `plugins: [roamFlavoredMarkdown()]` to the vault. Nothing goes in frontmatter.
+Run `npm install -D @svartz/plugins` and add `roamFlavoredMarkdown()` in `svartz.config.ts`:
+
+```ts
+import { defineConfig } from "@svartz/config";
+import { roamFlavoredMarkdown } from "@svartz/plugins";
+
+export default defineConfig({
+  version: "1.0.0",
+  vaults: [
+    {
+      id: "notes",
+      path: "vault",
+      target: { type: "static" },
+      plugins: [roamFlavoredMarkdown()],
+    },
+  ],
+});
+```
+
+Nothing goes in frontmatter.
 
 All options are optional booleans and default to `true`:
 

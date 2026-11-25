@@ -3,7 +3,26 @@ title: "Submissions"
 description: "Let readers propose edits or publish directly to a GitHub repository."
 ---
 
-Run `npm install -D @svartz/plugin-submissions`. Import `submissions` from `@svartz/plugin-submissions` and set `plugins: [submissions({ repo: "owner/wiki", mode: "pull-request" })]`. Use a [[plugins/server-plugins|server target]] and build from a Git commit GitHub can read.
+Run `npm install -D @svartz/plugin-submissions` and add `submissions()` to a [[plugins/server-plugins|server target]] in `svartz.config.ts`:
+
+```ts
+import { defineConfig } from "@svartz/config";
+import { submissions } from "@svartz/plugin-submissions";
+
+export default defineConfig({
+  version: "1.0.0",
+  vaults: [
+    {
+      id: "wiki",
+      path: "vault",
+      target: { type: "node" },
+      plugins: [submissions({ repo: "owner/wiki", mode: "pull-request" })],
+    },
+  ],
+});
+```
+
+Build from a Git commit GitHub can read.
 
 For pull requests, supply a fine-grained token with read/write Contents and Pull requests access, or install a GitHub App with those permissions. Use an App for direct commits. Keep the token, App key, and webhook secret on the server.
 
@@ -15,10 +34,10 @@ For pull requests, supply a fine-grained token with read/write Contents and Pull
 | `token` | `{ env: string }`. Defaults to `SVARTZ_GITHUB_TOKEN` when no App is set. |
 | `app` | `{ id: string \| number; privateKey: { env: string }; installation?: number }`. No App by default; the installation is looked up if omitted. Set this or `token`, not both. |
 | `mode` | `"permission"` (default), `"pull-request"`, or `"commit"`. |
-| `signIn.required` | Boolean, default `false`. Requires [[plugins/auth]] when enabled. |
+| `signIn.required` | Boolean, default `false`. Requires [[plugins/auth|auth]] when enabled. |
 | `guard.turnstile` | Optional `{ siteKey: string; secret: { env: string } }`. Skipped when sign-in is required. |
 | `guard.rateLimit` | `{ limit: number; period: number }`, default 10 attempts per 3600 seconds per account or IP. |
-| `sync.database`, `sync.webhookSecret` | Optional sync settings. Both take `{ env: string }`: the D1 binding and the webhook secret name. |
+| `sync.database`, `sync.webhookSecret` | Optional sync settings. Both take `{ env: string }` for the D1 binding and the webhook secret name. |
 | `sync.live` | Required with sync. Use `{ workflow: string }` or `{ environment: string }`. |
 
 With accounts, permission mode commits when an editor has `submissions:commits:write` for the page and an App is configured. Other saves need `submissions:pull-requests:write` and go to review. Commit mode refuses saves from editors who lack commit permission; pull-request mode sends every allowed save to review. Without accounts, saves always go to review. Direct commits need an App, auth, and a branch that accepts unsigned commits from the App. A conflicting edit or some branch rules can send a direct save to review instead.

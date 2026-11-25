@@ -23,6 +23,6 @@ If the config root has `turbo.json` and no host app, Svartz syncs the managed `s
 
 ## Build directories and locks
 
-A standalone vault gets artifacts, SvelteKit state, and a dependency bridge under `.svartz/vaults/<id>/` when using the default output. Static and Node output use `dist/` there; Cloudflare writes `.svelte-kit/cloudflare/`. A host adapter controls its own output. See [[start/project-layout|Project layout]] and [[start/deploying|Deploy your site]].
+A standalone vault gets artifacts, SvelteKit state, and a dependency bridge under `.svartz/vaults/<id>/` when using the default output. Static and Node output use `dist/` there; Cloudflare writes `.svelte-kit/cloudflare/`. A host adapter controls its own output. See [[start/project-layout|Project layout]] and [[start/deploying|Deploy a vault]].
 
 Builds share a project lock. A later build normally recovers a crashed build's lock. If it names a leftover `.svartz/.vault-build.lock.recover` guard, check that no Svartz build is running before removing it.

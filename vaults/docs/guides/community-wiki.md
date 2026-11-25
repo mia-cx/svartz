@@ -15,50 +15,52 @@ Create a D1 database and copy its ID. Create a GitHub OAuth App with the callbac
 npm install -D @svartz/theme-wiki @svartz/auth @svartz/plugin-submissions @svartz/plugin-history @svartz/plugin-annotations @svartz/plugin-moderation wrangler
 ```
 
-Replace the values for your site, repo, apps, and database in `svartz.config.ts`. Keep `version` from the generated config.
+Replace the placeholders for your site, repo, apps, and database in `svartz.config.ts`:
 
 ```ts
-// Imports at the top of svartz.config.ts
+import { defineConfig } from "@svartz/config";
 import { auth } from "@svartz/auth";
 import { submissions } from "@svartz/plugin-submissions";
 import { history } from "@svartz/plugin-history";
 import { annotations } from "@svartz/plugin-annotations";
 import { moderation } from "@svartz/plugin-moderation";
-```
 
-```ts
-// Replace the vault entry inside vaults:
-{
-  id: "wiki",
-  path: "vault",
-  site: { title: "Field Guide", url: "https://wiki.example.com" },
-  theme: "@svartz/theme-wiki",
-  target: {
-    type: "cloudflare-workers",
-    routes: [{ pattern: "wiki.example.com", custom_domain: true }],
-    d1_databases: [{ binding: "SVARTZ_DB", database_name: "wiki", database_id: "<id>" }],
-  },
-  plugins: [
-    auth({
-      providers: { github: { clientId: "<client-id>", clientSecret: { env: "PRIVATE_GITHUB_CLIENT_SECRET" } } },
-      admins: ["github:<numeric-user-id>"],
-    }),
-    submissions({
-      repo: "owner/wiki",
-      mode: "pull-request",
-      signIn: { required: true },
-      app: { id: "<app-id>", privateKey: { env: "SVARTZ_GITHUB_APP_KEY" } },
-      sync: {
-        database: { env: "SVARTZ_DB" },
-        webhookSecret: { env: "SVARTZ_GITHUB_WEBHOOK_SECRET" },
-        live: { workflow: "deploy.yml" },
+export default defineConfig({
+  version: "1.0.0",
+  vaults: [
+    {
+      id: "wiki",
+      path: "vault",
+      site: { title: "Field Guide", url: "https://wiki.example.com" },
+      theme: "@svartz/theme-wiki",
+      target: {
+        type: "cloudflare-workers",
+        routes: [{ pattern: "wiki.example.com", custom_domain: true }],
+        d1_databases: [{ binding: "SVARTZ_DB", database_name: "wiki", database_id: "<id>" }],
       },
-    }),
-    history(),
-    annotations({ database: { env: "SVARTZ_DB" } }),
-    moderation(),
+      plugins: [
+        auth({
+          providers: { github: { clientId: "<client-id>", clientSecret: { env: "PRIVATE_GITHUB_CLIENT_SECRET" } } },
+          admins: ["github:<numeric-user-id>"],
+        }),
+        submissions({
+          repo: "owner/wiki",
+          mode: "pull-request",
+          signIn: { required: true },
+          app: { id: "<app-id>", privateKey: { env: "SVARTZ_GITHUB_APP_KEY" } },
+          sync: {
+            database: { env: "SVARTZ_DB" },
+            webhookSecret: { env: "SVARTZ_GITHUB_WEBHOOK_SECRET" },
+            live: { workflow: "deploy.yml" },
+          },
+        }),
+        history(),
+        annotations({ database: { env: "SVARTZ_DB" } }),
+        moderation(),
+      ],
+    },
   ],
-},
+});
 ```
 
 ## 3. Build and deploy

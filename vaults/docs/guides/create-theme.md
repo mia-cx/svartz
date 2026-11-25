@@ -32,38 +32,38 @@ For broader changes, replace a region or the frame. Use the shell's explorer, dr
 
 ## Manifest
 
-Export a `defineTheme` factory from the package root. `@svartz/vite` loads this Node-safe entry during config validation. It must not eagerly import `.svelte` files that Node cannot load.
+Export a `defineTheme` factory from the package root. `@svartz/vite` loads this Node-safe entry during config validation, so it must not eagerly import `.svelte` files.
 
 ```ts
 // src/lib/index.ts
-import { defineTheme } from '@svartz/core';
+import { defineTheme } from "@svartz/core";
 
 export default defineTheme({
-  id: '@example/theme',
-  version: '1.0.0',
-  contractVersion: '1.0.0',
+  id: "@example/theme",
+  version: "1.0.0",
+  contractVersion: "1.0.0",
   layouts: {
-    defaultPage: () => import('./SiteLayout.svelte'),
-    notePage: () => import('./SiteLayout.svelte')
+    defaultPage: () => import("./SiteLayout.svelte"),
+    notePage: () => import("./SiteLayout.svelte"),
   },
   routes: [
-    { id: 'home', pattern: '/', layoutSlot: 'notePage' },
-    { id: 'note', pattern: '/:slug', layoutSlot: 'notePage' }
+    { id: "home", pattern: "/", layoutSlot: "notePage" },
+    { id: "note", pattern: "/:slug", layoutSlot: "notePage" },
   ],
   components: {
-    callout: () => import('./Callout.svelte')
+    callout: () => import("./Callout.svelte"),
   },
-  capabilities: { callouts: true, codeBlocks: true }
+  capabilities: { callouts: true, codeBlocks: true },
 });
 ```
 
-`defaultPage` and `notePage` are required. The `note` route must contain `:slug`. A route may specify `component` or `layoutSlot`. Component references may be `{ default: Component }` or `() => import('./Component.svelte')`. Svartz loads lazy references before SSR and hydration. An import without a default component fails with the theme ID and slot.
+`defaultPage`, `notePage`, and a `note` route with `:slug` are required. Svartz loads lazy component imports before SSR and hydration; an import without a default component fails with the theme ID and slot. See the [[reference/theme-contract|theme contract]] for all manifest fields.
 
-`components` holds shared theme components and the five content slots: `callout`, `codeBlock`, `image`, `link`, and `embed`. A host app can override those five content slots. Host wins, then theme, then the built-in HTML renderer. Layouts and route pages remain theme-owned. Content components receive typed `ContentComponentProps` from `@svartz/ui/runtime`, including `tag`, `attributes`, `text`, slot-specific fields, and a Svelte 5 `children` snippet. Render `{@render children?.()}` to keep nested links and images overridable. The `codeBlock` slot wraps a whole element: a highlighted `<figure>` arrives as `tag: "figure"` with its contents in `children`, and a bare `<pre>` arrives as `tag: "pre"` with the `<pre>` itself in `children`, so Svelte keeps the code's whitespace. Render `children` inside your wrapper; don't recreate the `<pre>`.
+A host app can override the five content slots (`callout`, `codeBlock`, `image`, `link`, and `embed`). Host overrides win, then the theme, then the built-in HTML renderer. Layouts and route pages remain theme-owned. Content components receive typed `ContentComponentProps` from `@svartz/ui/runtime`, including `tag`, `attributes`, `text`, slot-specific fields, and a Svelte 5 `children` snippet. Render `{@render children?.()}` so nested links and images remain overridable. The `codeBlock` slot wraps a whole element. A highlighted `<figure>` arrives as `tag: "figure"` with its contents in `children`, and a bare `<pre>` arrives as `tag: "pre"` with the `<pre>` itself in `children` so Svelte preserves code whitespace. Render `children` inside your wrapper without recreating the `<pre>`.
 
 ## Runtime entry
 
-Publish a `./runtime` export that Vite can bundle in SvelteKit. It can share the manifest factory and use eager or lazy Svelte modules. The package root and runtime entry may differ in how they import Svelte files. See `themes/minimal/src/lib/index.ts` and `themes/minimal/src/lib/runtime.ts`.
+Publish a `./runtime` export that Vite can bundle in SvelteKit. It can share the manifest factory and use eager or lazy Svelte modules. See `themes/minimal/src/lib/index.ts` and `themes/minimal/src/lib/runtime.ts` for a working pair.
 
 ```json
 {
@@ -75,7 +75,7 @@ Publish a `./runtime` export that Vite can bundle in SvelteKit. It can share the
 }
 ```
 
-Configure the theme for a vault with `theme: { base: '@example/theme' }`. `base` can also be a path resolved from the config directory. Theme options beside `base` pass to a factory manifest. To let vaults list your theme beside others in `base`, export its theme-minimal `extensions` from both entries.
+Select the theme in `svartz.config.ts` with `theme: { base: "@example/theme" }` or a path relative to the config directory. Extra options beside `base` pass to a factory manifest. To let vaults combine your theme in a `theme.base` array, export its `@svartz/theme-minimal` `extensions` from both entries.
 
 ## Build on @svartz/ui
 
@@ -86,21 +86,17 @@ Configure the theme for a vault with `theme: { base: '@example/theme' }`. `base`
 - Pass `svartzSyntax()` from `@svartz/ui/syntax` in `pluginPreset` from `index.ts` only. It replaces `core:transform-syntax` with the Svartz code colours and pulls rehype, so it stays out of browser code.
 - Type layouts and pages with `ThemePageProps`. `vault` carries the index, tags, folders, and search documents with deployment URLs.
 
-Themes can only use the routes the pipeline builds: notes, `/tags`, `/tags/:slug`, `/folders`, `/folders/:slug`, `/feed`, and `/`. Read the prefixes from `theme.routes` in the vault config, as the pipeline does.
+Themes can only use the routes the pipeline builds, which are notes, `/tags`, `/tags/:slug`, `/folders`, `/folders/:slug`, `/feed`, and `/`. Read the prefixes from `theme.routes` in the vault config, as the pipeline does.
 
-Don't work out folders from slugs. A folder note (`guides/index.md`) usually publishes as `guides`, but if a root `guides.md` takes that URL, it publishes as `guides-2`. Each folder lists its notes in `noteSlugs` and names its folder note in `noteSlug`, and its `title` is the folder note's frontmatter title when it has one. `folderLayout(entries, folders)` from `@svartz/ui` gives each note's folder and each folder's note.
+Do not derive folder structure from slugs. A folder note (`guides/index.md`) publishes as `guides` unless a root `guides.md` claims that URL, in which case it publishes as `guides-2`. Each folder lists its notes in `noteSlugs`, names its folder note in `noteSlug`, and takes its `title` from the folder note's frontmatter title when present. Use `folderLayout(entries, folders)` from `@svartz/ui` to read each note's folder and each folder's note.
 
-## Notes and browser resources
+## Plugin regions and note markers
 
-Markdown `.md` and `.mdx` files compile to inert content. Write a `.svx` note when it needs authored Svelte markup or imports. Theme components can style either format, but Markdown itself never executes Svelte expressions.
-
-Content plugins contribute remark or rehype steps and optional CSS, assets, or browser scripts. Browser script modules export `mount(pathname)` and may return a cleanup function. Svartz calls cleanup on navigation, vault changes, and unmount. Do not attach global listeners at module import time.
-
-Plugins mount actions into two regions a theme renders from `@svartz/ui` (see [[guides/create-plugin#Add actions to every page|browser actions]]):
+Plugins mount browser actions into two regions exported by `@svartz/ui` (see [[guides/create-plugin#Add actions to every page|browser actions]]):
 
 - `<PageActions href={entry.markdownHref} />` in every note's header, even when `markdownHref` is unset. It holds Copy page, View as Markdown, and the page-actions region.
-- `<SiteActions />` once on every page, in the rail or site navigation, inside the phone drawer.
+- `<SiteActions />` once on every page, in the rail or site navigation and inside the phone drawer.
 
-Render each exactly once per page and let Svelte leave them empty: plugins own their children. Both take no space while empty, and base.css styles the links and buttons plugins mount in them like Copy page.
+Render each once per page and let Svelte leave them empty, because plugins own their children. Both take no space while empty, and `base.css` styles the links and buttons plugins mount there.
 
-Plugins that work on the note itself, such as annotations, find its body by `data-svartz-note`. Put `data-svartz-note={entry.slug}` on the one element that wraps the rendered note, and leave it off list pages and password-protected notes (`entry.locked`, or a `password_group` property once unlocked). A theme that extends minimal inherits this from minimal's layout, home page included: its `home` page receives the home note's body already marked in `children`, so it renders `children` and adds no marker of its own.
+Plugins that act on note content, such as annotations, find the note body by `data-svartz-note`. Put `data-svartz-note={entry.slug}` on the single element wrapping the rendered note, and omit it on list pages and password-protected notes (`entry.locked`, or a `password_group` property once unlocked). A theme extending `@svartz/theme-minimal` inherits this marker on note and home pages, so its `home` page renders `children` without adding another marker.

@@ -3,10 +3,22 @@ title: "Analytics"
 description: "Enable one browser analytics provider through vault settings."
 ---
 
-Analytics ships with the core pipeline. Do not install a separate package or put `analytics()` in `plugins`. Set `analytics` on a vault or in `defaults`:
+Analytics ships with the core pipeline. Do not install a separate package or put `analytics()` in `plugins`. Set `analytics` on a vault or in `defaults` in `svartz.config.ts`:
 
 ```ts
-analytics: { provider: "plausible", scriptSrc: "https://plausible.io/js/pa-example.js" },
+import { defineConfig } from "@svartz/config";
+
+export default defineConfig({
+  version: "1.0.0",
+  vaults: [
+    {
+      id: "notes",
+      path: "vault",
+      target: { type: "static" },
+      analytics: { provider: "plausible", scriptSrc: "https://plausible.io/js/pa-example.js" },
+    },
+  ],
+});
 ```
 
 The default is off. No note frontmatter is involved. A vault setting replaces the entire default setting. Set up the site in your analytics service first and use its public IDs and script URL. Never put a secret in these settings.

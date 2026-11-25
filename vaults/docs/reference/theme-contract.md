@@ -28,6 +28,6 @@ A route has a required `id` and `pattern`, and can choose `layoutSlot` or `compo
 
 ## Extend or compose
 
-`extendTheme(parent, overrides)` is for authoring a new theme. In config, `theme.base: [first, second]` composes installed themes; the first provides the site shell and tokens. The optional `theme.routes` chooses note renderers. These rules do not change the note's URL. See [[themes/choosing-and-composing|Choose and compose themes]] for matching and [[themes/minimal|Minimal]] for the shell most first-party themes extend.
+To author a theme on top of `@svartz/theme-minimal`, export `extensions` and pass them to `composeThemes(extensions, config, identity)` from `@svartz/theme-minimal` and `@svartz/theme-minimal/runtime`. In config, `theme.base: [first, second]` composes installed themes; the first provides the site shell and tokens. `theme.routes` renames listing URL prefixes (`tags`, `folders`, and `feed`). Note renderers are chosen by note or folder-note `theme` frontmatter or each renderer's `detect` function, without changing the note's URL. See [[themes/choosing-and-composing|Choose and combine themes]] for matching and [[themes/minimal|Minimal]] for the shell first-party themes extend.
 
 Keep `data-svartz-note` on rendered note bodies and the page and site action regions in custom layouts that support browser plugins. The [[guides/create-plugin#Add actions to every page|browser action contract]] describes what mounts there.
