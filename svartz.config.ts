@@ -4,12 +4,14 @@ import cli from "./packages/cli/package.json" with { type: "json" };
 
 /** Svartz's own docs, and one demo per first-party theme, each a Worker on its own domain. */
 const DOCS_DOMAIN = "svartz.dev";
+/** The docs also answer here. Their canonical URLs name {@link DOCS_DOMAIN}, so search engines index one copy. */
+const DOCS_MIRRORS = ["svartz.com", "svartz.app"];
 const GITHUB = "https://github.com/mia-cx/svartz";
 
-const worker = (name: string, domain: string) => ({
+const worker = (name: string, ...domains: string[]) => ({
   type: "cloudflare-workers" as const,
   name,
-  routes: [{ pattern: domain, custom_domain: true }],
+  routes: domains.map((pattern) => ({ pattern, custom_domain: true })),
 });
 
 /** A theme demo: `wiki` deploys as `svartz-demo-wiki` at `wiki.demo.svartz.dev`. */
@@ -37,7 +39,7 @@ export default defineConfig({
       // Svartz's documentation, built with Svartz.
       id: "docs",
       path: "vaults/docs",
-      target: worker("svartz-docs", DOCS_DOMAIN),
+      target: worker("svartz-docs", DOCS_DOMAIN, ...DOCS_MIRRORS),
       theme: {
         base: "@svartz/theme-docs",
         version: cli.version,
