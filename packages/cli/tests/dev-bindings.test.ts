@@ -221,6 +221,24 @@ describe("svartz dev hands server plugins the vault's Wrangler bindings", () => 
     }
   }, DEV_TIMEOUT);
 
+  it("falls back to the project's .env.<env>, keeping only the secrets the target requires", async () => {
+    const root = await createProject("svartz-dev-bindings-dotenv-env-");
+    await rm(path.join(root, ".dev.vars"));
+    await writeFile(path.join(root, ".env"), "PRIVATE_SECRET=from-env\n");
+    // Vite reads `.env.<mode>`, not `.env.<CLOUDFLARE_ENV>`, so these reach plugins only through Wrangler.
+    await writeFile(path.join(root, ".env.staging"), "PRIVATE_SECRET=from-env-staging\nPRIVATE_DOTENV_TOKEN=undeclared\n");
+    const staging = { ...GUESTBOOK_BINDINGS, secrets: { required: ["PRIVATE_SECRET"] } };
+    await writeConfig(root, { target: { type: "cloudflare-workers", ...GUESTBOOK_BINDINGS, env: { staging } } });
+
+    const dev = await startDev(root, "/", { ...process.env, CLOUDFLARE_ENV: "staging" });
+    try {
+      expect(await guestbook(`${dev.origin}/_svartz/guestbook/`))
+        .toMatchObject({ secret: "from-env-staging", dotenv: null });
+    } finally {
+      await dev.stop();
+    }
+  }, DEV_TIMEOUT);
+
   it("serves a host vault the same D1 the host app's own routes read through adapter-cloudflare", async () => {
     const root = await createProject("svartz-dev-bindings-host-", { main: ".svelte-kit/cloudflare/_worker.js" });
     await symlink(kit2Toolchain, path.join(root, "node_modules"), "dir");

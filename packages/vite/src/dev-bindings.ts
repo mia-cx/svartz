@@ -1,8 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseEnv } from "node:util";
 import { DEV_BINDINGS, type DevBindings } from "@svartz/core";
 
 /** Wrangler's config file names, in the order Wrangler looks for them. */
@@ -13,23 +12,24 @@ interface PlatformProxy {
   dispose(): Promise<void>;
 }
 
-interface Wrangler {
-  getPlatformProxy(options: {
-    configPath: string;
-    environment?: string;
-    persist: { path: string };
-  }): Promise<PlatformProxy>;
+/** The Wrangler settings that decide which local secrets a Worker sees. */
+interface LocalVarsConfig {
+  readonly vars: Record<string, unknown>;
+  readonly secrets?: unknown;
 }
 
-/**
- * The project's `.dev.vars.<env>` or `.dev.vars`, which Wrangler reads only from beside its config. A generated config
- * never sits beside them, and copying them there would put secrets into the build.
- */
-function projectDevVars(projectRoot: string, environment: string | undefined): Record<string, string> {
-  const file = [...(environment ? [`.dev.vars.${environment}`] : []), ".dev.vars"]
-    .map((name) => join(projectRoot, name))
-    .find(existsSync);
-  return file ? parseEnv(readFileSync(file, "utf8")) as Record<string, string> : {};
+interface Wrangler {
+  getPlatformProxy(options: { configPath: string; environment?: string; persist: { path: string } }): Promise<PlatformProxy>;
+  unstable_readConfig(args: { config: string; env?: string }, options: { hideWarnings: boolean }): LocalVarsConfig;
+  /** Wrangler's own `.dev.vars` and `.env` loader. It reads the files beside `configPath`, which needn't exist. */
+  unstable_getVarsForDev(
+    configPath: string,
+    envFiles: undefined,
+    vars: LocalVarsConfig["vars"],
+    env: string | undefined,
+    silent: boolean,
+    secrets: LocalVarsConfig["secrets"],
+  ): Record<string, { readonly value: unknown }>;
 }
 
 type BindingsSlot = { [DEV_BINDINGS]?: DevBindings };
@@ -44,6 +44,28 @@ async function importWrangler(appRoot: string): Promise<Wrangler> {
   return await import(pathToFileURL(entry).href) as Wrangler;
 }
 
+/**
+ * Wrangler's platform for the config at `configPath`. Wrangler reads local secrets (`.dev.vars`, `.env`) beside its
+ * config, so for a config outside `projectRoot`, such as the one a build generates, its loader runs again from the
+ * project, where they live. Copying them beside the config instead would put secrets into the build.
+ */
+async function startPlatform(
+  wrangler: Wrangler,
+  configPath: string,
+  projectRoot: string,
+  environment: string | undefined,
+  persistPath: string,
+): Promise<PlatformProxy> {
+  const platform = await wrangler.getPlatformProxy({ configPath, environment, persist: { path: persistPath } });
+  if (resolve(configPath, "..") === resolve(projectRoot)) return platform;
+  const { vars, secrets } = wrangler.unstable_readConfig({ config: configPath, env: environment }, { hideWarnings: true });
+  const local = wrangler.unstable_getVarsForDev(join(projectRoot, "wrangler.json"), undefined, vars, environment, true, secrets);
+  return {
+    env: { ...platform.env, ...Object.fromEntries(Object.entries(local).map(([name, binding]) => [name, binding.value])) },
+    dispose: () => platform.dispose(),
+  };
+}
+
 interface DevBindingsOptions {
   /** Read the Wrangler config's bindings: the app deploys to Cloudflare. */
   readonly wrangler?: boolean;
@@ -52,9 +74,8 @@ interface DevBindingsOptions {
 }
 
 /**
- * Hand server plugins `dotenv`, and the bindings, vars and `.dev.vars` secrets of the Wrangler config in `configDir`,
- * under `svartz dev`. Wrangler reads `.dev.vars` beside its config; for a config elsewhere, such as the one a build
- * generates, the secrets come from `projectRoot`, where Wrangler itself resolves from. Its `getPlatformProxy` starts on
+ * Hand server plugins `dotenv`, and the bindings, vars and local secrets of the Wrangler config in `configDir`, under
+ * `svartz dev`. Wrangler resolves from `projectRoot`, and the secrets come from there. Its `getPlatformProxy` starts on
  * the first plugin request and keeps local data in `.wrangler/state` beside that config, where
  * `wrangler d1 execute --local` reads it. Does nothing without either. Returns a function that stops the proxy.
  */
@@ -69,23 +90,19 @@ export function serveDevBindings(
   // `wrangler d1 execute --local` reads from beside the config.
   const persistPath = join(configDir, ".wrangler", "state", "v3");
 
-  const colocated = resolve(configDir) === resolve(projectRoot);
   let proxy: Promise<PlatformProxy> | undefined;
-  let secrets: Record<string, string> = {};
   const bindings: DevBindings = async () => {
     if (!configPath) return dotenv;
     if (!proxy) {
       // CLOUDFLARE_ENV is how Wrangler selects an environment; a host that picks one in its adapter options sets it
       // here too, or plugins read the top-level bindings.
       const environment = process.env.CLOUDFLARE_ENV || undefined;
-      secrets = colocated ? {} : projectDevVars(projectRoot, environment);
       proxy = importWrangler(projectRoot).then((wrangler) =>
-        wrangler.getPlatformProxy({ configPath, environment, persist: { path: persistPath } }));
+        startPlatform(wrangler, configPath, projectRoot, environment, persistPath));
       // A failed start (a bad config, a missing Wrangler) retries on the next request rather than sticking.
       proxy.catch(() => { proxy = undefined; });
     }
-    // Secrets override the config's vars, as Wrangler's own `.dev.vars` would.
-    return { ...dotenv, ...(await proxy).env, ...secrets };
+    return { ...dotenv, ...(await proxy).env };
   };
   const slot = globalThis as BindingsSlot;
   slot[DEV_BINDINGS] = bindings;
