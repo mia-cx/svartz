@@ -116,6 +116,16 @@ describe("canonical route allocation", () => {
     expect(files.map((file) => file.slug)).toEqual(["field-guides", "field-guides-2"]);
   });
 
+  // The ranking orders one folder's notes only: an earlier folder's namesake still beats a later folder's index.
+  it.each([
+    [new Set<string>(), ["field-guides", "field-guides-2"]],
+    [new Set(["field-guides"]), ["field-guides-2", "field-guides-3"]],
+  ])("keeps folders in path order, whatever kind of note each has (reserved: %o)", (reserved, slugs) => {
+    const files = [note("Field Guides/Field Guides.md"), note("Field-Guides/index.md")];
+    allocateRoutes([...files].reverse(), reserved);
+    expect(files.map((file) => file.slug)).toEqual(slugs);
+  });
+
   it("allows the same explicit segment in different folders", () => {
     const files = [note("guides/first.md"), note("notes/second.md")];
     for (const file of files) file.frontmatter = { slug: "setup" };

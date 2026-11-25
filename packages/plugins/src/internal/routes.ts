@@ -67,9 +67,31 @@ function exactName(file: ProcessedFile, slug: string): boolean {
   return sourceStem === slug;
 }
 
+/** A file's folder, as written: `Guides/Guides.md` → `Guides`. */
+const folderOf = (path: string): string => path.replaceAll("\\", "/").replace(/\/?[^/]*$/, "");
+
 /**
- * Assign canonical slugs before links, giving explicit slugs priority over filenames. Among folder notes that want one
- * URL, `index` beats `_index` beats a note named after its folder ({@link folderNoteRank}); the rest are numbered.
+ * The path each file of `group` sorts by. Each folder's files keep the places their paths give them among other
+ * folders' files, and fill those places in {@link folderNoteRank} order. So `index` beats `_index`, and `_index` beats
+ * the folder's namesake, inside one folder. Files from different folders keep the order their paths give them.
+ */
+function sortPaths(group: readonly ProcessedFile[]): Map<ProcessedFile, string> {
+  const folders = new Map<string, ProcessedFile[]>();
+  for (const file of group) folders.set(folderOf(file.path), [...folders.get(folderOf(file.path)) ?? [], file]);
+  const keys = new Map<ProcessedFile, string>();
+  for (const files of folders.values()) {
+    const places = files.map((file) => file.path).sort((left, right) => left.localeCompare(right));
+    [...files]
+      .sort((left, right) => folderNoteRank(left.path) - folderNoteRank(right.path) || left.path.localeCompare(right.path))
+      .forEach((file, place) => keys.set(file, places[place]!));
+  }
+  return keys;
+}
+
+/**
+ * Assign canonical slugs before links, giving explicit slugs priority over filenames. Among one folder's notes that
+ * want one URL, `index` beats `_index` beats a note named after its folder ({@link folderNoteRank}); the rest are
+ * numbered.
  */
 export function allocateRoutes(
   files: readonly ProcessedFile[],
@@ -93,6 +115,7 @@ export function allocateRoutes(
   }
 
   const claimedSlugs = new Set(groups.keys());
+  const sortPath = new Map([...groups.values()].flatMap((group) => [...sortPaths(group)]));
   const allocated = new Set<string>();
   const losers: { file: ProcessedFile; slug: string }[] = [];
   const reserved = new Set([...reservedPaths].map((path) => path.replace(/^\/+|\/+$/g, "")));
@@ -102,8 +125,7 @@ export function allocateRoutes(
     const group = groups.get(slug)!.sort((left, right) =>
       Number(right === explicit) - Number(left === explicit) ||
       Number(exactName(right, slug)) - Number(exactName(left, slug)) ||
-      folderNoteRank(left.path) - folderNoteRank(right.path) ||
-      left.path.localeCompare(right.path),
+      sortPath.get(left)!.localeCompare(sortPath.get(right)!),
     );
     if (reserved.has(slug === "index" ? "" : slug)) {
       losers.push(...group.map((file) => ({ file, slug })));
@@ -117,8 +139,7 @@ export function allocateRoutes(
   for (const { file, slug } of losers.sort((left, right) =>
     left.slug.localeCompare(right.slug) ||
     Number(right.file === explicitClaims.get(right.slug)) - Number(left.file === explicitClaims.get(left.slug)) ||
-    folderNoteRank(left.file.path) - folderNoteRank(right.file.path) ||
-    left.file.path.localeCompare(right.file.path),
+    sortPath.get(left.file)!.localeCompare(sortPath.get(right.file)!),
   )) {
     for (let suffix = 2; ; suffix++) {
       const candidate = `${slug}-${suffix}`;
