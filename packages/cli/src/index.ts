@@ -281,15 +281,13 @@ const ensureVaultWorkspace = (
 
       try {
         const existing = await lstat(workspaceNodeModulesPath);
-        if (existing.isSymbolicLink()) {
-          const currentTarget = await readlink(workspaceNodeModulesPath);
-          const resolvedTarget = path.resolve(workspaceRoot, currentTarget);
-          if (resolvedTarget === appNodeModulesPath) {
-            return;
-          }
+        // Only ever replace the link this made: a real node_modules belongs to someone else.
+        if (!existing.isSymbolicLink()) {
+          throw new Error(`${workspaceNodeModulesPath} isn't Svartz's to replace. Give the vault an outDir whose parent Svartz owns.`);
         }
-
-        await rm(workspaceNodeModulesPath, { recursive: true, force: true });
+        const currentTarget = await readlink(workspaceNodeModulesPath);
+        if (path.resolve(workspaceRoot, currentTarget) === appNodeModulesPath) return;
+        await rm(workspaceNodeModulesPath);
       } catch (cause) {
         if ((cause as NodeJS.ErrnoException).code !== "ENOENT") {
           throw cause;
@@ -462,7 +460,7 @@ const createAppConfig = (
     if (!hostApp) applyPlatformEnvForVault(vault);
     const wranglerConfig = hostApp || vault.target.type !== "cloudflare-workers"
       ? undefined
-      : yield* Effect.tryPromise({ try: () => writeVaultWranglerConfig(vault, projectRoot), catch: (cause) => cause as Error });
+      : yield* Effect.tryPromise({ try: () => writeVaultWranglerConfig(vault), catch: (cause) => cause as Error });
     if (wranglerConfig) process.env["SVARTZ_WRANGLER_CONFIG"] = wranglerConfig;
     else delete process.env["SVARTZ_WRANGLER_CONFIG"];
     process.env["SVARTZ_OUT_DIR"] = vault.outDir;

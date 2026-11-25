@@ -13,7 +13,26 @@ interface PlatformProxy {
 }
 
 interface Wrangler {
-  getPlatformProxy(options: { configPath: string; environment?: string; persist: { path: string } }): Promise<PlatformProxy>;
+  getPlatformProxy(options: {
+    configPath: string;
+    environment?: string;
+    envFiles: string[];
+    persist: { path: string };
+  }): Promise<PlatformProxy>;
+}
+
+/**
+ * The local secret files Wrangler would pick beside its config, read from `projectRoot` instead: `.dev.vars.<env>` or
+ * `.dev.vars`, else the `.env` files. A generated config never sits beside them, and copying them there would put
+ * secrets into the build.
+ */
+function localSecretFiles(projectRoot: string, environment: string | undefined): string[] {
+  const devVars = [...(environment ? [`.dev.vars.${environment}`] : []), ".dev.vars"]
+    .map((name) => join(projectRoot, name))
+    .find(existsSync);
+  if (devVars) return [devVars];
+  const suffixes = ["", ...(environment ? [`.${environment}`] : [])];
+  return suffixes.flatMap((suffix) => [`.env${suffix}`, `.env${suffix}.local`]).map((name) => join(projectRoot, name));
 }
 
 type BindingsSlot = { [DEV_BINDINGS]?: DevBindings };
@@ -36,14 +55,14 @@ interface DevBindingsOptions {
 }
 
 /**
- * Hand server plugins `dotenv`, and the bindings, vars and `.dev.vars` of the Wrangler config in `configDir`, under
- * `svartz dev`. Wrangler's `getPlatformProxy` starts on the first plugin request and keeps local data in
- * `.wrangler/state` beside that config, where `wrangler d1 execute --local` reads it. Does nothing without either.
- * Returns a function that stops the proxy.
+ * Hand server plugins `dotenv`, and the bindings and vars of the Wrangler config in `configDir` with the project's
+ * `.dev.vars`, under `svartz dev`. Wrangler resolves from `projectRoot`. Its `getPlatformProxy` starts on the first
+ * plugin request and keeps local data in `.wrangler/state` beside that config, where `wrangler d1 execute --local`
+ * reads it. Does nothing without either. Returns a function that stops the proxy.
  */
 export function serveDevBindings(
   configDir: string,
-  appRoot: string,
+  projectRoot: string,
   { wrangler = true, dotenv = {} }: DevBindingsOptions = {},
 ): () => Promise<void> {
   const configPath = wrangler ? WRANGLER_CONFIG_FILES.map((name) => join(configDir, name)).find(existsSync) : undefined;
@@ -59,7 +78,9 @@ export function serveDevBindings(
       // CLOUDFLARE_ENV is how Wrangler selects an environment; a host that picks one in its adapter options sets it
       // here too, or plugins read the top-level bindings.
       const environment = process.env.CLOUDFLARE_ENV || undefined;
-      proxy = importWrangler(appRoot).then((wrangler) => wrangler.getPlatformProxy({ configPath, environment, persist: { path: persistPath } }));
+      const envFiles = localSecretFiles(projectRoot, environment);
+      proxy = importWrangler(projectRoot).then((wrangler) =>
+        wrangler.getPlatformProxy({ configPath, environment, envFiles, persist: { path: persistPath } }));
       // A failed start (a bad config, a missing Wrangler) retries on the next request rather than sticking.
       proxy.catch(() => { proxy = undefined; });
     }

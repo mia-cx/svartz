@@ -6,7 +6,7 @@ import os from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { deriveProtectionKey, openProtectedPayload, type ProtectedEnvelope, type ProtectedGroupPayload } from "@svartz/core";
 import { getGeneratedHostStylesPath, getGeneratedHostRegistryPath } from "@svartz/vite";
 import { chromium } from "playwright";
@@ -31,6 +31,16 @@ async function pnpm(args: string[]) {
 }
 
 describe("svartz CLI", () => {
+  // Each build syncs the root's per-vault scripts and tasks from its config, so put back the ones the root config makes.
+  const manifests = ["package.json", "turbo.json"].map((name) => resolve(ROOT, name));
+  let manifestSources: string[] = [];
+  beforeAll(async () => {
+    manifestSources = await Promise.all(manifests.map((file) => readFile(file, "utf8")));
+  });
+  afterEach(async () => {
+    await Promise.all(manifests.map((file, index) => writeFile(file, manifestSources[index]!)));
+  });
+
   beforeAll(
     async () => {
       await pnpm(["--filter", "@svartz/core", "build"]);
@@ -97,8 +107,6 @@ describe("svartz CLI", () => {
   it("links CSS for every standalone vault built in one CLI process", async () => {
     const configPath = resolve(ROOT, ".svartz-multi-style-e2e.config.ts");
     const notePath = resolve(ROOT, "vaults/docs/multi-vault-style.svx");
-    const packageSource = await readFile(resolve(ROOT, "package.json"), "utf8");
-    const turboSource = await readFile(resolve(ROOT, "turbo.json"), "utf8");
     try {
       await writeFile(notePath, "<h1 class='multi-tone'>Styled vault</h1><style>.multi-tone { color: rgb(12, 34, 56); }</style>\n");
       await writeFile(configPath, `export default {
@@ -119,8 +127,6 @@ describe("svartz CLI", () => {
     } finally {
       await rm(configPath, { force: true });
       await rm(notePath, { force: true });
-      await writeFile(resolve(ROOT, "package.json"), packageSource);
-      await writeFile(resolve(ROOT, "turbo.json"), turboSource);
     }
   }, 240_000);
 
@@ -131,8 +137,6 @@ describe("svartz CLI", () => {
 
     /** Builds the reference showcase with this theme `base`, then reads a REST and an MCP page. */
     async function buildReference(base: string | readonly string[]) {
-      const packageSource = await readFile(resolve(ROOT, "package.json"), "utf8");
-      const turboSource = await readFile(resolve(ROOT, "turbo.json"), "utf8");
       try {
         await writeFile(configPath, `export default {
           version: "1.0.0",
@@ -147,8 +151,6 @@ describe("svartz CLI", () => {
         };
       } finally {
         await rm(configPath, { force: true });
-        await writeFile(resolve(ROOT, "package.json"), packageSource);
-        await writeFile(resolve(ROOT, "turbo.json"), turboSource);
       }
     }
 
@@ -249,8 +251,6 @@ describe("svartz CLI", () => {
     const vault = resolve(repo, "content");
     const configPath = resolve(ROOT, ".svartz-versions-e2e.config.ts");
     const dist = resolve(ROOT, ".svartz/vaults/versions-e2e/dist");
-    const packageSource = await readFile(resolve(ROOT, "package.json"), "utf8");
-    const turboSource = await readFile(resolve(ROOT, "turbo.json"), "utf8");
     const post = (frontmatter: string, body: string) => writeFile(resolve(vault, "posts/hello.md"), `---\ntitle: Hello\n${frontmatter}---\n\n${body}\n`);
     let day = 0;
     const commit = async (message: string) => {
@@ -355,16 +355,12 @@ describe("svartz CLI", () => {
       await rm(configPath, { force: true });
       await rm(repo, { recursive: true, force: true });
       await rm(resolve(ROOT, ".svartz/vaults/versions-e2e"), { recursive: true, force: true });
-      await writeFile(resolve(ROOT, "package.json"), packageSource);
-      await writeFile(resolve(ROOT, "turbo.json"), turboSource);
     }
   }, 480_000);
 
   it("publishes protected SVX as sealed static output only", async () => {
     const configPath = resolve(ROOT, ".svartz-protected-e2e.config.ts");
     const dist = resolve(ROOT, ".svartz/vaults/protected-e2e/dist");
-    const packageSource = await readFile(resolve(ROOT, "package.json"), "utf8");
-    const turboSource = await readFile(resolve(ROOT, "turbo.json"), "utf8");
     const previousPassword = process.env.SVARTZ_TEST_PROTECTED_PASSWORD;
     const previousSecondPassword = process.env.SVARTZ_TEST_SECOND_PASSWORD;
     process.env.SVARTZ_TEST_PROTECTED_PASSWORD = "e2e-only-password";
@@ -501,8 +497,6 @@ describe("svartz CLI", () => {
     } finally {
       await rm(configPath, { force: true });
       await rm(resolve(ROOT, ".svartz/vaults/protected-e2e"), { recursive: true, force: true });
-      await writeFile(resolve(ROOT, "package.json"), packageSource);
-      await writeFile(resolve(ROOT, "turbo.json"), turboSource);
       if (previousPassword === undefined) delete process.env.SVARTZ_TEST_PROTECTED_PASSWORD;
       else process.env.SVARTZ_TEST_PROTECTED_PASSWORD = previousPassword;
       if (previousSecondPassword === undefined) delete process.env.SVARTZ_TEST_SECOND_PASSWORD;

@@ -175,7 +175,7 @@ target: {
 
 A `cloudflare-pages` vault, or a `host` vault in an app on `@sveltejs/adapter-cloudflare`, reads the Wrangler config beside `svartz.config.ts` instead: `wrangler.json`, `wrangler.jsonc` or `wrangler.toml`.
 
-On the first plugin request, `svartz dev` starts Wrangler's local platform and adds its bindings, `vars` and `.dev.vars` secrets to `context.env`, over the dev server's environment variables of the same name. Keep `.dev.vars` beside `svartz.config.ts` in every case. A plugin then reads `context.env.DB` as it would in production. To use a Wrangler environment's bindings, set `CLOUDFLARE_ENV` to its name, as you would for `wrangler dev`. A host app that picks an environment in its adapter options sets `CLOUDFLARE_ENV` too, so its routes and its plugins read the same bindings.
+On the first plugin request, `svartz dev` starts Wrangler's local platform and adds its bindings, `vars` and `.dev.vars` secrets to `context.env`, over the dev server's environment variables of the same name. Keep `.dev.vars` beside `svartz.config.ts` in every case. A plugin then reads `context.env.DB` as it would in production. To use a Wrangler environment's bindings, set `CLOUDFLARE_ENV` to its name, as you would for `wrangler dev`; plugins then read `.dev.vars.<name>` when it exists. A host app that picks an environment in its adapter options sets `CLOUDFLARE_ENV` too, so its routes and its plugins read the same bindings.
 
 Local data lives in `.wrangler/state` beside the Wrangler config and survives restarts: `.svartz/vaults/<id>/.wrangler/state` for a `cloudflare-workers` vault. Inspect or seed it through the same config:
 

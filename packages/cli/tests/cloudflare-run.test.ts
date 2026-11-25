@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import module, { createRequire } from "node:module";
 import os from "node:os";
@@ -59,9 +60,10 @@ async function writeConfig(root: string, vault: Record<string, unknown>): Promis
   })};\n`);
 }
 
-/** Bundle the worker `config` names as `wrangler deploy` does, short of the upload. */
-async function bundle(config: string, outdir: string): Promise<void> {
-  await execFileAsync(wranglerBin, ["deploy", "--dry-run", "--config", config, "--outdir", outdir], {
+/** Bundle the worker `config` names, in its environment `env` if given, as `wrangler deploy` does, short of the upload. */
+async function bundle(config: string, outdir: string, env?: string): Promise<void> {
+  const environment = env ? ["--env", env] : [];
+  await execFileAsync(wranglerBin, ["deploy", "--dry-run", "--config", config, "--outdir", outdir, ...environment], {
     env: { ...process.env, WRANGLER_SEND_METRICS: "false" },
   });
 }
@@ -155,10 +157,13 @@ describe("standalone Cloudflare builds", () => {
             name: "wplace-docs",
             routes: [{ pattern: "wplace.example.com", custom_domain: true }],
             d1_databases: [{ binding: "SVARTZ_DB", database_name: "wplace", database_id: "00000000-0000-0000-0000-000000000000" }],
+            // Wrangler replaces the top-level assets with an environment's, so the build fills these in too.
+            env: { staging: { assets: { html_handling: "none" } } },
           },
         },
       ],
     })};\n`);
+    await writeFile(path.join(root, ".dev.vars"), "PRIVATE_SECRET=local-only\n");
     await runBuild([cli, "build", "--config", path.join(root, "svartz.config.ts")], { cwd: root, timeout: BUILD_TIMEOUT - 30_000 });
 
     const deployed = await Promise.all(["docs", "wplace"].map(async (id) => {
@@ -170,6 +175,8 @@ describe("standalone Cloudflare builds", () => {
         page: await readFile(path.join(vaultRoot, ".svelte-kit/cloudflare/index.html"), "utf8"),
       };
     }));
+    await bundle(path.join(root, ".svartz/vaults/wplace/wrangler.json"), path.join(root, "deploy/wplace-staging"), "staging");
+    expect(existsSync(path.join(root, ".svartz/vaults/wplace/.dev.vars"))).toBe(false);
     const [docs, wplace] = deployed;
     expect(docs!.wrangler).toMatchObject({ name: "docs", routes: [{ pattern: "docs.example.com", custom_domain: true }] });
     expect(docs!.wrangler).not.toHaveProperty("d1_databases");

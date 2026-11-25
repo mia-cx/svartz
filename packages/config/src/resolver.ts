@@ -340,6 +340,18 @@ export const resolveConfig = (
         }),
       });
     });
+    // The build writes its workspace (node_modules, wrangler.json, generated modules) into the outDir's parent, so
+    // that parent must never hold the project itself.
+    const projectRoot = yield* Effect.promise(() => canonicalBuildRoot(configDir));
+    const unsafe = vaults.findIndex((_, index) => isWithin(buildRoots[index]!, projectRoot));
+    if (unsafe !== -1) {
+      const vault = vaults[unsafe]!;
+      return yield* new VaultPathInvalid({
+        vaultId: vault.id,
+        path: vault.outDir,
+        message: `Vault "${vault.id}" builds in ${buildRoots[unsafe]}, which holds the project. Give its outDir a parent of its own, such as ".svartz/vaults/${vault.id}/dist".`,
+      });
+    }
     for (let first = 0; first < vaults.length; first++) {
       for (let next = first + 1; next < vaults.length; next++) {
         const current = vaults[first]!;

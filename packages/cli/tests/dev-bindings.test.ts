@@ -201,6 +201,21 @@ describe("svartz dev hands server plugins the vault's Wrangler bindings", () => 
     }, DEV_TIMEOUT);
   }
 
+  it("reads the Wrangler environment CLOUDFLARE_ENV names, with the project's .dev.vars for it", async () => {
+    const root = await createProject("svartz-dev-bindings-env-");
+    await writeFile(path.join(root, ".dev.vars.staging"), "PRIVATE_SECRET=from-dev-vars-staging\n");
+    const staging = { ...GUESTBOOK_BINDINGS, vars: { GREETING: "from-staging" } };
+    await writeConfig(root, { target: { type: "cloudflare-workers", ...GUESTBOOK_BINDINGS, env: { staging } } });
+
+    const dev = await startDev(root, "/", { ...process.env, CLOUDFLARE_ENV: "staging" });
+    try {
+      expect(await guestbook(`${dev.origin}/_svartz/guestbook/`))
+        .toMatchObject({ vars: "from-staging", secret: "from-dev-vars-staging" });
+    } finally {
+      await dev.stop();
+    }
+  }, DEV_TIMEOUT);
+
   it("serves a host vault the same D1 the host app's own routes read through adapter-cloudflare", async () => {
     const root = await createProject("svartz-dev-bindings-host-", { main: ".svelte-kit/cloudflare/_worker.js" });
     await symlink(kit2Toolchain, path.join(root, "node_modules"), "dir");

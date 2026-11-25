@@ -303,6 +303,15 @@ describe("TargetConfigSchema", () => {
     expect(Either.isRight(result)).toBe(true);
   });
 
+  it("keeps Wrangler keys it doesn't list, at the top level and under env", () => {
+    const target = {
+      type: "cloudflare-workers",
+      images: { binding: "IMAGES" },
+      env: { staging: { images: { binding: "IMAGES" } } },
+    };
+    expect(Schema.decodeUnknownSync(TargetConfigSchema)(target)).toEqual(target);
+  });
+
   it("accepts cloudflare-workers target with only type (all env fields optional)", () => {
     const result = decode(TargetConfigSchema, { type: "cloudflare-workers" });
     expect(Either.isRight(result)).toBe(true);
