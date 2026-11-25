@@ -115,7 +115,8 @@ function prepare(
     const asset = attachment(target);
     if (asset !== undefined) return renderAssetEmbed(asset.href, asset.path, alias);
     const slug = resolve({ target, type: "wikilink" });
-    if (slug === null) return `\`${raw}\``;
+    // An embed of the new note itself, like any unresolved embed, shows as written.
+    if (slug === null || slug === NEW_NOTE) return `\`${raw}\``;
     const title = alias ?? notes.find((note) => note.slug === slug)!.title;
     return `<div class="svartz-embed" data-embed="${escapeHtml(slug)}"><p class="svartz-embed-source"><a href="${escapeHtml(url(slug, section))}">${escapeHtml(title)}</a></p></div>`;
   });
