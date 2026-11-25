@@ -1,5 +1,6 @@
 ---
 title: "Choose and combine themes"
+order: 1
 description: "Select a theme per vault, or use several renderers on one site."
 ---
 

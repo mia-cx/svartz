@@ -1,5 +1,6 @@
 ---
 title: "Obsidian Markdown"
+order: 1
 description: "Write wikilinks, embeds, callouts, math, and diagrams in your notes."
 ---
 

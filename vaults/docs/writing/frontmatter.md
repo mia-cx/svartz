@@ -1,5 +1,6 @@
 ---
 title: "Frontmatter"
+order: 2
 description: "Set a note title, dates, tags, links, and publishing rules in its header."
 ---
 

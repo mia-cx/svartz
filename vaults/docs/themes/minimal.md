@@ -1,5 +1,6 @@
 ---
 title: "Minimal"
+order: 2
 description: "Publish a browsable Obsidian vault with search, backlinks, and a graph."
 ---
 

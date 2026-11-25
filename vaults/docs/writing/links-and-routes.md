@@ -1,5 +1,6 @@
 ---
 title: "Links and routes"
+order: 3
 description: "Link to notes by filename and control their public URLs."
 ---
 

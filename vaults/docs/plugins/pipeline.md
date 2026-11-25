@@ -1,5 +1,6 @@
 ---
 title: "The build pipeline"
+order: 1
 description: "See where Svartz discovers, filters, transforms, and emits content."
 ---
 

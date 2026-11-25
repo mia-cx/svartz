@@ -1,5 +1,6 @@
 ---
 title: "Project layout"
+order: 3
 description: "Find the config, source vaults, and generated build files."
 ---
 

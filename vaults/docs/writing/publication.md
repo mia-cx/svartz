@@ -1,5 +1,6 @@
 ---
 title: "What gets published"
+order: 4
 description: "Use publication modes, globs, and frontmatter to control the build."
 ---
 

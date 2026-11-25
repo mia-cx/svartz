@@ -1,5 +1,6 @@
 ---
 title: "Plugins"
+order: 4
 description: "Add optional content formats, browser features, and server-side tools."
 ---
 

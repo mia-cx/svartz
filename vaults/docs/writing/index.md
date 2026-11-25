@@ -1,5 +1,6 @@
 ---
 title: "Writing notes"
+order: 2
 description: "Choose what to publish and control how notes appear on the web."
 ---
 

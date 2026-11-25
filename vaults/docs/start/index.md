@@ -1,5 +1,6 @@
 ---
 title: "Get started"
+order: 1
 description: "Install Svartz, preview your notes, and publish the build."
 ---
 

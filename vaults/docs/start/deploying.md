@@ -1,5 +1,6 @@
 ---
 title: "Deploy a vault"
+order: 4
 description: "Build a standalone site for static hosting, Node, Workers, or Pages, or use a SvelteKit host."
 ---
 

@@ -1,5 +1,6 @@
 ---
 title: "Reference"
+order: 6
 description: "Look up config keys, CLI flags, public types, and extension contracts."
 ---
 

@@ -1,5 +1,6 @@
 ---
 title: "Guides"
+order: 5
 description: "Set up a community wiki, mount vaults in SvelteKit, or extend Svartz."
 ---
 

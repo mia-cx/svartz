@@ -1,5 +1,6 @@
 ---
 title: "Themes"
+order: 3
 description: "Pick the layout and page types that fit your vault."
 ---
 

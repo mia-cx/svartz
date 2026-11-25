@@ -1,5 +1,6 @@
 ---
 title: "Your first site"
+order: 2
 description: "Add a note, preview the site, and find the static build."
 ---
 
