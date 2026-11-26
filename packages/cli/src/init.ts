@@ -190,7 +190,7 @@ const within = (child: string, parent: string) =>
 /**
  * Why `vaults` can't be written beside `files`, the project files init writes, or nothing when they can: a vault
  * path that is a file, or would be one of init's files; a new vault inside another vault, whose folder init would then
- * write into; and files standing where a new vault's folders would go.
+ * write into, or holding one of init's files; and files standing where a new vault's folders would go.
  */
 async function vaultConflicts(
   root: string,
@@ -202,12 +202,17 @@ async function vaultConflicts(
     const info = await stat(path.join(root, vault.path)).catch(() => undefined);
     if (info && !info.isDirectory()) problems.push([vault.path, `${vault.path} exists and isn't a folder`]);
     const file = files.find((name) => vault.path === name || within(vault.path, name));
-    if (file) problems.push([vault.path, `the vault ${vault.path} would take the place of ${file}, which init writes`]);
+    if (file)
+      problems.push([vault.path, file === vault.path
+        ? `${file} is a file init writes, so it can't be a vault`
+        : `the vault ${vault.path} would sit inside ${file}, a file init writes`]);
   }
   const fresh = newVaults(root, vaults);
   for (const vault of fresh) {
     const outer = vaults.find((other) => within(vault.path, other.path));
     if (outer) problems.push([vault.path, `the new vault ${vault.path} would sit inside the vault ${outer.path}`]);
+    const inner = files.find((name) => within(name, vault.path));
+    if (inner) problems.push([vault.path, `the new vault ${vault.path} would hold ${inner}, which init writes`]);
   }
   const notes = fresh.map((vault) => path.join(vault.path, STARTER_NOTE));
   for (const blocked of await nonDirectoryAncestors(root, notes))
@@ -670,8 +675,18 @@ const initProjectEffect = (
         return { kind: "already-configured", packageManager: manager, vaults };
       }
       if (!existingConfig) {
-        const conflict = yield* operation("inspect vault paths", () =>
-          vaultConflicts(root, vaults, [configName, "package.json"]));
+        // Every file host integration may write, whether or not this run writes it: none of them can hold a vault.
+        const hostFiles = [
+          path.join(root, configName),
+          existingManifestPath,
+          location.viteConfigPath,
+          appTypesPath,
+          rootLayoutPath,
+          ...PAGE_ROUTE_FILES.map((name) => path.join(catchallRoot, name)),
+          ...PAGE_ROUTE_FILES.map((name) => path.join(root, pageRoute, name)),
+          ...(params ?? []).map(([destination]) => path.join(root, destination)),
+        ].map((file) => path.relative(root, file).split(path.sep).join("/"));
+        const conflict = yield* operation("inspect vault paths", () => vaultConflicts(root, vaults, hostFiles));
         if (conflict) return yield* conflict;
         yield* operation("write Svartz config", () =>
           writeNewFile(path.join(root, configName), renderConfig(vaults)),

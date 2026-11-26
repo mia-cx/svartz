@@ -203,6 +203,39 @@ it.each([
   expect(await readdir(path.join(root, "Garden"))).toEqual(["Garden.md"]);
 });
 
+// Proves a vault where host integration writes one of its own files is refused before init changes the app.
+it("refuses a vault on a file host integration writes, before writing", async () => {
+  const root = await fixture();
+  const viteConfig = "export default { plugins: [] };\n";
+  await mkdir(path.join(root, "src/routes"), { recursive: true });
+  await writeFile(path.join(root, "vite.config.ts"), viteConfig);
+  await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "host-app", devDependencies: { "@sveltejs/kit": "^2.0.0" } }));
+
+  const failure = await initProject({
+    cwd: root,
+    install: false,
+    git: false,
+    vaults: (context) => vaultsFromFlags({ vault: ["src/app.d.ts"] }, context),
+  }).catch((error: unknown) => error);
+
+  expect(failure).toMatchObject({ paths: ["src/app.d.ts"] });
+  expect(await readFile(path.join(root, "vite.config.ts"), "utf8")).toBe(viteConfig);
+  expect((await readdir(root)).sort()).toEqual(["package.json", "src", "vite.config.ts"]);
+  expect(await readdir(path.join(root, "src"))).toEqual(["routes"]);
+});
+
+// Proves an empty --vault means the default vault folder, as an empty value does for every other flag.
+it("writes the default vault folder for an empty --vault", async () => {
+  const root = await fixture();
+  await execFileAsync(process.execPath, [cli, "init", "--no-install", "--no-git", "--vault", "", "--vault", "blog"], { cwd: root });
+
+  const config = await readFile(path.join(root, "svartz.config.ts"), "utf8");
+  expect(config).toContain("path: 'vault'");
+  expect(config).toContain("id: 'notes'");
+  expect(await readFile(path.join(root, "vault", "index.md"), "utf8")).toContain("# Welcome");
+  expect(await readFile(path.join(root, "blog", "index.md"), "utf8")).toContain("# Welcome");
+});
+
 // Proves `host` is refused outside a SvelteKit app, where nothing could serve it, before any file is written.
 it("refuses the host target without a SvelteKit app", async () => {
   const root = await fixture();

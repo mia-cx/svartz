@@ -173,7 +173,8 @@ export function vaultsFromFlags(flags: InitFlags, context: InitContext): VaultCh
     throw new InitUsageError({ message: "--worker and --domain need a vault with --target cloudflare-workers." });
   const vaults: VaultChoice[] = [];
   for (let index = 0; index < count; index++) {
-    const folder = paths[index];
+    // An empty --vault keeps its position, so the other flags still line up, and means the default folder.
+    const folder = paths[index] || undefined;
     const theme = answer("theme", index) ?? "minimal";
     if (!isTheme(theme)) throw new InitUsageError({ message: `There's no theme "${theme}". Pick one of ${list(Object.keys(THEMES))}.` });
     const named = answer("scheme", index);
