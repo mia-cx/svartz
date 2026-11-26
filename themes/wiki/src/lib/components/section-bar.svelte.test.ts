@@ -88,3 +88,15 @@ it('moves focus to More when the focused section moves into it', async () => {
 	await settled();
 	expect(document.activeElement).toBe(sections.getByRole('button', { name: 'More' }).element());
 });
+
+it('moves focus to the first returning section when More goes away', async () => {
+	const { sections, links } = await bar('14rem');
+	const more = sections.getByRole('button', { name: 'More' });
+	await expect.element(more).toBeVisible();
+	const first = menu[links().length]!.title;
+	(more.element() as HTMLElement).focus();
+	(document.body.firstElementChild as HTMLElement).style.inlineSize = '60rem';
+	await settled();
+	await settled();
+	expect(document.activeElement).toBe(sections.getByRole('link', { name: first, exact: true }).element());
+});

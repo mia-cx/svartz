@@ -62,10 +62,18 @@
 			}
 		}
 		if (count === shown) return;
-		// A section that moves into More takes its focused link or chevron with it, so focus moves to More instead.
+		// A re-fit can remove the focused control: a section moving into More takes its link with it, and More goes once
+		// every section fits. Focus moves to More, or without More to the first section that left it.
 		const focused = nav.contains(document.activeElement) ? document.activeElement : null;
+		const returning = shown ?? count;
 		shown = count;
-		if (focused) void tick().then(() => focused.isConnected || nav?.querySelector<HTMLElement>('.bar:not(.probe) .more-toggle')?.focus());
+		if (focused) {
+			void tick().then(() => {
+				if (focused.isConnected || !nav) return;
+				const more = nav.querySelector<HTMLElement>('.bar:not(.probe) .more-toggle');
+				(more ?? nav.querySelectorAll<HTMLElement>('.bar:not(.probe) > .top > a')[returning])?.focus();
+			});
+		}
 	}
 
 	$effect(() => {
