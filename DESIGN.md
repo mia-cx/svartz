@@ -77,7 +77,7 @@ The OFM content components (callout, code block, link, embed), the search dialog
 
 ## The Svartz mark
 
-An ink block with a vermilion proof mark offset to its lower right, like a stamp that missed its register. It appears as `.sv-mark` and as the default favicon (`SVARTZ_MARK_SVG` in `@svartz/ui`). The favicon uses the hex equivalents `#120f0b` and `#de3f20`, because image converters don't all read OKLCH. A site's own name is set as `.sv-wordmark`; the Svartz mark never replaces it.
+Svartz has no mark of its own yet. Until it does, the mark is Svelte's logo, exactly as `sv create` ships it for a new app's favicon. It appears as `.sv-mark`, as the default favicon (`SVARTZ_MARK_SVG` in `@svartz/ui`) and in the corner of the default social image. A site's own name is set as `.sv-wordmark`; the mark never replaces it.
 
 ## Dials
 
