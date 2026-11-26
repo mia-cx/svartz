@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { execFile, spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -22,12 +22,14 @@ const DIST_INDEX_PATH = resolve(DIST_ROOT, "index.html");
 const DIST_NOT_FOUND_PATH = resolve(DIST_ROOT, "404.html");
 const DIST_SITEMAP_PATH = resolve(DIST_ROOT, "sitemap.xml");
 
+/** Runs `command` in the repository root, answering what it printed. */
 async function run(command: string, args: string[]) {
-  await execFileAsync(command, args, {
+  const { stdout } = await execFileAsync(command, args, {
     cwd: ROOT,
     env: process.env,
     maxBuffer: 20 * 1024 * 1024,
   });
+  return stdout;
 }
 
 async function pnpm(args: string[]) {
@@ -146,6 +148,53 @@ describe("svartz CLI", () => {
     } finally {
       await rm(configPath, { force: true });
       await rm(notePath, { force: true });
+    }
+  }, 240_000);
+
+  // Proves a vault with `theme.versions` publishes each git ref's docs below its id, with a picker that keeps the reader
+  // on their page and a notice on deprecated pages, composed API and MCP themes alike, and reuses a snapshot's build.
+  it("builds versioned reference docs from git refs", async () => {
+    const repo = await mkdtemp(resolve(os.tmpdir(), "svartz-versions-"));
+    const configPath = resolve(ROOT, ".svartz-versions-e2e.config.ts");
+    const dist = resolve(ROOT, ".svartz/vaults/versions-e2e/dist");
+    const git = (...args: string[]) => execFileAsync("git", ["-C", repo, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", ...args]);
+    const build = (versions: unknown) => writeFile(configPath, `export default ${JSON.stringify({
+      version: "1.0.0",
+      vaults: [{ id: "versions-e2e", path: resolve(repo, "docs"), target: { type: "static" }, site: { title: "Versions" },
+        theme: { base: ["@svartz/theme-api-docs", "@svartz/theme-mcp-docs"], routes: { folders: "reference" }, versions } }],
+    })};\n`).then(() => run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]));
+    const versions = [{ id: "v2", status: "latest" }, { id: "v1", ref: "docs-v1", status: "deprecated" }];
+    try {
+      // v1 lacks the set_notification tool and words get-pet differently; the working tree is v2.
+      await git("init", "-q");
+      await cp(resolve(ROOT, "vaults/showcase-reference"), resolve(repo, "docs"), { recursive: true });
+      await rm(resolve(repo, "docs/mcp/set-notification.md"));
+      const getPet = resolve(repo, "docs/rest/get-pet.md");
+      await writeFile(getPet, `${await readFile(getPet, "utf8")}\nVersion one wording.\n`);
+      await git("add", "-A");
+      await git("commit", "-qm", "v1");
+      await git("tag", "docs-v1");
+      await rm(resolve(repo, "docs"), { recursive: true });
+      await cp(resolve(ROOT, "vaults/showcase-reference"), resolve(repo, "docs"), { recursive: true });
+
+      expect(await build(versions)).toContain('vault "versions-e2e@v1": built, and cached');
+      const links = (html: string) => [...html.matchAll(/<a href="([^"]*)"[^>]*><span class="id[^"]*">([^<]*)/g)].map(([, href, id]) => [id, href]);
+
+      const latest = await readFile(resolve(dist, "rest/get-pet/index.html"), "utf8");
+      expect(latest).not.toContain("Version one wording.");
+      expect(links(latest)).toEqual([["v2", "/rest/get-pet/"], ["v1", "/v1/rest/get-pet/"]]);
+      // An MCP page only v2 has: v1's link lands on v1's home page.
+      expect(links(await readFile(resolve(dist, "mcp/set-notification/index.html"), "utf8"))).toEqual([["v2", "/mcp/set-notification/"], ["v1", "/v1/"]]);
+      const old = await readFile(resolve(dist, "v1/rest/get-pet/index.html"), "utf8");
+      expect(old).toContain("Version one wording.");
+      expect(old).toMatch(/Version v1 is deprecated\. <a href="\/rest\/get-pet\/"[^>]*>(?:<!--[^>]*-->)?Read this page in v2, the latest version/);
+      await expect(access(resolve(dist, "v1/mcp/set-notification"))).rejects.toMatchObject({ code: "ENOENT" });
+
+      expect(await build(versions)).toContain('vault "versions-e2e@v1": reused its build from the cache');
+      await expect(build([...versions, { id: "v0", ref: "no-such-ref" }])).rejects.toThrow('git has no ref "no-such-ref"');
+    } finally {
+      await rm(configPath, { force: true });
+      await rm(repo, { recursive: true, force: true });
     }
   }, 240_000);
 

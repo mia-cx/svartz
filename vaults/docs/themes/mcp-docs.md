@@ -25,7 +25,7 @@ export default defineConfig({
 });
 ```
 
-Optional `baseUrl` is a string joined to endpoint paths such as `/mcp`. Use a full endpoint URL when the tool lives elsewhere. The theme also accepts `version`, `nav`, and the shared reference route prefixes. It retains [[themes/minimal|minimal's explorer, contents, and previous and next links]].
+Optional `baseUrl` is a string joined to endpoint paths such as `/mcp`. Use a full endpoint URL when the tool lives elsewhere. The theme also accepts `version`, `nav`, the shared reference route prefixes, and [[themes/api-docs#Versions|`versions`]], which publishes several versions from git with a picker. It retains [[themes/minimal|minimal's explorer, contents, and previous and next links]].
 
 ```yaml
 operation:

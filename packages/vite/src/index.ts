@@ -1,8 +1,5 @@
 import { existsSync, realpathSync } from "node:fs";
-import {
-  mkdir,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
@@ -15,6 +12,7 @@ import {
   type ChangeEvent,
   type PluginContext,
   type ResolvedConfig,
+  type RouteIndex,
   type StageName,
   type SvartzTheme,
 } from "@svartz/core";
@@ -86,6 +84,7 @@ import { emitProtectedGroupArtifacts } from "./protected-payload";
 import { clearPublicAssets, recordMarkdownRoutes, recordPublicAssets } from "./public-assets";
 import { writeProtectedBridgeModules, type ProtectedBridgeModule } from "./protected-bridge";
 import { themeSourceAliases } from "./theme-aliases";
+import { clearSnapshotBuild, readSnapshotBuild, snapshotKey, writeSnapshotBuild, type SnapshotBuild } from "./snapshot-cache";
 
 const PIPELINE_STAGES: readonly StageName[] = [
   "discoverFiles",
@@ -149,6 +148,12 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   let protectedBridgeModules: ProtectedBridgeModule[] = [];
   let runnerMeta = new Map<string, unknown>();
   let devServer: ViteDevServer | undefined;
+  // Each of Vite's environments runs the pipeline; a snapshot reports what the cache did once.
+  let snapshotReported = false;
+  const reportSnapshot = (outcome: string) => {
+    if (!snapshotReported) console.info(`[svartz] vault "${context.config.id}": ${outcome}`);
+    snapshotReported = true;
+  };
   let pendingChange: ChangeEvent | undefined;
   let rebuildPromise: Promise<void> | undefined;
   let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
@@ -277,6 +282,18 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       (id) => import(id), context.config, projectRoot(), selectedThemeSources(context.config),
     );
     plugins = resolveRuntimePlugins(context.config, theme, hostAdapter);
+    const snapshot = options.snapshot
+      ? await snapshotKey(context.config, options.snapshot, {
+          mode: context.mode, theme, plugins, themeImport, base: deploymentBasePath(context.config, kitBasePath), runtime: serverRuntime(),
+        })
+      : undefined;
+    const cached = snapshot && await readSnapshotBuild(context.config, snapshot);
+    if (cached) {
+      await restoreSnapshotBuild(cached);
+      reportSnapshot("reused its build from the cache");
+      return;
+    }
+    if (snapshot) await clearSnapshotBuild(context.config);
     const runnerContext = createRunnerContext();
     runnerContext.meta.set("svartz:mode", context.mode);
     runnerContext.meta.set("svartz:theme", theme);
@@ -298,6 +315,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
 
     await runStages(plugins, runnerContext, PIPELINE_STAGES);
     assertNoNotesUnderPages(context.config, plugins, runnerContext.index?.routes.all ?? []);
+    assertNoRoutesUnderNestedMounts(runnerContext.index?.routes);
     await emitProtectedGroupArtifacts(runnerContext, context.root);
     protectedBridgeModules = await writeProtectedBridgeModules(runnerContext);
     runnerMeta = runnerContext.meta;
@@ -352,8 +370,34 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       ),
     );
 
+    if (snapshot) {
+      const assets = [...emittedAssets].map(([fileName, { key, path }]) => ({ key, fileName, path }));
+      await writeSnapshotBuild(context.config, snapshot, { assets, markdownRoutes });
+      reportSnapshot("built, and cached for the next build");
+    }
+
     if (devServer) {
       await invalidateGeneratedModules(devServer);
+    }
+  }
+
+  /** Takes up a snapshot's cached build: its generated modules are on disk already, so only its public files load. */
+  async function restoreSnapshotBuild(build: SnapshotBuild): Promise<void> {
+    emittedAssets = new Map(await Promise.all(build.assets.map(async ({ key, fileName, path }) =>
+      [fileName, { key, path, type: "asset", pluginId: "svartz:snapshot-cache", contents: await readFile(path) }] as const)));
+    emittedArtifacts = [...emittedAssets.values()];
+    markdownRoutes = build.markdownRoutes;
+    recordPublicAssets(context.config.id, build.assets.map(({ fileName, path }) => ({ fileName, path })));
+    recordMarkdownRoutes(context.config.id, markdownRoutes);
+  }
+
+  /** A version's pages are served below its mount, so the vault it's built inside can't publish there too. */
+  function assertNoRoutesUnderNestedMounts(routes: RouteIndex | undefined): void {
+    if (!routes || !options.nestedMounts?.length) return;
+    for (const route of [...routes.all, ...Object.keys(routes.redirects)]) {
+      const mount = options.nestedMounts.find((nested) => route.startsWith(`${nested}/`));
+      if (!mount) continue;
+      throw new Error(`Vault "${context.config.id}" publishes ${route}, below ${mount}/, where one of its versions is served. Rename the note or its folder, or the version.`);
     }
   }
 

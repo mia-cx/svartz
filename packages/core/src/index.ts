@@ -31,6 +31,7 @@ export type {
 } from "./types";
 export { createVaultEntryView, createVaultView, type VaultNoteView, type VaultView } from "./vault-view";
 export { SEARCH_INDEX_OPTIONS } from "./search-options";
+export { describeValue } from "./describe-value";
 export {
   createProtectionSalt,
   deriveProtectionKey,

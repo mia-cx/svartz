@@ -56,6 +56,7 @@ import { resolveHostApp, shippedApp, type AppLocation } from "./workspace";
 import { writeVaultWranglerConfig } from "./wrangler-config";
 import { commandExecutable, initProject, packageManager } from "./init";
 import { withVaultBuildLock } from "./build-lock";
+import { versionVaults, type VersionVault } from "./versions";
 
 class CliAppRootMissing extends Data.TaggedError("CliAppRootMissing")<{
   readonly appRoot: string;
@@ -318,8 +319,29 @@ const loadWorkspace = (configPath?: string): Effect.Effect<WorkspaceContext, Cli
     return { config, projectRoot: path.resolve(config.configDir), hostApp };
   });
 
-/** A set of vaults that build or serve together, and the app they run in. */
-type AppRun = { readonly location: AppLocation; readonly vaults: readonly ResolvedConfig[] };
+/**
+ * A set of vaults that build or serve together, and the app they run in. A vault with `theme.versions` brings a vault
+ * per older version, right after it; `builds` holds what their Vite plugins need beyond the config.
+ */
+type AppRun = {
+  readonly location: AppLocation;
+  readonly vaults: readonly ResolvedConfig[];
+  readonly builds?: ReadonlyMap<string, Omit<VersionVault, "config">>;
+};
+
+/** The run of `vaults` in `location`, each vault followed by its versions. */
+const appRun = (location: AppLocation, vaults: readonly ResolvedConfig[]): Effect.Effect<AppRun, CliError> =>
+  Effect.tryPromise({
+    try: async () => {
+      const expanded = (await Promise.all(vaults.map(versionVaults))).flat();
+      return {
+        location,
+        vaults: expanded.map(({ config }) => config),
+        builds: new Map(expanded.map(({ config, ...build }) => [config.id, build])),
+      };
+    },
+    catch: (cause) => cause as Error,
+  });
 
 /** Every `host` vault, mounted together in the SvelteKit app at the config root. */
 const hostRun = (workspace: WorkspaceContext, vaultId?: string): Effect.Effect<AppRun, CliError> =>
@@ -331,17 +353,14 @@ const hostRun = (workspace: WorkspaceContext, vaultId?: string): Effect.Effect<A
         message: `Vault "${vaults[0]!.id}" targets "host", which mounts it in a SvelteKit app beside svartz.config.ts, and there is none at "${workspace.projectRoot}". Give it another target to build it with the app Svartz ships.`,
       });
     }
-    return { location: workspace.hostApp, vaults };
+    return yield* appRun(workspace.hostApp, vaults);
   });
 
-/** The run that builds or serves `vault`: its host app's, or the shipped app with that vault alone. */
+/** The run that builds or serves `vault`: its host app's, or the shipped app with that vault and its versions. */
 const runFor = (workspace: WorkspaceContext, vault: ResolvedConfig): Effect.Effect<AppRun, CliError> =>
   vault.target.type === "host"
     ? hostRun(workspace, vault.id)
-    : Effect.map(ensureBuildTargetSupported(vault), (supported) => ({
-        location: shippedApp(workspace.projectRoot),
-        vaults: [supported],
-      }));
+    : Effect.flatMap(ensureBuildTargetSupported(vault), (supported) => appRun(shippedApp(workspace.projectRoot), [supported]));
 
 /** What `dev` and `preview` serve: `--vault`'s run, or else every host vault in a host app, or else the first vault. */
 const serveRun = (workspace: WorkspaceContext, vaultId?: string): Effect.Effect<AppRun, CliError> =>
@@ -447,7 +466,7 @@ const ensureBuildTargetSupported = (
       });
 
 const createAppConfig = (
-  { location, vaults }: AppRun,
+  { location, vaults, builds }: AppRun,
   mode: "development" | "production",
   command: "serve" | "build",
   serverOptions?: Partial<ServerOptions>,
@@ -455,6 +474,8 @@ const createAppConfig = (
   Effect.gen(function* () {
     const { appRoot, projectRoot, hostApp, viteConfigPath } = location;
     const vault = vaults[0]!;
+    // A host app, or a vault built with its versions, chains every vault's server handle in one `virtual:svartz/server`.
+    const sharedServer = Boolean(hostApp) || vaults.length > 1;
     yield* Effect.forEach(vaults, (item) => ensureVaultWorkspace(appRoot, item), { concurrency: 1 });
     process.chdir(appRoot);
     if (!hostApp) applyPlatformEnvForVault(vault);
@@ -498,7 +519,7 @@ const createAppConfig = (
         }));
         await writeFile(hostRegistryPath, createHostRegistrySource(vaults));
         await writeFile(hostIndexPath, createHostIndexSource(vaults));
-        if (hostApp) await writeFile(hostServerPath, createHostServerSource(vaults));
+        if (sharedServer) await writeFile(hostServerPath, createHostServerSource(vaults));
         if (!hostApp) await writeFile(standalonePluginPath, [
           `import { hostStylesPlugin, publicAssetsPlugin } from ${JSON.stringify(import.meta.resolve("@svartz/vite/host"))};`,
           `export { withMarkdownNegotiation } from ${JSON.stringify(import.meta.resolve("@svartz/vite/host"))};`,
@@ -512,8 +533,9 @@ const createAppConfig = (
       return root ? [{ id, root }] : [];
     }));
     const themeRoots = themes.map(({ root }) => root);
-    // A lone vault loads its workspace themes from source, so theme edits need no rebuild.
-    const themeSources = vaults.length === 1
+    // A lone vault, or one with its versions, which share its themes, loads workspace themes from source, so theme edits
+    // need no rebuild.
+    const themeSources = !hostApp || vaults.length === 1
       ? Object.fromEntries(themes.flatMap(({ id, root }) => {
           const source = path.join(root, "src", "lib", "index.ts");
           return isLocalWorkspacePackage(root, projectRoot) && existsSync(source) ? [[id, source]] : [];
@@ -522,7 +544,7 @@ const createAppConfig = (
     process.env["SVARTZ_THEME_SOURCES"] = JSON.stringify(themeSources);
 
     process.env["SVARTZ_TAILWIND_SOURCES_PATH"] = yield* Effect.tryPromise({
-      try: () => vaults.length === 1
+      try: () => !hostApp || vaults.length === 1
         ? writeGeneratedTailwindSourcesFile(projectRoot, vault, hostApp)
         : writeGeneratedHostTailwindSourcesFile(projectRoot, projectRoot, vaults),
       catch: (cause) => cause as Error,
@@ -564,6 +586,7 @@ const createAppConfig = (
           projectRoot,
           ...(wranglerConfig ? { wranglerDir: path.dirname(wranglerConfig) } : {}),
           exposeVirtualModules: vaults.length === 1,
+          ...builds?.get(item.id),
         }) as never),
         {
           name: "svartz:host-registry-base",
@@ -580,8 +603,8 @@ const createAppConfig = (
         alias: {
           "virtual:svartz/host": hostRegistryPath,
           "virtual:svartz/index": hostIndexPath,
-          // The standalone shell's `virtual:svartz/server` is its one vault's module, aliased by the svartz plugin.
-          ...(hostApp ? { "virtual:svartz/server": hostServerPath } : {}),
+          // A lone standalone vault's `virtual:svartz/server` is its own module, aliased by the svartz plugin.
+          ...(sharedServer ? { "virtual:svartz/server": hostServerPath } : {}),
         },
       },
       server: {

@@ -6,7 +6,10 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { getSiteRoutes } from '../site-routes.js';
 	import { themeSettings } from '../theme-settings.js';
+	import VersionNotice from './VersionNotice.svelte';
+	import { versionLinks } from './versions.js';
 
 	let {
 		shell,
@@ -18,7 +21,12 @@
 		pageFoot,
 		footer
 	}: {
-		shell: { readonly drawer: boolean; readonly themeConfig?: Readonly<Record<string, unknown>> };
+		shell: {
+			readonly drawer: boolean;
+			readonly homeHref: string;
+			readonly currentHref?: string;
+			readonly themeConfig?: Readonly<Record<string, unknown>>;
+		};
 		header: Snippet;
 		navigation: Snippet;
 		pageHead: Snippet;
@@ -29,6 +37,10 @@
 	} = $props();
 
 	const navLinks = $derived(themeSettings(shell.themeConfig ?? {}).navLinks);
+	const hasRoute = getSiteRoutes();
+	const versions = $derived(
+		versionLinks(shell.themeConfig ?? {}, { homeHref: shell.homeHref, currentHref: shell.currentHref ?? shell.homeHref, hasRoute })
+	);
 </script>
 
 {@render header()}
@@ -47,6 +59,7 @@
 	<main class="main" id="content" tabindex="-1" inert={shell.drawer}>
 		<div class="split">
 			<div class="page">
+				<VersionNotice {versions} />
 				<div data-sv-preview>{@render pageHead()}{@render body()}</div>
 				{@render pageFoot()}
 			</div>
