@@ -298,6 +298,40 @@ describe("Markdown copies for LLM agents", () => {
     expect(full).toContain("]: /docs/reference/api.md");
   });
 
+  it.each([
+    { name: "a deployment base and no site.url", url: undefined, deploymentBase: "/project", origin: "https://deployed.invalid/project" },
+    { name: "site.url", url: "https://example.com/project", deploymentBase: undefined, origin: "https://example.com/project" },
+  ])("sends every llms-full.txt link where the page's own copy sends it, with $name", async ({ url, deploymentBase, origin }) => {
+    const setup = [
+      "---\ntitle: Setup\n---",
+      "[About](../../../about/), [search](../search/?q=a#results), [step](<next.md#Step One>), [top](#top), [site](https://example.org/x).",
+      "![Diagram](../diagram.png) [Manual][manual] [Next][next]",
+      "",
+      "[manual]: ../manual.md",
+      "[next]: next.md#step-one",
+    ].join("\n");
+    const ctx = build([file("guides/setup.md", setup), file("guides/next.md", "---\ntitle: Next\n---\nDone."), file("diagram.png")], { url });
+    if (deploymentBase) ctx.meta.set("svartz:deploymentBase", deploymentBase);
+    const asset = await emit(ctx);
+    // Each destination in reading order, as a reader fetching the file from `from` reaches it.
+    const destinations = (markdown: string, from: string) => {
+      const tree = unified().use(remarkParse).use(remarkGfm).parse(markdown);
+      const definitions = new Map<string, string>();
+      visit(tree, "definition", (node) => void definitions.set(node.identifier, node.url));
+      const urls: string[] = [];
+      visit(tree, (node) => {
+        if (node.type === "link" || node.type === "image") urls.push(node.url);
+        if (node.type === "linkReference" || node.type === "imageReference") urls.push(definitions.get(node.identifier)!);
+      });
+      return urls.map((href) => new URL(href, from).href);
+    };
+    const copy = destinations(asset("guides/setup.md")!, `${origin}/docs/guides/setup.md`);
+    expect(copy).toHaveLength(8);
+    // GFM autolinks the bare URL on each page's `Source:` line; that line names the page rather than linking from it.
+    const full = asset("llms-full.txt")!.replace(/^Source: .*$/gm, "");
+    expect(destinations(full, `${origin}/docs/llms-full.txt`)).toEqual(copy);
+  });
+
   it("keeps the deployment base in llms-full.txt links without site.url", async () => {
     const ctx = build([
       file("guides/setup.md", "---\ntitle: Setup\n---\nSee [more](../tags/?sort=new#top) and [[next]]."),

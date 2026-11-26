@@ -27,8 +27,6 @@ export interface AgentMarkdownLinks {
   note(target: { target: string; section?: string; type: "wikilink" | "markdown" }): string | undefined;
   /** URL for a public vault attachment named from this note. */
   asset(target: string): string | undefined;
-  /** URL for a relative destination that names neither, such as a host route. Without it, such links stay as authored. */
-  path?(target: string): string | undefined;
 }
 
 interface Replacement {
@@ -56,9 +54,7 @@ function definitionUrl(target: string, links: AgentMarkdownLinks): string | unde
   if (asset) return asset;
   const [path = "", section] = target.split("#");
   const url = links.note({ target: path, section: section || undefined, type: "markdown" });
-  if (url) return `${url}${anchor(section)}`;
-  // A definition naming a note that isn't public stays as authored, like the page's own copy.
-  return NOTE_FILE.test(path) ? undefined : links.path?.(target);
+  return url && `${url}${anchor(section)}`;
 }
 
 function embedReplacements(source: string, links: AgentMarkdownLinks): Replacement[] {
@@ -67,7 +63,7 @@ function embedReplacements(source: string, links: AgentMarkdownLinks): Replaceme
     const start = node.position?.start.offset;
     if (start === undefined) return;
     if (node.type === "image") {
-      const url = assetUrl(links, node.url) ?? links.path?.(node.url);
+      const url = assetUrl(links, node.url);
       if (url) replacements.push({ start, end: node.position!.end.offset!, text: `![${escapeLabel(node.alt ?? "")}](${url})` });
       return;
     }
@@ -135,10 +131,7 @@ export function portableMarkdown(file: ProcessedFile, source: string, links: Age
       if (link.destination && url) return [{ ...link.destination, text: url }];
       // A Markdown link to another path, such as a host route, stays as authored. One to a note that
       // isn't public becomes its label, like a wikilink, rather than a link to a file that isn't published.
-      if (link.destination && !NOTE_FILE.test(link.target)) {
-        const path = links.path?.(link.section ? `${link.target}#${link.section}` : link.target);
-        return path ? [{ ...link.destination, text: path }] : [];
-      }
+      if (link.destination && !NOTE_FILE.test(link.target)) return [];
       // An unresolved wikilink becomes its label, as on the page.
       return [{ start: link.start, end: link.end, text: noteLink(url, label) }];
     }),
@@ -180,6 +173,47 @@ export function agentMarkdown(
 }
 
 const gfmParser = unified().use(remarkParse).use(remarkGfm);
+const HAS_SCHEME = /^[a-z][\w+.-]*:/i;
+
+/**
+ * `markdown` with every destination resolved against `from`, the URL it was written for, then written by `format`.
+ * It reaches the same places from anywhere, so a copy can move into `llms-full.txt` without recomputing a link.
+ * Links, images, reference definitions and HTML attributes all move; a destination with a scheme stays as it is.
+ */
+export function rebaseLinks(markdown: string, from: URL, format: (url: URL) => string): string {
+  const rebase = (target: string) => (HAS_SCHEME.test(target) ? undefined : format(new URL(target, from)));
+  const replacements: Replacement[] = [];
+  const add = (start: number, end: number, target: string) => {
+    const text = rebase(target);
+    if (text !== undefined) replacements.push({ start, end, text });
+  };
+  for (const { destination } of findLinkSpans(markdown)) {
+    if (destination) add(destination.start, destination.end, markdown.slice(destination.start, destination.end));
+  }
+  for (const { start, end, target } of referenceDefinitionSpans(markdown)) add(start, end, target);
+  visit(markdownParser.parse(markdown), (node) => {
+    const start = node.position?.start.offset;
+    if (start === undefined) return;
+    if (node.type === "image") {
+      const url = rebase(node.url);
+      const title = node.title ? ` "${node.title.replaceAll('"', '\\"')}"` : "";
+      if (url) replacements.push({ start, end: node.position!.end.offset!, text: `![${escapeLabel(node.alt ?? "")}](${url}${title})` });
+    } else if (node.type === "html") {
+      for (const span of htmlAssetSpans(node.value)) {
+        // A tag inside a blockquote or list loses its markers in `value`, so its offsets may not match the source.
+        if (markdown.slice(start + span.start, start + span.end) === span.target) add(start + span.start, start + span.end, span.target);
+      }
+    }
+  });
+  let body = markdown;
+  let limit = Infinity;
+  for (const { start, end, text } of replacements.sort((left, right) => right.start - left.start)) {
+    if (end > limit) continue;
+    body = body.slice(0, start) + text + body.slice(end);
+    limit = start;
+  }
+  return body;
+}
 /** A reference or footnote label at the start of its definition: `[doc]:` or `[^1]:`. */
 const DEFINITION_LABEL = /^\[\^?(?:\\.|[^\\\]])+\]/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
