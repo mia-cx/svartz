@@ -33,7 +33,7 @@ characters/                  → "Characters" in the bar
     Mirelle Ashford.md
 ```
 
-Each top-level folder is a bar item that links to its folder note, or to its folder page if it has none. A dropdown shows 12 pages, then links to the rest. Folders deeper than a flyout appear as plain links. Notes at the vault root stay out of the bar. Sections that don't fit the bar's width wait in a **More** menu at its end, each opening its pages as a flyout, and More carries the current section's mark while it waits there. On narrow screens the same tree opens in the menu drawer.
+Each top-level folder is a bar item that links to its folder note, or to its folder page if it has none. A dropdown shows 12 pages, then links to the rest. Folders deeper than a flyout appear as plain links. Notes at the vault root stay out of the bar. Sections that don't fit the bar's width wait in a **More** menu at its end. More scrolls when it runs long, and each section's chevron there expands its pages below its row. More carries the current section's mark while it waits there. On narrow screens the same tree opens in the menu drawer.
 
 Sections and pages sort by title. To put one first, give it an `order` number: lower comes first, and anything without one follows in title order. A folder takes the `order` of its folder note.
 
