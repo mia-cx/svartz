@@ -32,7 +32,7 @@ const packages = [
   ['@svartz/theme-api-docs', 'themes/api-docs', ['dist/index.js', 'dist/runtime.js']],
   ['@svartz/theme-mcp-docs', 'themes/mcp-docs', ['dist/index.js', 'dist/runtime.js']],
   ['@svartz/vite', 'packages/vite', ['dist/index.js', 'dist/host.js', 'dist/discovery.js', 'types/virtual-modules.d.ts']],
-  ['svartz', 'packages/cli', ['dist/index.js', 'template/vault/index.md', 'template/gitignore']],
+  ['svartz', 'packages/cli', ['dist/index.js', 'app/vite.config.js', 'app/src/app.html', 'template/vault/index.md', 'template/gitignore']],
 ];
 
 async function command(file, args, cwd, { build = false } = {}) {
@@ -62,12 +62,26 @@ async function localDependencies(project, archives) {
       if (archives.has(name)) manifest[group][name] = `file:${archives.get(name)}`;
     }
   }
-  // The registry has no v1 packages yet, so pin transitive Svartz packages locally too.
+  // Pin transitive Svartz packages to the same archives as direct dependencies.
   manifest.devDependencies ??= {};
   for (const [name, archive] of archives) {
     if (!manifest.dependencies?.[name]) manifest.devDependencies[name] = `file:${archive}`;
   }
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+async function checkInstalledArchives(project, archives) {
+  const lockfile = JSON.parse(await readFile(path.join(project, 'package-lock.json'), 'utf8'));
+  const installed = new Set();
+  for (const [location, entry] of Object.entries(lockfile.packages)) {
+    const name = location.split('node_modules/').at(-1);
+    if (!archives.has(name)) continue;
+    assert.equal(entry.version, releaseVersion, `${location} version`);
+    assert(entry.resolved?.startsWith('file:'), `${location} must resolve from a local tarball`);
+    assert.equal(path.resolve(project, entry.resolved.slice(5)), archives.get(name), `${location} tarball`);
+    installed.add(name);
+  }
+  assert.equal(installed.size, archives.size, 'The consumer must install every local tarball');
 }
 
 async function freePort() {
@@ -119,6 +133,7 @@ async function checkFresh(project, launcher, archives) {
   await command(path.join(launcher, 'node_modules/.bin/svartz'), ['init', '--no-install', '--no-git'], project);
   await localDependencies(project, archives);
   await command('npm', ['install', '--no-audit', '--no-fund'], project);
+  await checkInstalledArchives(project, archives);
   await command('node', ['--input-type=module', '-e', [
     "import { citations, hardLineBreaks, oxHugoFlavoredMarkdown, roamFlavoredMarkdown } from '@svartz/plugins';",
     "import minimalTheme from '@svartz/theme-minimal';",
@@ -132,6 +147,34 @@ async function checkFresh(project, launcher, archives) {
   assert.match(html, /Svartz/);
   await checkDev(project, '/', 'Svartz');
   console.log('Packed fresh project: install, static build, and dev passed.');
+}
+
+async function checkWorkers(project) {
+  const vaults = [
+    { id: 'notes', path: 'vault', theme: '@svartz/theme-minimal', site: { title: 'Notes' }, marker: 'Packed notes vault' },
+    { id: 'guides', path: 'guides', theme: '@svartz/theme-wiki', site: { title: 'Guides' }, marker: 'Packed guides vault' },
+  ];
+  await write(project, 'svartz.config.ts', `export default ${JSON.stringify({
+    version: '1.0.0',
+    vaults: vaults.map(({ marker, ...vault }) => ({ ...vault, target: { type: 'cloudflare-workers' } })),
+  }, null, 2)};\n`);
+  for (const vault of vaults) await write(project, `${vault.path}/index.md`, `# ${vault.marker}\n`);
+  await rm(path.join(project, '.svartz'), { recursive: true, force: true });
+  await command('npm', ['run', 'build'], project, { build: true });
+  const vaultsRoot = path.join(project, '.svartz/vaults');
+  assert.deepEqual((await readdir(vaultsRoot)).sort(), vaults.map(({ id }) => id).sort());
+  for (const vault of vaults) {
+    const vaultRoot = path.join(vaultsRoot, vault.id);
+    const wrangler = JSON.parse(await readFile(path.join(vaultRoot, 'wrangler.json'), 'utf8'));
+    assert.equal(wrangler.name, vault.id, `${vault.id} Worker name`);
+    assert.equal(wrangler.main, '.svelte-kit/cloudflare/_worker.js', `${vault.id} Worker entry`);
+    assert((await stat(path.join(vaultRoot, wrangler.main))).isFile(), `${vault.id} Worker entry must be a file`);
+    const html = await readFile(path.join(vaultRoot, '.svelte-kit/cloudflare/index.html'), 'utf8');
+    for (const { id, marker } of vaults) {
+      assert.equal(html.includes(marker), id === vault.id, `${vault.id} Worker page: ${marker}`);
+    }
+    console.log(`Packed Worker ${wrangler.name}: .svartz/vaults/${vault.id}/wrangler.json -> ${wrangler.main}`);
+  }
 }
 
 async function checkStyledHostCss(project) {
@@ -220,6 +263,7 @@ async function checkHost(project, launcher, archives) {
     "export const GET = () => new Response(renderHostRss(vaults, ['notes'], { title: 'Portfolio', url: 'https://example.test' }), { headers: { 'content-type': 'application/rss+xml' } });",
   ].join('\n'));
   await command('npm', ['install', '--no-audit', '--no-fund'], project);
+  await checkInstalledArchives(project, archives);
   await command('node', ['--input-type=module', '-e', [
     "import { createRequire } from 'node:module';",
     "const require = createRequire(import.meta.resolve('svartz'));",
@@ -281,6 +325,7 @@ async function checkHost(project, launcher, archives) {
 
   // Reuse the packed Vite 8 consumer with its adapter changed to the production host's adapter.
   await command('npm', ['install', '--save-dev', '@sveltejs/adapter-cloudflare@^7', '--no-audit', '--no-fund'], project);
+  await checkInstalledArchives(project, archives);
   await write(project, 'svelte.config.js', "import adapter from '@sveltejs/adapter-cloudflare';\nexport default { kit: { adapter: adapter() } };\n");
   await command('npm', ['run', 'svartz:build'], project, { build: true });
   await stat(path.join(project, '.svelte-kit/cloudflare/_worker.js'));
@@ -327,13 +372,16 @@ try {
     }
     archives.set(name, archive);
   }
-  console.log(`${archives.size} public archives: runtime files and package boundaries passed.`);
+  console.log(`${archives.size} public archives at ${releaseVersion}: runtime files and package boundaries passed (including svartz app/).`);
 
   const launcher = path.join(temporary, 'launcher');
   await mkdir(launcher);
   await write(launcher, 'package.json', '{"name":"svartz-release-launcher","private":true,"type":"module"}\n');
   await command('npm', ['install', '--no-audit', '--no-fund', ...archives.values()], launcher);
-  await checkFresh(path.join(temporary, 'fresh'), launcher, archives);
+  await checkInstalledArchives(launcher, archives);
+  const fresh = path.join(temporary, 'fresh');
+  await checkFresh(fresh, launcher, archives);
+  await checkWorkers(fresh);
   await checkHost(path.join(temporary, 'host'), launcher, archives);
 } finally {
   if (!process.env.SVARTZ_RELEASE_KEEP_TEMP) await rm(temporary, { recursive: true, force: true });

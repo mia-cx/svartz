@@ -34,9 +34,13 @@ Its title and commit message are `chore(release): version packages`.
 The Changesets action only opens or updates that PR.
 It never publishes, tags, or creates GitHub releases.
 
-The bot uses GitHub's built-in token.
-GitHub may require you to approve workflows on its PR.
-You can also dispatch Release validation with the full release-PR head SHA before merging.
+The bot uses GitHub's built-in token, so its PR updates may not trigger pull-request workflows without approval.
+After each update the bot explicitly dispatches the read-only Release validation workflow on `changeset-release/main` with the full release-PR head SHA. This does not publish or deploy.
+To validate an existing release PR head manually, run:
+
+```sh
+gh workflow run release-validation.yml --ref changeset-release/main -f sha=FULL_RELEASE_PR_HEAD_SHA
+```
 
 Review the changelogs and merge the release PR.
 The release plan checks the merged commit's associated PR.
@@ -136,7 +140,9 @@ Then configure the package's trusted publisher as above, and merge the release P
 `pnpm test:release` tests release scripts, registry checks, and real Changesets versioning.
 `pnpm release:check` builds and packs every public package outside the monorepo.
 It checks licenses, exports, types, runtime files, and resolved dependency ranges.
-It installs a fresh CLI consumer and builds and serves its static site.
+It checks that `svartz` ships its bundled `app/` and verifies that every Svartz dependency in the consumer lockfiles comes from the local tarballs.
+It initializes a fresh CLI consumer, builds and serves its static site, then builds two vaults as independent Cloudflare Workers with separate Wrangler configs, bundles, and prerendered pages. No Worker is deployed.
+Workspace CI also runs the packed check on implementation PRs after building.
 It checks a mounted Vite 8 host, protected SVX, emitted CSS, and Svelte types.
 The same packed host always builds with `@sveltejs/adapter-cloudflare`.
 The check requires a Worker entry and prerendered mounted note HTML in the Cloudflare output.
