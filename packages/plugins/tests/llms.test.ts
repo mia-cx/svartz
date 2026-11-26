@@ -310,6 +310,11 @@ describe("Markdown copies for LLM agents", () => {
       // Angle brackets around a space, a backslash escape, protocol-relative URLs, and a `)` with a title.
       "[Two words](<../search/?q=two words>), [escaped](../a\\_b/), ![Logo](//cdn.example.org/logo.png), ![Plot](</docs/charts/run).png> 'Original plot').",
       "",
+      // A `|` in a table cell's destination, and a `srcset` whose first URL holds a comma.
+      "| Link | Image |",
+      "| --- | --- |",
+      "| [pipe](../a\\|b/) | <img srcset=\"../a,b.png 1x, ../c.png 2x, https://cdn.example.org/d.png 3x\"> |",
+      "",
       "[manual]: ../manual.md",
       "[next]: next.md#step-one",
       "[cdn]: //cdn.example.org/lib.js \"Library\"",
@@ -328,14 +333,23 @@ describe("Markdown copies for LLM agents", () => {
         if (node.type === "linkReference" || node.type === "imageReference") links.push(definitions.get(node.identifier)!);
         if (node.type === "html") {
           for (const element of parseFragment(node.value).childNodes) {
-            if ("attrs" in element) links.push(...element.attrs.filter((attribute) => attribute.name === "src").map(({ value }) => ({ url: value })));
+            if (!("attrs" in element)) continue;
+            for (const { name, value } of element.attrs) {
+              if (name === "src") links.push({ url: value });
+              // Each candidate's URL is a run of non-whitespace, minus trailing commas, as the HTML spec reads it.
+              if (name === "srcset") {
+                const tokens = value.trim().split(/\s+/);
+                links.push(...tokens.filter((_, index) => index === 0 || tokens[index - 1]!.endsWith(",")).map((url) => ({ url: url.replace(/,+$/, "") })));
+              }
+            }
           }
         }
       });
-      return links.map(({ url, title }) => [new URL(url, from).href, title ?? null]);
+      // `|` and `%7C` name the same URL.
+      return links.map(({ url, title }) => [new URL(url, from).href.replaceAll("|", "%7C"), title ?? null]);
     };
     const copy = destinations(asset("guides/setup.md")!, `${origin}/docs/guides/setup.md`);
-    expect(copy).toHaveLength(14);
+    expect(copy).toHaveLength(18);
     // GFM autolinks the bare URL on each page's `Source:` line; that line names the page rather than linking from it.
     const full = asset("llms-full.txt")!.replace(/^Source: .*$/gm, "");
     expect(destinations(full, `${origin}/docs/llms-full.txt`)).toEqual(copy);

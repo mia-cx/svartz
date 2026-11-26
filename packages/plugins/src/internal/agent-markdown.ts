@@ -199,6 +199,37 @@ function labelEnd(markdown: string, start: number): number {
 
 type HtmlNode = DefaultTreeAdapterMap["childNode"];
 
+const isHtmlSpace = (char: string | undefined) => char === " " || char === "\t" || char === "\n" || char === "\f" || char === "\r";
+
+/**
+ * A `srcset` value's candidates as the HTML spec reads them: a URL is a run of non-whitespace minus trailing commas,
+ * so a comma inside one stays put, and its descriptors run to the next comma outside parentheses.
+ */
+function srcsetCandidates(value: string): { url: string; descriptors: string }[] {
+  const candidates: { url: string; descriptors: string }[] = [];
+  let at = 0;
+  while (at < value.length) {
+    while (isHtmlSpace(value[at]) || value[at] === ",") at++;
+    if (at >= value.length) break;
+    const start = at;
+    while (at < value.length && !isHtmlSpace(value[at])) at++;
+    let url = value.slice(start, at);
+    if (url.endsWith(",")) {
+      while (url.endsWith(",")) url = url.slice(0, -1);
+      candidates.push({ url, descriptors: "" });
+      continue;
+    }
+    const descriptorsStart = at;
+    for (let depth = 0; at < value.length && (value[at] !== "," || depth > 0); at++) {
+      if (value[at] === "(") depth++;
+      else if (value[at] === ")") depth--;
+    }
+    candidates.push({ url, descriptors: value.slice(descriptorsStart, at).trim() });
+    at++;
+  }
+  return candidates;
+}
+
 /**
  * `markdown` with every path- and root-relative destination resolved against `from`, the URL it was written for, then
  * written by `format`. It reaches the same places from anywhere, so a copy can move into `llms-full.txt` without
@@ -206,7 +237,8 @@ type HtmlNode = DefaultTreeAdapterMap["childNode"];
  * URL attributes; only those source spans are rewritten. Absolute destinations stay as written.
  */
 export function rebaseLinks(markdown: string, from: URL, format: (url: URL) => string): string {
-  const rebase = (url: string) => (isAbsolute(url) ? undefined : format(new URL(url, from)));
+  // A `|` is written `%7C`, the same URL, since a raw one would end a GFM table cell.
+  const rebase = (url: string) => (isAbsolute(url) ? undefined : format(new URL(url, from)).replaceAll("|", "%7C"));
   const replacements: Replacement[] = [];
   visit(gfmParser.parse(markdown), (node) => {
     const start = node.position?.start.offset;
@@ -236,10 +268,7 @@ export function rebaseLinks(markdown: string, from: URL, format: (url: URL) => s
           // A tag inside a blockquote or list loses its markers in `value`, so its offsets may not match the source.
           if (!location || markdown.slice(start + location.startOffset, start + location.endOffset) !== node.value.slice(location.startOffset, location.endOffset)) continue;
           const rebased = name === "srcset"
-            ? value.split(",").map((candidate) => {
-              const [url = "", ...descriptors] = candidate.trim().split(/\s+/);
-              return [rebase(url) ?? url, ...descriptors].join(" ");
-            }).join(", ")
+            ? srcsetCandidates(value).map(({ url, descriptors }) => [rebase(url) ?? url, descriptors].filter(Boolean).join(" ")).join(", ")
             : rebase(value);
           if (rebased !== undefined && rebased !== value) {
             replacements.push({ start: start + location.startOffset, end: start + location.endOffset, text: `${name}="${writeAttribute(rebased)}"` });
