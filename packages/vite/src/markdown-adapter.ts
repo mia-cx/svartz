@@ -53,14 +53,14 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
         ? await nodeHandlerModule(directory)
         : { file: "_worker.js", name: "default" };
       const original = `svartz-${entry}`;
-      const common = `
+      const common = hasContentRoutes ? `
         import { createServerHandle, decodeRoutePath, markdownCopyFor } from ${JSON.stringify(import.meta.resolve("@svartz/core"))};
         const markdown = ${JSON.stringify(markdown)};
         const handle = createServerHandle({
           basePath: "", vault: { id: "", mountPath: "", site: {} }, servers: [],
           markdown,
         }, { building: false, dev: false, privateEnv: {} });
-      `;
+      ` : "";
       const source = node ? `${common}
         import { ${handlerExport} as original } from "./${original}";
         // Other chunks may import more of the handler's chunk than the handler; this module's own export wins.
@@ -120,8 +120,8 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
           } catch (error) { next(error); }
         }
       ` : `${common}
-        import original from "./${original}";
-        const publicFiles = new Set(${JSON.stringify(publicFiles)});
+        import original from "./${original}";${hasContentRoutes ? `
+        const publicFiles = new Set(${JSON.stringify(publicFiles)});` : ""}
         export default {
           ...original,
           fetch(request, env, ctx) {

@@ -3,12 +3,35 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { gzipSync } from "node:zlib";
 import type { ConfigEnv, UserConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
-import { hostStylesPlugin, withSvartzHost } from "../src/host";
+import { hostStylesPlugin, withMarkdownNegotiation, withSvartzHost } from "../src/host";
 import { clearPublicAssets, getMarkdownRoutes, getPublicFileNames, publicAssetsPlugin, recordMarkdownRoutes, recordPublicAssets } from "../src/public-assets";
 
 afterEach(() => vi.unstubAllEnvs());
+
+it("keeps the redirect-only Worker entry under 1 KiB gzip without content routes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "svartz-redirect-worker-"));
+  const entry = join(root, "_worker.js");
+  try {
+    await withMarkdownNegotiation({
+      name: "cloudflare",
+      adapt: () => writeFile(entry, "export default { fetch: () => new Response('original worker') };\n"),
+    }, "cloudflare-workers", root).adapt({ getBuildDirectory: () => root });
+    expect(gzipSync(await readFile(entry)).byteLength).toBeLessThan(1024);
+    const { default: worker } = await import(pathToFileURL(entry).href);
+    const env = { SVARTZ_WWW_REDIRECT_HOSTS: ["example.com"] };
+    const redirect = await worker.fetch(new Request("https://www.example.com/assets/logo.svg?v=2"), env);
+    expect(redirect.status).toBe(301);
+    expect(redirect.headers.get("location")).toBe("https://example.com/assets/logo.svg?v=2");
+    const response = await worker.fetch(new Request("https://example.com/assets/logo.svg?v=2"), env);
+    expect(await response.text()).toBe("original worker");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 it("keeps host Vite settings and supplies aliases for the secondary Kit build", async () => {
   vi.stubEnv("SVARTZ_THEME_MODULE_PATH", "/generated/theme.ts");
