@@ -37,6 +37,17 @@ const STATUSES: readonly VersionStatus[] = ["latest", "supported", "deprecated"]
 /** A version id is one URL segment that reads as written: `2026-01`, `v2`, `1.4`. */
 const VERSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
+/**
+ * Every promise's value once all have settled, or the first failure, thrown only then: a failed version must not end the
+ * build, and release its lock, while another is still writing its snapshot.
+ */
+export async function settled<T>(promises: readonly Promise<T>[]): Promise<T[]> {
+  const results = await Promise.allSettled(promises);
+  const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failed) throw failed.reason;
+  return results.map((result) => (result as PromiseFulfilledResult<T>).value);
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -95,7 +106,7 @@ async function extract(root: string, commit: string, prefix: string, target: str
     child.once("error", reject);
     child.once("close", (code) => (code === 0 ? resolve() : reject(new Error(`${name} failed (${code}): ${stderr.trim()}`))));
   });
-  await Promise.all([done(archive, "git archive"), done(unpack, "tar")]);
+  await settled([done(archive, "git archive"), done(unpack, "tar")]);
 }
 
 /**
@@ -146,7 +157,7 @@ export async function versionVaults(vault: ResolvedConfig): Promise<VersionVault
   const latest = versions.find((version) => version.status === "latest")!;
   const older = versions.filter((version) => version.status !== "latest");
   const mountOf = (version: VersionSpec) => `${vault.mountPath}/${version.id}`;
-  const snapshots = await Promise.all(older.map(async (version): Promise<VersionVault> => {
+  const snapshots = await settled(older.map(async (version): Promise<VersionVault> => {
     const folder = path.join(getVaultBuildRoot(vault), "versions", version.id);
     const { path: vaultPath, source } = await snapshot(vault, version, folder);
     return {

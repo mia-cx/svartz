@@ -43,3 +43,14 @@ it("reads a version again when the vault's folder changes at the same commit", a
   expect(await readdir(mcp!.config.path)).toEqual(["find-pets.md"]);
   expect(mcp!.snapshot).not.toBe(rest!.snapshot);
 });
+
+// Proves a failed version lets the others finish reading before the build fails and releases its lock, so a retry
+// never writes into a snapshot that's still being extracted.
+it("finishes reading every version before failing on a missing ref", async () => {
+  const config = vault("rest");
+  const versions = [{ id: "v2", status: "latest" }, { id: "v1", ref: "v1" }, { id: "v0", ref: "no-such-ref" }];
+  const failing = { ...config, theme: { ...config.theme, versions } } as ResolvedConfig;
+
+  await expect(versionVaults(failing)).rejects.toThrow('git has no ref "no-such-ref"');
+  expect(await readdir(join(repo, ".svartz/api/versions/v1"))).toContain("source");
+});

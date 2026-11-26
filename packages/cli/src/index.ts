@@ -56,7 +56,7 @@ import { resolveHostApp, shippedApp, type AppLocation } from "./workspace";
 import { writeVaultWranglerConfig } from "./wrangler-config";
 import { commandExecutable, initProject, packageManager } from "./init";
 import { withVaultBuildLock } from "./build-lock";
-import { versionVaults, type VersionVault } from "./versions";
+import { settled, versionVaults, type VersionVault } from "./versions";
 
 class CliAppRootMissing extends Data.TaggedError("CliAppRootMissing")<{
   readonly appRoot: string;
@@ -330,7 +330,7 @@ type AppRun = { readonly location: AppLocation; readonly vaults: readonly Resolv
 const withVersions = (vaults: readonly ResolvedConfig[]) =>
   Effect.tryPromise({
     try: async () => {
-      const expanded = (await Promise.all(vaults.map(versionVaults))).flat();
+      const expanded = (await settled(vaults.map(versionVaults))).flat();
       return {
         vaults: expanded.map(({ config }) => config),
         builds: new Map(expanded.map(({ config, ...build }): [string, Omit<VersionVault, "config">] => [config.id, build])),
