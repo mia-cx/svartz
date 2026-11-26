@@ -7,6 +7,7 @@ import GithubSlugger from "github-slugger";
 import matter from "gray-matter";
 import { posix } from "node:path";
 import type { ProcessedFile } from "@svartz/core";
+import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
@@ -26,6 +27,8 @@ export interface AgentMarkdownLinks {
   note(target: { target: string; section?: string; type: "wikilink" | "markdown" }): string | undefined;
   /** URL for a public vault attachment named from this note. */
   asset(target: string): string | undefined;
+  /** URL for a relative destination that names neither, such as a host route. Without it, such links stay as authored. */
+  path?(target: string): string | undefined;
 }
 
 interface Replacement {
@@ -53,7 +56,7 @@ function definitionUrl(target: string, links: AgentMarkdownLinks): string | unde
   if (asset) return asset;
   const [path = "", section] = target.split("#");
   const url = links.note({ target: path, section: section || undefined, type: "markdown" });
-  return url && `${url}${anchor(section)}`;
+  return url ? `${url}${anchor(section)}` : links.path?.(target);
 }
 
 function embedReplacements(source: string, links: AgentMarkdownLinks): Replacement[] {
@@ -62,7 +65,7 @@ function embedReplacements(source: string, links: AgentMarkdownLinks): Replaceme
     const start = node.position?.start.offset;
     if (start === undefined) return;
     if (node.type === "image") {
-      const url = assetUrl(links, node.url);
+      const url = assetUrl(links, node.url) ?? links.path?.(node.url);
       if (url) replacements.push({ start, end: node.position!.end.offset!, text: `![${escapeLabel(node.alt ?? "")}](${url})` });
       return;
     }
@@ -128,6 +131,8 @@ export function portableMarkdown(file: ProcessedFile, source: string, links: Age
       const url = asset ?? (note && `${note}${anchor(link.section)}`);
       // A Markdown link swaps only its destination, keeping its label markup and title.
       if (link.destination && url) return [{ ...link.destination, text: url }];
+      const path = link.destination && links.path?.(link.section ? `${link.target}#${link.section}` : link.target);
+      if (link.destination && path) return [{ ...link.destination, text: path }];
       // A Markdown link to another path, such as a host route, stays as authored. One to a note that
       // isn't public becomes its label, like a wikilink, rather than a link to a file that isn't published.
       if (link.destination && !NOTE_FILE.test(link.target)) return [];
@@ -169,4 +174,47 @@ export function agentMarkdown(
   return Object.keys(page.properties).length > 0
     ? `${matter.stringify("", { ...page.properties }).trim()}\n\n${content}\n`
     : `${content}\n`;
+}
+
+const gfmParser = unified().use(remarkParse).use(remarkGfm);
+/** A reference or footnote label at the start of its definition: `[doc]:` or `[^1]:`. */
+const DEFINITION_LABEL = /^\[\^?(?:\\.|[^\\\]])+\]/;
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+
+/**
+ * A copy that still means the same once joined with others into one document, as in `llms-full.txt`. Each reference
+ * and footnote label gets the `scope` prefix, so a definition binds only the page that wrote it, and a fence the page
+ * leaves open closes at its end instead of swallowing the next page.
+ */
+export function selfContained(markdown: string, scope: string): string {
+  const tree = gfmParser.parse(markdown);
+  const label = (identifier: string) => `${scope}:${identifier}`;
+  const replacements: Replacement[] = [];
+  visit(tree, (node) => {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (start === undefined || end === undefined) return;
+    if (node.type === "linkReference" || node.type === "imageReference") {
+      // Only the label after the text changes: `[text][doc]`, `[text][]`, and the shortcut `[doc]` all become `[text][scope:doc]`.
+      const from = node.referenceType === "full" ? markdown.lastIndexOf("[", end - 1) : node.referenceType === "collapsed" ? end - 2 : end;
+      replacements.push({ start: from, end, text: `[${label(node.identifier)}]` });
+    } else if (node.type === "footnoteReference") {
+      replacements.push({ start, end, text: `[^${label(node.identifier)}]` });
+    } else if (node.type === "definition" || node.type === "footnoteDefinition") {
+      const own = DEFINITION_LABEL.exec(markdown.slice(start))?.[0];
+      if (own) replacements.push({ start, end: start + own.length, text: node.type === "definition" ? `[${label(node.identifier)}]` : `[^${label(node.identifier)}]` });
+    }
+  });
+  let body = markdown;
+  for (const { start, end, text } of replacements.sort((left, right) => right.start - left.start)) {
+    body = body.slice(0, start) + text + body.slice(end);
+  }
+
+  // Only a fence at the top level runs on: the blank line before the next page ends any list or quote around one.
+  const last = tree.children.at(-1);
+  if (last?.type !== "code") return body;
+  const lines = markdown.slice(last.position!.start.offset, last.position!.end.offset).split("\n");
+  const fence = FENCE.exec(lines[0]!)?.[1];
+  const closed = lines.length > 1 && new RegExp(`^ {0,3}\\${fence?.[0]}{${fence?.length},}\\s*$`).test(lines.at(-1)!);
+  return fence === undefined || closed ? body : `${body.trimEnd()}\n${fence}\n`;
 }

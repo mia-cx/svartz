@@ -2,11 +2,11 @@
 import { posix, resolve } from "node:path";
 import { definePlugin, type Artifact, type Index, type IndexEntry, type PluginContext } from "@svartz/core";
 import { compareExplorerNodes, orderOf, type ExplorerSortable } from "./explorer";
-import { agentMarkdown } from "./internal/agent-markdown";
+import { agentMarkdown, selfContained } from "./internal/agent-markdown";
 import { createAssetResolver } from "./internal/asset-references";
 import { renderMarkdown } from "./internal/render-markdown";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
-import { alternateNames } from "./internal/routes";
+import { alternateNames, markdownHref } from "./internal/routes";
 
 const NOTE_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
 
@@ -144,13 +144,16 @@ function emitLlms(ctx: PluginContext, base: string | undefined): void {
   const mountPath = ctx.config.mountPath ?? "";
   const notesBySlug = new Map(notes.map((file) => [file.slug, file]));
 
-  /** A page's Markdown copy, its links relative to `fromHref`; frontmatter only in the page's own copy. */
-  const copyOf = (entry: IndexEntry, fromHref: string, withProperties: boolean): string | undefined => {
+  /**
+   * A page's Markdown copy with its links made by `url`. The page's own copy keeps its frontmatter. The one in
+   * `llms-full.txt` drops it and also rebases every other relative link from where the page's copy sits.
+   */
+  const copyOf = (entry: IndexEntry, url: (href: string) => string, inFull: boolean): string | undefined => {
     const file = notesBySlug.get(entry.slug);
     const source = file && sources.get(file.path);
     if (!file || source === undefined) return undefined;
-    const url = linkFrom(base, fromHref);
-    return agentMarkdown(file, source, { title: entry.title, properties: withProperties ? file.frontmatter ?? {} : {} }, {
+    const copyUrl = new URL(markdownHref(entry.slug, mountPath), "https://svartz.invalid");
+    return agentMarkdown(file, source, { title: entry.title, properties: inFull ? {} : file.frontmatter ?? {} }, {
       note(link) {
         const slug = resolveLink({ raw: "", label: undefined, ...link }, slugMap, allSlugs, ctx.config.linkResolution, file.slug, notes);
         const target = slug ? bySlug.get(slug) : undefined;
@@ -160,15 +163,23 @@ function emitLlms(ctx: PluginContext, base: string | undefined): void {
         const path = resolveAsset(file, target);
         return path && url(`${mountPath}/${path.split("/").map(encodeURIComponent).join("/")}`);
       },
+      ...(inFull && {
+        path(target: string) {
+          if (/^(?:[a-z][\w+.-]*:|[/#])/i.test(target)) return undefined;
+          const resolved = new URL(target, copyUrl);
+          return url(`${resolved.pathname}${resolved.search}${resolved.hash}`);
+        },
+      }),
     });
   };
 
   for (const entry of entries) {
-    const markdown = entry.markdownHref && copyOf(entry, entry.markdownHref, true);
+    const markdown = entry.markdownHref && copyOf(entry, linkFrom(base, entry.markdownHref), false);
     if (markdown) addAsset(ctx, entry.markdownHref!.slice(mountPath.length + 1), markdown, "text/markdown");
   }
 
-  const sections = readingSections(index)
+  const reading = readingSections(index);
+  const sections = reading
     .map((section) => ({ ...section, entries: section.entries.filter((entry) => entry.markdownHref) }))
     .filter((section) => section.entries.length > 0);
   const { title, description } = ctx.config.site;
@@ -185,7 +196,8 @@ function emitLlms(ctx: PluginContext, base: string | undefined): void {
       `Each page links to a Markdown copy of its content. [llms-full.txt](${url(`${mountPath}/llms-full.txt`)}) holds every page in one file.`,
       "",
       ...sections.flatMap((section) => [
-        `## ${section.title ?? "Pages"}`,
+        // `## Optional` is the opt-in section agents may skip, so a folder with that name says it is one.
+        `## ${section.title === undefined ? "Pages" : /^optional$/i.test(section.title.trim()) ? `${section.title} (folder)` : section.title}`,
         "",
         ...section.entries.map((entry) => item(entry.title, entry.markdownHref!, entry.description)),
         "",
@@ -197,11 +209,15 @@ function emitLlms(ctx: PluginContext, base: string | undefined): void {
   }
 
   if (!reserved.has("llms-full.txt")) {
-    const fromHref = `${mountPath}/llms-full.txt`;
-    const pages = sections.flatMap((section) => section.entries).flatMap((entry) => {
-      const markdown = copyOf(entry, fromHref, false);
-      return markdown ? [withSource(markdown, linkFrom(base, fromHref)(entry.href)), ""] : [];
-    });
+    // Every link is absolute, or root-relative without `site.url`, since a page's own location is gone here.
+    const url = (href: string) => (base ? absoluteUrl(base, href) : href);
+    // A host route may own a page's `.md` URL; the page is still public, so its content belongs here.
+    const pages = reading.flatMap((section) => section.entries)
+      .filter((entry) => !entry.locked && !entry.properties.encrypted && !entry.properties.hidden)
+      .flatMap((entry) => {
+        const markdown = copyOf(entry, url, true);
+        return markdown ? [withSource(selfContained(markdown, entry.slug), url(entry.href)), ""] : [];
+      });
     addAsset(ctx, "llms-full.txt", [...intro, ...pages].join("\n"), "text/plain");
   }
 }

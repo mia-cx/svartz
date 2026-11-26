@@ -143,6 +143,8 @@ describe("extractDescription", () => {
     { name: "reads the first paragraph only", markdown: "First paragraph.\n\nSecond paragraph.", description: "First paragraph." },
     { name: "skips headings, code and embeds", markdown: "# Title\n\n```js\ncode\n```\n\n![[diagram.png]]\n\nSee [[guides/setup|the setup]] and [[faq]].", description: "See the setup and faq." },
     { name: "keeps inline code and hyphenated words", markdown: "Run `pnpm dev` for a well-known server.", description: "Run pnpm dev for a well-known server." },
+    { name: "keeps a space at a hard break", markdown: "First line.  \nSecond line.\\\nThird line.", description: "First line. Second line. Third line." },
+    { name: "gives a note that is only an embed none", markdown: "![[diagram.png]]", description: "" },
     { name: "falls back to a list when there is no paragraph", markdown: "- Only a list item.\n- Another.", description: "Only a list item." },
   ])("$name", ({ markdown, description }) => {
     expect(extractDescription(markdown)).toBe(description);

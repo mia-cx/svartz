@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { toString } from "mdast-util-to-string";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
+import { visit } from "unist-util-visit";
 import type { IndexEntry, PluginContext, ProcessedFile, ResolvedConfig } from "@svartz/core";
 import { parseFrontmatter } from "../src/parse-frontmatter";
 import { filterUnpublished } from "../src/filter-unpublished";
@@ -282,6 +287,47 @@ describe("Markdown copies for LLM agents", () => {
     ].join("\n"));
   });
 
+  it("links absolutely from llms-full.txt, wherever the page sat", async () => {
+    const full = (await emit(build([
+      file("guides/setup.md", "---\ntitle: Setup\n---\nSee [all tags](../tags/), [[next]], ![[diagram.png]] and [the API][api].\n\n[api]: ../reference/api.md"),
+      file("guides/next.md", "---\ntitle: Next\n---\nDone."),
+      file("reference/api.md", "---\ntitle: API\n---\nEndpoints."),
+      file("diagram.png"),
+    ])))("llms-full.txt")!;
+    expect(full).toContain("See [all tags](/docs/tags/), [next](/docs/guides/next.md), ![](/docs/diagram.png) and [the API][");
+    expect(full).toContain("]: /docs/reference/api.md");
+  });
+
+  it("keeps each page's references and fences to itself in llms-full.txt", async () => {
+    const full = (await emit(build([
+      file("a.md", "---\ntitle: A\n---\nRead [doc] and [more][doc].[^1]\n\n[doc]: https://a.example\n[^1]: A's note.\n\n```js\nconst open = true;"),
+      file("b.md", "---\ntitle: B\n---\nRead [the doc][doc].[^1]\n\n[doc]: https://b.example\n[^1]: B's note."),
+    ])))("llms-full.txt")!;
+    // Read the file as one document, the way an agent's Markdown parser would.
+    const tree = unified().use(remarkParse).use(remarkGfm).parse(full);
+    const definitions = new Map<string, string>();
+    visit(tree, "definition", (node) => void definitions.set(node.identifier, node.url));
+    const footnotes = new Map<string, string>();
+    visit(tree, "footnoteDefinition", (node) => void footnotes.set(node.identifier, toString(node)));
+    const pages: { title: string; links: string[]; notes: string[] }[] = [];
+    visit(tree, (node) => {
+      if (node.type === "heading" && node.depth === 1) pages.push({ title: toString(node), links: [], notes: [] });
+      if (node.type === "linkReference") pages.at(-1)!.links.push(definitions.get(node.identifier)!);
+      if (node.type === "footnoteReference") pages.at(-1)!.notes.push(footnotes.get(node.identifier)!);
+    });
+    expect(pages).toEqual([
+      { title: "Docs", links: [], notes: [] },
+      { title: "A", links: ["https://a.example", "https://a.example"], notes: ["A's note."] },
+      { title: "B", links: ["https://b.example"], notes: ["B's note."] },
+    ]);
+  });
+
+  it("keeps ## Optional for the opt-in section when a folder has that name", async () => {
+    const asset = await emit(build([file("Optional/start-here.md", "---\ntitle: Start here\n---\nRead me first.")]));
+    expect(asset("llms.txt")).toContain("## Optional (folder)\n\n- [Start here](optional/start-here.md): Read me first.");
+    expect(asset("llms.txt")).not.toMatch(/^## Optional$/m);
+  });
+
   it("lists tag pages, folder listings and the feed under Optional only when asked", async () => {
     expect(await emit(build(explorerVault())).then((asset) => asset("llms.txt"))).not.toContain("## Optional");
     const asset = await emit(build(explorerVault(), { optional: true }));
@@ -313,6 +359,7 @@ describe("Markdown copies for LLM agents", () => {
     const asset = await emit(ctx);
     expect(asset("reference/api.md")).toBeUndefined();
     expect(asset("llms.txt")).not.toContain("API");
+    expect(asset("llms-full.txt")).not.toContain("Tokens.");
     expect(asset("guides/setup.md")).toContain("[the API](../reference/api/#auth-flow)");
     expect(ctx.index!.entries.find((entry) => entry.slug === "reference/api")?.markdownHref).toBeUndefined();
   });
@@ -390,6 +437,19 @@ describe("Markdown copies for LLM agents", () => {
     expect(asset("snippet.md")).toBe(`${properties}\n# Snippet\n\n${code}\n`);
     expect(asset("api.md")).toBeUndefined();
     expect(asset("llms.txt")).not.toContain("api.md");
+  });
+
+  it("keeps a public page in llms-full.txt when the host owns its copy's URL, and leaves hidden pages out", async () => {
+    const ctx = build([
+      file("api.md", "---\ntitle: API\n---\nEndpoints."),
+      file("draft.md", "---\ntitle: Draft\nhidden: true\n---\nNot yet."),
+      file("vault.md", "---\ntitle: Vault\nencrypted: true\n---\nCiphertext."),
+    ]);
+    ctx.meta.set("reservedRoutes", new Set(["api.md"]));
+    const full = (await emit(ctx))("llms-full.txt");
+    expect(full).toContain("# API\n\nSource: /docs/api/\n\nEndpoints.");
+    expect(full).not.toContain("Not yet.");
+    expect(full).not.toContain("Ciphertext.");
   });
 
   it("writes nothing when the vault disables it", async () => {

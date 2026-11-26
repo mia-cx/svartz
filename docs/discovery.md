@@ -53,11 +53,11 @@ Each vault writes a Markdown copy of every public note beside its page: `/journa
 
 `<mountPath>/llms.txt` lists every copy with its description, in the [llms.txt](https://llmstxt.org/) format. It has a `##` section per top-level folder, in explorer order: folders before notes, each by `order` front matter and then by title, with a folder's own note first. The home page and other root notes share a `Pages` section. A note's description is its `description` front matter, or else its first paragraph, cut at the last whole sentence within 300 characters.
 
-`<mountPath>/llms-full.txt` holds every copy in one file, in the same order, without front matter. Each page starts at its own `#` heading, followed by a `Source:` line with its page URL.
+`<mountPath>/llms-full.txt` holds every public page in one file, in the same order, without front matter. A page whose `.md` URL a host route owns still appears. Each page starts at its own `#` heading, followed by a `Source:` line with its page URL. Each page keeps its own reference links and footnotes, and a code fence left open at the end of a page closes there.
 
-Set `discovery: { llms: { optional: true } }` to add an `## Optional` section to `llms.txt` that lists the tag pages, folder listings, and the feed. Agents with little context can skip it.
+Set `discovery: { llms: { optional: true } }` to add an `## Optional` section to `llms.txt` that lists the tag pages, folder listings, and the feed. Agents with little context can skip it. A folder named Optional gets an `## Optional (folder)` section instead, so it is never skipped.
 
-Links in both files are absolute when `site.url` exists, and relative otherwise, so neither needs a public URL. A manual SvelteKit route at `llms.txt` or `llms-full.txt` wins.
+Links in `llms.txt` and the copies are absolute when `site.url` exists, and relative otherwise, so none of them needs a public URL. `llms-full.txt` has no single location for its pages' relative links to resolve from, so every link in it is absolute, or root-relative (`/docs/tags/`) without `site.url`. A manual SvelteKit route at `llms.txt` or `llms-full.txt` wins.
 
 Every theme shows two buttons on a note: Copy page puts the copy on the clipboard, and View as Markdown opens it. Each page also links its copy with `<link rel="alternate" type="text/markdown">`, so an agent that reads the page finds the copy.
 
