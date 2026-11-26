@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { getSiteRoutes } from '../site-routes.js';
+	import { getVaultHomes } from '../site-routes.js';
 	import { themeSettings } from '../theme-settings.js';
 	import VersionNotice from './VersionNotice.svelte';
 	import { versionLinks } from './versions.js';
@@ -37,9 +37,9 @@
 	} = $props();
 
 	const navLinks = $derived(themeSettings(shell.themeConfig ?? {}).navLinks);
-	const hasRoute = getSiteRoutes();
+	const homeOf = getVaultHomes();
 	const versions = $derived(
-		versionLinks(shell.themeConfig ?? {}, { homeHref: shell.homeHref, currentHref: shell.currentHref ?? shell.homeHref, hasRoute })
+		versionLinks(shell.themeConfig ?? {}, { homeHref: shell.homeHref, currentHref: shell.currentHref ?? shell.homeHref, homeOf })
 	);
 </script>
 

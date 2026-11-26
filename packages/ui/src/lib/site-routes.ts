@@ -2,16 +2,18 @@ import { getContext, setContext } from 'svelte';
 
 const key = Symbol('svartz.site-routes');
 
+/** Given a URL with the deployment base, the home page of the vault that serves it, or `undefined` when none does. */
+export type VaultHomeOf = (href: string) => string | undefined;
+
 /**
- * Called by a Svartz runtime page: every URL the app serves, across all its vaults, with the deployment base, so a
- * component can link to a page in another vault (such as another version) only when it exists.
+ * Called by a Svartz runtime page, so a component can link to a page in another vault, such as another version, only
+ * when that vault serves it.
  */
-export function setSiteRoutes(read: () => ReadonlySet<string>): void {
-	setContext(key, read);
+export function setVaultHomes(homeOf: VaultHomeOf): void {
+	setContext(key, homeOf);
 }
 
-/** Whether the app serves `href`; `false` for every URL outside a Svartz page. Call it during component init. */
-export function getSiteRoutes(): (href: string) => boolean {
-	const read = getContext<(() => ReadonlySet<string>) | undefined>(key);
-	return (href) => read?.().has(href) ?? false;
+/** The home page of the vault serving a URL; `undefined` for every URL outside a Svartz page. Call it during component init. */
+export function getVaultHomes(): VaultHomeOf {
+	return getContext<VaultHomeOf | undefined>(key) ?? (() => undefined);
 }

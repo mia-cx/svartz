@@ -1,3 +1,4 @@
+import type { VaultHomeOf } from '../site-routes.js';
 import { isRecord } from '../theme-settings.js';
 
 /** `latest` is served at the unversioned URL; `deprecated` pages point readers to it. */
@@ -25,11 +26,12 @@ const isVersion = (value: unknown): value is ReferenceVersion =>
 /**
  * The site's versions in config order, each linking to the page the reader is on as that version has it, or to that
  * version's home page when it has no such page. Empty unless the build lists `versions` and names the current one in
- * `version`. The latest version lives at the vault's mount, and every other at `<mount>/<id>/`.
+ * `version`. The latest version lives at the vault's mount, and every other at `<mount>/<id>/`; since the latest's mount
+ * holds the others', a page counts only when `homeOf` says the version itself serves it.
  */
 export function versionLinks(
 	themeConfig: Readonly<Record<string, unknown>>,
-	page: { readonly homeHref: string; readonly currentHref: string; readonly hasRoute: (href: string) => boolean }
+	page: { readonly homeHref: string; readonly currentHref: string; readonly homeOf: VaultHomeOf }
 ): VersionLink[] {
 	const versions = Array.isArray(themeConfig.versions) ? themeConfig.versions.filter(isVersion) : [];
 	const current = versions.find((version) => version.id === themeConfig.version);
@@ -39,7 +41,7 @@ export function versionLinks(
 	return versions.map(({ id, status }) => {
 		const home = status === 'latest' ? latestHome : `${latestHome}${id}/`;
 		const same = `${home}${path}`;
-		const samePage = id === current.id || page.hasRoute(same);
+		const samePage = id === current.id || page.homeOf(same) === home;
 		return { id, status, current: id === current.id, samePage, href: samePage ? same : home };
 	});
 }

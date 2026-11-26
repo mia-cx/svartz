@@ -7,7 +7,7 @@
 	import SearchDialog from '../SearchDialog.svelte';
 	import SiteLogo from '../SiteLogo.svelte';
 	import type { SearchOptions } from '../search.js';
-	import { getSiteRoutes } from '../site-routes.js';
+	import { getVaultHomes } from '../site-routes.js';
 	import { themeSettings } from '../theme-settings.js';
 	import VersionPicker from './VersionPicker.svelte';
 	import { versionLinks } from './versions.js';
@@ -30,9 +30,9 @@
 
 	const settings = $derived(themeSettings(shell.themeConfig ?? {}));
 	const version = $derived(typeof shell.themeConfig?.version === 'string' ? shell.themeConfig.version : undefined);
-	const hasRoute = getSiteRoutes();
+	const homeOf = getVaultHomes();
 	const versions = $derived(
-		versionLinks(shell.themeConfig ?? {}, { homeHref: shell.homeHref, currentHref: shell.currentHref ?? shell.homeHref, hasRoute })
+		versionLinks(shell.themeConfig ?? {}, { homeHref: shell.homeHref, currentHref: shell.currentHref ?? shell.homeHref, homeOf })
 	);
 </script>
 
