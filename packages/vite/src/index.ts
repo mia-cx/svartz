@@ -298,7 +298,8 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       reportSnapshot("reused its build from the cache");
       return;
     }
-    if (snapshot) await clearSnapshotBuild(context.config);
+    // Any snapshot pipeline run rewrites the files a cached entry names, cached or not, so the entry goes first.
+    if (options.snapshot) await clearSnapshotBuild(context.config);
     const runnerContext = createRunnerContext();
     runnerContext.meta.set("svartz:mode", context.mode);
     runnerContext.meta.set("svartz:theme", theme);
@@ -402,9 +403,10 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     if (!options.nestedMounts?.length) return;
     const published = [...(routes?.all ?? []), ...Object.keys(routes?.redirects ?? {}), ...files.map((file) => `/${file}`)];
     for (const path of published) {
-      const mount = options.nestedMounts.find((nested) => path.startsWith(`${nested}/`));
+      // The mount itself counts: static output needs it to be the folder holding the version's pages.
+      const mount = options.nestedMounts.find((nested) => path === nested || path.startsWith(`${nested}/`));
       if (!mount) continue;
-      throw new Error(`Vault "${context.config.id}" publishes ${path}, below ${mount}/, where one of its versions is served. Rename the note, file or folder, or the version.`);
+      throw new Error(`Vault "${context.config.id}" publishes ${path}, where version ${mount}/ is served. Rename the note, file or folder, or the version.`);
     }
   }
 

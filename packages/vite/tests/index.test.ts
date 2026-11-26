@@ -480,6 +480,14 @@ describe("@svartz/vite version snapshots", () => {
     expect(await build(config)).toBe(2);
   });
 
+  // Proves a build that bypasses the cache drops the entry whose files it rewrote, so the next cacheable build runs again.
+  it("forgets a cached build that a build with password groups rewrote", async () => {
+    publishing();
+    expect(await build(snapshotConfig())).toBe(1);
+    expect(await build(snapshotConfig({ passwordGroups: { members: { env: "SVARTZ_TEST_PASSWORD" } } }))).toBe(2);
+    expect(await build(snapshotConfig())).toBe(3);
+  });
+
   // Proves editing a file a plugin reads, such as a bibliography outside the vault, builds the snapshot again.
   it("builds again when a file a plugin reads changes", async () => {
     publishing();
@@ -502,8 +510,12 @@ describe("@svartz/vite version snapshots", () => {
   });
 
   // Proves the latest version can't publish a public file where one of its versions serves its own.
-  it("refuses a public file below a version's mount", async () => {
-    publishing("assets/v1/logo.png");
-    await expect(build(snapshotConfig(), { nestedMounts: ["/v1"] })).rejects.toThrow("publishes /v1/logo.png, below /v1/");
+  it.each([
+    ["below a version's mount", "assets/v1/logo.png", "/v1/logo.png"],
+    // Static output needs `v1` to be the folder that holds the version's pages.
+    ["at a version's mount", "assets/v1", "/v1"],
+  ])("refuses a public file %s", async (_case, asset, path) => {
+    publishing(asset);
+    await expect(build(snapshotConfig(), { nestedMounts: ["/v1"] })).rejects.toThrow(`publishes ${path}, where version /v1/ is served`);
   });
 });
