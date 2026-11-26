@@ -41,10 +41,6 @@
 		scroll-padding-block-start: var(--wiki-head);
 	}
 
-	:global(:root:has(.section-bar)) {
-		--wiki-head: 5.75rem;
-	}
-
 	.wiki-header {
 		box-sizing: border-box;
 		block-size: var(--wiki-head);
@@ -96,11 +92,6 @@
 
 	/* Phone and tablet: the rail becomes a drawer under the header. */
 	@media (max-width: 56rem) {
-		/* The bar moves into the drawer, so the header is one row again. */
-		:global(:root:has(.section-bar)) {
-			--wiki-head: 3.5rem;
-		}
-
 		.wiki {
 			grid-template-columns: minmax(0, 1fr);
 			padding-inline: var(--sv-space-4);
