@@ -15,6 +15,12 @@ describe("static host routes", () => {
       }
       expect([...await staticHostRoutes(root, "/blog")].sort()).toEqual(["about", "contact", "manual", "nested"]);
       expect([...await staticHostRoutes(root, "")].sort()).toEqual(["", "blog/about", "blog/contact", "blog/manual", "blog/nested"]);
+      await mkdir(join(root, "static/blog/media"), { recursive: true });
+      await writeFile(join(root, "static/robots.txt"), "");
+      await writeFile(join(root, "static/blog/llms.txt"), "");
+      expect(await staticHostRoutes(root, "")).toContain("robots.txt");
+      expect(await staticHostRoutes(root, "/blog")).toContain("llms.txt");
+      expect(await staticHostRoutes(root, "/blog")).not.toContain("media");
       expect(isHostRouteFile(root, join(root, "src/routes/blog/about/+page.svelte"))).toBe(true);
       expect(isHostRouteFile(root, join(root, "src/routes/blog/manual/+page@.svelte"))).toBe(true);
       expect(isHostRouteFile(root, join(root, "vault/about.md"))).toBe(false);

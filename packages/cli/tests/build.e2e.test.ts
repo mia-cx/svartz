@@ -280,7 +280,22 @@ describe("svartz CLI", () => {
   });
 
   it("builds social images and favicon variants for a static vault", async () => {
-    await buildFixture({ target: { type: "static", basePath: "/site" }, site: { title: "Docs", url: "https://example.test/site" } });
+    await buildFixture({
+      target: { type: "static", basePath: "/site" },
+      site: { title: "Docs", url: "https://example.test/site" },
+      discovery: { robots: {
+        training: false,
+        contentSignals: { search: true, aiInput: true, aiTrain: false },
+        rules: [{ userAgent: "Amazonbot", disallow: ["/drafts/"] }],
+      } },
+    });
+    expect(await readFile(resolve(DIST_ROOT, "robots.txt"), "utf8")).toBe([
+      "User-agent: *", "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Allow: /", "",
+      "User-agent: GPTBot", "User-agent: ClaudeBot", "User-agent: Google-Extended", "User-agent: Applebot-Extended",
+      "User-agent: CCBot", "User-agent: Meta-ExternalAgent", "User-agent: Bytespider", "Disallow: /", "",
+      "User-agent: Amazonbot", "Disallow: /drafts/", "",
+      "Sitemap: https://example.test/site/sitemap.xml", "",
+    ].join("\n"));
     await access(resolve(DIST_ROOT, "__svartz/social/index.png"));
     await access(resolve(DIST_ROOT, "__svartz/favicon.svg"));
     await access(resolve(DIST_ROOT, "__svartz/favicon-32.png"));

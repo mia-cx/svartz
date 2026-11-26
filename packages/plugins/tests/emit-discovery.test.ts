@@ -116,6 +116,67 @@ describe("discovery output", () => {
     expect(ctx.artifacts.has("assets/sitemap.xml")).toBe(true);
   });
 
+  describe("robots.txt", () => {
+    const robotsFor = async (robots: Partial<ResolvedConfig["discovery"]["robots"]>, config: Partial<ResolvedConfig> = {}) => {
+      const base = context();
+      const ctx = context({
+        mountPath: "",
+        discovery: { ...base.config.discovery, robots: {
+          enabled: true, bots: true, search: true, training: true, rules: [], contentSignals: {}, ...robots,
+        } },
+        ...config,
+      });
+      await emitDiscovery().emitArtifacts!.run(ctx);
+      return ctx.artifacts.get("assets/robots.txt")?.contents;
+    };
+
+    it.each([
+      ["admits every crawler and names the absolute sitemap", {}, [
+        "User-agent: *", "Allow: /", "", "Sitemap: https://example.com/site/sitemap.xml", "",
+      ]],
+      ["blocks every crawler", { bots: false, search: false, training: false }, [
+        "User-agent: *", "Disallow: /", "", "Sitemap: https://example.com/site/sitemap.xml", "",
+      ]],
+      ["keeps search and agents while opting out of training, with content signals and a raw rule", {
+        training: false,
+        contentSignals: { search: true, aiInput: true, aiTrain: false },
+        rules: [{ userAgent: ["Amazonbot", "YandexBot"], allow: ["/public/"], disallow: ["/drafts/"] }],
+      }, [
+        "User-agent: *", "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Allow: /", "",
+        "User-agent: GPTBot", "User-agent: ClaudeBot", "User-agent: Google-Extended", "User-agent: Applebot-Extended",
+        "User-agent: CCBot", "User-agent: Meta-ExternalAgent", "User-agent: Bytespider", "Disallow: /", "",
+        "User-agent: Amazonbot", "User-agent: YandexBot", "Allow: /public/", "Disallow: /drafts/", "",
+        "Sitemap: https://example.com/site/sitemap.xml", "",
+      ]],
+      ["admits only search and agent fetchers", { bots: false, search: true, training: false }, [
+        "User-agent: *", "Disallow: /", "",
+        "User-agent: Googlebot", "User-agent: bingbot", "User-agent: DuckDuckBot", "User-agent: Applebot",
+        "User-agent: OAI-SearchBot", "User-agent: ChatGPT-User", "User-agent: Claude-SearchBot", "User-agent: Claude-User",
+        "User-agent: PerplexityBot", "User-agent: Perplexity-User", "Allow: /", "",
+        "Sitemap: https://example.com/site/sitemap.xml", "",
+      ]],
+    ])("%s", async (_name, robots, lines) => {
+      expect(await robotsFor(robots)).toBe(lines.join("\n"));
+    });
+
+    it("leaves out the sitemap line without a sitemap", async () => {
+      const base = context().config.discovery;
+      expect(await robotsFor({}, { discovery: { ...base, sitemap: { enabled: false }, robots: {
+        enabled: true, bots: true, search: true, training: true, rules: [], contentSignals: {},
+      } } })).toBe("User-agent: *\nAllow: /\n");
+    });
+
+    it("leaves robots.txt to a host route and to a host that mounts the vault", async () => {
+      const ctx = context({ mountPath: "", discovery: { ...context().config.discovery, robots: {
+        enabled: true, bots: true, search: true, training: true, rules: [], contentSignals: {},
+      } } });
+      ctx.meta.set("reservedRoutes", new Set(["robots.txt"]));
+      await emitDiscovery().emitArtifacts!.run(ctx);
+      expect(ctx.artifacts.has("assets/robots.txt")).toBe(false);
+      expect(await robotsFor({}, { mountPath: "/blog" })).toBeUndefined();
+    });
+  });
+
   it.each(["rss.xml", "sitemap.xml"])("rejects a vault asset at the generated %s path", async (name) => {
     const ctx = context();
     ctx.files.push({ path: name, slug: name, extension: ".xml", content: "user asset" });

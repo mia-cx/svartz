@@ -107,6 +107,20 @@ const SiteConfigSchema = Schema.Struct({
   ))),
 });
 
+/** A robots.txt product token (RFC 9309), or `*`. */
+const UserAgentSchema = Schema.String.pipe(Schema.pattern(/^(?:\*|[A-Za-z0-9_.-]+)$/));
+const RobotsPathSchema = Schema.String.pipe(Schema.pattern(/^\/\S*$/));
+
+/** One robots.txt group. RFC 9309 joins a group without rules to the next, so each needs one. */
+const RobotsRuleSchema = Schema.Struct({
+  userAgent: Schema.Union(UserAgentSchema, Schema.NonEmptyArray(UserAgentSchema)),
+  allow: Schema.optional(Schema.Array(RobotsPathSchema)),
+  disallow: Schema.optional(Schema.Array(RobotsPathSchema)),
+}).pipe(Schema.filter(
+  (rule) => Boolean(rule.allow?.length || rule.disallow?.length),
+  { message: () => "A robots rule needs an allow or disallow path" },
+));
+
 const DiscoveryConfigSchema = Schema.Struct({
   feed: Schema.optional(Schema.Struct({
     enabled: Schema.optional(Schema.Boolean),
@@ -125,6 +139,18 @@ const DiscoveryConfigSchema = Schema.Struct({
   })),
   favicon: Schema.optional(Schema.Struct({
     enabled: Schema.optional(Schema.Boolean),
+  })),
+  robots: Schema.optional(Schema.Struct({
+    enabled: Schema.optional(Schema.Boolean),
+    bots: Schema.optional(Schema.Boolean),
+    search: Schema.optional(Schema.Boolean),
+    training: Schema.optional(Schema.Boolean),
+    rules: Schema.optional(Schema.Array(RobotsRuleSchema)),
+    contentSignals: Schema.optional(Schema.Struct({
+      search: Schema.optional(Schema.Boolean),
+      aiInput: Schema.optional(Schema.Boolean),
+      aiTrain: Schema.optional(Schema.Boolean),
+    })),
   })),
   dateSources: Schema.optional(Schema.Array(Schema.Literal("frontmatter", "git", "filesystem")).pipe(
     Schema.filter((sources) => sources.length > 0, { message: () => "dateSources needs at least one source" }),

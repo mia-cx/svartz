@@ -8,10 +8,19 @@ export function isHostRouteFile(root: string, file: string): boolean {
   return path !== "" && !path.startsWith("..") && PAGE_FILE.test(path.split(/[\\/]/).at(-1) ?? "");
 }
 
-/** Static host routes outrank generated vault pages in SvelteKit. */
+/**
+ * Static host routes outrank generated vault pages in SvelteKit. The host's own files at the mount, such as
+ * `static/robots.txt`, outrank the vault's generated ones too.
+ */
 export async function staticHostRoutes(root: string, mountPath: string): Promise<Set<string>> {
   const routesRoot = join(root, "src/routes");
   const paths = new Set<string>();
+  try {
+    const files = await readdir(join(root, "static", mountPath), { withFileTypes: true });
+    for (const file of files) if (file.isFile()) paths.add(file.name);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
 
   const walk = async (directory: string, segments: string[]): Promise<void> => {
     let entries;

@@ -84,6 +84,15 @@ describe("SvartzConfigSchema", () => {
     }))).toBe(true);
   });
 
+  it("rejects a robots rule that would merge into the next group or break the file", () => {
+    const vault = { id: "blog", path: "vault", target: { type: "host" } };
+    const robots = (rules: unknown[]) => decode(SvartzConfigSchema, { version: "1.0.0", vaults: [{ ...vault, discovery: { robots: { rules } } }] });
+    expect(Either.isRight(robots([{ userAgent: "Amazonbot", disallow: ["/"] }]))).toBe(true);
+    expect(Either.isLeft(robots([{ userAgent: "Amazonbot" }]))).toBe(true);
+    expect(Either.isLeft(robots([{ userAgent: "Amazonbot\nUser-agent: *", disallow: ["/"] }]))).toBe(true);
+    expect(Either.isLeft(robots([{ userAgent: "Amazonbot", disallow: ["drafts"] }]))).toBe(true);
+  });
+
   it("accepts local favicon sources and rejects remote sources", () => {
     const vault = { id: "blog", path: "vault", target: { type: "host" } };
     expect(Either.isRight(decode(SvartzConfigSchema, {

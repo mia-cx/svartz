@@ -171,6 +171,40 @@ function sitemap(ctx: PluginContext, base: string): string {
   ].join("\n");
 }
 
+/** Search engines plus the AI search and agent fetchers that cite pages in answers. */
+const SEARCH_CRAWLERS = [
+  "Googlebot", "bingbot", "DuckDuckBot", "Applebot",
+  "OAI-SearchBot", "ChatGPT-User", "Claude-SearchBot", "Claude-User", "PerplexityBot", "Perplexity-User",
+];
+
+/** Crawlers, and robots.txt tokens such as Google-Extended, that collect pages to train AI models. */
+const TRAINING_CRAWLERS = [
+  "GPTBot", "ClaudeBot", "Google-Extended", "Applebot-Extended", "CCBot", "Meta-ExternalAgent", "Bytespider",
+];
+
+const group = (agents: readonly string[], lines: readonly string[]): string =>
+  [...agents.map((agent) => `User-agent: ${agent}`), ...lines].join("\n");
+
+const crawl = (allowed: boolean): string => allowed ? "Allow: /" : "Disallow: /";
+
+function robots(ctx: PluginContext, base: string | undefined): string {
+  const { robots: config, sitemap: sitemapConfig } = ctx.config.discovery;
+  const { search, aiInput, aiTrain } = config.contentSignals;
+  const signals = Object.entries({ search, "ai-input": aiInput, "ai-train": aiTrain })
+    .flatMap(([name, value]) => value === undefined ? [] : [`${name}=${value ? "yes" : "no"}`]);
+  // A crawler obeys only its most specific group, so a preset that matches `*` needs no group of its own.
+  return [
+    group(["*"], [...signals.length ? [`Content-Signal: ${signals.join(", ")}`] : [], crawl(config.bots)]),
+    ...config.search === config.bots ? [] : [group(SEARCH_CRAWLERS, [crawl(config.search)])],
+    ...config.training === config.bots ? [] : [group(TRAINING_CRAWLERS, [crawl(config.training)])],
+    ...config.rules.map((rule) => group([rule.userAgent].flat(), [
+      ...(rule.allow ?? []).map((path) => `Allow: ${path}`),
+      ...(rule.disallow ?? []).map((path) => `Disallow: ${path}`),
+    ])),
+    ...sitemapConfig.enabled && base ? [`Sitemap: ${absoluteUrl(base, "/sitemap.xml")}`] : [],
+  ].join("\n\n") + "\n";
+}
+
 export const EMIT_DISCOVERY_ID = "core:emit-discovery" as const;
 
 export const emitDiscovery = definePlugin(() => ({
@@ -178,15 +212,19 @@ export const emitDiscovery = definePlugin(() => ({
   emitArtifacts: {
     async run(ctx) {
       if (!ctx.index) return;
-      const { feed, sitemap: sitemapConfig, llms } = ctx.config.discovery;
+      const { feed, sitemap: sitemapConfig, llms, robots: robotsConfig } = ctx.config.discovery;
       const base = ctx.config.site.url;
       if (llms?.enabled) emitLlms(ctx, base);
+      const reserved = (ctx.meta.get("reservedRoutes") as ReadonlySet<string> | undefined) ?? new Set();
+      // Crawlers read robots.txt only at the site root, so a mounted vault leaves it to the host.
+      if (robotsConfig?.enabled && !ctx.config.mountPath && !reserved.has("robots.txt")) {
+        addAsset(ctx, "robots.txt", robots(ctx, base), "text/plain");
+      }
       if (!feed.enabled && !sitemapConfig.enabled) return;
       if (!base) {
         if (ctx.meta.get("svartz:mode") === "development") return;
         throw new Error(`Vault "${ctx.config.id}" needs site.url to generate RSS or sitemap in production.`);
       }
-      const reserved = (ctx.meta.get("reservedRoutes") as ReadonlySet<string> | undefined) ?? new Set();
       if (feed.enabled && !reserved.has("rss.xml")) addAsset(ctx, "rss.xml", await rss(ctx, base));
       if (sitemapConfig.enabled && !reserved.has("sitemap.xml")) addAsset(ctx, "sitemap.xml", sitemap(ctx, base));
     },
