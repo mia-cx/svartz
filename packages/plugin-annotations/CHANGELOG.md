@@ -1,5 +1,17 @@
 # @svartz/plugin-annotations
 
+## 2.6.0
+
+### Patch Changes
+
+- dbf8b88: Svartz's plugin packages carry the npm keyword `svartz-plugin`, and its themes `svartz-theme`, so an npm search for either keyword finds them. Tag your own Svartz plugin or theme the same way to be found beside them.
+- Updated dependencies [1ddaf7e]
+- Updated dependencies [dbf8b88]
+- Updated dependencies [8f0291d]
+- Updated dependencies [ba0f490]
+  - @svartz/auth@2.6.0
+  - @svartz/core@2.6.0
+
 ## 2.5.0
 
 ### Minor Changes

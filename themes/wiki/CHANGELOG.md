@@ -1,5 +1,23 @@
 # @svartz/theme-wiki
 
+## 2.6.0
+
+### Minor Changes
+
+- de60087: The wiki header is one bar: the site name, the sections, then search and colour mode, 3.5rem tall where it used to take two rows. Sections that don't fit the bar's width wait in a **More** menu at its end, which scrolls when it runs long. Each section's chevron there expands its pages below its row. More carries the current section's mark while that section waits there. On phones and tablets the menu button and drawer work as before.
+
+### Patch Changes
+
+- dbf8b88: Svartz's plugin packages carry the npm keyword `svartz-plugin`, and its themes `svartz-theme`, so an npm search for either keyword finds them. Tag your own Svartz plugin or theme the same way to be found beside them.
+- Updated dependencies [4334c0f]
+- Updated dependencies [dbf8b88]
+- Updated dependencies [8f0291d]
+- Updated dependencies [ba0f490]
+- Updated dependencies [67eb970]
+  - @svartz/theme-minimal@2.6.0
+  - @svartz/core@2.6.0
+  - @svartz/ui@2.6.0
+
 ## 2.5.0
 
 ### Patch Changes

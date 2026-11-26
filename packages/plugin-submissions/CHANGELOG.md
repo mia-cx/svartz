@@ -1,5 +1,21 @@
 # @svartz/plugin-submissions
 
+## 2.6.0
+
+### Patch Changes
+
+- b7f2573: A page's history numbers its pages from 1, as GitHub does: `?page=1` is the first page, the same as no `?page`, and `?page=10` the last, which reaches the latest 1,000 changes. `?page=0` now answers 404. `CommitReader.history` takes GitHub's page number as it is, counting from 1.
+- dbf8b88: Svartz's plugin packages carry the npm keyword `svartz-plugin`, and its themes `svartz-theme`, so an npm search for either keyword finds them. Tag your own Svartz plugin or theme the same way to be found beside them.
+- Updated dependencies [5596543]
+- Updated dependencies [1ddaf7e]
+- Updated dependencies [dbf8b88]
+- Updated dependencies [8f0291d]
+- Updated dependencies [04e44dd]
+- Updated dependencies [ba0f490]
+  - @svartz/plugins@2.6.0
+  - @svartz/auth@2.6.0
+  - @svartz/core@2.6.0
+
 ## 2.5.0
 
 ### Minor Changes

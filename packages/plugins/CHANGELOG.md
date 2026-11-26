@@ -1,5 +1,29 @@
 # @svartz/plugins
 
+## 2.6.0
+
+### Minor Changes
+
+- 1ddaf7e: A note named exactly after its folder is that folder's note, as with Obsidian's folder notes: `Guides/Guides.md` publishes at `/guides/`, names and introduces the `Guides` listing, and can't set `slug`, as `Guides/index.md` and `Guides/_index.md` do. Wikilinks to `[[Guides]]` still find it, and the `closest` and `shallowest` link strategies rank notes by where their files sit, not by their URLs.
+
+  When a folder holds more than one folder note, `index` comes first, then `_index`, then the note named after the folder. The first present names the folder's listing and sets its `order`. It takes the folder's URL unless another note, such as a root `guides.md`, already holds it. The others take numbered URLs (`/guides-2/`), as in any collision.
+
+  A note named after its folder that sets `slug` now fails the build, as other folder notes do: `Guides/Guides.md` with `slug: overview` used to publish at `/guides/overview/`. Before upgrading, remove its `slug`. If the old URL must keep working, add it as an alias: `aliases: [guides/overview]`.
+
+  An account can no longer take the user page folder's own name as its handle (`users` by default), since `users/users.md` is that folder's note rather than a user page. The handle chooser offers `users-2` instead.
+
+### Patch Changes
+
+- 5596543: A wikilink or embed with an alias inside a table cell now resolves. Obsidian writes the alias separator there as `\|`, as in `[[Setup\|Install the sensor]]`, and Svartz used to keep the backslash in the link's target and show the link unresolved.
+
+  The managed Turbo build task for a `cloudflare-workers` vault now caches the Worker's bundle and `wrangler.json`, which `wrangler deploy` reads, instead of `dist/`. Before, a cache hit restored no deployable Worker.
+
+- dbf8b88: Svartz's plugin packages carry the npm keyword `svartz-plugin`, and its themes `svartz-theme`, so an npm search for either keyword finds them. Tag your own Svartz plugin or theme the same way to be found beside them.
+- 04e44dd: `@svartz/plugins` exports the option types of `citations`, `oxHugoFlavoredMarkdown` and `roamFlavoredMarkdown` (`CitationOptions`, `OxHugoOptions`, `RoamOptions`), as it already exported `PresentationOptions`. A config can name them, and the API reference documents their fields.
+- Updated dependencies [8f0291d]
+- Updated dependencies [ba0f490]
+  - @svartz/core@2.6.0
+
 ## 2.5.0
 
 ### Minor Changes
