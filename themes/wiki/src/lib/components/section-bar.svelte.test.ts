@@ -67,3 +67,24 @@ it('shows every section when they fit exactly, even if More would be wider than 
 	expect(links()).toEqual(['Characters', 'Items', 'Mechanics', 'AI']);
 	await expect.element(sections.getByRole('button', { name: 'More' })).not.toBeInTheDocument();
 });
+
+/** Two frames: resize observers have run and the bar has re-rendered. */
+const settled = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+
+it("never widens the page with its hidden copy of the sections, however many there are", async () => {
+	const many = Array.from({ length: 15 }, (_, index) => folder(`Section with a long name ${index + 1}`));
+	const { sections } = await bar('20rem', many);
+	await expect.element(sections.getByRole('button', { name: 'More' })).toBeVisible();
+	expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+});
+
+it('moves focus to More when the focused section moves into it', async () => {
+	const { sections } = await bar('60rem');
+	const places = sections.getByRole('link', { name: 'Places', exact: true });
+	await expect.element(places).toBeVisible();
+	(places.element() as HTMLElement).focus();
+	(document.body.firstElementChild as HTMLElement).style.inlineSize = '14rem';
+	await settled();
+	await settled();
+	expect(document.activeElement).toBe(sections.getByRole('button', { name: 'More' }).element());
+});

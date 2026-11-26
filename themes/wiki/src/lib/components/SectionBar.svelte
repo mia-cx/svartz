@@ -10,6 +10,7 @@
 -->
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
+	import { tick } from 'svelte';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import type { MenuFolder } from '../wiki.js';
@@ -50,18 +51,21 @@
 		const gap = parseFloat(getComputedStyle(probe).columnGap) || 0;
 		const available = nav.clientWidth;
 		const total = sections.reduce((sum, width, index) => sum + width + (index > 0 ? gap : 0), 0);
-		if (total <= available) {
-			shown = sections.length;
-			return;
+		let count = sections.length;
+		if (total > available) {
+			let used = more!;
+			count = 0;
+			for (const width of sections) {
+				if (used + gap + width > available) break;
+				used += gap + width;
+				count += 1;
+			}
 		}
-		let used = more!;
-		let count = 0;
-		for (const width of sections) {
-			if (used + gap + width > available) break;
-			used += gap + width;
-			count += 1;
-		}
+		if (count === shown) return;
+		// A section that moves into More takes its focused link or chevron with it, so focus moves to More instead.
+		const focused = nav.contains(document.activeElement) ? document.activeElement : null;
 		shown = count;
+		if (focused) void tick().then(() => focused.isConnected || nav?.querySelector<HTMLElement>('.bar:not(.probe) .more-toggle')?.focus());
 	}
 
 	$effect(() => {
@@ -255,13 +259,18 @@
 		white-space: nowrap;
 	}
 
-	/* Until the bar knows what fits, the sections past its edge stay out of sight instead of under the search. */
+	/*
+	 * Until the bar knows what fits, which without JavaScript is always, it scrolls sideways instead of running under
+	 * the search, so every section link stays reachable: tabbing to one scrolls it into view.
+	 */
 	.bar:not(.measured) {
-		overflow-x: clip;
+		overflow-x: auto;
+		scrollbar-width: none;
 	}
 
+	/* Fixed, so the copy, however wide, never widens the page or gives it a scrollbar. */
 	.probe {
-		position: absolute;
+		position: fixed;
 		inset-block-start: 0;
 		inset-inline-start: 0;
 		visibility: hidden;
