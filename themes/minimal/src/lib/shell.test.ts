@@ -1,8 +1,10 @@
+import type { IndexEntry, NoteStructuredData, VaultView } from '@svartz/core';
 import { buildExplorerTree, folderLayout, type ExplorerItem } from '@svartz/ui';
 import { describe, expect, it } from 'vitest';
+import { minimalExtension } from './compose.js';
 import type { PageRenderer, ThemeExtension } from './extension.js';
 import { choosePage } from './select.js';
-import { adjacentPages, explorerNotes, explorerTrail, filterExplorer, physicalFolder, readingOrder } from './shell.js';
+import { adjacentPages, explorerNotes, explorerTrail, filterExplorer, noteStructuredData, physicalFolder, readingOrder } from './shell.js';
 
 interface Note {
 	slug: string;
@@ -111,5 +113,34 @@ describe('a hidden note outside the folder records', () => {
 		const folderNotes = ['guides/section', 'guides'].flatMap((slug) => layout.noteOf(slug) ?? []) as Parameters<typeof choosePage>[2];
 		// A plain note in minimal's style: no schema renderer.
 		expect(choosePage(site, hidden, folderNotes)).toEqual({ theme: minimal });
+	});
+});
+
+describe("a composed site's structured data", () => {
+	const retype = (type: string) => (nodes: NoteStructuredData) => ({ ...nodes, article: { ...nodes.article, '@type': type } });
+	const symbol: PageRenderer = { id: 'symbol', detect: (properties) => properties.symbol, body: (() => null) as never };
+	const docs: ThemeExtension = {
+		id: '@acme/docs',
+		renderers: [symbol],
+		structuredData: (nodes, page) => retype(page.renderer ? 'APIReference' : 'TechArticle')(nodes)
+	};
+	const blog: ThemeExtension = { id: '@acme/blog', name: 'blog', structuredData: retype('BlogPosting') };
+	const notes = [
+		note('guides/index.md', 'Guides', undefined, {}),
+		note('guides/install.md', 'Install', undefined, {}),
+		note('guides/define-theme.md', 'defineTheme', undefined, { symbol: { name: 'defineTheme' } }),
+		note('posts/index.md', 'Posts', undefined, { theme: 'blog' }),
+		note('posts/launch.md', 'Launch', undefined, {})
+	];
+	const vault = { entries: notes, folders: [folder(notes, 'guides', 'Guides'), folder(notes, 'posts', 'Posts')] } as unknown as VaultView;
+	const structuredData = noteStructuredData({ primary: docs, extensions: [docs, blog, minimalExtension] });
+	const typeOf = (slug: string) =>
+		structuredData({ article: { '@type': 'Article' } }, { entry: notes.find((entry) => entry.slug === slug) as unknown as IndexEntry, vault }).article['@type'];
+
+	it('goes to the theme and renderer that render each note', () => {
+		expect(typeOf('guides/install')).toBe('TechArticle');
+		expect(typeOf('guides/define-theme')).toBe('APIReference');
+		// A folder note's `theme:` cascades to the notes below it.
+		expect(typeOf('posts/launch')).toBe('BlogPosting');
 	});
 });

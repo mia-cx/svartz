@@ -1,4 +1,4 @@
-import type { IndexEntry } from '@svartz/core';
+import type { IndexEntry, NoteStructuredData } from '@svartz/core';
 import type { Component } from 'svelte';
 import ReferenceBody from './ReferenceBody.svelte';
 import ReferenceExamples from './ReferenceExamples.svelte';
@@ -70,6 +70,11 @@ export function referenceExtension(identity: ReferenceThemeIdentity, renderers: 
 		frame: ReferenceFrame,
 		regions: { header: ReferenceTopBar },
 		renderers: [...new Set(renderers)].map(referenceRenderer),
-		chrome: referenceChrome
+		chrome: referenceChrome,
+		// A guide is a tech article; an operation's or a schema's page is its API reference.
+		structuredData: (nodes: NoteStructuredData, page: { readonly renderer?: unknown }): NoteStructuredData => ({
+			...nodes,
+			article: { ...nodes.article, '@type': page.renderer ? 'APIReference' : 'TechArticle' }
+		})
 	};
 }

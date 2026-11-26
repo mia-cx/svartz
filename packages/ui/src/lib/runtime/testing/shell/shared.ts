@@ -31,7 +31,7 @@ export const testIndex = {
 		{
 			slug: 'tags/testing',
 			href: '/tags/testing/',
-			properties: {},
+			properties: { kind: 'guide' },
 			page: { toc: true, comments: true },
 			path: 'tags/testing.md',
 			title: 'Authored tag landing',

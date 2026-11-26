@@ -1,4 +1,4 @@
-import type { IndexEntry, SvartzPlugin, ThemeRenderCapabilities, TocEntry, VaultView } from '@svartz/core';
+import type { IndexEntry, NoteStructuredData, SvartzPlugin, ThemeRenderCapabilities, TocEntry, VaultView } from '@svartz/core';
 import type { ExplorerItem, ExplorerNode, ThemePageProps } from '@svartz/ui';
 import type { Component, Snippet } from 'svelte';
 
@@ -153,6 +153,15 @@ export interface ThemeExtension {
 	readonly chrome?: ThemeChrome;
 	/** Content components (`callout`, `codeBlock`, …) this theme overrides. */
 	readonly components?: Readonly<Record<string, Component>>;
+	/**
+	 * Maps the JSON-LD of the notes this theme renders to its own page kinds. `page` says which of its
+	 * renderers claimed the note, if any. Plain notes go to the primary theme's.
+	 *
+	 * ```ts
+	 * structuredData: (nodes) => ({ ...nodes, article: { ...nodes.article, '@type': 'TechArticle' } })
+	 * ```
+	 */
+	readonly structuredData?: (nodes: NoteStructuredData, page: PageChoice & { readonly entry: IndexEntry }) => NoteStructuredData;
 }
 
 /** The Node-safe part of an extension, for the build: no components. */

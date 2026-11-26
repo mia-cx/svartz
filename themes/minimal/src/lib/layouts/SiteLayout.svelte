@@ -28,7 +28,7 @@
 	import { compositionOf } from '../compose.js';
 	import type { ListPageName, ShellState, ThemeChrome } from '../extension.js';
 	import { choosePage, folderTheme } from '../select.js';
-	import { adjacentPages, explorerTrail, physicalFolder, readingOrder } from '../shell.js';
+	import { adjacentPages, explorerTrail, folderNotes, physicalFolder, readingOrder } from '../shell.js';
 	import Explorer from '../components/Explorer.svelte';
 	import ColumnsFrame from '../shell/ColumnsFrame.svelte';
 	import Masthead from '../shell/Masthead.svelte';
@@ -60,22 +60,11 @@
 	const composition = $derived(compositionOf(props.theme));
 	const primary = $derived(composition.primary);
 	const layout = $derived(folderLayout(props.vault.entries, props.vault.folders));
-	const parentOf = (folder: string) => (folder.includes('/') ? folder.slice(0, folder.lastIndexOf('/')) : undefined);
-	/** The folder notes above a folder, nearest first, for `theme:` to cascade from. */
-	const folderNotes = (folder: string | undefined, except?: IndexEntry) => {
-		const notes: IndexEntry[] = [];
-		for (let current = folder; current !== undefined; current = parentOf(current)) {
-			const note = layout.noteOf(current);
-			if (note && note !== except) notes.push(note);
-		}
-		return notes;
-	};
-
 	// One pass over the vault: every page's theme. A page two themes claim fails the build here, by name.
 	const pages = $derived(
 		new Map(
 			props.vault.entries.flatMap((entry) => {
-				const choice = choosePage(composition, entry, folderNotes(layout.folderOf(entry.slug), entry));
+				const choice = choosePage(composition, entry, folderNotes(layout, layout.folderOf(entry.slug), entry));
 				return choice ? [[entry, choice] as const] : [];
 			})
 		)
@@ -95,7 +84,7 @@
 		if (props.vault.entries.includes(entry)) return pages.get(entry);
 		// The folder records leave hidden notes out, so the note's file decides which folder notes cascade.
 		const folder = layout.folderOf(entry.slug) ?? physicalFolder(entry, props.vault.entries, layout.folderOf);
-		return choosePage(composition, entry, folderNotes(folder, entry));
+		return choosePage(composition, entry, folderNotes(layout, folder, entry));
 	});
 
 	let drawer = $state(false);
@@ -162,7 +151,7 @@
 		const slug = props.match?.params.slug;
 		const folder =
 			route === 'folder' ? slug : route === 'note' && !props.entry && props.vault.folders.some((item) => item.slug === slug) ? slug : undefined;
-		if (folder) return folderTheme(composition, folderNotes(folder)).pages?.folder ?? primary.pages?.folder;
+		if (folder) return folderTheme(composition, folderNotes(layout, folder)).pages?.folder ?? primary.pages?.folder;
 		const name = route ? LIST_PAGES[route] : undefined;
 		return name ? primary.pages?.[name] : undefined;
 	});

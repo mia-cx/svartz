@@ -22,6 +22,7 @@ const KNOWN_THEME_KEYS = new Set<string>([
   "artifactRequirements",
   "pluginPreset",
   "socialImage",
+  "structuredData",
   "faviconSvg",
   "defaults",
   "hooks",
@@ -147,6 +148,13 @@ function validateTheme(theme: SvartzTheme): void {
     throw new ThemeValidationError({
       themeId: theme.id,
       message: "Theme socialImage must be a function returning SVG markup",
+    });
+  }
+
+  if (theme.structuredData !== undefined && typeof theme.structuredData !== "function") {
+    throw new ThemeValidationError({
+      themeId: theme.id,
+      message: "Theme structuredData must be a function returning the note's JSON-LD nodes",
     });
   }
 

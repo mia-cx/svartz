@@ -33,6 +33,13 @@ async function run(command: string, args: string[]) {
   return stdout;
 }
 
+/** The `@graph` of a built page's one JSON-LD script. */
+function structuredData(html: string) {
+  const scripts = [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)];
+  expect(scripts).toHaveLength(1);
+  return JSON.parse(scripts[0]![1]!)["@graph"];
+}
+
 async function pnpm(args: string[]) {
   await run("corepack", ["pnpm", ...args]);
 }
@@ -231,7 +238,7 @@ describe("svartz CLI", () => {
           version: "1.0.0",
           vaults: [{ id: "compose-e2e", path: "vaults/showcase-reference", target: { type: "static" },
             theme: { base: ${JSON.stringify(base)}, version: "v2", routes: { folders: "reference" } },
-            site: { title: "Composed reference" } }],
+            site: { title: "Composed reference", url: "https://reference.example" } }],
         };\n`);
         await run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]);
         return {
@@ -250,6 +257,8 @@ describe("svartz CLI", () => {
       expect(rest).toContain("curl -X GET");
       expect(rest).toContain('id="explorer-tree"');
       expect(mcp).toContain("find_pets");
+      // An operation's page is its API reference, whichever composition renders it.
+      expect(structuredData(rest)[1]).toMatchObject({ "@type": "APIReference", url: "https://reference.example/rest/get-pet/" });
     }
 
     it("composes every theme a theme.base list names", async () => {
@@ -300,6 +309,28 @@ describe("svartz CLI", () => {
     expect(noteHtml).toContain('<link rel="canonical" href="https://example.test/site/guides/create-plugin/"');
     expect(noteHtml).toContain('property="og:image" content="https://example.test/site/__svartz/social/guides/create-plugin.png"');
     expect(noteHtml).not.toContain("/site/site/");
+    const website = { "@type": "WebSite", name: "Docs", url: "https://example.test/site/" };
+    const crumb = (position: number, name: string, item: string) => ({ "@type": "ListItem", position, name, item });
+    const [noteSite, article, noteCrumbs] = structuredData(noteHtml);
+    expect(noteSite).toEqual(website);
+    expect(article).toMatchObject({
+      "@type": "Article",
+      headline: "Create Plugin",
+      url: "https://example.test/site/guides/create-plugin/",
+      image: "https://example.test/site/__svartz/social/guides/create-plugin.png",
+    });
+    expect(noteCrumbs).toEqual({
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        crumb(1, "Home", "https://example.test/site/"),
+        crumb(2, "Guides", "https://example.test/site/folders/guides/"),
+        crumb(3, "Create Plugin", "https://example.test/site/guides/create-plugin/"),
+      ],
+    });
+    expect(structuredData(await readFile(resolve(DIST_ROOT, "folders/guides/index.html"), "utf8"))).toEqual([
+      website,
+      { "@type": "BreadcrumbList", itemListElement: [crumb(1, "Home", "https://example.test/site/"), crumb(2, "Guides", "https://example.test/site/folders/guides/")] },
+    ]);
     const sitemap = await readFile(DIST_SITEMAP_PATH, "utf8");
     expect(sitemap).toContain("<loc>https://example.test/site/</loc>");
     expect(sitemap).toContain("<loc>https://example.test/site/tags/guides/</loc>");

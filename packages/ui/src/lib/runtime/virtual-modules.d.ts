@@ -27,6 +27,7 @@ declare module 'virtual:svartz/theme' {
 		readonly layouts: Record<string, ThemeComponentLoader | undefined>;
 		readonly components?: Record<string, ThemeComponentLoader | undefined>;
 		readonly routes: readonly RuntimeRouteMatch['route'][];
+		readonly structuredData?: import('@svartz/core').SvartzTheme['structuredData'];
 	};
 
 	export const routes: readonly RuntimeRouteMatch['route'][];
@@ -130,19 +131,8 @@ declare module 'virtual:svartz/artifacts' {
 			readonly inline: string;
 		};
 	};
-	export const vault: {
-		readonly id: string;
-		readonly entries: readonly RuntimeIndexEntry[];
-		readonly search: readonly RuntimeSearchDocument[];
-		readonly tags: readonly RuntimeTagEntry[];
-		readonly folders: readonly RuntimeFolderEntry[];
-		readonly routes: typeof index.routes;
-		note(reference: string): {
-			readonly entry: RuntimeIndexEntry;
-			readonly outgoing: readonly RuntimeIndexEntry[];
-			readonly backlinks: readonly RuntimeIndexEntry[];
-		} | undefined;
-	};
+	/** The index with the deployment base applied (`createVaultView`). */
+	export const vault: import('@svartz/core').VaultView;
 	export const searchOptions: {
 		readonly fields: readonly string[];
 		readonly storeFields: readonly string[];

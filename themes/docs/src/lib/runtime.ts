@@ -31,7 +31,9 @@ const docs: ThemeExtension = {
 	regions: { header: TopBar, pageHead: PageHead, aside: OnThisPage, footer: PageFooter },
 	renderers: [symbolRenderer],
 	pages: { home: HomePage, tags: TagListPage, tag: TagPage, feed: UpdatesPage, folders: ModuleListPage, folder: ModulePage },
-	chrome: { graph: false, backlinks: false, dates: false, readerMode: false }
+	chrome: { graph: false, backlinks: false, dates: false, readerMode: false },
+	// A guide is a tech article; a symbol's page is its API reference.
+	structuredData: (nodes, { renderer }) => ({ ...nodes, article: { ...nodes.article, '@type': renderer ? 'APIReference' : 'TechArticle' } })
 };
 
 export const extensions: readonly ThemeExtension[] = [docs];

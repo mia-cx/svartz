@@ -2,6 +2,8 @@
 	import type { Component } from 'svelte';
 	import PageBody from './PageBody.svelte';
 	import { themeTokenCss } from '../theme-tokens.js';
+	import { pageCrumbs } from '../crumbs.js';
+	import { jsonLdScript, pageGraph } from './structured-data.js';
 	import {
 		artifactKeyToSlug,
 		useBrowserResources,
@@ -143,6 +145,23 @@
 			: resolveSiteAssetUrl(siteConfig.image)
 	);
 
+	// Without `site.url` there is no canonical URL for the graph to name.
+	const structuredData = $derived(
+		canonicalUrl &&
+			jsonLdScript(
+				pageGraph({
+					site: siteConfig,
+					vault: state.vault,
+					theme,
+					entry,
+					crumbs: pageCrumbs(state.vault, entry, runtimeRoute),
+					url: canonicalUrl,
+					image: socialImageUrl,
+					absolute: (path) => resolvePublishedUrl(path)!
+				})
+			)
+	);
+
 	const layoutModule = $derived(resolveComponentModule(resolveLayoutReference(runtimeRoute)));
 	const pageModule = $derived(resolvePageModule(runtimeRoute));
 	const LayoutComponent = $derived(layoutModule?.default);
@@ -185,6 +204,7 @@
 			property="article:modified_time"
 			content={isoDate(entry?.modifiedAt)}
 		/>{/if}
+	{#if structuredData}{@html structuredData}{/if}
 </svelte:head>
 
 {#if LayoutComponent && pageModule}

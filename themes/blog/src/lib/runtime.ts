@@ -1,5 +1,6 @@
 import { defineTheme } from '@svartz/core';
 import { composeThemes, type ThemeExtension } from '@svartz/theme-minimal/runtime';
+import { readPost } from './blog.js';
 import { blogIdentity, type BlogThemeConfig } from './manifest.js';
 import ArchivePage from './pages/ArchivePage.svelte';
 import FolderListPage from './pages/FolderListPage.svelte';
@@ -25,7 +26,13 @@ export const extensions: readonly ThemeExtension[] = [
 		frame: BlogFrame,
 		regions: { header: BlogHeader, pageHead: PostHead, pageFoot: PostFoot, aside: RelatedPosts, footer: BlogFooter },
 		pages: { home: HomePage, tags: TagsPage, tag: TagPage, feed: ArchivePage, folders: FolderListPage, folder: FolderPage },
-		chrome: { graph: false, backlinks: false, readerMode: false }
+		chrome: { graph: false, backlinks: false, readerMode: false },
+		// Posts show no breadcrumbs, and their byline names the post's own `author` ahead of the site's.
+		structuredData: ({ article }, { entry }) => {
+			if (entry.slug === 'index') return { article };
+			const { author } = readPost(entry.properties);
+			return { article: { ...article, '@type': 'BlogPosting', ...(author && { author: { '@type': 'Person', name: author } }) } };
+		}
 	}
 ];
 
