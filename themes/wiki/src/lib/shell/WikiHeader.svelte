@@ -1,8 +1,8 @@
 <!--
-	The wiki's header: the site name over the rail, a wide search over the
-	article, colour mode, and the section bar from the vault's top-level
-	folders. On phones and tablets a menu button opens the rail as a drawer and
-	the section bar moves into it.
+	The wiki's header, one bar: the site name over the rail, the section bar from
+	the vault's top-level folders over the article, then search and colour mode.
+	Sections that don't fit wait in the bar's More menu. On phones and tablets a
+	menu button opens the rail as a drawer and the section bar moves into it.
 -->
 <script lang="ts">
 	import Menu from '@lucide/svelte/icons/menu';
@@ -29,35 +29,38 @@
 		{#if shell.drawer}<X aria-hidden="true" />{:else}<Menu aria-hidden="true" />{/if}
 	</button>
 	<a class="sv-wordmark" href={shell.homeHref}><SiteLogo logo={themeSettings(shell.themeConfig).logo} />{shell.site.title}</a>
-	<div class="search"><SearchDialog documents={shell.vault.search} searchIndex={shell.searchIndex} searchOptions={shell.searchOptions} /></div>
-	<ColorModeToggle />
-	{#if menu.length > 0}
-		<div class="section-bar"><SectionBar {menu} currentPath={shell.currentHref} currentFolders={shell.trail} /></div>
-	{/if}
+	<div class="section-bar">
+		{#if menu.length > 0}<SectionBar {menu} currentPath={shell.currentHref} currentFolders={shell.trail} />{/if}
+	</div>
+	<div class="tools">
+		<div class="search"><SearchDialog documents={shell.vault.search} searchIndex={shell.searchIndex} searchOptions={shell.searchOptions} /></div>
+		<ColorModeToggle />
+	</div>
 </div>
 
 <style>
-	/* Same columns as the page below: the name over the rail, search over the article. */
+	/* Same columns as the page below: the name over the rail, the sections over the article. */
 	.header-inner {
 		display: grid;
-		grid-template-columns: 14rem minmax(0, 36rem) 1fr;
+		grid-template-columns: 14rem minmax(0, 1fr) auto;
 		align-items: center;
-		grid-template-rows: calc(3.5rem - var(--sv-rule-width));
-		grid-auto-rows: 2.25rem;
+		block-size: 100%;
 		column-gap: var(--sv-space-7);
 		max-inline-size: 84rem;
 		margin-inline: auto;
 		padding-inline: var(--sv-space-5);
 	}
 
-	.header-inner > :global(.sv-color-mode) {
-		justify-self: end;
+	/* Full height, so the current section's underline meets the header's rule. */
+	.section-bar {
+		align-self: stretch;
+		min-inline-size: 0;
 	}
 
-	/* Under the search, aligned with the article. */
-	.section-bar {
-		grid-column: 2 / -1;
-		align-self: end;
+	.tools {
+		display: flex;
+		align-items: center;
+		gap: var(--sv-space-3);
 	}
 
 	.sv-wordmark {
@@ -67,7 +70,7 @@
 
 	.search {
 		display: flex;
-		min-inline-size: 0;
+		inline-size: clamp(11rem, 18vw, 16rem);
 	}
 
 	.search :global(.sv-search-trigger) {
@@ -88,18 +91,19 @@
 		}
 
 		.header-inner {
-			block-size: 100%;
 			display: flex;
 			gap: var(--sv-space-2);
 			padding-inline: var(--sv-space-3);
 		}
 
-		.search {
+		.tools {
 			flex: 1;
+			gap: var(--sv-space-2);
 		}
 
-		.header-inner > :global(.sv-color-mode) {
-			margin-inline-start: auto;
+		.search {
+			flex: 1;
+			inline-size: auto;
 		}
 	}
 
@@ -107,6 +111,10 @@
 		.sv-wordmark {
 			overflow: hidden;
 			text-overflow: ellipsis;
+		}
+
+		.tools {
+			justify-content: flex-end;
 		}
 
 		.search {
