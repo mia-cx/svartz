@@ -137,6 +137,8 @@ const DiscoveryConfigSchema = Schema.Struct({
   })),
   llms: Schema.optional(Schema.Struct({
     enabled: Schema.optional(Schema.Boolean),
+    /** List tag pages, folder listings and the feed under `## Optional` in `llms.txt`. */
+    optional: Schema.optional(Schema.Boolean),
   })),
   favicon: Schema.optional(Schema.Struct({
     enabled: Schema.optional(Schema.Boolean),

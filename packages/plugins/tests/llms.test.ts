@@ -35,6 +35,7 @@ const setup = [
 function build(vault: ProcessedFile[], config: {
   url?: string;
   enabled?: boolean;
+  optional?: boolean;
   frontmatter?: Partial<ResolvedConfig["frontmatter"]>;
 } = {}) {
   const ctx: PluginContext = {
@@ -65,7 +66,7 @@ function build(vault: ProcessedFile[], config: {
       discovery: {
         feed: { enabled: false, limit: 10, content: "summary", sort: "published" },
         sitemap: { enabled: false },
-        llms: { enabled: config.enabled ?? true },
+        llms: { enabled: config.enabled ?? true, optional: config.optional ?? false },
       },
     } as unknown as ResolvedConfig,
     files: vault,
@@ -198,19 +199,112 @@ describe("Markdown copies for LLM agents", () => {
       "",
       "> How to use it.",
       "",
-      "Each page links to a Markdown copy of its content.",
+      "Each page links to a Markdown copy of its content. [llms-full.txt](https://example.com/site/docs/llms-full.txt) holds every page in one file.",
       "",
       "## Pages",
       "",
       "- [Home](https://example.com/site/docs/index.md): Welcome.",
+      "- [Widget](https://example.com/site/docs/widget.md): A counter.",
+      "",
+      "## Guides",
+      "",
       "- [Next steps](https://example.com/site/docs/guides/next.md): Done.",
       "- [Setup](https://example.com/site/docs/guides/setup.md): Install the CLI.",
+      "",
+      "## Reference",
+      "",
       "- [API](https://example.com/site/docs/reference/api.md): Endpoints.",
-      "- [Widget](https://example.com/site/docs/widget.md): A counter.",
       "",
     ].join("\n"));
     expect(asset("guides/setup.md")).toContain("[the next step](https://example.com/site/docs/guides/next.md)");
     expect(ctx.index!.entries.find((entry) => entry.slug === "guides/setup")?.markdownHref).toBe("/docs/guides/setup.md");
+  });
+
+  const explorerVault = () => [
+    file("index.md", "---\ntitle: Home\n---\nWelcome."),
+    file("about.md", "---\ntitle: About\n---\nWho we are."),
+    file("appendix/api.md", "---\ntitle: API\n---\nEndpoints."),
+    file("guides/index.md", "---\ntitle: Guides\norder: 1\n---\nStart here. Then read [[step-2]]."),
+    file("guides/step-10.md", "---\ntitle: Step 10\ntags: [advanced]\n---\nLast."),
+    file("guides/step-2.md", "---\ntitle: Step 2\n---\nSecond."),
+    file("guides/zeta.md", "---\ntitle: Zeta\norder: 1\n---\nFirst."),
+    file("guides/deep/dive.md", "---\ntitle: Dive\n---\nDeeper."),
+  ];
+
+  it("sections llms.txt by top-level folder in explorer order", async () => {
+    const asset = await emit(build(explorerVault()));
+    // A folder's `order` comes from its folder note, which leads its section. Folders list before notes, then
+    // `order`, then titles in natural order.
+    expect(asset("llms.txt")).toBe([
+      "# Docs",
+      "",
+      "> How to use it.",
+      "",
+      "Each page links to a Markdown copy of its content. [llms-full.txt](llms-full.txt) holds every page in one file.",
+      "",
+      "## Pages",
+      "",
+      "- [Home](index.md): Welcome.",
+      "- [About](about.md): Who we are.",
+      "",
+      "## Guides",
+      "",
+      "- [Guides](guides.md): Start here. Then read step-2.",
+      "- [Dive](guides/deep/dive.md): Deeper.",
+      "- [Zeta](guides/zeta.md): First.",
+      "- [Step 2](guides/step-2.md): Second.",
+      "- [Step 10](guides/step-10.md): Last.",
+      "",
+      "## Appendix",
+      "",
+      "- [API](appendix/api.md): Endpoints.",
+      "",
+    ].join("\n"));
+  });
+
+  it("writes every page into llms-full.txt in llms.txt order, linking from its own location", async () => {
+    const asset = await emit(build(explorerVault(), { url: "https://example.com" }));
+    expect(asset("llms-full.txt")).toBe([
+      "# Docs",
+      "",
+      "> How to use it.",
+      "",
+      ...[
+        ["Home", "", "Welcome."],
+        ["About", "about/", "Who we are."],
+        ["Guides", "guides/", "Start here. Then read [step-2](https://example.com/docs/guides/step-2.md)."],
+        ["Dive", "guides/deep/dive/", "Deeper."],
+        ["Zeta", "guides/zeta/", "First."],
+        ["Step 2", "guides/step-2/", "Second."],
+        ["Step 10", "guides/step-10/", "Last."],
+        ["API", "appendix/api/", "Endpoints."],
+      ].flatMap(([title, path, body]) => [`# ${title}`, "", `Source: https://example.com/docs/${path}`, "", body, ""]),
+    ].join("\n"));
+  });
+
+  it("lists tag pages, folder listings and the feed under Optional only when asked", async () => {
+    expect(await emit(build(explorerVault())).then((asset) => asset("llms.txt"))).not.toContain("## Optional");
+    const asset = await emit(build(explorerVault(), { optional: true }));
+    expect(asset("llms.txt")!.split("## Optional\n\n")[1]).toBe([
+      "- [Tags](tags/): Every tag.",
+      "- [#advanced](tags/advanced/): Pages tagged advanced.",
+      "- [Folders](folders/): Every folder.",
+      "- [Appendix](folders/appendix/): Pages in the Appendix folder.",
+      "- [Guides](folders/guides/): Pages in the Guides folder.",
+      "- [Deep](folders/guides/deep/): Pages in the Deep folder.",
+      "- [Feed](feed/): The latest pages.",
+      "",
+    ].join("\n"));
+  });
+
+  it("leaves llms.txt and llms-full.txt to a host route that owns them", async () => {
+    expect(await emit(build(vault())).then((asset) => asset("llms-full.txt"))).toBeDefined();
+    const ctx = build(vault());
+    ctx.meta.set("reservedRoutes", new Set(["llms.txt", "llms-full.txt"]));
+    const asset = await emit(ctx);
+    expect(asset("llms.txt")).toBeUndefined();
+    expect(asset("llms-full.txt")).toBeUndefined();
+    expect(asset("guides/setup.md")).toBeDefined();
   });
 
   it("gives a protected note no copy and links to its locked page instead", async () => {

@@ -138,6 +138,7 @@ const mergeDiscovery = (
   },
   llms: {
     enabled: vault?.llms?.enabled ?? defaults?.llms?.enabled ?? true,
+    optional: vault?.llms?.optional ?? defaults?.llms?.optional ?? false,
   },
   favicon: {
     enabled: vault?.favicon?.enabled ?? defaults?.favicon?.enabled ?? !isHost,
