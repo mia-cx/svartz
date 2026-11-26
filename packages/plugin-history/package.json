@@ -9,6 +9,7 @@
   },
   "type": "module",
   "description": "Every page's history with diffs, and Recent changes for the whole wiki, read from the submissions plugin's GitHub mirror; or prerendered previous versions of a note, read from git",
+  "keywords": ["svartz-plugin"],
   "exports": {
     ".": {
       "import": "./dist/index.js",

@@ -52,3 +52,5 @@ export const load: PageServerLoad = ({ url }) => {
 ```
 
 See [[guides/host-vaults|Publish vaults in a SvelteKit app]] to set up the virtual modules.
+
+API reference: [[reference/api/core/VaultView|VaultView]] and [[reference/api/core/createVaultView|createVaultView]].

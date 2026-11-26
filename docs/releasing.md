@@ -79,6 +79,14 @@ A deploy brings its environment up to date as of its turn, whatever started it, 
 Dispatch Docs deploy on `main` to redeploy either one.
 It uses the organization's `CLOUDFLARE_API_TOKEN` secret and `CLOUDFLARE_ACCOUNT_ID` variable.
 
+The docs' API reference, `vaults/docs/reference/api/`, is generated, never committed.
+Each build of the docs vault writes it before reading the vault, from the workspace packages' built `.d.ts` files, so run `pnpm build` first: one note per symbol each published entry point exports, read by TypeDoc.
+The managed `svartz:build:docs` task depends on the packages' builds, so a type change never restores stale pages from Turbo's cache.
+`pnpm docs:api` regenerates it alone, for example after editing a doc comment while `pnpm svartz dev --vault docs` runs.
+A new entry point in a package's `exports` gets its pages with no other change.
+The generator, `scripts/api-reference/`, replaces the whole folder, so never edit notes there by hand: link to them from the guides instead.
+A field's default comes from its doc comment, as `Default: \`"permission"\`.` or an `@defaultValue` tag.
+
 ## One-time setup
 
 npm requires a package to exist before you can configure its trusted publisher.

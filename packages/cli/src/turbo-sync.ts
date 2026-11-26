@@ -108,7 +108,18 @@ function createManagedScripts(config: ResolvedConfigSet): Record<string, string>
   };
 }
 
-function createManagedTurboTasks(config: ResolvedConfigSet): Record<string, TurboTask> {
+/**
+ * The builds a vault build waits on, so a rebuilt package changes its cache key: `^build` when the workspace has a
+ * generic `build` task, which Turbo runs in each dependency that has one. Otherwise none, as before: `^build` would
+ * fail on a dependency without a build, and naming package builds (`theme#build`) can pull in unrelated ones, even
+ * one that consumes the vault and so closes a cycle. Such a workspace keeps independent vault builds.
+ */
+function buildDependencies(tasks: TurboJson["tasks"]): string[] {
+  return tasks && "build" in tasks ? ["^build"] : [];
+}
+
+/** The managed tasks; each vault build depends on `builds` ({@link buildDependencies}). */
+function createManagedTurboTasks(config: ResolvedConfigSet, builds: readonly string[]): Record<string, TurboTask> {
   return {
     [turboTaskName("svartz:build")]: {
       dependsOn: config.vaults.map((vault) => turboTaskName(buildTaskName(vault.id))),
@@ -118,6 +129,9 @@ function createManagedTurboTasks(config: ResolvedConfigSet): Record<string, Turb
         [
           turboTaskName(buildTaskName(vault.id)),
           {
+            // Workspace packages the project depends on build first, and their output is part of this task's hash: a
+            // rebuilt local theme or plugin, or the types a generated reference reads, never restores a stale vault.
+            ...(builds.length > 0 ? { dependsOn: [...builds] } : {}),
             inputs: getBuildTaskInputs(config, vault.id, vault.path),
             outputs: getBuildTaskOutputs(config, vault),
           } satisfies TurboTask,
@@ -198,7 +212,7 @@ function createNextTurboJson(
         ? existingTurboJson.$schema
         : TURBO_JSON_SCHEMA,
     ...existingTurboJson,
-    tasks: mergeManagedTurboTasks(existingTurboJson.tasks, createManagedTurboTasks(config)),
+    tasks: mergeManagedTurboTasks(existingTurboJson.tasks, createManagedTurboTasks(config, buildDependencies(existingTurboJson.tasks))),
   };
 }
 

@@ -49,14 +49,17 @@ export interface SymbolMember {
 	readonly kind: SymbolKind;
 	readonly signature?: string;
 	readonly description?: string;
+	/** What an optional property is when left out: `` `"api"` `` or "the repository's default branch". Backticks render as code. */
+	readonly default?: string;
 	readonly static: boolean;
 	readonly deprecated?: string;
 }
 
 /**
- * The `symbol` frontmatter schema: one exported symbol per note. A TypeDoc
- * plugin emits this shape; until then, write it by hand. Types in `type`,
- * `extends`, and `implements` may use `[[Name]]` to link to other symbols.
+ * The `symbol` frontmatter schema: one exported symbol per note, written by
+ * hand or generated from types. Signatures, types, `extends`, `implements`,
+ * and defaults may use `[[Name]]` or `[[path/to/Name|Name]]` to link to other
+ * symbols.
  *
  * ```yaml
  * symbol:
@@ -90,6 +93,9 @@ const texts = (value: unknown) => (Array.isArray(value) ? value.map(text).filter
 const isKind = (value: unknown): value is SymbolKind => typeof value === 'string' && value in SYMBOL_KINDS;
 const records = (value: unknown) => (Array.isArray(value) ? value.filter(isRecord) : []);
 
+/** A default as written; YAML may have read `false` or `3` as a boolean or number. */
+const defaultText = (value: unknown) => text(value) ?? (typeof value === 'number' || typeof value === 'boolean' ? String(value) : undefined);
+
 function readParameter(raw: Properties): SymbolParameter | undefined {
 	const name = text(raw.name);
 	if (!name) return undefined;
@@ -97,7 +103,7 @@ function readParameter(raw: Properties): SymbolParameter | undefined {
 		name,
 		type: text(raw.type) ?? text(raw.constraint),
 		optional: raw.optional === true,
-		default: text(raw.default) ?? (typeof raw.default === 'number' ? String(raw.default) : undefined),
+		default: defaultText(raw.default),
 		description: text(raw.description)
 	};
 }
@@ -131,6 +137,7 @@ export function readSymbol(properties: Properties): DocSymbol | undefined {
 				kind: member.kind,
 				signature: text(member.signature),
 				description: text(member.description),
+				default: defaultText(member.default),
 				static: member.static === true,
 				deprecated: member.deprecated === true ? 'Deprecated.' : text(member.deprecated)
 			}];

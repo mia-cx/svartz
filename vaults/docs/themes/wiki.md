@@ -40,3 +40,5 @@ infobox:
 `featured` picks a home-page feature; `hatnote` or `infobox` selects the article renderer in a composed vault. Use top-level `image` for a vault attachment; `infobox.image` does not publish a local attachment on its own. Use `order` to put pages or sections first.
 
 The theme extends [[themes/minimal|minimal]], retaining its search, drawer, contents, and shared options. Wiki swaps the article chrome and listings. Its ordinary feed lists built notes; a community site can link the live [[plugins/history|Recent changes page]] separately.
+
+API reference: [[reference/api/theme-wiki/index|@svartz/theme-wiki]], configured with [[reference/api/theme-minimal/MinimalThemeConfig|MinimalThemeConfig]].

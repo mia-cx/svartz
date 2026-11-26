@@ -17,4 +17,26 @@ describe('wikilinkSegments', () => {
 		]);
 		expect(wikilinkSegments('[[Nowhere]]', entries)).toEqual([{ text: 'Nowhere' }]);
 	});
+
+	it('links a vault path whose file name has an underscore', () => {
+		const api = [{ slug: 'reference/api/core/contract_version', title: 'CONTRACT_VERSION', href: '/reference/api/core/contract_version/' }];
+		expect(wikilinkSegments('[[reference/api/core/CONTRACT_VERSION|CONTRACT_VERSION]]', api)).toEqual([
+			{ text: 'CONTRACT_VERSION', href: '/reference/api/core/contract_version/' }
+		]);
+	});
+
+	it('prefers the note a path names exactly over one it only matches loosely', () => {
+		const api = [
+			{ slug: 'api/foo_bar', title: 'foo_bar', href: '/api/foo_bar/' },
+			{ slug: 'api/foo-bar', title: 'foo-bar', href: '/api/foo-bar/' }
+		];
+		expect(wikilinkSegments('[[api/foo-bar]]', api)).toEqual([{ text: 'api/foo-bar', href: '/api/foo-bar/' }]);
+		expect(wikilinkSegments('[[api/foo_bar]]', api)).toEqual([{ text: 'api/foo_bar', href: '/api/foo_bar/' }]);
+	});
+
+	it('loosely matches a name whose spaces and underscores run together', () => {
+		const notes = [{ slug: 'notes/foo-bar', title: 'Foo_ Bar', href: '/notes/foo-bar/' }];
+		expect(wikilinkSegments('[[foo-bar]]', notes)).toEqual([{ text: 'foo-bar', href: '/notes/foo-bar/' }]);
+		expect(wikilinkSegments('[[Foo_ Bar]]', notes)).toEqual([{ text: 'Foo_ Bar', href: '/notes/foo-bar/' }]);
+	});
 });

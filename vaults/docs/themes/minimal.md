@@ -35,3 +35,5 @@ The shell puts search and folders on the left, the note in the middle, and the g
 In frontmatter, use a number for `order` to place a note before unordered notes in the explorer. Lower comes first. A folder uses its folder note's order. Use `comments: false` to hide Giscus for a note. Other [[writing/frontmatter|standard fields]] work without theme-specific metadata.
 
 Minimal supplies the shared shell, content slots, and list routes to every other [[themes|first-party theme]].
+
+API reference: [[reference/api/theme-minimal/MinimalThemeConfig|MinimalThemeConfig]], and the [[reference/api/theme-minimal/index|@svartz/theme-minimal]] exports for theme authors.

@@ -42,3 +42,5 @@ symbol:
 Top-level page kinds grouped on the folder index are `namespace`, `class`, `interface`, `type`, `enum`, `function`, and `variable`. `kind` also accepts `method`, `property`, `constructor`, and `accessor` (used for entries under `members`). The `DocSymbol` type also supports `signatures` for overloads, `typeParameters`, `throws`, `extends`, `implements`, `members`, `source`, and `deprecated`. Types and descriptions can include wikilinks and inline code.
 
 Docs extends [[themes/minimal|minimal]], keeping its explorer, search, and previous and next links. The symbol renderer adds signatures and reference sections; the explorer puts kind badges beside symbols.
+
+API reference: [[reference/api/theme-docs/DocsThemeConfig|DocsThemeConfig]] and [[reference/api/theme-docs/DocSymbol|DocSymbol]]. This site's own [[reference/api/index|API reference]] is rendered by this theme.

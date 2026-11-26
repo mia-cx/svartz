@@ -25,3 +25,5 @@ export default defineConfig({
 `key` is an optional string, default `"p"`. No frontmatter is needed. Put a top-level horizontal rule (`---` on its own line, with a blank line above it) between slides. A rule inside a callout or quote does not split the slide.
 
 Open [Weather station slides](https://minimal.demo.svartz.dev/reference/slides/) and press P. Use the arrow keys or Space to advance, Shift+Space to go back, and Esc to leave. Slides are static copies of the rendered note, so interactive controls such as copy buttons are not available. The trigger is ignored in editable fields and with Ctrl, Command, or Alt held.
+
+API reference: [[reference/api/plugins/presentation|presentation]] and [[reference/api/plugins/PresentationOptions|PresentationOptions]].

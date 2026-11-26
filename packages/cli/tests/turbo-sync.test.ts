@@ -134,6 +134,7 @@ describe("managed Turbo sync", () => {
       dependsOn: ["//#svartz:build:docs", "//#svartz:build:obsidian-journal"],
     });
     expect(turboJson.tasks["//#svartz:build:docs"]).toEqual({
+      dependsOn: ["^build"],
       inputs: [
         "packages/cli/app/**",
         "package.json",
@@ -145,6 +146,7 @@ describe("managed Turbo sync", () => {
       outputs: [".svartz/vaults/docs/dist/**"],
     });
     expect(turboJson.tasks["//#svartz:build:obsidian-journal"]).toEqual({
+      dependsOn: ["^build"],
       inputs: [
         "packages/cli/app/**",
         "package.json",
@@ -164,6 +166,34 @@ describe("managed Turbo sync", () => {
       cache: false,
       persistent: true,
     });
+  });
+
+  // Turbo refuses a graph whose `^build` names no task, so a workspace without one keeps vault builds independent.
+  it("makes vault builds depend on ^build only when the workspace has a build task", async () => {
+    const { workspaceRoot } = await createWorkspaceFixture();
+    await writeFile(path.join(workspaceRoot, "turbo.json"), JSON.stringify({ tasks: { lint: {} } }));
+    await syncManagedTurboFiles(createResolvedConfig(workspaceRoot, [{ id: "docs" }]));
+
+    const turboJson = JSON.parse(await readFile(path.join(workspaceRoot, "turbo.json"), "utf8")) as {
+      tasks: Record<string, Record<string, unknown>>;
+    };
+    expect(turboJson.tasks["//#svartz:build:docs"]).not.toHaveProperty("dependsOn");
+  });
+
+  // Only a generic `build` is safe to wait on: named package builds can be unrelated, or consume the vault in a cycle.
+  it.each([
+    [{ build: {}, "theme#build": {} }, ["^build"]],
+    [{ "theme#build": {}, "icons#build": {} }, undefined],
+    [{ "//#build": {} }, undefined],
+  ])("waits on ^build only with a generic build task (%o)", async (tasks, dependsOn) => {
+    const { workspaceRoot } = await createWorkspaceFixture();
+    await writeFile(path.join(workspaceRoot, "turbo.json"), JSON.stringify({ tasks }));
+    await syncManagedTurboFiles(createResolvedConfig(workspaceRoot, [{ id: "docs" }]));
+
+    const turboJson = JSON.parse(await readFile(path.join(workspaceRoot, "turbo.json"), "utf8")) as {
+      tasks: Record<string, Record<string, unknown>>;
+    };
+    expect(turboJson.tasks["//#svartz:build:docs"]!.dependsOn).toEqual(dependsOn);
   });
 
   it("caches a Worker vault's bundle and Wrangler config, which its deploy reads", async () => {

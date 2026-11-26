@@ -1,11 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ConfigEnv, UserConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { hostStylesPlugin, withSvartzHost } from "../src/host";
-import { clearPublicAssets, publicAssetsPlugin, recordPublicAssets } from "../src/public-assets";
+import { clearPublicAssets, getMarkdownRoutes, getPublicFileNames, publicAssetsPlugin, recordMarkdownRoutes, recordPublicAssets } from "../src/public-assets";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -83,6 +84,27 @@ it("keeps an existing host Tailwind plugin without adding a second copy", async 
   const config = await wrapped({ command: "build", mode: "production" });
   const plugins = config.plugins?.flat(2) ?? [];
   expect(plugins.filter((plugin) => plugin && typeof plugin === "object" && "name" in plugin && plugin.name === "@tailwindcss/vite:scan")).toHaveLength(1);
+});
+
+it("lets the build spawn processes after recording a large vault's files", () => {
+  // Over the 128 KiB one environment variable may hold on Linux.
+  recordPublicAssets("large", Array.from({ length: 2000 }, (_, index) => ({ fileName: `large/reference/api/notes/note-${index}.md`, path: `/tmp/note-${index}.md` })));
+  try {
+    expect(spawnSync(process.execPath, ["-e", ""]).error).toBeUndefined();
+  } finally {
+    clearPublicAssets();
+  }
+});
+
+it("records a vault whatever its id, `__proto__` included", () => {
+  recordPublicAssets("__proto__", [{ fileName: "proto/a.md", path: "/tmp/a.md" }]);
+  recordMarkdownRoutes("__proto__", { "/proto/": "/proto.md" });
+  try {
+    expect(getPublicFileNames()).toEqual(["proto/a.md"]);
+    expect(getMarkdownRoutes()).toEqual({ "/proto/": "/proto.md" });
+  } finally {
+    clearPublicAssets();
+  }
 });
 
 it("emits only the files recorded since the last clear", async () => {

@@ -42,3 +42,5 @@ Add `history()` alongside [[plugins/submissions|submissions]] with `sync` enable
 History does not show drafts, private revisions, or protected pages. Live mode follows the file at its current path; it does not follow renames. It lists up to 1,000 revisions for one page, 100 at a time (`?page=1` to `?page=10`), then links to the rest on GitHub. The mirror's backfill limits how far Recent changes and account contributions reach. Account attribution comes from site save records, not commit authorship or trailers.
 
 Reverting needs a GitHub App, accounts, and `history:reverts:write`. It creates a new commit and requires the branch's current state to match what the moderator reviewed.
+
+API reference: [[reference/api/plugin-history/history|history]] and [[reference/api/plugin-history/HistoryOptions|HistoryOptions]].

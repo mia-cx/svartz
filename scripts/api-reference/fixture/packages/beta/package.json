@@ -1,0 +1,5 @@
+{
+  "name": "@fixture/beta",
+  "dependencies": { "@fixture/alpha": "workspace:^" },
+  "exports": { ".": { "types": "./types/index.d.ts" } }
+}

@@ -4,7 +4,10 @@ export interface LinkSegment {
 }
 
 const WIKILINK = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g;
-const normalize = (value: string) => value.toLowerCase().replace(/[\s_]+/g, '-');
+/** A target as written, case and spaces aside. */
+const exact = (value: string) => value.toLowerCase().replace(/\s+/g, '-');
+/** Looser still: any run of spaces and `_` reads as one `-`, as in a slug made from `CONTRACT_VERSION` or `Foo_ Bar`. */
+const loose = (value: string) => value.toLowerCase().replace(/[\s_]+/g, '-');
 
 /**
  * Frontmatter isn't run through the Markdown pipeline, so values like
@@ -20,10 +23,12 @@ export function wikilinkSegments(
 	let last = 0;
 	for (const match of value.matchAll(WIKILINK)) {
 		if (match.index > last) segments.push({ text: value.slice(last, match.index) });
-		const target = normalize(match[1]!.trim());
-		const note = entries.find(
-			(entry) => normalize(entry.title) === target || entry.slug.split('/').at(-1) === target || entry.slug === target
+		const raw = match[1]!.trim();
+		// An exact match wins, so `[[api/foo-bar]]` finds `api/foo-bar` even when `api/foo_bar` comes first.
+		const find = (key: (value: string) => string) => entries.find(
+			(entry) => key(entry.title) === key(raw) || key(entry.slug.split('/').at(-1)!) === key(raw) || key(entry.slug) === key(raw)
 		);
+		const note = find(exact) ?? find(loose);
 		const text = match[2]?.trim() ?? match[1]!.trim();
 		segments.push(note ? { text, href: note.href } : { text });
 		last = match.index + match[0].length;

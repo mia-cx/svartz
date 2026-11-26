@@ -5,7 +5,7 @@
 	type parameters, parameters, returns, throws, hierarchy, and members.
 -->
 <script lang="ts">
-	import { DescText } from '@svartz/ui';
+	import { DescText, wikilinkSegments } from '@svartz/ui';
 	import type { RendererProps } from '@svartz/theme-minimal/runtime';
 	import KindBadge from './KindBadge.svelte';
 	import TypeText from './TypeText.svelte';
@@ -30,16 +30,16 @@
 		);
 	});
 
-	const memberGroups = $derived(
-		Object.entries(
-			symbol.members.reduce<Record<string, SymbolMember[]>>((groups, member) => {
-				(groups[member.kind] ??= []).push(member);
-				return groups;
-			}, {})
-		) as [SymbolMember['kind'], SymbolMember[]][]
-	);
+	// A Map, not an object: a `constructor` member would find `Object.prototype.constructor`.
+	const memberGroups = $derived([
+		...symbol.members
+			.reduce((groups, member) => groups.set(member.kind, [...(groups.get(member.kind) ?? []), member]), new Map<SymbolMember['kind'], SymbolMember[]>())
+			.entries()
+	]);
 	const sourceIsUrl = $derived(symbol.source ? /^https?:\/\//.test(symbol.source) : false);
 </script>
+
+{#snippet linked(value: string)}{#each wikilinkSegments(value, entries) as segment, index (index)}{#if segment.href}<a href={segment.href} data-sv-internal>{segment.text}</a>{:else}{segment.text}{/if}{/each}{/snippet}
 
 {#snippet parameterTable(rows: readonly SymbolParameter[])}
 	<table class="params">
@@ -50,7 +50,7 @@
 					<td><code class="name">{row.name}{row.optional ? '?' : ''}</code></td>
 					<td>
 						{#if row.type}<TypeText value={row.type} {entries} />{/if}
-						{#if row.default}<span class="default">= <code>{row.default}</code></span>{/if}
+						{#if row.default}<span class="default">= <code>{@render linked(row.default)}</code></span>{/if}
 					</td>
 					<td>{#if row.description}<DescText value={row.description} {entries} />{/if}</td>
 				</tr>
@@ -85,7 +85,7 @@
 				{/each}
 			</div>
 		{/if}
-		<pre class="signature" id="overload-panel" role={symbol.signatures.length > 1 ? 'tabpanel' : undefined} aria-labelledby={symbol.signatures.length > 1 ? `overload-tab-${overload}` : undefined}><code>{symbol.signatures[overload]}</code></pre>
+		<pre class="signature" id="overload-panel" role={symbol.signatures.length > 1 ? 'tabpanel' : undefined} aria-labelledby={symbol.signatures.length > 1 ? `overload-tab-${overload}` : undefined}><code>{@render linked(symbol.signatures[overload]!)}</code></pre>
 	</div>
 {/if}
 
@@ -156,8 +156,9 @@
 					{#if member.static}<span class="sv-badge" data-sv-signal style:--sv-hue="var(--sv-hue-blue)">static</span>{/if}
 					{#if member.deprecated}<span class="sv-badge" data-sv-signal style:--sv-hue="var(--sv-hue-red)">deprecated</span>{/if}
 				</h3>
-				{#if member.signature}<pre class="signature small"><code>{member.signature}</code></pre>{/if}
+				{#if member.signature}<pre class="signature small"><code>{@render linked(member.signature)}</code></pre>{/if}
 				{#if member.description}<p><DescText value={member.description} {entries} /></p>{/if}
+				{#if member.default}<p class="default">Default: <DescText value={member.default} {entries} /></p>{/if}
 				{#if member.deprecated}<p class="member-deprecated"><DescText value={member.deprecated} {entries} /></p>{/if}
 			</article>
 		{/each}
@@ -243,6 +244,17 @@
 		font-family: var(--sv-font-mono);
 		font-size: 0.9rem;
 		line-height: 1.6;
+	}
+
+	.signature a {
+		color: var(--sv-accent-text);
+		text-decoration: underline;
+		text-decoration-color: var(--sv-accent-soft);
+		text-underline-offset: 0.2em;
+	}
+
+	.signature a:hover {
+		text-decoration-color: var(--sv-accent);
 	}
 
 	.signature.small {
