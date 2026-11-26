@@ -26,8 +26,9 @@ permissions:
 concurrency:
   # One deploy per environment. Every run deploys the latest commit or release as of its turn, so a queued run
   # replacing another, a late run or a re-run changes nothing. A newer staging push cancels an older one; production
-  # runs never cut a rollout short.
-  group: docs-deploy-${{ inputs.environment || 'staging' }}
+  # runs never cut a rollout short. The ref keeps a dispatch from another branch, which deploys nothing, out of main's
+  # group.
+  group: docs-deploy-${{ github.ref }}-${{ inputs.environment || 'staging' }}
   cancel-in-progress: ${{ (inputs.environment || 'staging') != 'production' }}
 
 defaults:
