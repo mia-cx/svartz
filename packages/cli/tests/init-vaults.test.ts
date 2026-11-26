@@ -224,6 +224,28 @@ it("refuses a vault on a file host integration writes, before writing", async ()
   expect(await readdir(path.join(root, "src"))).toEqual(["routes"]);
 });
 
+// Proves preflight claims only what this host's integration writes: a static host gets no plugin page matchers, so a
+// new vault at src/params is free.
+it("lets a vault use a path a static host integration leaves alone", async () => {
+  const root = await fixture();
+  await mkdir(path.join(root, "src/routes"), { recursive: true });
+  await writeFile(path.join(root, "vite.config.ts"), "import adapter from '@sveltejs/adapter-static';\nexport default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "host-app", devDependencies: { "@sveltejs/kit": "^2.0.0" } }));
+  // Installed, so the workspace's SvelteKit 3 can't stand in: SvelteKit 2 keeps one matcher file per name in src/params/.
+  await mkdir(path.join(root, "node_modules/@sveltejs/kit"), { recursive: true });
+  await writeFile(path.join(root, "node_modules/@sveltejs/kit/package.json"), JSON.stringify({ name: "@sveltejs/kit", version: "2.0.0" }));
+
+  const result = await initProject({
+    cwd: root,
+    install: false,
+    git: false,
+    vaults: (context) => vaultsFromFlags({ vault: ["src/params"] }, context),
+  });
+
+  expect(result.kind).toBe("integrated");
+  expect(await readdir(path.join(root, "src/params"))).toEqual(["index.md"]);
+});
+
 // Proves an empty --vault means the default vault folder, as an empty value does for every other flag.
 it("writes the default vault folder for an empty --vault", async () => {
   const root = await fixture();

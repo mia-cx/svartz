@@ -164,6 +164,9 @@ const command = (
 
 /** A new project's files besides its vaults. It builds with the app Svartz ships, so it needs no app of its own. */
 const NEW_PROJECT_FILES = [".gitignore", configName, "package.json"] as const;
+/** One file integration writes into a host app: its absolute path, the operation's name for errors, and the write. */
+type PlannedWrite = { readonly file: string; readonly name: string; readonly write: () => Promise<void> };
+
 /** The note a new vault starts with. */
 const STARTER_NOTE = "index.md";
 
@@ -660,102 +663,75 @@ const initProjectEffect = (
       const integratedManifest = integrateManifest(existingManifest ?? {}, themePackages(vaults));
       const manifestChanged =
         JSON.stringify(existingManifest) !== JSON.stringify(integratedManifest);
-      if (
-        existingConfig &&
-        integratedViteSource === viteSource &&
-        integratedAppTypes === appTypesSource &&
-        !manifestChanged &&
-        !installCatchall &&
-        !migrateRootLayout &&
-        !migrateCatchallPage &&
-        !installCatchallServer &&
-        !migrateCatchall &&
-        !installPageRoute
-      ) {
+      const writeTemplate = (file: string, template: string) => async () =>
+        writeNewFile(file, await readFile(template, "utf8"));
+      // Everything integration writes in this host, in order. The already-configured check, the vault preflight and
+      // the writes all read this one list, so what preflight claims can't drift from what init writes.
+      const hostWrites: readonly PlannedWrite[] = [
+        ...(integratedViteSource !== viteSource
+          ? [{ file: location.viteConfigPath, name: "write host Vite config",
+            write: () => writeFile(location.viteConfigPath, integratedViteSource) }]
+          : []),
+        ...(integratedAppTypes !== appTypesSource
+          ? [appTypesSource === undefined
+            ? { file: appTypesPath, name: "write host app types", write: () => writeNewFile(appTypesPath, integratedAppTypes) }
+            : { file: appTypesPath, name: "update host app types", write: () => writeFile(appTypesPath, integratedAppTypes) }]
+          : []),
+        ...(installCatchall
+          ? PAGE_ROUTE_FILES.map((name) => ({
+            file: path.join(catchallRoot, name),
+            name: `write ${name}`,
+            write: writeTemplate(path.join(catchallRoot, name), path.join(templateRoot, "src", "routes", "[...slug]", name)),
+          }))
+          : []),
+        ...(installPageRoute
+          ? [
+            ...PAGE_ROUTE_FILES.map((name, index) => ({
+              file: path.join(root, pageRoute, name),
+              name: `write plugin page ${name}`,
+              write: () => writeNewFile(path.join(root, pageRoute, name), pageRouteTemplates[index]!),
+            })),
+            ...(params ?? []).map(([destination, template]) => ({
+              file: path.join(root, destination),
+              name: `write ${destination}`,
+              write: writeTemplate(path.join(root, destination), template),
+            })),
+          ]
+          : []),
+        ...(installCatchallServer
+          ? [{ file: catchallServerPath, name: "write catchall server load",
+            write: () => existingCatchallServer === undefined
+              ? writeNewFile(catchallServerPath, catchallServerTemplate)
+              : writeFile(catchallServerPath, catchallServerTemplate) }]
+          : []),
+        ...(migrateCatchall
+          ? [{ file: catchallLoadPath, name: "update host catchall load", write: () => writeFile(catchallLoadPath, catchallLoadTemplate) }]
+          : []),
+        ...(migrateCatchallPage && catchallPageUpdate !== undefined
+          ? [{ file: catchallPagePath, name: "update host catchall page", write: () => writeFile(catchallPagePath, catchallPageUpdate) }]
+          : []),
+        ...(migrateRootLayout
+          ? [{ file: rootLayoutPath, name: "update host root layout", write: () => writeFile(rootLayoutPath, rootLayoutTemplate) }]
+          : []),
+        ...(manifestChanged
+          ? [{ file: existingManifestPath, name: "write package.json",
+            write: () => writeFile(existingManifestPath, `${JSON.stringify(integratedManifest, null, 2)}\n`) }]
+          : []),
+      ];
+      if (existingConfig && hostWrites.length === 0) {
         return { kind: "already-configured", packageManager: manager, vaults };
       }
       if (!existingConfig) {
-        // Every file host integration may write, whether or not this run writes it: none of them can hold a vault.
-        const hostFiles = [
-          path.join(root, configName),
-          existingManifestPath,
-          location.viteConfigPath,
-          appTypesPath,
-          rootLayoutPath,
-          ...PAGE_ROUTE_FILES.map((name) => path.join(catchallRoot, name)),
-          ...PAGE_ROUTE_FILES.map((name) => path.join(root, pageRoute, name)),
-          ...(params ?? []).map(([destination]) => path.join(root, destination)),
-        ].map((file) => path.relative(root, file).split(path.sep).join("/"));
-        const conflict = yield* operation("inspect vault paths", () => vaultConflicts(root, vaults, hostFiles));
+        const files = [path.join(root, configName), ...hostWrites.map(({ file }) => file)]
+          .map((file) => path.relative(root, file).split(path.sep).join("/"));
+        const conflict = yield* operation("inspect vault paths", () => vaultConflicts(root, vaults, files));
         if (conflict) return yield* conflict;
         yield* operation("write Svartz config", () =>
           writeNewFile(path.join(root, configName), renderConfig(vaults)),
         );
         yield* writeStarterNotes(root, vaults);
       }
-      if (integratedViteSource !== viteSource)
-        yield* operation("write host Vite config", () =>
-          writeFile(location.viteConfigPath, integratedViteSource),
-        );
-      if (integratedAppTypes !== appTypesSource) {
-        if (appTypesSource === undefined)
-          yield* operation("write host app types", () =>
-            writeNewFile(appTypesPath, integratedAppTypes),
-          );
-        else
-          yield* operation("update host app types", () =>
-            writeFile(appTypesPath, integratedAppTypes),
-          );
-      }
-      if (installCatchall) {
-        for (const name of ["+page.svelte", "+page.ts", "+page.server.ts"]) {
-          const source = yield* operation(`read ${name} template`, () =>
-            readFile(
-              path.join(templateRoot, "src", "routes", "[...slug]", name),
-              "utf8",
-            ),
-          );
-          yield* operation(`write ${name}`, () =>
-            writeNewFile(path.join(catchallRoot, name), source),
-          );
-        }
-      }
-      if (installPageRoute) {
-        for (const [index, name] of PAGE_ROUTE_FILES.entries()) {
-          yield* operation(`write plugin page ${name}`, () =>
-            writeNewFile(path.join(root, pageRoute, name), pageRouteTemplates[index]!),
-          );
-        }
-        for (const [destination, template] of params ?? []) {
-          const source = yield* operation(`read ${destination} template`, () => readFile(template, "utf8"));
-          yield* operation(`write ${destination}`, () => writeNewFile(path.join(root, destination), source));
-        }
-      }
-      if (installCatchallServer)
-        yield* operation("write catchall server load", () =>
-          existingCatchallServer === undefined
-            ? writeNewFile(catchallServerPath, catchallServerTemplate)
-            : writeFile(catchallServerPath, catchallServerTemplate),
-        );
-      if (migrateCatchall)
-        yield* operation("update host catchall load", () =>
-          writeFile(catchallLoadPath, catchallLoadTemplate),
-        );
-      if (migrateCatchallPage && catchallPageUpdate !== undefined)
-        yield* operation("update host catchall page", () =>
-          writeFile(catchallPagePath, catchallPageUpdate),
-        );
-      if (migrateRootLayout)
-        yield* operation("update host root layout", () =>
-          writeFile(rootLayoutPath, rootLayoutTemplate),
-        );
-      if (manifestChanged)
-        yield* operation("write package.json", () =>
-          writeFile(
-            existingManifestPath,
-            `${JSON.stringify(integratedManifest, null, 2)}\n`,
-          ),
-        );
+      for (const { name, write } of hostWrites) yield* operation(name, write);
       if (options.install !== false) yield* command(manager, ["install"], root);
       return { kind: "integrated", packageManager: manager, vaults };
     }
