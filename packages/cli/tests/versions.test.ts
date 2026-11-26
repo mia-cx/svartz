@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -54,3 +54,24 @@ it("finishes reading every version before failing on a missing ref", async () =>
   await expect(versionVaults(failing)).rejects.toThrow('git has no ref "no-such-ref"');
   expect(await readdir(join(repo, ".svartz/api/versions/v1"))).toContain("source");
 });
+
+// Proves a `tar` that can't start fails the build with its own error instead of leaving `git archive` blocked on a full
+// pipe, which would hold the build lock until the process is killed.
+it("reports a tar that can't start, with an archive larger than the pipe", async () => {
+  const git = (...args: string[]) => exec("git", ["-C", repo, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", ...args]);
+  await writeFile(join(repo, "rest/large.bin"), Buffer.alloc(4 * 1024 * 1024, 1));
+  await git("add", "-A");
+  await git("commit", "-qm", "large");
+  await git("tag", "-f", "v1");
+  // A PATH with git and no tar.
+  const bin = join(repo, ".bin");
+  await mkdir(bin);
+  await symlink((await exec("git", ["--exec-path"])).stdout.trim() + "/git", join(bin, "git"));
+  const original = process.env.PATH;
+  process.env.PATH = bin;
+  try {
+    await expect(versionVaults(vault("rest"))).rejects.toThrow("spawn tar ENOENT");
+  } finally {
+    process.env.PATH = original;
+  }
+}, 10_000);

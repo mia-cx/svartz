@@ -100,13 +100,26 @@ async function extract(root: string, commit: string, prefix: string, target: str
   const depth = prefix.split("/").filter(Boolean).length;
   const unpack = spawn("tar", ["-x", "-f", "-", "-C", target, `--strip-components=${depth}`], { stdio: ["pipe", "ignore", "pipe"] });
   archive.stdout.pipe(unpack.stdin);
+  // A broken pipe into tar means tar failed or was stopped, which tar's own wait reports.
+  unpack.stdin.on("error", () => {});
+  let failure: Error | undefined;
   const done = (child: typeof archive | typeof unpack, name: string) => new Promise<void>((resolve, reject) => {
     let stderr = "";
     child.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
-    child.once("error", reject);
-    child.once("close", (code) => (code === 0 ? resolve() : reject(new Error(`${name} failed (${code}): ${stderr.trim()}`))));
+    const fail = (error: Error) => {
+      // Either child failing stops both: the other would wait forever on a pipe nothing fills or drains.
+      failure ??= error;
+      archive.kill();
+      unpack.kill();
+      reject(error);
+    };
+    child.once("error", fail);
+    child.once("close", (code) => (code === 0 ? resolve() : fail(new Error(`${name} failed (${code}): ${stderr.trim()}`))));
   });
-  await settled([done(archive, "git archive"), done(unpack, "tar")]);
+  // The first failure, not the one stopping the other child caused.
+  await settled([done(archive, "git archive"), done(unpack, "tar")]).catch(() => {
+    throw failure;
+  });
 }
 
 /**
