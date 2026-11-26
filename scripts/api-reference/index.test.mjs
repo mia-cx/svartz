@@ -72,7 +72,12 @@ describe('the API reference generator', () => {
 		const rows = frontmatter(join(out, 'alpha/SiteSettings.md')).symbol.members.map(({ name, signature, default: value, description }) => ({ name, signature, default: value, description }));
 		assert.deepEqual(rows, [
 			{ name: 'title', signature: 'title?: string', default: '`"Untitled"`', description: "The site's title." },
-			{ name: 'url', signature: 'url: string', default: undefined, description: 'Where it publishes.' }
+			{ name: 'url', signature: 'url: string', default: undefined, description: 'Where it publishes.' },
+			// An optional `unknown` stays `unknown`, and only `undefined` leaves an optional type.
+			{ name: 'extra', signature: 'extra?: unknown', default: undefined, description: 'Anything a plugin wants.' },
+			// A nested object lists its fields under their path.
+			{ name: 'social', signature: 'social?: { … }', default: undefined, description: 'Link previews.' },
+			{ name: 'social.image', signature: 'image?: string | null', default: undefined, description: 'The preview image.' }
 		]);
 	});
 

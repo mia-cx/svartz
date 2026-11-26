@@ -89,7 +89,8 @@ export async function convert(entries, { tsconfig }) {
 }
 
 /**
- * @typedef {{ name: string, optional: boolean, type: string, description?: string, default?: string }} ComponentProp
+ * A field: `name` is its path (`discovery.site`), `key` its own name when that differs.
+ * @typedef {{ name: string, key?: string, optional: boolean, type: string, description?: string, default?: string }} ComponentProp
  */
 
 /** The props of a Svelte `Component<Props>`, or undefined for any other type. */
@@ -106,34 +107,51 @@ function componentProps(checker, type) {
  * primitives keep their type expression.
  */
 function aliasFields(checker, type) {
-	if (!(type.flags & ts.TypeFlags.Object) || checker.isArrayType(type) || checker.isTupleType(type)) return undefined;
-	if (type.getCallSignatures().length > 0 || type.getConstructSignatures().length > 0) return undefined;
+	if (!plainObject(checker, type)) return undefined;
 	const fields = fieldsOf(checker, type);
 	return fields.length > 0 ? fields : undefined;
 }
 
+/** Nested fields deeper than this keep their type on one row: `a.b.c.d` lists, `a.b.c.d.e` doesn't. */
+const MAX_FIELD_DEPTH = 3;
+
+/** Whether `type` is an object of fields: not a union, function, array, tuple or primitive. */
+const plainObject = (checker, type) =>
+	(type.flags & ts.TypeFlags.Object) !== 0 && !checker.isArrayType(type) && !checker.isTupleType(type) &&
+	type.getCallSignatures().length === 0 && type.getConstructSignatures().length === 0;
+
 /**
  * Each property of `type`, with its doc comment and default. Its type is the one written on its declaration when
  * `asWritten` and there is one (a component's props read as their author wrote them), else the checker's resolved type
- * (a schema field reads as the value it accepts, `string`, not as `Schema.optional<typeof Schema.String>`).
+ * (a schema field reads as the value it accepts, `string`, not as `Schema.optional<typeof Schema.String>`). A resolved
+ * field holding an object of fields lists them too, as `discovery.site.title`, the way inline option objects do.
  */
-function fieldsOf(checker, type, { asWritten = false } = {}) {
-	return checker.getPropertiesOfType(type).map((prop) => {
+function fieldsOf(checker, type, { asWritten = false, prefix = '', depth = 0 } = {}) {
+	return checker.getPropertiesOfType(type).flatMap((prop) => {
 		const node = prop.declarations?.[0];
 		const tag = prop.getJsDocTags(checker).find((item) => item.name === 'default' || item.name === 'defaultValue');
 		const optional = (prop.flags & ts.SymbolFlags.Optional) !== 0;
 		const resolved = checker.getTypeOfSymbol(prop);
-		return {
-			name: prop.name,
+		const written = asWritten && node && ts.isPropertySignature(node) && node.type ? node.type.getText() : undefined;
+		// Spotting a nested object looks past an optional field's `undefined`. The type text drops only `| undefined`,
+		// which `?` already states, so `unknown` stays `unknown` and `null` stays.
+		const value = optional ? checker.getNonNullableType(resolved) : resolved;
+		const nested = written === undefined && depth < MAX_FIELD_DEPTH && plainObject(checker, value) &&
+			checker.getPropertiesOfType(value).length > 0 ? value : undefined;
+		const row = {
+			name: `${prefix}${prop.name}`,
+			key: prop.name,
 			optional,
-			type: asWritten && node && ts.isPropertySignature(node) && node.type
-				? node.type.getText()
-				: checker.typeToString(optional ? checker.getNonNullableType(resolved) : resolved),
+			type: written ?? (nested ? '{ … }' : withoutUndefined(checker.typeToString(resolved, undefined, ts.TypeFormatFlags.NoTruncation), optional)),
 			description: oneLine(ts.displayPartsToString(prop.getDocumentationComment(checker))) || undefined,
 			default: tag ? stripCode(ts.displayPartsToString(tag.text)) || undefined : undefined
 		};
+		return [row, ...(nested ? fieldsOf(checker, nested, { prefix: `${row.name}.`, depth: depth + 1 }) : [])];
 	});
 }
+
+/** An optional field's type as text, without the `| undefined` its `?` already states. */
+const withoutUndefined = (text, optional) => (optional ? text.replace(/ \| undefined$/, '').replace(/^undefined \| /, '') : text);
 
 /**
  * Lay out one note per declaration, plus a folder note per entry point and one for the whole reference.
@@ -395,7 +413,8 @@ function memberRows(child, parent, link, prefix = '') {
 const propMember = (prop) => compact({
 	name: prop.name,
 	kind: 'property',
-	signature: `${propertyName(prop.name)}${prop.optional ? '?' : ''}: ${prop.type}`,
+	// A nested field's row is named by its path (`discovery.site`), its signature by its own key.
+	signature: `${propertyName(prop.key ?? prop.name)}${prop.optional ? '?' : ''}: ${prop.type}`,
 	...splitDefault(prop.description ?? '', prop.default && `\`${prop.default}\``)
 });
 

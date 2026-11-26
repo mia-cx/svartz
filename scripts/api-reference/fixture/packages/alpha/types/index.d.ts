@@ -37,6 +37,13 @@ export type SiteSettings = Derive<{
 	title?: string;
 	/** Where it publishes. */
 	url: string;
+	/** Anything a plugin wants. */
+	extra?: unknown;
+	/** Link previews. */
+	social?: {
+		/** The preview image. */
+		image?: string | null;
+	};
 }>;
 
 /** Named like the `extra` entry point's folder. */
