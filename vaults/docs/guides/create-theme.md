@@ -28,6 +28,8 @@ Export a build entry with the same IDs and names, its build plugins and capabili
 
 A renderer reads frontmatter in `detect`. Return `undefined` for a note it does not own. Return typed data for a match, or throw an error for invalid metadata. The body gets the entry, data, shared shell, and the parent snippets. Render the note's `children` where its prose belongs, and `actions` if you split out the page head. If the layout uses a dynamic component, bind it to a local component variable before rendering it.
 
+Give the extension a `structuredData` function to describe its pages to search engines, such as a recipe page as a `Recipe`. See [[writing/structured-data#In your own theme|Structured data]].
+
 For broader changes, replace a region or the frame. Use the shell's explorer, drawer, contents, and page navigation instead of recalculating them. Keep `PageActions` in a replaced page head and `SiteActions` in the navigation so plugin actions still appear. See the [[reference/theme-contract|theme contract]] for slots and the [[themes/choosing-and-composing|composition rules]].
 
 ## Manifest
