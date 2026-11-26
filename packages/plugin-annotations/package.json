@@ -12,6 +12,7 @@
   },
   "type": "module",
   "description": "Readers' comments beside the passage they respond to, stored in Cloudflare D1",
+  "keywords": ["svartz-plugin"],
   "exports": {
     ".": {
       "import": "./dist/index.js",

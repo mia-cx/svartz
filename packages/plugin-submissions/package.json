@@ -9,6 +9,7 @@
   },
   "type": "module",
   "description": "Readers edit or add a Svartz page from the site and get a GitHub pull request",
+  "keywords": ["svartz-plugin"],
   "exports": {
     ".": {
       "import": "./dist/index.js",

@@ -12,6 +12,7 @@
   },
   "type": "module",
   "description": "Reader sign-in and accounts for Svartz sites, and the signed-in account for server plugins",
+  "keywords": ["svartz-plugin"],
   "exports": {
     ".": {
       "import": "./dist/index.js",

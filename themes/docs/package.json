@@ -2,6 +2,7 @@
 	"name": "@svartz/theme-docs",
 	"version": "2.5.0",
 	"description": "A Svartz theme for package reference docs: modules, classes, interfaces, functions, and types.",
+	"keywords": ["svartz-theme"],
 	"license": "SEE LICENSE IN LICENSE",
 	"publishConfig": { "access": "public" },
 	"engines": { "node": "^20.19.0 || >=22.12.0" },

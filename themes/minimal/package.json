@@ -92,7 +92,8 @@
 		"vitest-browser-svelte": "^2.0.2"
 	},
 	"keywords": [
-		"svelte"
+		"svelte",
+		"svartz-theme"
 	],
 	"dependencies": {
 		"@lucide/svelte": "^1.48.0",

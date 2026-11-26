@@ -12,6 +12,7 @@
   },
   "type": "module",
   "description": "Core pipeline plugins for the Svartz build system",
+  "keywords": ["svartz-plugin"],
   "exports": {
     ".": {
       "import": "./dist/index.js",

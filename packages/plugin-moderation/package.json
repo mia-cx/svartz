@@ -9,6 +9,7 @@
   },
   "type": "module",
   "description": "Readers report pages, edits, comments and accounts, and moderators work through the reports on the site's dashboard",
+  "keywords": ["svartz-plugin"],
   "exports": {
     ".": {
       "import": "./dist/index.js",
