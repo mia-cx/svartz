@@ -181,6 +181,17 @@ describe("discovery output", () => {
         "User-agent: Googlebot", "User-agent: Amazonbot", "Disallow: /", "Allow: /public/", "",
         "Sitemap: https://example.com/sitemap.xml", "",
       ]],
+      // Google reads `Googlebot.1` as Googlebot, so its rule keeps the search preset's line rather than blocking it.
+      ["matches a rule's crawler to a preset as crawlers read its token", {
+        bots: false, search: true, training: false, rules: [{ userAgent: "Googlebot.1", disallow: ["/drafts/"] }],
+      }, [
+        "User-agent: *", "Disallow: /", "",
+        "User-agent: Googlebot", "User-agent: bingbot", "User-agent: DuckDuckBot", "User-agent: Applebot",
+        "User-agent: OAI-SearchBot", "User-agent: ChatGPT-User", "User-agent: Claude-SearchBot", "User-agent: Claude-User",
+        "User-agent: PerplexityBot", "User-agent: Perplexity-User", "Disallow:", "",
+        "User-agent: Googlebot.1", "Disallow:", "Disallow: /drafts/", "",
+        "Sitemap: https://example.com/sitemap.xml", "",
+      ]],
       ["splits a raw rule's crawlers by the preset that covers them", {
         training: false, rules: [{ userAgent: ["googlebot", "GPTBot"], disallow: ["/drafts/"] }],
       }, [

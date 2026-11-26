@@ -206,9 +206,10 @@ function robots(ctx: PluginContext, base: string | undefined): string {
   // A crawler obeys only its most specific group, so a preset that matches `*` needs no group of its own, and every
   // group repeats the content signals: a crawler with its own group never reads `*`'s.
   const signal = signals.length ? [`Content-Signal: ${signals.join(", ")}`] : [];
-  // The preset that covers a crawler (tokens match case-insensitively), and so the line its own rule starts from.
+  // The preset that covers a crawler, and so the line its own rule starts from. Crawlers match case-insensitively on a
+  // token's leading letters, `-` and `_` (RFC 9309), so `Googlebot.1` is Googlebot.
   const presetOf = (agent: string) => {
-    const name = agent.toLowerCase();
+    const name = /^[A-Za-z_-]*/.exec(agent)![0].toLowerCase();
     if (SEARCH_CRAWLERS.some((crawler) => crawler.toLowerCase() === name)) return config.search;
     if (TRAINING_CRAWLERS.some((crawler) => crawler.toLowerCase() === name)) return config.training;
     return config.bots;

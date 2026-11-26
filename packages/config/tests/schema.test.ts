@@ -90,8 +90,8 @@ describe("SvartzConfigSchema", () => {
     expect(Either.isRight(robots([{ userAgent: "Amazonbot", disallow: ["/"] }]))).toBe(true);
     expect(Either.isLeft(robots([{ userAgent: "Amazonbot" }]))).toBe(true);
     expect(Either.isLeft(robots([{ userAgent: "Amazonbot\nUser-agent: *", disallow: ["/"] }]))).toBe(true);
-    // A crawler reads `Googlebot.1` as Googlebot, so a token outside RFC 9309's letters, `-` and `_` is refused.
-    expect(Either.isLeft(robots([{ userAgent: "Googlebot.1", disallow: ["/drafts/"] }]))).toBe(true);
+    // 360 Search documents tokens with digits.
+    expect(Either.isRight(robots([{ userAgent: "360Spider", disallow: ["/drafts/"] }]))).toBe(true);
     expect(Either.isLeft(robots([{ userAgent: "Amazonbot", disallow: ["drafts"] }]))).toBe(true);
   });
 
