@@ -95,6 +95,7 @@ export default defineConfig({
         description: "A Svartz showcase vault that uses every Obsidian Markdown feature.",
         url: demos.minimal.url,
       },
+      discovery: { llms: { optional: true } },
     },
     {
       // Demo for @svartz/theme-wiki: a fictional game wiki.

@@ -7,6 +7,8 @@ import GithubSlugger from "github-slugger";
 import matter from "gray-matter";
 import { posix } from "node:path";
 import type { ProcessedFile } from "@svartz/core";
+import remarkGfm from "remark-gfm";
+import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
@@ -169,4 +171,170 @@ export function agentMarkdown(
   return Object.keys(page.properties).length > 0
     ? `${matter.stringify("", { ...page.properties }).trim()}\n\n${content}\n`
     : `${content}\n`;
+}
+
+const gfmParser = unified().use(remarkParse).use(remarkGfm);
+/** Already absolute: it has a scheme, or names its host (`//cdn.example.org/…`). */
+const isAbsolute = (url: string) => url.startsWith("//") || /^[a-z][\w+.-]*:/i.test(url);
+/** The HTML attributes that hold URLs, and the elements whose copies rewrite them. */
+const URL_ATTRIBUTES = new Set(["href", "src", "poster", "srcset"]);
+const URL_ELEMENTS = new Set(["a", "audio", "iframe", "img", "link", "source", "video"]);
+
+/** A destination as CommonMark reads it back: in `<…>` when it holds spaces, parentheses or angle brackets. */
+const writeDestination = (url: string) => {
+  const escaped = url.replace(/[\\<>]/g, "\\$&");
+  return /[\s()<>]/.test(url) ? `<${escaped}>` : escaped;
+};
+const writeTitle = (title: string | null | undefined) => (title ? ` "${title.replace(/[\\"]/g, "\\$&")}"` : "");
+const writeAttribute = (value: string) => value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+
+/** The offset of the `]` closing the label that opens at `start`, skipping escaped brackets. */
+function labelEnd(markdown: string, start: number): number {
+  for (let at = start + 1; at < markdown.length; at++) {
+    if (markdown[at] === "\\") at++;
+    else if (markdown[at] === "]") return at;
+  }
+  return -1;
+}
+
+type HtmlNode = DefaultTreeAdapterMap["childNode"];
+
+const isHtmlSpace = (char: string | undefined) => char === " " || char === "\t" || char === "\n" || char === "\f" || char === "\r";
+
+/**
+ * A `srcset` value's candidates as the HTML spec reads them: a URL is a run of non-whitespace minus trailing commas,
+ * so a comma inside one stays put, and its descriptors run to the next comma outside parentheses.
+ */
+function srcsetCandidates(value: string): { url: string; descriptors: string }[] {
+  const candidates: { url: string; descriptors: string }[] = [];
+  let at = 0;
+  while (at < value.length) {
+    while (isHtmlSpace(value[at]) || value[at] === ",") at++;
+    if (at >= value.length) break;
+    const start = at;
+    while (at < value.length && !isHtmlSpace(value[at])) at++;
+    let url = value.slice(start, at);
+    if (url.endsWith(",")) {
+      while (url.endsWith(",")) url = url.slice(0, -1);
+      candidates.push({ url, descriptors: "" });
+      continue;
+    }
+    const descriptorsStart = at;
+    for (let depth = 0; at < value.length && (value[at] !== "," || depth > 0); at++) {
+      if (value[at] === "(") depth++;
+      else if (value[at] === ")") depth--;
+    }
+    candidates.push({ url, descriptors: value.slice(descriptorsStart, at).trim() });
+    at++;
+  }
+  return candidates;
+}
+
+/**
+ * `markdown` with every path- and root-relative destination resolved against `from`, the URL it was written for, then
+ * written by `format`. It reaches the same places from anywhere, so a copy can move into `llms-full.txt` without
+ * recomputing a link. The Markdown parser finds link, image and definition destinations, and the HTML parser finds
+ * URL attributes; only those source spans are rewritten. Absolute destinations stay as written.
+ */
+export function rebaseLinks(markdown: string, from: URL, format: (url: URL) => string): string {
+  // A `|` is written `%7C`, the same URL, since a raw one would end a GFM table cell.
+  const rebase = (url: string) => (isAbsolute(url) ? undefined : format(new URL(url, from)).replaceAll("|", "%7C"));
+  const replacements: Replacement[] = [];
+  visit(gfmParser.parse(markdown), (node) => {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (start === undefined || end === undefined) return;
+    if (node.type === "link" || node.type === "image" || node.type === "definition") {
+      const url = rebase(node.url);
+      if (url === undefined) return;
+      const target = `${writeDestination(url)}${writeTitle(node.title)}`;
+      if (node.type === "image") {
+        if (markdown.startsWith("![", start)) replacements.push({ start, end, text: `![${escapeLabel(node.alt ?? "")}](${target})` });
+      } else if (node.type === "definition") {
+        const close = labelEnd(markdown, start);
+        if (close > 0 && markdown[close + 1] === ":") replacements.push({ start, end, text: `${markdown.slice(start, close + 1)}: ${target}` });
+      } else {
+        // Only the part after the label changes, so its markup stays as written. Autolinks have no label.
+        const close = node.children.at(-1)?.position?.end.offset ?? start + 1;
+        if (markdown[start] === "[" && markdown[close] === "]" && markdown[close + 1] === "(") replacements.push({ start: close + 1, end, text: `(${target})` });
+      }
+    } else if (node.type === "html") {
+      const elements = (nodes: readonly HtmlNode[]): HtmlNode[] =>
+        nodes.flatMap((child) => ("childNodes" in child ? [child, ...elements(child.childNodes)] : [child]));
+      for (const element of elements(parseFragment(node.value, { sourceCodeLocationInfo: true }).childNodes)) {
+        if (!("tagName" in element) || !URL_ELEMENTS.has(element.tagName)) continue;
+        for (const { name, value } of element.attrs.filter((attribute) => URL_ATTRIBUTES.has(attribute.name))) {
+          const location = element.sourceCodeLocation?.attrs?.[name];
+          // A tag inside a blockquote or list loses its markers in `value`, so its offsets may not match the source.
+          if (!location || markdown.slice(start + location.startOffset, start + location.endOffset) !== node.value.slice(location.startOffset, location.endOffset)) continue;
+          const rebased = name === "srcset"
+            ? srcsetCandidates(value).map(({ url, descriptors }) => [rebase(url) ?? url, descriptors].filter(Boolean).join(" ")).join(", ")
+            : rebase(value);
+          if (rebased !== undefined && rebased !== value) {
+            replacements.push({ start: start + location.startOffset, end: start + location.endOffset, text: `${name}="${writeAttribute(rebased)}"` });
+          }
+        }
+      }
+    }
+  });
+  let body = markdown;
+  let limit = Infinity;
+  for (const { start, end, text } of replacements.sort((left, right) => right.start - left.start)) {
+    if (end > limit) continue;
+    body = body.slice(0, start) + text + body.slice(end);
+    limit = start;
+  }
+  return body;
+}
+
+/** A reference or footnote label at the start of its definition: `[doc]:` or `[^1]:`. */
+const DEFINITION_LABEL = /^\[\^?(?:\\.|[^\\\]])+\]/;
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+
+/** Where the `[label]` ending at `end` opens: its last `[` that no backslash escapes, since a label holds no other. */
+function labelStart(markdown: string, end: number): number {
+  for (let at = markdown.lastIndexOf("[", end - 1); at >= 0; at = markdown.lastIndexOf("[", at - 1)) {
+    let backslashes = 0;
+    while (markdown[at - 1 - backslashes] === "\\") backslashes++;
+    if (backslashes % 2 === 0) return at;
+  }
+  return end;
+}
+
+/**
+ * A copy that still means the same once joined with others into one document, as in `llms-full.txt`. Each reference
+ * and footnote label gets the `scope` prefix, so a definition binds only the page that wrote it, and a fence the page
+ * leaves open closes at its end instead of swallowing the next page.
+ */
+export function selfContained(markdown: string, scope: string): string {
+  const tree = gfmParser.parse(markdown);
+  const label = (identifier: string) => `${scope}:${identifier}`;
+  const replacements: Replacement[] = [];
+  visit(tree, (node) => {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (start === undefined || end === undefined) return;
+    if (node.type === "linkReference" || node.type === "imageReference") {
+      // Only the label after the text changes: `[text][doc]`, `[text][]`, and the shortcut `[doc]` all become `[text][scope:doc]`.
+      const from = node.referenceType === "full" ? labelStart(markdown, end) : node.referenceType === "collapsed" ? end - 2 : end;
+      replacements.push({ start: from, end, text: `[${label(node.identifier)}]` });
+    } else if (node.type === "footnoteReference") {
+      replacements.push({ start, end, text: `[^${label(node.identifier)}]` });
+    } else if (node.type === "definition" || node.type === "footnoteDefinition") {
+      const own = DEFINITION_LABEL.exec(markdown.slice(start))?.[0];
+      if (own) replacements.push({ start, end: start + own.length, text: node.type === "definition" ? `[${label(node.identifier)}]` : `[^${label(node.identifier)}]` });
+    }
+  });
+  let body = markdown;
+  for (const { start, end, text } of replacements.sort((left, right) => right.start - left.start)) {
+    body = body.slice(0, start) + text + body.slice(end);
+  }
+
+  // Only a fence at the top level runs on: the blank line before the next page ends any list or quote around one.
+  const last = tree.children.at(-1);
+  if (last?.type !== "code") return body;
+  const lines = markdown.slice(last.position!.start.offset, last.position!.end.offset).split("\n");
+  const fence = FENCE.exec(lines[0]!)?.[1];
+  const closed = lines.length > 1 && new RegExp(`^ {0,3}\\${fence?.[0]}{${fence?.length},}\\s*$`).test(lines.at(-1)!);
+  return fence === undefined || closed ? body : `${body.trimEnd()}\n${fence}\n`;
 }

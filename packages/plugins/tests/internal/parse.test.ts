@@ -136,19 +136,18 @@ describe("heading extraction", () => {
 });
 
 describe("extractDescription", () => {
-  it("extracts first sentences", () => {
-    const desc = extractDescription("First sentence. Second one. Third here.");
-    expect(desc).toContain("First sentence.");
-    expect(desc).toContain("Second one.");
-  });
-
-  it("strips headings and code blocks", () => {
-    const desc = extractDescription(
-      "# Title\n```js\ncode\n```\nActual content here.",
-    );
-    expect(desc).not.toContain("Title");
-    expect(desc).not.toContain("code");
-    expect(desc).toContain("Actual content here.");
+  const sentence = "This sentence is padded out to make it roughly one hundred and twenty characters long, which is what the test needs. ";
+  it.each([
+    { name: "stops at the last whole sentence that fits", markdown: sentence.repeat(3), description: sentence.repeat(2).trim() },
+    { name: "keeps a first sentence longer than the limit whole", markdown: `${"word ".repeat(80)}ends here. Next.`, description: `${"word ".repeat(80)}ends here.` },
+    { name: "reads the first paragraph only", markdown: "First paragraph.\n\nSecond paragraph.", description: "First paragraph." },
+    { name: "skips headings, code and embeds", markdown: "# Title\n\n```js\ncode\n```\n\n![[diagram.png]]\n\nSee [[guides/setup|the setup]] and [[faq]].", description: "See the setup and faq." },
+    { name: "keeps inline code and hyphenated words", markdown: "Run `pnpm dev` for a well-known server.", description: "Run pnpm dev for a well-known server." },
+    { name: "keeps a space at a hard break", markdown: "First line.  \nSecond line.\\\nThird line.", description: "First line. Second line. Third line." },
+    { name: "gives a note that is only an embed none", markdown: "![[diagram.png]]", description: "" },
+    { name: "falls back to a list when there is no paragraph", markdown: "- Only a list item.\n- Another.", description: "Only a list item." },
+  ])("$name", ({ markdown, description }) => {
+    expect(extractDescription(markdown)).toBe(description);
   });
 });
 

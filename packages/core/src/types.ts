@@ -66,8 +66,12 @@ interface ResolvedDiscoveryConfig {
   };
   readonly sitemap: { readonly enabled: boolean };
   readonly socialImages: { readonly enabled: boolean };
-  /** A Markdown copy of each public page plus `llms.txt`, for LLM agents. */
-  readonly llms: { readonly enabled: boolean };
+  /** A Markdown copy of each public page plus `llms.txt` and `llms-full.txt`, for LLM agents. */
+  readonly llms: {
+    readonly enabled: boolean;
+    /** `llms.txt` lists tag pages, folder listings and the feed under `## Optional`. */
+    readonly optional: boolean;
+  };
   readonly favicon: { readonly enabled: boolean };
   /**
    * The site's `robots.txt`, written for a vault at the site root. `bots` admits every crawler; `search` (search

@@ -535,6 +535,9 @@ importers:
       moment:
         specifier: ^2.30.1
         version: 2.30.1
+      parse5:
+        specifier: ^7.3.0
+        version: 7.3.0
       pathe:
         specifier: ^2.0.3
         version: 2.0.3

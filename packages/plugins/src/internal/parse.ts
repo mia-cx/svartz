@@ -75,12 +75,42 @@ export const stripMarkdownToText = (markdown: string): string =>
     .replace(/\s+/g, " ")
     .trim();
 
-export const extractDescription = (markdown: string): string => {
-  const stripped = stripMarkdownToText(markdown);
+/** A generated description stops at the last whole sentence that fits; a longer first sentence stays whole. */
+const DESCRIPTION_LENGTH = 300;
+const sentenceSegmenter = new Intl.Segmenter("en", { granularity: "sentence" });
+/** `![[diagram.png]]`: an embed shows a file, so it gives a description no words. */
+const WIKI_EMBED = /!\[\[[^\]]*\]\]/g;
 
-  const sentences = stripped.match(/[^.!?]+[.!?]+/g);
-  if (!sentences) return stripped.slice(0, 200).trim();
-  return sentences.slice(0, 3).join("").trim().slice(0, 300);
+/** The first paragraph's text: top-level prose first, else one in a list or callout, else the whole body. */
+function firstParagraph(markdown: string): string {
+  const tree = markdownParser.parse(markdown.replace(/<!--[\s\S]*?-->|%%[\s\S]*?%%/g, " "));
+  // `toString` drops a hard break, which would join the sentences on either side of it.
+  visit(tree, "break", (_node, index, parent) => {
+    if (parent && index !== undefined) parent.children[index] = { type: "text", value: " " };
+  });
+  const text = (node: Parameters<typeof toString>[0]) => toString(node, { includeHtml: false, includeImageAlt: false })
+    .replace(WIKI_EMBED, "")
+    .replace(/\[\[([^\]|]*?)(?:\|([^\]]*))?\]\]/g, (_match, target: string, label?: string) => label ?? target)
+    .replace(/^\[![\w-]+\][+-]?/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const paragraphs: string[] = [];
+  visit(tree, "paragraph", (node) => {
+    const value = text(node);
+    if (value) paragraphs.push(value);
+  });
+  const topLevel = tree.children.find((node) => node.type === "paragraph" && text(node));
+  return (topLevel && text(topLevel)) ?? paragraphs[0] ?? stripMarkdownToText(markdown.replace(WIKI_EMBED, " "));
+}
+
+/** A note's description from its first paragraph, cut at a sentence boundary. */
+export const extractDescription = (markdown: string): string => {
+  let description = "";
+  for (const { segment } of sentenceSegmenter.segment(firstParagraph(markdown))) {
+    if (description && (description + segment).trim().length > DESCRIPTION_LENGTH) break;
+    description += segment;
+  }
+  return description.trim();
 };
 
 export const countWords = (markdown: string): number => {

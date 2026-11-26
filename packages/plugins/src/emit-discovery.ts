@@ -1,11 +1,12 @@
 /** Generate adapter-independent discovery files from the published vault index. */
 import { posix, resolve } from "node:path";
-import { definePlugin, type Artifact, type IndexEntry, type PluginContext } from "@svartz/core";
-import { agentMarkdown } from "./internal/agent-markdown";
+import { definePlugin, type Artifact, type Index, type IndexEntry, type PluginContext } from "@svartz/core";
+import { compareExplorerNodes, orderOf, type ExplorerSortable } from "./explorer";
+import { agentMarkdown, rebaseLinks, selfContained } from "./internal/agent-markdown";
 import { createAssetResolver } from "./internal/asset-references";
 import { renderMarkdown } from "./internal/render-markdown";
 import { buildSlugMap, resolveLink } from "./internal/resolve";
-import { alternateNames } from "./internal/routes";
+import { alternateNames, markdownHref } from "./internal/routes";
 
 const NOTE_EXTENSIONS = new Set([".md", ".mdx", ".svx"]);
 
@@ -47,9 +48,87 @@ function linkFrom(base: string | undefined, fromHref: string) {
   };
 }
 
-/** Markdown copies of public notes plus the vault's `llms.txt` index. */
+interface ExplorerNode extends ExplorerSortable {
+  /** A folder's slug; notes have none. */
+  readonly folder?: string;
+  /** The note, or a folder's folder note. */
+  readonly entry?: IndexEntry;
+}
+
+/**
+ * Every page in reading order, grouped by top-level folder: the home page, then the explorer top to bottom, each
+ * folder's own note ahead of what it holds. Sections keep the order of their first page, and root pages share one.
+ */
+function readingSections(index: Index): { readonly title?: string; readonly entries: readonly IndexEntry[] }[] {
+  const bySlug = new Map(index.entries.map((entry) => [entry.slug, entry]));
+  // Every ancestor lists a note too; the longest slug is the folder its file sits in.
+  const homes = new Map<string, string>();
+  for (const folder of index.folders) {
+    for (const slug of folder.noteSlugs) if (folder.slug.length > (homes.get(slug)?.length ?? -1)) homes.set(slug, folder.slug);
+  }
+  const folderNotes = new Set(index.folders.map((folder) => folder.noteSlug));
+  const parentOf = (slug: string) => (slug.includes("/") ? slug.slice(0, slug.lastIndexOf("/")) : undefined);
+  // Each folder's children, keyed by its slug; the vault root's are under `undefined`.
+  const children = new Map<string | undefined, ExplorerNode[]>();
+  const place = (folder: string | undefined, node: ExplorerNode) => {
+    const siblings = children.get(folder);
+    if (siblings) siblings.push(node);
+    else children.set(folder, [node]);
+  };
+  for (const folder of index.folders) {
+    const entry = folder.noteSlug === undefined ? undefined : bySlug.get(folder.noteSlug);
+    place(parentOf(folder.slug), { isFolder: true, title: folder.title, order: orderOf(entry), folder: folder.slug, entry });
+  }
+  for (const entry of index.entries) {
+    if (entry.slug === "index" || folderNotes.has(entry.slug)) continue;
+    place(homes.get(entry.slug), { isFolder: false, title: entry.title, order: orderOf(entry), entry });
+  }
+  for (const nodes of children.values()) nodes.sort(compareExplorerNodes);
+  const childrenOf = (folder: string | undefined) => children.get(folder) ?? [];
+  const pages = (node: ExplorerNode): IndexEntry[] => [
+    ...(node.entry ? [node.entry] : []),
+    ...(node.folder === undefined ? [] : childrenOf(node.folder).flatMap(pages)),
+  ];
+
+  const home = bySlug.get("index");
+  const sections = new Map<string, { title?: string; entries: IndexEntry[] }>(home ? [["", { entries: [home] }]] : []);
+  for (const node of childrenOf(undefined)) {
+    const key = node.folder ?? "";
+    const section = sections.get(key) ?? { title: node.folder === undefined ? undefined : node.title, entries: [] };
+    section.entries.push(...pages(node));
+    sections.set(key, section);
+  }
+  return [...sections.values()];
+}
+
+/** `llms-full.txt` starts each page at its own heading; the line after it names the page it came from. */
+function withSource(markdown: string, source: string): string {
+  const [heading, ...body] = markdown.trimEnd().split("\n");
+  return [heading, "", `Source: ${source}`, ...body].join("\n");
+}
+
+/** The low-value listing pages agents can skip: tag pages, folder listings and the feed. */
+function optionalPages(index: Index): { readonly title: string; readonly href: string; readonly description: string }[] {
+  const { routes, tags, folders } = index;
+  const tagPages = tags.filter((tag) => routes.tags.includes(tag.href));
+  const folderPages = folders.filter((folder) => routes.folders.includes(folder.href));
+  // A folder's own URL (`/guides/`) shows its folder note, or the same listing as its folder page.
+  const named = new Set([...tags, ...folders].map((page) => page.href));
+  const natural = new Set(folders.map((folder) => `${routes.mountPath}/${folder.slug}/`));
+  return [
+    ...routes.tags.filter((href) => !named.has(href)).map((href) => ({ title: "Tags", href, description: "Every tag." })),
+    ...tagPages.map((tag) => ({ title: `#${tag.title}`, href: tag.href, description: `Pages tagged ${tag.title}.` })),
+    ...routes.folders.filter((href) => !named.has(href) && !natural.has(href))
+      .map((href) => ({ title: "Folders", href, description: "Every folder." })),
+    ...folderPages.map((folder) => ({ title: folder.title, href: folder.href, description: `Pages in the ${folder.title} folder.` })),
+    ...routes.feed.map((href) => ({ title: "Feed", href, description: "The latest pages." })),
+  ];
+}
+
+/** Markdown copies of public notes, the vault's `llms.txt` index, and every copy in one `llms-full.txt`. */
 function emitLlms(ctx: PluginContext, base: string | undefined): void {
-  const entries = ctx.index?.entries ?? [];
+  const index = ctx.index!;
+  const entries = index.entries;
   const bySlug = new Map(entries.map((entry) => [entry.slug, entry]));
   const sources = (ctx.meta.get("sourceBodies") as ReadonlyMap<string, string> | undefined) ?? new Map<string, string>();
   const notes = ctx.files.filter((file) => NOTE_EXTENSIONS.has(file.extension ?? ""));
@@ -63,15 +142,15 @@ function emitLlms(ctx: PluginContext, base: string | undefined): void {
   const resolveAsset = createAssetResolver(ctx.files.filter((file) =>
     !NOTE_EXTENSIONS.has(file.extension ?? "") && (!publicAssets || publicAssets.has(file.path))));
   const mountPath = ctx.config.mountPath ?? "";
-  const published = entries.filter((entry): entry is IndexEntry & { markdownHref: string } => Boolean(entry.markdownHref));
-
   const notesBySlug = new Map(notes.map((file) => [file.slug, file]));
-  for (const entry of published) {
+
+  /** A page's Markdown copy as it sits at `copyHref`; the one in `llms-full.txt` drops the frontmatter. */
+  const copyOf = (entry: IndexEntry, copyHref: string, withProperties: boolean): string | undefined => {
     const file = notesBySlug.get(entry.slug);
     const source = file && sources.get(file.path);
-    if (!file || source === undefined) continue;
-    const url = linkFrom(base, entry.markdownHref);
-    const markdown = agentMarkdown(file, source, { title: entry.title, properties: file.frontmatter ?? {} }, {
+    if (!file || source === undefined) return undefined;
+    const url = linkFrom(base, copyHref);
+    return agentMarkdown(file, source, { title: entry.title, properties: withProperties ? file.frontmatter ?? {} : {} }, {
       note(link) {
         const slug = resolveLink({ raw: "", label: undefined, ...link }, slugMap, allSlugs, ctx.config.linkResolution, file.slug, notes);
         const target = slug ? bySlug.get(slug) : undefined;
@@ -82,27 +161,61 @@ function emitLlms(ctx: PluginContext, base: string | undefined): void {
         return path && url(`${mountPath}/${path.split("/").map(encodeURIComponent).join("/")}`);
       },
     });
-    addAsset(ctx, entry.markdownHref.slice(mountPath.length + 1), markdown, "text/markdown");
+  };
+
+  for (const entry of entries) {
+    const markdown = entry.markdownHref && copyOf(entry, entry.markdownHref, true);
+    if (markdown) addAsset(ctx, entry.markdownHref!.slice(mountPath.length + 1), markdown, "text/markdown");
   }
 
-  const reserved = (ctx.meta.get("reservedRoutes") as ReadonlySet<string> | undefined) ?? new Set();
-  if (reserved.has("llms.txt")) return;
-  const url = linkFrom(base, `${mountPath}/llms.txt`);
+  const reading = readingSections(index);
+  const sections = reading
+    .map((section) => ({ ...section, entries: section.entries.filter((entry) => entry.markdownHref) }))
+    .filter((section) => section.entries.length > 0);
   const { title, description } = ctx.config.site;
-  const pages = [...published]
-    .sort((left, right) => left.href.localeCompare(right.href))
-    .map((entry) => `- [${entry.title}](${url(entry.markdownHref)})${entry.description ? `: ${entry.description.replace(/\n/g, " ")}` : ""}`);
-  addAsset(ctx, "llms.txt", [
-    `# ${title}`,
-    "",
-    ...(description ? [`> ${description}`, ""] : []),
-    "Each page links to a Markdown copy of its content.",
-    "",
-    "## Pages",
-    "",
-    ...pages,
-    "",
-  ].join("\n"), "text/plain");
+  const intro = [`# ${title}`, "", ...(description ? [`> ${description}`, ""] : [])];
+  const reserved = (ctx.meta.get("reservedRoutes") as ReadonlySet<string> | undefined) ?? new Set();
+
+  if (!reserved.has("llms.txt")) {
+    const url = linkFrom(base, `${mountPath}/llms.txt`);
+    const item = (name: string, href: string, summary: string | undefined) =>
+      `- [${name}](${url(href)})${summary ? `: ${summary.replace(/\n/g, " ")}` : ""}`;
+    const optional = ctx.config.discovery.llms.optional ? optionalPages(index) : [];
+    addAsset(ctx, "llms.txt", [
+      ...intro,
+      `Each page links to a Markdown copy of its content. [llms-full.txt](${url(`${mountPath}/llms-full.txt`)}) holds every page in one file.`,
+      "",
+      ...sections.flatMap((section) => [
+        // `## Optional` is the opt-in section agents may skip, so a folder with that name says it is one.
+        `## ${section.title === undefined ? "Pages" : /^optional$/i.test(section.title.trim()) ? `${section.title} (folder)` : section.title}`,
+        "",
+        ...section.entries.map((entry) => item(entry.title, entry.markdownHref!, entry.description)),
+        "",
+      ]),
+      ...(optional.length > 0
+        ? ["## Optional", "", ...optional.map((page) => item(page.title, page.href, page.description)), ""]
+        : []),
+    ].join("\n"), "text/plain");
+  }
+
+  if (!reserved.has("llms-full.txt")) {
+    // A page's own location is gone here, so each link is resolved from where the page's copy is deployed and kept
+    // absolute, or root-relative without `site.url`: it reaches exactly what it reaches from the copy.
+    const deploymentBase = (ctx.meta.get("svartz:deploymentBase") as string | undefined) ?? "";
+    const deployed = (href: string) => (base ? new URL(absoluteUrl(base, href)) : new URL(`${deploymentBase}${href}`, "https://svartz.invalid"));
+    const format = (url: URL) => (base ? url.href : `${url.pathname}${url.search}${url.hash}`);
+    // A host route may own a page's `.md` URL; the page is still public, so its content belongs here.
+    const pages = reading.flatMap((section) => section.entries)
+      .filter((entry) => !entry.locked && !entry.properties.encrypted && !entry.properties.hidden)
+      .flatMap((entry) => {
+        const copyHref = entry.markdownHref ?? markdownHref(entry.slug, mountPath);
+        const markdown = copyOf(entry, copyHref, false);
+        if (!markdown) return [];
+        const rebased = rebaseLinks(markdown, deployed(copyHref), format);
+        return [withSource(selfContained(rebased, entry.slug), format(deployed(entry.href))), ""];
+      });
+    addAsset(ctx, "llms-full.txt", [...intro, ...pages].join("\n"), "text/plain");
+  }
 }
 
 function sortedEntries(ctx: PluginContext): IndexEntry[] {
