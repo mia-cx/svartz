@@ -30,7 +30,7 @@ Run from the repository root with Node 24, pnpm 9, Git, and Chromium. Build the 
    grep -F '[history]' .stress-cache/history-control/{cold,warm}.log
    ```
 
-   `--history` fetches full history to the pinned revision. A config hook opts three notes from `vaults.mjs` into versions without changing the checkout. The control creates one note with three commits. A `warm` filename means the runner kept the build directory. Check the compiled and reused counts for actual hits.
+   Default and encoded profiles use a one-commit checkout at `<vault>/vault`. `--history` fetches full history into `<vault>/vault-history` so the default note-date lookup always sees the same history. If an older runner already unshallowed `<vault>/vault`, move it aside first. A config hook opts three notes from `vaults.mjs` into versions without changing the checkout. The control creates one note with three commits. A `warm` filename means the runner kept the build directory. Check the compiled and reused counts for actual hits.
 
    `--retain-version-keys` is a separate diagnostic profile. It preloads a script in the CLI that skips pruning hashed version JSON files from that profile's cache. Cold still starts empty. The repeat can then reuse entries from both Vite passes. Use it only in this benchmark; stock builds should prune stale entries.
 
@@ -42,7 +42,7 @@ Run from the repository root with Node 24, pnpm 9, Git, and Chromium. Build the 
    done
    ```
 
-   This copies tracked, non-hidden files to a fresh temporary vault and profile without community plugins. It samples up to three distinct links per category and asks Obsidian's metadata cache for the destination and heading or block existence. `obsidian.json` contains the result. Compare it with `links.json`, the rendered page or emitted page component, and the source. A missing note-index edge can still be a working attachment link or a same-note jump. The sample is not a vault-wide accuracy estimate.
+   This copies tracked, non-hidden files to a temporary vault and profile, with only the harness's local probe plugin enabled. The script deletes both after Obsidian exits, including on failure. It samples up to three distinct links per category and passes each authored linkpath, minus its display label, to Obsidian's `parseLinktext`, file resolver, and `resolveSubpath`. `obsidian.json` records the destination and the resolved anchor line, if any. Compare it with `links.json`, the rendered page or emitted page component, and the source. A missing note-index edge can still be a working attachment link or a same-note jump. The sample is not a vault-wide accuracy estimate.
 
 ## Outputs
 

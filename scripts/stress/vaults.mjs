@@ -1,3 +1,10 @@
+import { join } from 'node:path';
+
+/** Separate full history because default discovery also reads Git for note dates. */
+export function vaultSource(work, profile) {
+  return join(work, /-history(?:-retained)?$/.test(profile) ? 'vault-history' : 'vault');
+}
+
 // Pin content, not branches: a new benchmark corpus is a deliberate change.
 export const vaults = [
   {

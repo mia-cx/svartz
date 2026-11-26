@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, open, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vaults } from './vaults.mjs';
+import { vaults, vaultSource } from './vaults.mjs';
 import { measureBrowser } from './browser.mjs';
 
 const script = fileURLToPath(import.meta.url);
@@ -14,7 +14,7 @@ const scope = ['--user', '--scope', '--quiet', '--expand-environment=no', '-p', 
 const git = (args, cwd = root) => execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
 const save = (file, value) => writeFile(file, `${JSON.stringify(value, null, 2)}\n`);
 
-async function checkout(vault, source) {
+async function checkout(vault, source, history) {
   if (!existsSync(join(source, '.git'))) {
     await mkdir(source, { recursive: true });
     git(['init', '--quiet', source]);
@@ -22,12 +22,16 @@ async function checkout(vault, source) {
   }
   const head = spawnSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: source, encoding: 'utf8' });
   if (head.status !== 0) {
-    git(['fetch', '--quiet', '--depth=1', 'origin', vault.commit], source);
+    git(['fetch', '--quiet', ...(history ? [] : ['--depth=1']), 'origin', vault.commit], source);
     git(['checkout', '--quiet', '--detach', vault.commit], source);
   }
   if (git(['rev-parse', 'HEAD'], source).trim() !== vault.commit || git(['status', '--porcelain', '--ignored'], source).trim()) {
     throw new Error(`Unexpected commit or local changes in ${source}; move it aside and rerun.`);
   }
+  const correctDepth = history
+    ? git(['rev-parse', '--is-shallow-repository'], source).trim() === 'false'
+    : git(['rev-list', '--count', 'HEAD'], source).trim() === '1';
+  if (!correctDepth) throw new Error(`Unexpected Git history depth in ${source}; move it aside and rerun.`);
 }
 
 function sampledTreeRss(pid) {
@@ -167,14 +171,11 @@ async function main() {
     const heap = process.env.NODE_OPTIONS?.match(/--max-old-space-size=(\d+)/)?.[1];
     const profile = `${workaround ? 'encoded' : 'default'}${heap ? `-heap${heap}` : ''}${history ? '-history' : ''}${retainKeys ? '-retained' : ''}`;
     const dir = join(work, profile);
-    const source = join(work, 'vault');
+    const source = vaultSource(work, profile);
     await mkdir(dir, { recursive: true });
-    await checkout(vault, source);
+    await checkout(vault, source, history);
     if (!args.includes('--measure-only')) {
       for (const name of ['audit', 'links', 'browser', 'obsidian']) await rm(join(dir, `${name}.json`), { force: true });
-      if (history && git(['rev-parse', '--is-shallow-repository'], source).trim() === 'true') {
-        git(['fetch', '--quiet', '--unshallow', 'origin', vault.commit], source);
-      }
       const builds = await buildPair(vault, source, dir, { workaround, history, retainKeys });
       if (builds.some(({ exitCode }) => exitCode !== 0)) process.exitCode = 1;
     }
