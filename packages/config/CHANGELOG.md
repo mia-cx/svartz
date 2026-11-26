@@ -1,5 +1,13 @@
 # @svartz/config
 
+## 2.6.0
+
+### Patch Changes
+
+- Updated dependencies [8f0291d]
+- Updated dependencies [ba0f490]
+  - @svartz/core@2.6.0
+
 ## 2.5.0
 
 ### Patch Changes

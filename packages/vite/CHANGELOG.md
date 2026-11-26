@@ -1,5 +1,31 @@
 # @svartz/vite
 
+## 2.6.0
+
+### Minor Changes
+
+- ba0f490: Svartz builds a full site in any repository from just `svartz.config.ts` and its vaults: the `svartz` package now ships the app every vault builds with, unless its target is `host`. A host app's config can mix both: `svartz build` builds the host vaults in the app, then each other vault on its own, and `--vault <id>` builds a standalone vault there too.
+
+  Each `cloudflare-workers` vault is its own Worker. Its target is the Worker's Wrangler config, written to `.svartz/vaults/<id>/wrangler.json`: `name` defaults to the vault's id, and `routes`, `vars`, `d1_databases` and the other bindings come from the target. Two vaults in one config deploy to their own domains, each with its own theme, with `npx wrangler deploy --config .svartz/vaults/<id>/wrangler.json`. Under `svartz dev`, plugins read the target's bindings and the project's `.dev.vars` and `.env`.
+
+  The shipped app runs SvelteKit 3, so `svartz` now needs Node `^22.17.0 || >=24.0.0` and Vite `^8.0.12`, host apps included.
+
+  `npx svartz init` in an empty directory now writes only `svartz.config.ts` with one `static` vault, a starter note, `.gitignore` and `package.json`. `svartz({ projectRoot })` in `@svartz/vite` now also resolves themes and Wrangler, and `wranglerDir` names the Wrangler config the dev server reads bindings from.
+
+### Patch Changes
+
+- a4084cd: A vault of around a thousand notes or more builds again on Linux. The build kept every published file's path in one environment variable, and once that outgrew the size Linux allows one variable, every process the build started afterwards failed with `spawn E2BIG`.
+- Updated dependencies [4334c0f]
+- Updated dependencies [5596543]
+- Updated dependencies [1ddaf7e]
+- Updated dependencies [dbf8b88]
+- Updated dependencies [8f0291d]
+- Updated dependencies [04e44dd]
+- Updated dependencies [ba0f490]
+  - @svartz/theme-minimal@2.6.0
+  - @svartz/plugins@2.6.0
+  - @svartz/core@2.6.0
+
 ## 2.5.0
 
 ### Minor Changes

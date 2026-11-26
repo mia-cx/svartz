@@ -1,5 +1,17 @@
 # @svartz/theme-minimal
 
+## 2.6.0
+
+### Patch Changes
+
+- 4334c0f: A focused control at the edge of a side column, such as the search button under the site title, shows its whole focus ring. The scrolling columns used to clip its outer edge.
+- dbf8b88: Svartz's plugin packages carry the npm keyword `svartz-plugin`, and its themes `svartz-theme`, so an npm search for either keyword finds them. Tag your own Svartz plugin or theme the same way to be found beside them.
+- Updated dependencies [8f0291d]
+- Updated dependencies [ba0f490]
+- Updated dependencies [67eb970]
+  - @svartz/core@2.6.0
+  - @svartz/ui@2.6.0
+
 ## 2.5.0
 
 ### Patch Changes
