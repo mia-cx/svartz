@@ -37,25 +37,29 @@
 </script>
 
 <header class="top-bar">
-	<button
-		class="sv-icon-button menu"
-		type="button"
-		aria-expanded={shell.drawer}
-		aria-controls="explorer-panel"
-		aria-label={shell.drawer ? 'Close the page list' : 'Open the page list'}
-		onclick={shell.toggleDrawer}
-	>
-		{#if shell.drawer}<X aria-hidden="true" />{:else}<Menu aria-hidden="true" />{/if}
-	</button>
-	<a class="sv-wordmark" href={shell.homeHref}><SiteLogo logo={settings.logo} />{shell.site.title}</a>
-	{#if versions.length > 0}<VersionPicker {versions} />{:else if version}<span class="sv-badge version" data-sv-signal style:--sv-hue="var(--sv-hue-green)">{version}</span>{/if}
+	<div class="brand">
+		<button
+			class="sv-icon-button menu"
+			type="button"
+			aria-expanded={shell.drawer}
+			aria-controls="explorer-panel"
+			aria-label={shell.drawer ? 'Close the page list' : 'Open the page list'}
+			onclick={shell.toggleDrawer}
+		>
+			{#if shell.drawer}<X aria-hidden="true" />{:else}<Menu aria-hidden="true" />{/if}
+		</button>
+		<a class="sv-wordmark" href={shell.homeHref}><SiteLogo logo={settings.logo} />{shell.site.title}</a>
+		{#if versions.length > 0}<VersionPicker {versions} />{:else if version}<span class="sv-badge version" data-sv-signal style:--sv-hue="var(--sv-hue-green)">{version}</span>{/if}
+	</div>
 	<div class="search"><SearchDialog documents={shell.vault.search} searchIndex={shell.searchIndex} searchOptions={shell.searchOptions} /></div>
-	{#if settings.navLinks.length > 0}
-		<nav class="top-links" aria-label="Project">
-			{#each settings.navLinks as link (link.label)}<a href={link.href}>{link.label}</a>{/each}
-		</nav>
-	{/if}
-	<ColorModeToggle />
+	<div class="end">
+		{#if settings.navLinks.length > 0}
+			<nav class="top-links" aria-label="Project">
+				{#each settings.navLinks as link (link.label)}<a href={link.href}>{link.label}</a>{/each}
+			</nav>
+		{/if}
+		<ColorModeToggle />
+	</div>
 </header>
 
 <style>
@@ -68,14 +72,32 @@
 		position: sticky;
 		inset-block-start: 0;
 		z-index: var(--sv-z-sticky);
-		display: flex;
+		/* ReferenceFrame's columns, so search spans the page column: sidebar, page, right column. */
+		display: grid;
+		grid-template-columns: minmax(16rem, max-content) minmax(0, var(--sv-measure)) minmax(var(--sv-rail-min, max-content), 1fr);
 		align-items: center;
-		gap: var(--sv-space-3);
+		column-gap: var(--sv-space-7);
 		block-size: 3.5rem;
 		/* Edges line up with the centred page below on wide screens. */
 		padding-inline: max(var(--sv-space-5), (100% - 100rem) / 2 + var(--sv-space-5));
 		border-block-end: var(--sv-rule-width) solid var(--sv-rule);
 		background: var(--sv-paper);
+	}
+
+	.brand,
+	.end {
+		display: flex;
+		align-items: center;
+		gap: var(--sv-space-3);
+	}
+
+	/* A long title may borrow half the gap before it pushes search off the page column. */
+	.brand {
+		margin-inline-end: calc(-0.5 * var(--sv-space-7));
+	}
+
+	.end {
+		justify-content: end;
 	}
 
 	.sv-wordmark {
@@ -84,14 +106,11 @@
 	}
 
 	.search {
-		flex: 1;
-		display: flex;
-		justify-content: center;
 		min-inline-size: 0;
 	}
 
 	.search :global(.sv-search-trigger) {
-		inline-size: min(28rem, 100%);
+		inline-size: 100%;
 	}
 
 	.top-links {
@@ -114,12 +133,21 @@
 		display: none;
 	}
 
+	/* The right column drops under the page, so the bar's last column only needs its links. */
+	@media (max-width: 72rem) {
+		.top-bar {
+			grid-template-columns: minmax(16rem, max-content) minmax(0, var(--sv-measure)) minmax(max-content, 1fr);
+		}
+	}
+
 	@media (max-width: 52rem) {
 		.menu {
 			display: inline-grid;
 		}
 
 		.top-bar {
+			display: flex;
+			gap: var(--sv-space-3);
 			padding-inline: var(--sv-space-3);
 		}
 

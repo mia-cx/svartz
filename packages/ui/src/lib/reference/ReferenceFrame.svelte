@@ -74,6 +74,12 @@
 		--sv-density: 0.85;
 		--sv-ratio: 1.15;
 		--sv-measure: 44rem;
+		/* The right column's narrowest width, which the top bar also reserves so search spans the page column. */
+		--sv-rail-min: 16rem;
+	}
+
+	:global(:root:has(.sv-reference-examples)) {
+		--sv-rail-min: 20rem;
 	}
 
 	.frame {
@@ -108,7 +114,7 @@
 
 	.split {
 		/* Contents match the sidebar's width and sit at the frame's far edge, so the columns balance. */
-		--rail: 16rem;
+		--rail: var(--sv-rail-min);
 		display: grid;
 		grid-template-columns: minmax(0, var(--sv-measure)) var(--rail);
 		justify-content: space-between;
@@ -116,9 +122,9 @@
 		align-items: start;
 	}
 
-	/* Code examples need room: a share of the width, clamped, and the page takes the rest. */
+	/* Code examples need room: the page keeps its reading width, and they fill the rest up to the frame's edge. */
 	.split:has(> .aside :global(.sv-reference-examples)) {
-		--rail: clamp(20rem, 35%, 34rem);
+		--rail: minmax(var(--sv-rail-min), 1fr);
 	}
 
 	/* Nothing beside the page: it keeps the reading width alone. */
