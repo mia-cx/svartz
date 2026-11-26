@@ -77,8 +77,9 @@
 	--sv-text: light-dark(oklch(0.3 0.01 80), oklch(0.86 0.008 80));
 	--sv-ink: light-dark(oklch(0.17 0.01 80), oklch(0.965 0.005 80));
 
-	/* Accent: editor's vermilion. `-text` is the AA-safe foreground on paper. */
-	--sv-accent: light-dark(oklch(0.6 0.2 33), oklch(0.7 0.17 36));
+	/* Accent: editor's vermilion. `-text` is the AA-safe foreground on paper; --sv-on-accent clears 4.5:1 on the accent
+	   as a button fill. */
+	--sv-accent: light-dark(oklch(0.58 0.2 33), oklch(0.7 0.17 36));
 	/* Derived from --sv-accent, so overriding the accent (theme.tokens.accent) carries its shades. */
 	--sv-accent-text: light-dark(
 		oklch(from var(--sv-accent) calc(l - 0.1) calc(c * 0.9) h),

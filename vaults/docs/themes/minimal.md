@@ -27,7 +27,7 @@ The shell puts search and folders on the left, the note in the middle, and the g
 | Setting | Type and default |
 | --- | --- |
 | `routes.tags`, `routes.folders`, `routes.feed` | Path segments; `tags`, `folders`, `feed`. |
-| `tokens` | Map of design token names to values; theme defaults apply when absent. |
+| `tokens` | Map of design token names to values, such as a [[themes/colour-schemes\|colour scheme]]; theme defaults apply when absent. |
 | `logo` | `{ src: string; dark?: string; alt?: string }`; no logo by default. |
 | `footer.links` | Map of labels to URLs; no extra links by default. |
 | `comments` | Giscus settings; off unless configured. See the [[reference/configuration\|configuration reference]]. |

@@ -55,6 +55,8 @@ import { syncManagedTurboFiles } from "./turbo-sync";
 import { resolveHostApp, shippedApp, type AppLocation } from "./workspace";
 import { writeVaultWranglerConfig } from "./wrangler-config";
 import { commandExecutable, initProject, packageManager } from "./init";
+import { DEFAULT_SCHEME, InitCancelledError, SCHEMES, TARGETS, THEMES, vaultsFromFlags, type InitFlags } from "./init-plan";
+import { askVaults } from "./init-prompts";
 import { withVaultBuildLock } from "./build-lock";
 
 class CliAppRootMissing extends Data.TaggedError("CliAppRootMissing")<{
@@ -805,20 +807,42 @@ function createProgram(): Command {
     .description("Build and serve static Svartz vault sites")
     .showHelpAfterError();
 
+  const repeat = (value: string, previous: string[]) => [...previous, value];
   program
     .command("init")
-    .description("Initialize Svartz in the current directory")
+    .description("Initialize Svartz in the current directory. In a terminal it asks; any answer flag or --yes skips the questions")
     .option("--no-install", "Write the project without installing dependencies")
     .option("--no-git", "Do not initialize a Git repository")
-    .action(async (options: { install: boolean; git: boolean }) => {
-      const result = await initProject(options);
+    .option("-y, --yes", "Skip the questions and write the default vault")
+    .option("--vault <path>", "A vault folder; repeat for more. An existing folder is published as it is", repeat, [])
+    .option("--id <id>", "The vault's id (default: its folder name)", repeat, [])
+    .option("--title <title>", "The site title", repeat, [])
+    .option("--theme <name>", `The theme: ${Object.keys(THEMES).join(", ")}`, repeat, [])
+    .option("--scheme <name>", `A colour scheme: ${[DEFAULT_SCHEME, ...Object.keys(SCHEMES)].join(", ")}`, repeat, [])
+    .option("--target <type>", `Where it deploys: ${Object.keys(TARGETS).join(", ")}`, repeat, [])
+    .option("--worker <name>", "The Cloudflare Worker's name (default: the vault id)", repeat, [])
+    .option("--domain <domain>", "The Cloudflare Worker's custom domain", repeat, [])
+    .addHelpText("after", "\nGive a vault flag once to apply it to every --vault, or once per --vault to match them in order.\n--worker and --domain match the cloudflare-workers vaults in order. An empty value, like --domain \"\", keeps that vault's default.")
+    .action(async ({ install, git, yes, ...flags }: InitFlags & { install: boolean; git: boolean; yes?: boolean }) => {
+      const interactive = !yes && process.stdin.isTTY && process.stdout.isTTY &&
+        Object.values(flags).every((values) => !values?.length);
+      const result = await initProject({
+        install,
+        git,
+        vaults: (context) => interactive ? askVaults(context) : vaultsFromFlags(flags, context),
+      }).catch((error: unknown) => {
+        if (error instanceof InitCancelledError) process.exit(1);
+        throw error;
+      });
       if (result.kind === "already-configured") {
         console.log("Svartz is already configured here. No files changed.");
         return;
       }
       console.log(result.kind === "created" ? "Created a Svartz site." : "Added Svartz to this SvelteKit app.");
       const script = result.kind === "created" ? "dev" : "svartz:dev";
-      console.log(`Run ${result.packageManager} run ${script} to start the vault.`);
+      if (result.vaults.length > 1)
+        console.log(`Run npx svartz dev --vault <id> to start a vault: ${result.vaults.map((vault) => vault.id).join(", ")}.`);
+      else console.log(`Run ${result.packageManager} run ${script} to start the vault.`);
     });
 
   program

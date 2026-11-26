@@ -4,7 +4,7 @@ order: 2
 description: "Add a note, preview the site, and find the static build."
 ---
 
-After [[start/installation|initializing a project]], replace `vault/index.md` with your home note:
+After [[start/installation|initializing a project]], replace `vault/index.md` with your home note. If you named your vault in `init`, its folder has that name instead of `vault`.
 
 ```md
 ---

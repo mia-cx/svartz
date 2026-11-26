@@ -13,6 +13,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isSvelteKit3 } from "@svartz/vite";
 import { Data, Effect, Either } from "effect";
+import {
+  InitCancelledError,
+  InitUsageError,
+  renderConfig,
+  themePackages,
+  vaultsFromFlags,
+  type InitContext,
+  type VaultChoice,
+} from "./init-plan";
 import { resolveAppLocation } from "./workspace";
 
 const templateRoot = fileURLToPath(new URL("../template/", import.meta.url));
@@ -60,11 +69,18 @@ export type InitOptions = {
   readonly git?: boolean;
   /** The running Node version; a new project needs {@link SCAFFOLD_NODE}. */
   readonly nodeVersion?: string;
+  /**
+   * The vaults to write, asked once the project passes its checks and only when it has no config. Defaults to one
+   * `vault` folder on theme-minimal, deploying as static files (or through the host app).
+   */
+  readonly vaults?: (context: InitContext) => readonly VaultChoice[] | Promise<readonly VaultChoice[]>;
 };
 
 export type InitResult = {
   readonly kind: "created" | "integrated" | "already-configured";
   readonly packageManager: PackageManager;
+  /** The vaults written to the new config; none when the project already had one. */
+  readonly vaults: readonly VaultChoice[];
 };
 
 /** Existing consumer-owned files prevent a safe scaffold write. */
@@ -97,7 +113,11 @@ export type InitError =
   | InitConflictError
   | InitLayoutError
   | InitOperationError
-  | InitCommandError;
+  | InitCommandError
+  | InitUsageError
+  | InitCancelledError;
+
+export { InitCancelledError, InitUsageError };
 
 const operation = <A>(
   name: string,
@@ -142,10 +162,84 @@ const command = (
       }),
   });
 
-/** A new project's files: a config and a vault. It builds with the app Svartz ships, so it needs no app of its own. */
-const NEW_PROJECT_FILES = ["gitignore", configName, path.join("vault", "index.md")] as const;
-/** Where the config template names its vault's target: `host` in an existing app, `static` in a new project. */
-const TARGET_PLACEHOLDER = "__SVARTZ_TARGET__";
+/** A new project's files besides its vaults. It builds with the app Svartz ships, so it needs no app of its own. */
+const NEW_PROJECT_FILES = [".gitignore", configName, "package.json"] as const;
+/** One file integration writes into a host app: its absolute path, the operation's name for errors, and the write. */
+type PlannedWrite = { readonly file: string; readonly name: string; readonly write: () => Promise<void> };
+
+/** The note a new vault starts with. */
+const STARTER_NOTE = "index.md";
+
+const chooseVaults = (
+  options: InitOptions,
+  context: InitContext,
+): Effect.Effect<readonly VaultChoice[], InitUsageError | InitCancelledError | InitOperationError> =>
+  Effect.tryPromise({
+    try: async () => options.vaults ? options.vaults(context) : vaultsFromFlags({}, context),
+    catch: (cause) =>
+      cause instanceof InitUsageError || cause instanceof InitCancelledError
+        ? cause
+        : new InitOperationError({ operation: "choose vaults", cause, message: `choose vaults: ${String(cause)}` }),
+  });
+
+/** The vaults that get a starter note: those whose folder doesn't exist yet. A folder that exists is published as it is. */
+const newVaults = (root: string, vaults: readonly VaultChoice[]) =>
+  vaults.filter((vault) => !existsSync(path.join(root, vault.path)));
+
+/** Whether project-relative `child` lies inside `parent`. */
+const within = (child: string, parent: string) =>
+  parent === "." ? child !== "." && !child.startsWith("../") : child.startsWith(`${parent}/`);
+
+/**
+ * Why `vaults` can't be written beside `files`, the project files init writes, or nothing when they can: a vault
+ * path that is a file, or would be one of init's files; a new vault inside another vault, whose folder init would then
+ * write into, or holding one of init's files; and files standing where a new vault's folders would go.
+ */
+async function vaultConflicts(
+  root: string,
+  vaults: readonly VaultChoice[],
+  files: readonly string[],
+): Promise<InitConflictError | undefined> {
+  const problems: [path: string, problem: string][] = [];
+  for (const vault of vaults) {
+    const info = await stat(path.join(root, vault.path)).catch(() => undefined);
+    if (info && !info.isDirectory()) problems.push([vault.path, `${vault.path} exists and isn't a folder`]);
+    const file = files.find((name) => vault.path === name || within(vault.path, name));
+    if (file)
+      problems.push([vault.path, file === vault.path
+        ? `${file} is a file init writes, so it can't be a vault`
+        : `the vault ${vault.path} would sit inside ${file}, a file init writes`]);
+  }
+  const fresh = newVaults(root, vaults);
+  for (const vault of fresh) {
+    const outer = vaults.find((other) => within(vault.path, other.path));
+    if (outer) problems.push([vault.path, `the new vault ${vault.path} would sit inside the vault ${outer.path}`]);
+    const inner = files.find((name) => within(name, vault.path));
+    if (inner) problems.push([vault.path, `the new vault ${vault.path} would hold ${inner}, which init writes`]);
+  }
+  const notes = fresh.map((vault) => path.join(vault.path, STARTER_NOTE));
+  for (const blocked of await nonDirectoryAncestors(root, notes))
+    problems.push([blocked, `${blocked} exists and isn't a folder`]);
+  if (problems.length === 0) return undefined;
+  return new InitConflictError({
+    paths: [...new Set(problems.map(([where]) => where))],
+    message: `Cannot initialize: ${[...new Set(problems.map(([, problem]) => problem))].join("; ")}. No files changed.`,
+  });
+}
+
+/** Each new vault's folder, with the starter note in it. */
+const writeStarterNotes = (root: string, vaults: readonly VaultChoice[]) =>
+  Effect.gen(function* () {
+    const fresh = newVaults(root, vaults);
+    if (fresh.length === 0) return;
+    const note = yield* operation("read starter note template", () =>
+      readFile(path.join(templateRoot, "vault", STARTER_NOTE), "utf8"),
+    );
+    for (const vault of fresh)
+      yield* operation(`write ${vault.path}/${STARTER_NOTE}`, () =>
+        writeNewFile(path.join(root, vault.path, STARTER_NOTE), note),
+      );
+  });
 
 const PAGE_ROUTE_FILES = ["+page.svelte", "+page.ts", "+page.server.ts"] as const;
 /** Files only SvelteKit 2 hosts get. */
@@ -210,7 +304,8 @@ function insideGitWorktree(root: string): boolean {
   );
 }
 
-function freshManifest(root: string): Manifest {
+/** `themes` are the theme packages the vaults use beyond theme-minimal, which Svartz ships. */
+function freshManifest(root: string, themes: readonly string[]): Manifest {
   return {
     name: packageName(root),
     private: true,
@@ -224,19 +319,20 @@ function freshManifest(root: string): Manifest {
     devDependencies: {
       "@svartz/config": "latest",
       svartz: "latest",
+      ...Object.fromEntries(themes.map((theme) => [theme, "latest"])),
       tailwindcss: "^4.1.18",
       vite: "^8.3.8",
     },
   };
 }
 
-function integrateManifest(manifest: Manifest): Manifest {
+function integrateManifest(manifest: Manifest, themes: readonly string[]): Manifest {
   const scripts = { ...manifest.scripts };
   scripts["svartz:dev"] ??= "svartz dev";
   scripts["svartz:build"] ??= "svartz build";
   scripts["svartz:preview"] ??= "svartz preview";
   const devDependencies = { ...manifest.devDependencies };
-  for (const name of svartzDependencies) {
+  for (const name of [...svartzDependencies, ...themes]) {
     if (!manifest.dependencies?.[name] && !devDependencies[name])
       devDependencies[name] = "latest";
   }
@@ -559,123 +655,89 @@ const initProjectEffect = (
           message:
             "Cannot integrate: Vite config has no default export. Add withSvartzHost from @svartz/vite/host manually.",
         });
-      const integratedManifest = integrateManifest(existingManifest ?? {});
+      const vaults = existingConfig ? [] : yield* chooseVaults(options, {
+        root,
+        host: true,
+        siteName: existingManifest?.name ?? packageName(root),
+      });
+      const integratedManifest = integrateManifest(existingManifest ?? {}, themePackages(vaults));
       const manifestChanged =
         JSON.stringify(existingManifest) !== JSON.stringify(integratedManifest);
-      if (
-        existingConfig &&
-        integratedViteSource === viteSource &&
-        integratedAppTypes === appTypesSource &&
-        !manifestChanged &&
-        !installCatchall &&
-        !migrateRootLayout &&
-        !migrateCatchallPage &&
-        !installCatchallServer &&
-        !migrateCatchall &&
-        !installPageRoute
-      ) {
-        return { kind: "already-configured", packageManager: manager };
+      const writeTemplate = (file: string, template: string) => async () =>
+        writeNewFile(file, await readFile(template, "utf8"));
+      // Everything integration writes in this host, in order. The already-configured check, the vault preflight and
+      // the writes all read this one list, so what preflight claims can't drift from what init writes.
+      const hostWrites: readonly PlannedWrite[] = [
+        ...(integratedViteSource !== viteSource
+          ? [{ file: location.viteConfigPath, name: "write host Vite config",
+            write: () => writeFile(location.viteConfigPath, integratedViteSource) }]
+          : []),
+        ...(integratedAppTypes !== appTypesSource
+          ? [appTypesSource === undefined
+            ? { file: appTypesPath, name: "write host app types", write: () => writeNewFile(appTypesPath, integratedAppTypes) }
+            : { file: appTypesPath, name: "update host app types", write: () => writeFile(appTypesPath, integratedAppTypes) }]
+          : []),
+        ...(installCatchall
+          ? PAGE_ROUTE_FILES.map((name) => ({
+            file: path.join(catchallRoot, name),
+            name: `write ${name}`,
+            write: writeTemplate(path.join(catchallRoot, name), path.join(templateRoot, "src", "routes", "[...slug]", name)),
+          }))
+          : []),
+        ...(installPageRoute
+          ? [
+            ...PAGE_ROUTE_FILES.map((name, index) => ({
+              file: path.join(root, pageRoute, name),
+              name: `write plugin page ${name}`,
+              write: () => writeNewFile(path.join(root, pageRoute, name), pageRouteTemplates[index]!),
+            })),
+            ...(params ?? []).map(([destination, template]) => ({
+              file: path.join(root, destination),
+              name: `write ${destination}`,
+              write: writeTemplate(path.join(root, destination), template),
+            })),
+          ]
+          : []),
+        ...(installCatchallServer
+          ? [{ file: catchallServerPath, name: "write catchall server load",
+            write: () => existingCatchallServer === undefined
+              ? writeNewFile(catchallServerPath, catchallServerTemplate)
+              : writeFile(catchallServerPath, catchallServerTemplate) }]
+          : []),
+        ...(migrateCatchall
+          ? [{ file: catchallLoadPath, name: "update host catchall load", write: () => writeFile(catchallLoadPath, catchallLoadTemplate) }]
+          : []),
+        ...(migrateCatchallPage && catchallPageUpdate !== undefined
+          ? [{ file: catchallPagePath, name: "update host catchall page", write: () => writeFile(catchallPagePath, catchallPageUpdate) }]
+          : []),
+        ...(migrateRootLayout
+          ? [{ file: rootLayoutPath, name: "update host root layout", write: () => writeFile(rootLayoutPath, rootLayoutTemplate) }]
+          : []),
+        ...(manifestChanged
+          ? [{ file: existingManifestPath, name: "write package.json",
+            write: () => writeFile(existingManifestPath, `${JSON.stringify(integratedManifest, null, 2)}\n`) }]
+          : []),
+      ];
+      if (existingConfig && hostWrites.length === 0) {
+        return { kind: "already-configured", packageManager: manager, vaults };
       }
       if (!existingConfig) {
-        const vaultPath = path.join(root, "vault");
-        if (
-          existsSync(vaultPath) &&
-          !(yield* operation("inspect vault path", () =>
-            stat(vaultPath),
-          )).isDirectory()
-        ) {
-          return yield* new InitConflictError({
-            paths: ["vault"],
-            message: "Cannot initialize: vault exists and is not a directory.",
-          });
-        }
-        const siteName = existingManifest?.name ?? packageName(root);
-        const config = (yield* operation("read config template", () =>
-          readFile(path.join(templateRoot, configName), "utf8"),
-        )).replace("__SVARTZ_SITE_NAME__", JSON.stringify(siteName))
-          .replace(TARGET_PLACEHOLDER, "'host'");
-        const starterNote = path.join(vaultPath, "index.md");
+        const files = [path.join(root, configName), ...hostWrites.map(({ file }) => file)]
+          .map((file) => path.relative(root, file).split(path.sep).join("/"));
+        const conflict = yield* operation("inspect vault paths", () => vaultConflicts(root, vaults, files));
+        if (conflict) return yield* conflict;
         yield* operation("write Svartz config", () =>
-          writeNewFile(path.join(root, configName), config),
+          writeNewFile(path.join(root, configName), renderConfig(vaults)),
         );
-        if (!existsSync(starterNote)) {
-          const note = yield* operation("read starter note template", () =>
-            readFile(path.join(templateRoot, "vault/index.md"), "utf8"),
-          );
-          yield* operation("write starter note", () =>
-            writeNewFile(starterNote, note),
-          );
-        }
+        yield* writeStarterNotes(root, vaults);
       }
-      if (integratedViteSource !== viteSource)
-        yield* operation("write host Vite config", () =>
-          writeFile(location.viteConfigPath, integratedViteSource),
-        );
-      if (integratedAppTypes !== appTypesSource) {
-        if (appTypesSource === undefined)
-          yield* operation("write host app types", () =>
-            writeNewFile(appTypesPath, integratedAppTypes),
-          );
-        else
-          yield* operation("update host app types", () =>
-            writeFile(appTypesPath, integratedAppTypes),
-          );
-      }
-      if (installCatchall) {
-        for (const name of ["+page.svelte", "+page.ts", "+page.server.ts"]) {
-          const source = yield* operation(`read ${name} template`, () =>
-            readFile(
-              path.join(templateRoot, "src", "routes", "[...slug]", name),
-              "utf8",
-            ),
-          );
-          yield* operation(`write ${name}`, () =>
-            writeNewFile(path.join(catchallRoot, name), source),
-          );
-        }
-      }
-      if (installPageRoute) {
-        for (const [index, name] of PAGE_ROUTE_FILES.entries()) {
-          yield* operation(`write plugin page ${name}`, () =>
-            writeNewFile(path.join(root, pageRoute, name), pageRouteTemplates[index]!),
-          );
-        }
-        for (const [destination, template] of params ?? []) {
-          const source = yield* operation(`read ${destination} template`, () => readFile(template, "utf8"));
-          yield* operation(`write ${destination}`, () => writeNewFile(path.join(root, destination), source));
-        }
-      }
-      if (installCatchallServer)
-        yield* operation("write catchall server load", () =>
-          existingCatchallServer === undefined
-            ? writeNewFile(catchallServerPath, catchallServerTemplate)
-            : writeFile(catchallServerPath, catchallServerTemplate),
-        );
-      if (migrateCatchall)
-        yield* operation("update host catchall load", () =>
-          writeFile(catchallLoadPath, catchallLoadTemplate),
-        );
-      if (migrateCatchallPage && catchallPageUpdate !== undefined)
-        yield* operation("update host catchall page", () =>
-          writeFile(catchallPagePath, catchallPageUpdate),
-        );
-      if (migrateRootLayout)
-        yield* operation("update host root layout", () =>
-          writeFile(rootLayoutPath, rootLayoutTemplate),
-        );
-      if (manifestChanged)
-        yield* operation("write package.json", () =>
-          writeFile(
-            existingManifestPath,
-            `${JSON.stringify(integratedManifest, null, 2)}\n`,
-          ),
-        );
+      for (const { name, write } of hostWrites) yield* operation(name, write);
       if (options.install !== false) yield* command(manager, ["install"], root);
-      return { kind: "integrated", packageManager: manager };
+      return { kind: "integrated", packageManager: manager, vaults };
     }
 
     // Without a SvelteKit app, a config is all a project needs: Svartz builds it with the app it ships.
-    if (existingConfig) return { kind: "already-configured", packageManager: manager };
+    if (existingConfig) return { kind: "already-configured", packageManager: manager, vaults: [] };
 
     const nodeVersion = options.nodeVersion ?? process.versions.node;
     if (!runsScaffold(nodeVersion))
@@ -684,41 +746,32 @@ const initProjectEffect = (
         message: `Cannot initialize: a new Svartz project runs SvelteKit 3, which needs Node ${SCAFFOLD_NODE}; this is Node ${nodeVersion}. No files changed.`,
       });
 
-    const files = NEW_PROJECT_FILES;
-    const destinationName = (name: string) =>
-      name === "gitignore" ? ".gitignore" : name;
-    const destinations = [...files.map(destinationName), "package.json"];
-    const conflicts = [
-      ...destinations.filter((name) => existsSync(path.join(root, name))),
-      ...(yield* operation("inspect scaffold destinations", () =>
-        nonDirectoryAncestors(root, destinations),
-      )),
-    ];
+    // Checked before any question, so nobody answers them for a project init can't write.
+    const conflicts = NEW_PROJECT_FILES.filter((name) => existsSync(path.join(root, name)));
     if (conflicts.length)
       return yield* new InitConflictError({
         paths: conflicts,
         message: `Cannot initialize: these files already exist: ${conflicts.join(", ")}`,
       });
-    const siteName = packageName(root);
-    for (const name of files) {
-      const content = (yield* operation(`read ${name} template`, () =>
-        readFile(path.join(templateRoot, name), "utf8"),
-      )).replaceAll("__SVARTZ_SITE_NAME__", JSON.stringify(siteName))
-        .replace(TARGET_PLACEHOLDER, "'static'");
-      yield* operation(`write ${destinationName(name)}`, () =>
-        writeNewFile(path.join(root, destinationName(name)), content),
-      );
-    }
+    const vaults = yield* chooseVaults(options, { root, host: false, siteName: packageName(root) });
+    const conflict = yield* operation("inspect vault paths", () => vaultConflicts(root, vaults, NEW_PROJECT_FILES));
+    if (conflict) return yield* conflict;
+    const gitignore = yield* operation("read gitignore template", () =>
+      readFile(path.join(templateRoot, "gitignore"), "utf8"),
+    );
+    yield* operation("write .gitignore", () => writeNewFile(path.join(root, ".gitignore"), gitignore));
+    yield* operation("write Svartz config", () => writeNewFile(path.join(root, configName), renderConfig(vaults)));
+    yield* writeStarterNotes(root, vaults);
     yield* operation("write package.json", () =>
       writeNewFile(
         existingManifestPath,
-        `${JSON.stringify(freshManifest(root), null, 2)}\n`,
+        `${JSON.stringify(freshManifest(root, themePackages(vaults)), null, 2)}\n`,
       ),
     );
     if (options.git !== false && !insideGitWorktree(root))
       yield* command("git", ["init"], root);
     if (options.install !== false) yield* command(manager, ["install"], root);
-    return { kind: "created", packageManager: manager };
+    return { kind: "created", packageManager: manager, vaults };
   });
 
 /** Initialize the invocation directory without replacing consumer-owned files. */
