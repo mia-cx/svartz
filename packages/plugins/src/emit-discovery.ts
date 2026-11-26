@@ -1,6 +1,7 @@
 /** Generate adapter-independent discovery files from the published vault index. */
 import { posix, resolve } from "node:path";
 import { definePlugin, type Artifact, type Index, type IndexEntry, type PluginContext } from "@svartz/core";
+import { compareExplorerNodes, orderOf, type ExplorerSortable } from "./explorer";
 import { agentMarkdown } from "./internal/agent-markdown";
 import { createAssetResolver } from "./internal/asset-references";
 import { renderMarkdown } from "./internal/render-markdown";
@@ -47,16 +48,7 @@ function linkFrom(base: string | undefined, fromHref: string) {
   };
 }
 
-const naturalOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
-
-const orderOf = (entry: IndexEntry | undefined): number | undefined => {
-  const order = entry?.properties.order;
-  return typeof order === "number" && Number.isFinite(order) ? order : undefined;
-};
-
-interface ExplorerNode {
-  readonly title: string;
-  readonly order?: number;
+interface ExplorerNode extends ExplorerSortable {
   /** A folder's slug; notes have none. */
   readonly folder?: string;
   /** The note, or a folder's folder note. */
@@ -66,8 +58,6 @@ interface ExplorerNode {
 /**
  * Every page in reading order, grouped by top-level folder: the home page, then the explorer top to bottom, each
  * folder's own note ahead of what it holds. Sections keep the order of their first page, and root pages share one.
- * The order is `buildExplorerTree`'s in `@svartz/ui`: folders before notes, each by `order` frontmatter, then by
- * title in natural order, and a folder takes its folder note's `order`.
  */
 function readingSections(index: Index): { readonly title?: string; readonly entries: readonly IndexEntry[] }[] {
   const bySlug = new Map(index.entries.map((entry) => [entry.slug, entry]));
@@ -78,18 +68,23 @@ function readingSections(index: Index): { readonly title?: string; readonly entr
   }
   const folderNotes = new Set(index.folders.map((folder) => folder.noteSlug));
   const parentOf = (slug: string) => (slug.includes("/") ? slug.slice(0, slug.lastIndexOf("/")) : undefined);
-  const childrenOf = (folder: string | undefined): ExplorerNode[] => [
-    ...index.folders.filter((candidate) => parentOf(candidate.slug) === folder).map((candidate): ExplorerNode => {
-      const entry = candidate.noteSlug === undefined ? undefined : bySlug.get(candidate.noteSlug);
-      return { title: candidate.title, order: orderOf(entry), folder: candidate.slug, entry };
-    }),
-    ...index.entries
-      .filter((entry) => entry.slug !== "index" && !folderNotes.has(entry.slug) && homes.get(entry.slug) === folder)
-      .map((entry): ExplorerNode => ({ title: entry.title, order: orderOf(entry), entry })),
-  ].sort((left, right) =>
-    Number(right.folder !== undefined) - Number(left.folder !== undefined) ||
-    (left.order ?? Infinity) - (right.order ?? Infinity) ||
-    naturalOrder.compare(left.title, right.title));
+  // Each folder's children, keyed by its slug; the vault root's are under `undefined`.
+  const children = new Map<string | undefined, ExplorerNode[]>();
+  const place = (folder: string | undefined, node: ExplorerNode) => {
+    const siblings = children.get(folder);
+    if (siblings) siblings.push(node);
+    else children.set(folder, [node]);
+  };
+  for (const folder of index.folders) {
+    const entry = folder.noteSlug === undefined ? undefined : bySlug.get(folder.noteSlug);
+    place(parentOf(folder.slug), { isFolder: true, title: folder.title, order: orderOf(entry), folder: folder.slug, entry });
+  }
+  for (const entry of index.entries) {
+    if (entry.slug === "index" || folderNotes.has(entry.slug)) continue;
+    place(homes.get(entry.slug), { isFolder: false, title: entry.title, order: orderOf(entry), entry });
+  }
+  for (const nodes of children.values()) nodes.sort(compareExplorerNodes);
+  const childrenOf = (folder: string | undefined) => children.get(folder) ?? [];
   const pages = (node: ExplorerNode): IndexEntry[] => [
     ...(node.entry ? [node.entry] : []),
     ...(node.folder === undefined ? [] : childrenOf(node.folder).flatMap(pages)),

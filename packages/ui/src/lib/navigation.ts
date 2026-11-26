@@ -1,3 +1,5 @@
+import { compareExplorerNodes, orderOf } from '@svartz/plugins/explorer';
+
 export interface UiIndexEntry {
 	readonly slug: string;
 	readonly href?: string;
@@ -166,30 +168,10 @@ export function folderBreadcrumbs(
 	return [{ title: 'Home', href: homeHref }, ...folderTrail(folder, layout, folders, withSlash(homeHref))];
 }
 
-const naturalOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-
-/** A note's `order` frontmatter, when it is a finite number. */
-export function orderOf(entry: Pick<UiIndexEntry, 'properties'> | undefined): number | undefined {
-	const order = entry?.properties?.order;
-	return typeof order === 'number' && Number.isFinite(order) ? order : undefined;
-}
-
-/** Plain notes rank after themed pages that set a rank below 2 (schemas 0, operations 1). */
-const PLAIN_RANK = 2;
-
 function sortExplorerNodes<T extends UiIndexEntry>(nodes: ExplorerNode<T>[]): ExplorerNode<T>[] {
-	const rank = (node: ExplorerNode<T>) => node.item?.sort?.[0] ?? PLAIN_RANK;
-	const key = (node: ExplorerNode<T>) => node.item?.sort?.[1] ?? node.title;
 	return nodes
 		.map((node) => ({ ...node, children: sortExplorerNodes([...node.children]) }))
-		.sort(
-			(left, right) =>
-				Number(right.isFolder) - Number(left.isFolder) ||
-				(left.order ?? Infinity) - (right.order ?? Infinity) ||
-				rank(left) - rank(right) ||
-				naturalOrder.compare(key(left), key(right)) ||
-				(left.item?.sort?.[2] ?? 0) - (right.item?.sort?.[2] ?? 0)
-		);
+		.sort(compareExplorerNodes);
 }
 
 /**
