@@ -1,5 +1,7 @@
-import type { ExplorerNode, UiIndexEntry } from '@svartz/ui';
+import type { SvartzTheme } from '@svartz/core';
+import { folderLayout, type ExplorerNode, type FolderLayout, type UiIndexEntry } from '@svartz/ui';
 import type { ReadingStop } from './extension.js';
+import { choosePage, type Composition } from './select.js';
 
 /**
  * The folder ids above the page or folder page at `href`, outermost first,
@@ -76,6 +78,37 @@ export function physicalFolder<T extends UiIndexEntry>(
 	}
 	return undefined;
 }
+
+const parentOf = (folder: string) => (folder.includes('/') ? folder.slice(0, folder.lastIndexOf('/')) : undefined);
+
+/** The folder notes above a folder, nearest first, for `theme:` to cascade from. */
+export function folderNotes<T>(layout: FolderLayout<T>, folder: string | undefined, except?: T): T[] {
+	const notes: T[] = [];
+	for (let current = folder; current !== undefined; current = parentOf(current)) {
+		const note = layout.noteOf(current);
+		if (note && note !== except) notes.push(note);
+	}
+	return notes;
+}
+
+/**
+ * A composed theme's `structuredData`. The shell is the primary theme's, so its
+ * `chrome.breadcrumbs` decides whether pages publish their trail. A note's
+ * article goes to the theme that renders it, chosen as the shell chooses, with
+ * the renderer that claimed it; plain notes go to the primary theme.
+ */
+export const pageStructuredData =
+	(composition: Composition): NonNullable<SvartzTheme['structuredData']> =>
+	({ article, breadcrumbs }, { entry, vault }) => {
+		const { primary } = composition;
+		const shown = primary.chrome?.breadcrumbs === false ? undefined : breadcrumbs;
+		if (!entry || !article) return { article, breadcrumbs: shown };
+		const layout = folderLayout(vault.entries, vault.folders);
+		const folder = layout.folderOf(entry.slug) ?? physicalFolder(entry, vault.entries, layout.folderOf);
+		const choice = choosePage(composition, entry, folderNotes(layout, folder, entry));
+		const theme = choice?.theme ?? primary;
+		return { article: theme.structuredData?.(article, { ...choice, theme, entry }) ?? article, breadcrumbs: shown };
+	};
 
 /** Every note in the tree, in order. */
 export const explorerNotes = <T extends UiIndexEntry>(tree: readonly ExplorerNode<T>[]): ExplorerNode<T>[] =>

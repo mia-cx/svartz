@@ -31,7 +31,7 @@ export const testIndex = {
 		{
 			slug: 'tags/testing',
 			href: '/tags/testing/',
-			properties: {},
+			properties: { kind: 'guide' },
 			page: { toc: true, comments: true },
 			path: 'tags/testing.md',
 			title: 'Authored tag landing',
@@ -44,16 +44,36 @@ export const testIndex = {
 			readingTimeMinutes: 1,
 			createdAt: new Date('2026-01-01T00:00:00.000Z'),
 			modifiedAt: new Date('2026-01-01T00:00:00.000Z')
+		},
+		{
+			// The `guides` folder's own note: its crumb links here rather than to the folder listing.
+			slug: 'guides',
+			href: '/guides/',
+			properties: {},
+			page: { toc: true, comments: true },
+			path: 'guides/index.md',
+			title: 'Guides',
+			tags: [],
+			aliases: [],
+			content: 'Guides folder note.',
+			links: [],
+			toc: [],
+			wordCount: 3,
+			readingTimeMinutes: 1,
+			createdAt: new Date('2026-01-01T00:00:00.000Z'),
+			modifiedAt: new Date('2026-01-01T00:00:00.000Z')
 		}
 	],
 	graph: { index: [] },
 	backlinks: { index: [] },
 	search: [],
 	tags: [{ slug: 'testing', title: 'Testing', noteCount: 1, href: '/tags/testing/' }],
-	folders: [{ slug: 'guides', title: 'Guides', noteCount: 1, noteSlugs: ['guides/intro'], href: '/folders/guides/' }],
+	folders: [
+		{ slug: 'guides', title: 'Guides', noteCount: 2, noteSlugs: ['guides', 'guides/intro'], noteSlug: 'guides', href: '/folders/guides/' }
+	],
 	routes: {
 		mountPath: '',
-		notes: ['/', '/guides/intro/'],
+		notes: ['/', '/guides/', '/guides/intro/'],
 		redirects: {},
 		tags: ['/tags/', '/tags/testing/'],
 		folders: ['/folders/', '/folders/guides/'],

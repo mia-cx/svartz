@@ -1,4 +1,4 @@
-import { materializeTheme } from '@svartz/core';
+import { materializeTheme, type IndexEntry, type VaultView } from '@svartz/core';
 import { describe, expect, it } from 'vitest';
 import createNodeTheme from './index.js';
 import createRuntimeTheme, { extensions } from './runtime.js';
@@ -40,5 +40,19 @@ describe('the symbol renderer', () => {
 
 	it('leaves guides to the shell', () => {
 		expect(renderer.detect({ title: 'Getting started' }, entry)).toBeUndefined();
+	});
+});
+
+describe('the docs theme in structured data', () => {
+	it('publishes a guide as a tech article and a symbol page as its API reference', () => {
+		const note = (slug: string, properties: Record<string, unknown>) => ({ slug, path: `${slug}.md`, properties }) as unknown as IndexEntry;
+		const guide = note('guides/install', {});
+		const symbol = note('reference/define-theme', { symbol: { kind: 'function', name: 'defineTheme' } });
+		const vault = { entries: [guide, symbol], folders: [] } as unknown as VaultView;
+		const typeOf = (entry: IndexEntry) =>
+			createRuntimeTheme().structuredData!({ article: { '@type': 'Article' } }, { entry, vault }).article?.['@type'];
+
+		expect(typeOf(guide)).toBe('TechArticle');
+		expect(typeOf(symbol)).toBe('APIReference');
 	});
 });

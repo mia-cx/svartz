@@ -1,4 +1,6 @@
 import type { SvartzPlugin } from "../plugin/types";
+import type { IndexEntry } from "../types";
+import type { VaultView } from "../vault-view";
 
 /**
  * Current contract version. Themes must declare a contractVersion and plugins may; `defineTheme` and plugin
@@ -126,6 +128,19 @@ interface SocialImageMetadata {
   readonly siteTitle: string;
 }
 
+/** One schema.org node in a page's JSON-LD graph, without `@context`. */
+interface JsonLdNode {
+  readonly "@type": string;
+  readonly [property: string]: unknown;
+}
+
+/** A page's JSON-LD beside the site's `WebSite`: the note it renders, and its breadcrumb trail. */
+interface PageStructuredData {
+  /** A note's `Article`, with headline, description, dates, URL, author and image. List pages have none. */
+  readonly article?: JsonLdNode;
+  readonly breadcrumbs?: JsonLdNode;
+}
+
 // --- Main Theme Interface ---
 
 interface SvartzTheme {
@@ -149,6 +164,15 @@ interface SvartzTheme {
   readonly pluginPreset?: ThemePluginPreset;
   /** Return a complete SVG document; Svartz rasterizes it at build time. */
   readonly socialImage?: (metadata: SocialImageMetadata) => string;
+  /**
+   * Maps each page's JSON-LD to what the theme shows: `TechArticle` for a guide, `BlogPosting` for a post.
+   * It returns the nodes to publish, so it can retype the article, add what the page shows, or drop
+   * breadcrumbs the theme doesn't show. `entry` is the note the page renders, absent on list pages.
+   */
+  readonly structuredData?: (
+    nodes: PageStructuredData,
+    page: { readonly entry?: IndexEntry; readonly vault: VaultView },
+  ) => PageStructuredData;
   /** Default scalable favicon when no vault source is configured. */
   readonly faviconSvg?: string;
   readonly defaults?: Record<string, unknown>;
@@ -166,5 +190,7 @@ export type {
   ThemeRequiredFeature,
   ThemePluginPreset,
   SocialImageMetadata,
+  JsonLdNode,
+  PageStructuredData,
   SvartzTheme,
 };

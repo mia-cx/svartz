@@ -1,8 +1,10 @@
+import type { IndexEntry, VaultView } from '@svartz/core';
 import { buildExplorerTree, folderLayout, type ExplorerItem } from '@svartz/ui';
 import { describe, expect, it } from 'vitest';
+import { minimalExtension } from './compose.js';
 import type { PageRenderer, ThemeExtension } from './extension.js';
 import { choosePage } from './select.js';
-import { adjacentPages, explorerNotes, explorerTrail, filterExplorer, physicalFolder, readingOrder } from './shell.js';
+import { adjacentPages, explorerNotes, explorerTrail, filterExplorer, pageStructuredData, physicalFolder, readingOrder } from './shell.js';
 
 interface Note {
 	slug: string;
@@ -113,3 +115,45 @@ describe('a hidden note outside the folder records', () => {
 		expect(choosePage(site, hidden, folderNotes)).toEqual({ theme: minimal });
 	});
 });
+
+describe("a composed site's structured data", () => {
+	const symbol: PageRenderer = { id: 'symbol', detect: (properties) => properties.symbol, body: (() => null) as never };
+	const docs: ThemeExtension = {
+		id: '@acme/docs',
+		renderers: [symbol],
+		structuredData: (article, { renderer }) => ({ ...article, '@type': renderer ? 'APIReference' : 'TechArticle' })
+	};
+	const blog: ThemeExtension = {
+		id: '@acme/blog',
+		name: 'blog',
+		chrome: { breadcrumbs: false },
+		structuredData: (article) => ({ ...article, '@type': 'BlogPosting' })
+	};
+	const notes = [
+		note('guides/index.md', 'Guides', undefined, {}),
+		note('guides/install.md', 'Install', undefined, {}),
+		note('guides/define-theme.md', 'defineTheme', undefined, { symbol: { name: 'defineTheme' } }),
+		note('posts/index.md', 'Posts', undefined, { theme: 'blog' }),
+		note('posts/launch.md', 'Launch', undefined, {})
+	];
+	const vault = { entries: notes, folders: [folder(notes, 'guides', 'Guides'), folder(notes, 'posts', 'Posts')] } as unknown as VaultView;
+	const nodes = { article: { '@type': 'Article' }, breadcrumbs: { '@type': 'BreadcrumbList' } };
+	const page = (slug: string) => ({ entry: notes.find((entry) => entry.slug === slug) as unknown as IndexEntry, vault });
+
+	it("goes to the theme and renderer that render each note, with the shell's breadcrumbs", () => {
+		const structuredData = pageStructuredData({ primary: docs, extensions: [docs, blog, minimalExtension] });
+
+		expect(structuredData(nodes, page('guides/install'))).toEqual({ ...nodes, article: { '@type': 'TechArticle' } });
+		expect(structuredData(nodes, page('guides/define-theme'))).toEqual({ ...nodes, article: { '@type': 'APIReference' } });
+		// A folder note's `theme:` cascades to the notes below it; the docs shell still shows their trail.
+		expect(structuredData(nodes, page('posts/launch'))).toEqual({ ...nodes, article: { '@type': 'BlogPosting' } });
+	});
+
+	it('drops breadcrumbs from every page when the primary theme hides them', () => {
+		const structuredData = pageStructuredData({ primary: blog, extensions: [blog, docs, minimalExtension] });
+
+		expect(structuredData(nodes, page('posts/launch')).breadcrumbs).toBeUndefined();
+		expect(structuredData({ breadcrumbs: nodes.breadcrumbs }, { vault }).breadcrumbs).toBeUndefined();
+	});
+});
+

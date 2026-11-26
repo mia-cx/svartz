@@ -1,5 +1,6 @@
 import { defineTheme } from '@svartz/core';
 import { composeThemes, type ThemeExtension } from '@svartz/theme-minimal/runtime';
+import { readPost } from './blog.js';
 import { blogIdentity, type BlogThemeConfig } from './manifest.js';
 import ArchivePage from './pages/ArchivePage.svelte';
 import FolderListPage from './pages/FolderListPage.svelte';
@@ -25,7 +26,18 @@ export const extensions: readonly ThemeExtension[] = [
 		frame: BlogFrame,
 		regions: { header: BlogHeader, pageHead: PostHead, pageFoot: PostFoot, aside: RelatedPosts, footer: BlogFooter },
 		pages: { home: HomePage, tags: TagsPage, tag: TagPage, feed: ArchivePage, folders: FolderListPage, folder: FolderPage },
-		chrome: { graph: false, backlinks: false, readerMode: false }
+		chrome: { breadcrumbs: false, graph: false, backlinks: false, readerMode: false },
+		// A post's header shows its `excerpt` and a byline naming its own `author`, ahead of the summary and the site's.
+		structuredData: (article, { entry }) => {
+			if (entry.slug === 'index') return article;
+			const { author, excerpt } = readPost(entry.properties, entry.description);
+			return {
+				...article,
+				'@type': 'BlogPosting',
+				description: excerpt,
+				...(author && { author: { '@type': 'Person', name: author } })
+			};
+		}
 	}
 ];
 

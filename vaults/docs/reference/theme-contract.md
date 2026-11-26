@@ -19,6 +19,7 @@ Publish a build manifest and a runtime entry, or point `theme.base` at a local t
 | `artifactRequirements` | Optional flags `index`, `graph`, `backlinks` and list `custom`. The index carries search and the table of contents. |
 | `pluginPreset` | Optional `{ plugins }`, merged between core plugins and user plugins. |
 | `socialImage(metadata)` | Optional function returning complete SVG; receives `title`, optional `description`, and `siteTitle`. |
+| `structuredData(nodes, page)` | Optional function mapping a page's JSON-LD (an optional `article` and `breadcrumbs`) to what the theme shows; receives the `vault` and, on a note, its `entry`. `composeThemes` builds it from each extension's `structuredData` and `chrome.breadcrumbs`. See [[writing/structured-data\|Structured data]]. |
 | `faviconSvg` | Optional fallback SVG string. |
 | `defaults`, `hooks` | Optional theme-defined records. |
 
