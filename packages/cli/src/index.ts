@@ -319,25 +319,21 @@ const loadWorkspace = (configPath?: string): Effect.Effect<WorkspaceContext, Cli
     return { config, projectRoot: path.resolve(config.configDir), hostApp };
   });
 
-/**
- * A set of vaults that build or serve together, and the app they run in. A vault with `theme.versions` brings a vault
- * per older version, right after it; `builds` holds what their Vite plugins need beyond the config.
- */
-type AppRun = {
-  readonly location: AppLocation;
-  readonly vaults: readonly ResolvedConfig[];
-  readonly builds?: ReadonlyMap<string, Omit<VersionVault, "config">>;
-};
+/** A set of vaults that build or serve together, and the app they run in. */
+type AppRun = { readonly location: AppLocation; readonly vaults: readonly ResolvedConfig[] };
 
-/** The run of `vaults` in `location`, each vault followed by its versions. */
-const appRun = (location: AppLocation, vaults: readonly ResolvedConfig[]): Effect.Effect<AppRun, CliError> =>
+/**
+ * `vaults`, each followed by the vaults of its older versions, and what their Vite plugins need beyond the config.
+ * Building reads the versions from git, so a build runs this under its lock: another build waiting on it can't swap a
+ * version's files mid-build.
+ */
+const withVersions = (vaults: readonly ResolvedConfig[]) =>
   Effect.tryPromise({
     try: async () => {
       const expanded = (await Promise.all(vaults.map(versionVaults))).flat();
       return {
-        location,
         vaults: expanded.map(({ config }) => config),
-        builds: new Map(expanded.map(({ config, ...build }) => [config.id, build])),
+        builds: new Map(expanded.map(({ config, ...build }): [string, Omit<VersionVault, "config">] => [config.id, build])),
       };
     },
     catch: (cause) => cause as Error,
@@ -353,14 +349,17 @@ const hostRun = (workspace: WorkspaceContext, vaultId?: string): Effect.Effect<A
         message: `Vault "${vaults[0]!.id}" targets "host", which mounts it in a SvelteKit app beside svartz.config.ts, and there is none at "${workspace.projectRoot}". Give it another target to build it with the app Svartz ships.`,
       });
     }
-    return yield* appRun(workspace.hostApp, vaults);
+    return { location: workspace.hostApp, vaults };
   });
 
-/** The run that builds or serves `vault`: its host app's, or the shipped app with that vault and its versions. */
+/** The run that builds or serves `vault`: its host app's, or the shipped app with that vault alone. */
 const runFor = (workspace: WorkspaceContext, vault: ResolvedConfig): Effect.Effect<AppRun, CliError> =>
   vault.target.type === "host"
     ? hostRun(workspace, vault.id)
-    : Effect.flatMap(ensureBuildTargetSupported(vault), (supported) => appRun(shippedApp(workspace.projectRoot), [supported]));
+    : Effect.map(ensureBuildTargetSupported(vault), (supported) => ({
+        location: shippedApp(workspace.projectRoot),
+        vaults: [supported],
+      }));
 
 /** What `dev` and `preview` serve: `--vault`'s run, or else every host vault in a host app, or else the first vault. */
 const serveRun = (workspace: WorkspaceContext, vaultId?: string): Effect.Effect<AppRun, CliError> =>
@@ -466,13 +465,14 @@ const ensureBuildTargetSupported = (
       });
 
 const createAppConfig = (
-  { location, vaults, builds }: AppRun,
+  { location, vaults: configured }: AppRun,
   mode: "development" | "production",
   command: "serve" | "build",
   serverOptions?: Partial<ServerOptions>,
 ): Effect.Effect<InlineConfig, CliError> =>
   Effect.gen(function* () {
     const { appRoot, projectRoot, hostApp, viteConfigPath } = location;
+    const { vaults, builds } = yield* withVersions(configured);
     const vault = vaults[0]!;
     // A host app, or a vault built with its versions, chains every vault's server handle in one `virtual:svartz/server`.
     const sharedServer = Boolean(hostApp) || vaults.length > 1;
@@ -586,7 +586,7 @@ const createAppConfig = (
           projectRoot,
           ...(wranglerConfig ? { wranglerDir: path.dirname(wranglerConfig) } : {}),
           exposeVirtualModules: vaults.length === 1,
-          ...builds?.get(item.id),
+          ...builds.get(item.id),
         }) as never),
         {
           name: "svartz:host-registry-base",

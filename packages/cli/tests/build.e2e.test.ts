@@ -10,6 +10,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { deriveProtectionKey, openProtectedPayload, type ProtectedEnvelope, type ProtectedGroupPayload } from "@svartz/core";
 import { getGeneratedHostStylesPath, getGeneratedHostRegistryPath } from "@svartz/vite";
 import { chromium } from "playwright";
+import { withVaultBuildLock } from "../src/build-lock";
 
 const execFileAsync = promisify(execFile);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -177,7 +178,16 @@ describe("svartz CLI", () => {
       await rm(resolve(repo, "docs"), { recursive: true });
       await cp(resolve(ROOT, "vaults/showcase-reference"), resolve(repo, "docs"), { recursive: true });
 
-      expect(await build(versions)).toContain('vault "versions-e2e@v1": built, and cached');
+      // A build waiting on another's lock reads no version yet, so it can't swap files out from under that build.
+      const snapshots = resolve(ROOT, ".svartz/vaults/versions-e2e/versions");
+      await rm(snapshots, { recursive: true, force: true });
+      let first!: Promise<string>;
+      await withVaultBuildLock(ROOT, async () => {
+        first = build(versions);
+        await new Promise((done) => setTimeout(done, 5_000));
+        await expect(access(snapshots)).rejects.toMatchObject({ code: "ENOENT" });
+      });
+      expect(await first).toContain('vault "versions-e2e@v1": built, and cached');
       const links = (html: string) => [...html.matchAll(/<a href="([^"]*)"[^>]*><span class="id[^"]*">([^<]*)/g)].map(([, href, id]) => [id, href]);
 
       const latest = await readFile(resolve(dist, "rest/get-pet/index.html"), "utf8");

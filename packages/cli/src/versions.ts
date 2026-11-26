@@ -27,7 +27,7 @@ export interface VersionSpec {
 /** A vault as the build runs it: its config, and what the Vite plugin needs to know beyond it. */
 export interface VersionVault {
   readonly config: ResolvedConfig;
-  /** The commit a snapshot was read from: its build is cached, since its files never change. */
+  /** Where a snapshot was read from, `<commit>:<folder>`: its build is cached, since its files never change. */
   readonly snapshot?: string;
   /** The mounts of the versions built inside this vault's: no page of its own may sit below one. */
   readonly nestedMounts?: readonly string[];
@@ -99,10 +99,10 @@ async function extract(root: string, commit: string, prefix: string, target: str
 }
 
 /**
- * The vault's folder as `version.ref` holds it, in `<vault build>/versions/<id>/vault/`. It's read again only when the
- * ref has moved to another commit.
+ * The vault's folder as `version.ref` holds it, in `<vault build>/versions/<id>/vault/`, and where it came from:
+ * `<commit>:<folder in the repository>`. It's read again only when that changes: the ref moved, or the vault did.
  */
-async function snapshot(vault: ResolvedConfig, version: VersionSpec, folder: string): Promise<{ path: string; commit: string }> {
+async function snapshot(vault: ResolvedConfig, version: VersionSpec, folder: string): Promise<{ path: string; source: string }> {
   const name = `Vault "${vault.id}" version "${version.id}"`;
   let root: string;
   let prefix: string;
@@ -117,10 +117,11 @@ async function snapshot(vault: ResolvedConfig, version: VersionSpec, folder: str
   } catch {
     throw new Error(`${name}: git has no ref "${version.ref}". In a CI checkout, fetch it first, such as with \`git fetch --tags\`.`);
   }
+  const source = `${commit}:${prefix}`;
   const target = path.join(folder, "vault");
-  const marker = path.join(folder, "commit");
+  const marker = path.join(folder, "source");
   const extracted = await readFile(marker, "utf8").catch(() => undefined);
-  if (extracted === commit) return { path: target, commit };
+  if (extracted === source) return { path: target, source };
   await rm(marker, { force: true });
   await rm(target, { recursive: true, force: true });
   await mkdir(target, { recursive: true });
@@ -129,8 +130,8 @@ async function snapshot(vault: ResolvedConfig, version: VersionSpec, folder: str
   } catch (cause) {
     throw new Error(`${name}: could not read ${prefix || "the repository"} at "${version.ref}": ${(cause as Error).message}`);
   }
-  await writeFile(marker, commit);
-  return { path: target, commit };
+  await writeFile(marker, source);
+  return { path: target, source };
 }
 
 /**
@@ -147,7 +148,7 @@ export async function versionVaults(vault: ResolvedConfig): Promise<VersionVault
   const mountOf = (version: VersionSpec) => `${vault.mountPath}/${version.id}`;
   const snapshots = await Promise.all(older.map(async (version): Promise<VersionVault> => {
     const folder = path.join(getVaultBuildRoot(vault), "versions", version.id);
-    const { path: vaultPath, commit } = await snapshot(vault, version, folder);
+    const { path: vaultPath, source } = await snapshot(vault, version, folder);
     return {
       config: {
         ...vault,
@@ -159,7 +160,7 @@ export async function versionVaults(vault: ResolvedConfig): Promise<VersionVault
         // Only the latest version is listed for crawlers and subscribers; older pages stay reachable by URL.
         discovery: { ...vault.discovery, feed: { ...vault.discovery.feed, enabled: false }, sitemap: { enabled: false } },
       },
-      snapshot: commit,
+      snapshot: source,
     };
   }));
   return [
