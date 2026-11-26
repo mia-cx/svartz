@@ -13,6 +13,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isSvelteKit3 } from "@svartz/vite";
 import { Data, Effect, Either } from "effect";
+import {
+  InitCancelledError,
+  InitUsageError,
+  renderConfig,
+  themePackages,
+  vaultsFromFlags,
+  type InitContext,
+  type VaultChoice,
+} from "./init-plan";
 import { resolveAppLocation } from "./workspace";
 
 const templateRoot = fileURLToPath(new URL("../template/", import.meta.url));
@@ -60,11 +69,18 @@ export type InitOptions = {
   readonly git?: boolean;
   /** The running Node version; a new project needs {@link SCAFFOLD_NODE}. */
   readonly nodeVersion?: string;
+  /**
+   * The vaults to write, asked once the project passes its checks and only when it has no config. Defaults to one
+   * `vault` folder on theme-minimal, deploying as static files (or through the host app).
+   */
+  readonly vaults?: (context: InitContext) => readonly VaultChoice[] | Promise<readonly VaultChoice[]>;
 };
 
 export type InitResult = {
   readonly kind: "created" | "integrated" | "already-configured";
   readonly packageManager: PackageManager;
+  /** The vaults written to the new config; none when the project already had one. */
+  readonly vaults: readonly VaultChoice[];
 };
 
 /** Existing consumer-owned files prevent a safe scaffold write. */
@@ -97,7 +113,11 @@ export type InitError =
   | InitConflictError
   | InitLayoutError
   | InitOperationError
-  | InitCommandError;
+  | InitCommandError
+  | InitUsageError
+  | InitCancelledError;
+
+export { InitCancelledError, InitUsageError };
 
 const operation = <A>(
   name: string,
@@ -142,10 +162,51 @@ const command = (
       }),
   });
 
-/** A new project's files: a config and a vault. It builds with the app Svartz ships, so it needs no app of its own. */
-const NEW_PROJECT_FILES = ["gitignore", configName, path.join("vault", "index.md")] as const;
-/** Where the config template names its vault's target: `host` in an existing app, `static` in a new project. */
-const TARGET_PLACEHOLDER = "__SVARTZ_TARGET__";
+/** A new project's files besides its vaults. It builds with the app Svartz ships, so it needs no app of its own. */
+const NEW_PROJECT_FILES = [".gitignore", configName, "package.json"] as const;
+/** The note a new vault starts with. */
+const STARTER_NOTE = "index.md";
+
+const chooseVaults = (
+  options: InitOptions,
+  context: InitContext,
+): Effect.Effect<readonly VaultChoice[], InitUsageError | InitCancelledError | InitOperationError> =>
+  Effect.tryPromise({
+    try: async () => options.vaults ? options.vaults(context) : vaultsFromFlags({}, context),
+    catch: (cause) =>
+      cause instanceof InitUsageError || cause instanceof InitCancelledError
+        ? cause
+        : new InitOperationError({ operation: "choose vaults", cause, message: `choose vaults: ${String(cause)}` }),
+  });
+
+/** The vaults that get a starter note: those whose folder doesn't exist yet. A folder that exists is published as it is. */
+const newVaults = (root: string, vaults: readonly VaultChoice[]) =>
+  vaults.filter((vault) => !existsSync(path.join(root, vault.path)));
+
+/** Vault paths that exist but aren't folders, and files standing where a new vault's folders would go. */
+async function vaultConflicts(root: string, vaults: readonly VaultChoice[]): Promise<string[]> {
+  const files = [];
+  for (const vault of vaults) {
+    const info = await stat(path.join(root, vault.path)).catch(() => undefined);
+    if (info && !info.isDirectory()) files.push(vault.path);
+  }
+  const notes = newVaults(root, vaults).map((vault) => path.join(vault.path, STARTER_NOTE));
+  return [...new Set([...files, ...await nonDirectoryAncestors(root, notes)])];
+}
+
+/** Each new vault's folder, with the starter note in it. */
+const writeStarterNotes = (root: string, vaults: readonly VaultChoice[]) =>
+  Effect.gen(function* () {
+    const fresh = newVaults(root, vaults);
+    if (fresh.length === 0) return;
+    const note = yield* operation("read starter note template", () =>
+      readFile(path.join(templateRoot, "vault", STARTER_NOTE), "utf8"),
+    );
+    for (const vault of fresh)
+      yield* operation(`write ${vault.path}/${STARTER_NOTE}`, () =>
+        writeNewFile(path.join(root, vault.path, STARTER_NOTE), note),
+      );
+  });
 
 const PAGE_ROUTE_FILES = ["+page.svelte", "+page.ts", "+page.server.ts"] as const;
 /** Files only SvelteKit 2 hosts get. */
@@ -210,7 +271,8 @@ function insideGitWorktree(root: string): boolean {
   );
 }
 
-function freshManifest(root: string): Manifest {
+/** `themes` are the theme packages the vaults use beyond theme-minimal, which Svartz ships. */
+function freshManifest(root: string, themes: readonly string[]): Manifest {
   return {
     name: packageName(root),
     private: true,
@@ -224,19 +286,20 @@ function freshManifest(root: string): Manifest {
     devDependencies: {
       "@svartz/config": "latest",
       svartz: "latest",
+      ...Object.fromEntries(themes.map((theme) => [theme, "latest"])),
       tailwindcss: "^4.1.18",
       vite: "^8.3.8",
     },
   };
 }
 
-function integrateManifest(manifest: Manifest): Manifest {
+function integrateManifest(manifest: Manifest, themes: readonly string[]): Manifest {
   const scripts = { ...manifest.scripts };
   scripts["svartz:dev"] ??= "svartz dev";
   scripts["svartz:build"] ??= "svartz build";
   scripts["svartz:preview"] ??= "svartz preview";
   const devDependencies = { ...manifest.devDependencies };
-  for (const name of svartzDependencies) {
+  for (const name of [...svartzDependencies, ...themes]) {
     if (!manifest.dependencies?.[name] && !devDependencies[name])
       devDependencies[name] = "latest";
   }
@@ -559,7 +622,12 @@ const initProjectEffect = (
           message:
             "Cannot integrate: Vite config has no default export. Add withSvartzHost from @svartz/vite/host manually.",
         });
-      const integratedManifest = integrateManifest(existingManifest ?? {});
+      const vaults = existingConfig ? [] : yield* chooseVaults(options, {
+        root,
+        host: true,
+        siteName: existingManifest?.name ?? packageName(root),
+      });
+      const integratedManifest = integrateManifest(existingManifest ?? {}, themePackages(vaults));
       const manifestChanged =
         JSON.stringify(existingManifest) !== JSON.stringify(integratedManifest);
       if (
@@ -574,38 +642,19 @@ const initProjectEffect = (
         !migrateCatchall &&
         !installPageRoute
       ) {
-        return { kind: "already-configured", packageManager: manager };
+        return { kind: "already-configured", packageManager: manager, vaults };
       }
       if (!existingConfig) {
-        const vaultPath = path.join(root, "vault");
-        if (
-          existsSync(vaultPath) &&
-          !(yield* operation("inspect vault path", () =>
-            stat(vaultPath),
-          )).isDirectory()
-        ) {
+        const conflicts = yield* operation("inspect vault paths", () => vaultConflicts(root, vaults));
+        if (conflicts.length)
           return yield* new InitConflictError({
-            paths: ["vault"],
-            message: "Cannot initialize: vault exists and is not a directory.",
+            paths: conflicts,
+            message: `Cannot initialize: these vault paths exist and aren't folders: ${conflicts.join(", ")}`,
           });
-        }
-        const siteName = existingManifest?.name ?? packageName(root);
-        const config = (yield* operation("read config template", () =>
-          readFile(path.join(templateRoot, configName), "utf8"),
-        )).replace("__SVARTZ_SITE_NAME__", JSON.stringify(siteName))
-          .replace(TARGET_PLACEHOLDER, "'host'");
-        const starterNote = path.join(vaultPath, "index.md");
         yield* operation("write Svartz config", () =>
-          writeNewFile(path.join(root, configName), config),
+          writeNewFile(path.join(root, configName), renderConfig(vaults)),
         );
-        if (!existsSync(starterNote)) {
-          const note = yield* operation("read starter note template", () =>
-            readFile(path.join(templateRoot, "vault/index.md"), "utf8"),
-          );
-          yield* operation("write starter note", () =>
-            writeNewFile(starterNote, note),
-          );
-        }
+        yield* writeStarterNotes(root, vaults);
       }
       if (integratedViteSource !== viteSource)
         yield* operation("write host Vite config", () =>
@@ -671,11 +720,11 @@ const initProjectEffect = (
           ),
         );
       if (options.install !== false) yield* command(manager, ["install"], root);
-      return { kind: "integrated", packageManager: manager };
+      return { kind: "integrated", packageManager: manager, vaults };
     }
 
     // Without a SvelteKit app, a config is all a project needs: Svartz builds it with the app it ships.
-    if (existingConfig) return { kind: "already-configured", packageManager: manager };
+    if (existingConfig) return { kind: "already-configured", packageManager: manager, vaults: [] };
 
     const nodeVersion = options.nodeVersion ?? process.versions.node;
     if (!runsScaffold(nodeVersion))
@@ -684,41 +733,36 @@ const initProjectEffect = (
         message: `Cannot initialize: a new Svartz project runs SvelteKit 3, which needs Node ${SCAFFOLD_NODE}; this is Node ${nodeVersion}. No files changed.`,
       });
 
-    const files = NEW_PROJECT_FILES;
-    const destinationName = (name: string) =>
-      name === "gitignore" ? ".gitignore" : name;
-    const destinations = [...files.map(destinationName), "package.json"];
-    const conflicts = [
-      ...destinations.filter((name) => existsSync(path.join(root, name))),
-      ...(yield* operation("inspect scaffold destinations", () =>
-        nonDirectoryAncestors(root, destinations),
-      )),
-    ];
+    // Checked before any question, so nobody answers them for a project init can't write.
+    const conflicts = NEW_PROJECT_FILES.filter((name) => existsSync(path.join(root, name)));
     if (conflicts.length)
       return yield* new InitConflictError({
         paths: conflicts,
         message: `Cannot initialize: these files already exist: ${conflicts.join(", ")}`,
       });
-    const siteName = packageName(root);
-    for (const name of files) {
-      const content = (yield* operation(`read ${name} template`, () =>
-        readFile(path.join(templateRoot, name), "utf8"),
-      )).replaceAll("__SVARTZ_SITE_NAME__", JSON.stringify(siteName))
-        .replace(TARGET_PLACEHOLDER, "'static'");
-      yield* operation(`write ${destinationName(name)}`, () =>
-        writeNewFile(path.join(root, destinationName(name)), content),
-      );
-    }
+    const vaults = yield* chooseVaults(options, { root, host: false, siteName: packageName(root) });
+    const vaultFiles = yield* operation("inspect vault paths", () => vaultConflicts(root, vaults));
+    if (vaultFiles.length)
+      return yield* new InitConflictError({
+        paths: vaultFiles,
+        message: `Cannot initialize: these vault paths exist and aren't folders: ${vaultFiles.join(", ")}`,
+      });
+    const gitignore = yield* operation("read gitignore template", () =>
+      readFile(path.join(templateRoot, "gitignore"), "utf8"),
+    );
+    yield* operation("write .gitignore", () => writeNewFile(path.join(root, ".gitignore"), gitignore));
+    yield* operation("write Svartz config", () => writeNewFile(path.join(root, configName), renderConfig(vaults)));
+    yield* writeStarterNotes(root, vaults);
     yield* operation("write package.json", () =>
       writeNewFile(
         existingManifestPath,
-        `${JSON.stringify(freshManifest(root), null, 2)}\n`,
+        `${JSON.stringify(freshManifest(root, themePackages(vaults)), null, 2)}\n`,
       ),
     );
     if (options.git !== false && !insideGitWorktree(root))
       yield* command("git", ["init"], root);
     if (options.install !== false) yield* command(manager, ["install"], root);
-    return { kind: "created", packageManager: manager };
+    return { kind: "created", packageManager: manager, vaults };
   });
 
 /** Initialize the invocation directory without replacing consumer-owned files. */

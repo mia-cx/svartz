@@ -107,7 +107,7 @@ it("adds configuration to an existing Kit app without changing its routes or bui
   expect(manifest.devDependencies).toHaveProperty("svartz", "latest");
   expect(manifest.devDependencies).toHaveProperty("tailwindcss", "^4.2.2");
   expect(await readFile(path.join(root, "svartz.config.ts"), "utf8")).toContain(
-    '"host-app"',
+    "'host-app'",
   );
   expect(await readFile(path.join(root, "src/routes/[...slug]/+page.ts"), "utf8"))
     .toContain('virtual:svartz/host');
