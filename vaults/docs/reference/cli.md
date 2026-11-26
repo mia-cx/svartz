@@ -21,23 +21,25 @@ In a terminal, `init` asks for each vault: a new one or an existing folder, its 
 
 | Flag | Default |
 | --- | --- |
-| `--vault <path>` | `vault`. A folder that exists is published as it is, wherever it is. A new one, inside the project, gets a starter note. Repeat for more vaults. |
+| `--vault <path>` | `vault`. A folder that exists is published as it is, wherever it is. A new one, inside the project and outside every other vault, gets a starter note. Repeat for more vaults. |
 | `--id <id>` | The folder's name, or `notes` for the default `vault` folder. |
 | `--title <title>` | The project's name for one vault, or each folder's name. |
 | `--theme <name>` | `minimal`. Also `wiki`, `blog`, `docs`, `api-docs` and `mcp-docs`. |
-| `--scheme <name>` | Svartz's own colours. Also `catppuccin`, `rose-pine`, `nord`, `gruvbox`, `tokyo-night`, `dracula`, `solarized` and `everforest`. |
-| `--target <type>` | `static`, or `host` in a SvelteKit app. Also `node`, `cloudflare-workers` and `cloudflare-pages`. |
+| `--scheme <name>` | `svartz`, Svartz's own colours. Also `catppuccin`, `rose-pine`, `nord`, `gruvbox`, `tokyo-night`, `dracula`, `solarized` and `everforest`. |
+| `--target <type>` | `static`, or `host` in a SvelteKit app. Also `node`, `cloudflare-workers` and `cloudflare-pages`. `host` works only in a SvelteKit app. |
 | `--worker <name>` | The vault's id. For `cloudflare-workers` vaults. |
 | `--domain <domain>` | None, so the Worker answers on workers.dev. For `cloudflare-workers` vaults. |
 
-Give a flag once to apply it to every vault, or once per `--vault` to match them in order. `--worker` and `--domain` match the `cloudflare-workers` vaults in order. This publishes an existing Obsidian vault as a wiki on a Worker, beside a new blog:
+Give a flag once to apply it to every vault, or once per `--vault` to match them in order. `--worker` and `--domain` match the `cloudflare-workers` vaults in order. An empty value keeps that vault's default, so `--domain ""` leaves a Worker on workers.dev. This publishes an existing Obsidian vault as a wiki on a Worker with its own domain, beside a new blog on a Worker without one, and keeps Svartz's colours for the blog:
 
 ```sh
 npx svartz init --vault ~/Obsidian/Lore --vault blog \
-  --theme wiki --theme blog --scheme gruvbox \
-  --target cloudflare-workers --target static \
-  --worker lore --domain lore.example.com
+  --theme wiki --theme blog --scheme gruvbox --scheme svartz \
+  --target cloudflare-workers \
+  --domain lore.example.com --domain ""
 ```
+
+In a SvelteKit app, one host vault mounts at the app's root. Several each mount at `/<id>`; change a vault's `mountPath` in the config to move it.
 
 ## What init writes
 

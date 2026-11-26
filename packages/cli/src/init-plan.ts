@@ -16,6 +16,9 @@ export type ThemeName = keyof typeof THEMES;
 
 export const demoUrl = (theme: ThemeName) => `https://${THEMES[theme].demo}.demo.svartz.dev`;
 
+/** The scheme name that keeps Svartz's own palette, as `--scheme` and the scheme question take it. */
+export const DEFAULT_SCHEME = "svartz";
+
 /** Display names for the shipped colour schemes, in the order init lists them. */
 export const SCHEMES: Readonly<Record<ColorSchemeName, string>> = {
   catppuccin: "Catppuccin",
@@ -141,7 +144,10 @@ function workerTarget(name: string, domain: string | undefined, vaults: readonly
 export function vaultsFromFlags(flags: InitFlags, context: InitContext): VaultChoice[] {
   const paths = flags.vault ?? [];
   const count = Math.max(1, paths.length);
-  /** A flag's value for the `index`th of `among` vaults: its one value, or its value in that position. */
+  /**
+   * A flag's value for the `index`th of `among` vaults: its one value, or its value in that position. An empty value
+   * (`--domain ""`) stands for the default, so one vault can keep it while another sets its own.
+   */
   const answer = (flag: keyof InitFlags, index: number, among = count): string | undefined => {
     const values = flags[flag] ?? [];
     if (values.length > 1 && values.length !== among)
@@ -150,10 +156,14 @@ export function vaultsFromFlags(flags: InitFlags, context: InitContext): VaultCh
           ? `--${flag} is given ${values.length} times for ${among} cloudflare-workers vaults. Give it once per Worker.`
           : `--${flag} is given ${values.length} times for ${count} vaults. Give it once for all of them, or once per --vault.`,
       });
-    return values.length === 1 ? values[0] : values[index];
+    return (values.length === 1 ? values[0] : values[index]) || undefined;
   };
   const types = Array.from({ length: count }, (_, index) => {
     const type = answer("target", index) ?? (context.host ? "host" : "static");
+    if (type === "host" && !context.host)
+      throw new InitUsageError({
+        message: `--target host needs a SvelteKit app, and there's none here. Use ${list(Object.keys(TARGETS))} instead.`,
+      });
     if (isTarget(type)) return type;
     throw new InitUsageError({ message: `There's no target "${type}". Pick one of ${list(["host", ...Object.keys(TARGETS)])}.` });
   });
@@ -166,9 +176,12 @@ export function vaultsFromFlags(flags: InitFlags, context: InitContext): VaultCh
     const folder = paths[index];
     const theme = answer("theme", index) ?? "minimal";
     if (!isTheme(theme)) throw new InitUsageError({ message: `There's no theme "${theme}". Pick one of ${list(Object.keys(THEMES))}.` });
-    const scheme = answer("scheme", index);
+    const named = answer("scheme", index);
+    const scheme = named === DEFAULT_SCHEME ? undefined : named;
     if (scheme !== undefined && !isScheme(scheme))
-      throw new InitUsageError({ message: `There's no colour scheme "${scheme}". Pick one of ${list(Object.keys(colorSchemes))}.` });
+      throw new InitUsageError({
+        message: `There's no colour scheme "${scheme}". Pick ${DEFAULT_SCHEME} or one of ${list(Object.keys(colorSchemes))}.`,
+      });
     const id = answer("id", index) ?? (folder === undefined ? "notes" : slug(path.basename(path.resolve(context.root, folder))));
     const problem = idProblem(id, vaults.map((vault) => vault.id));
     if (problem) throw new InitUsageError({ message: problem });
@@ -210,9 +223,13 @@ function renderTarget(target: VaultTarget): string {
   return `{ type: 'cloudflare-workers', name: ${quote(target.name)}${routes} }`;
 }
 
-/** `svartz.config.ts` for `vaults`, importing the colour schemes they use by name. */
+/**
+ * `svartz.config.ts` for `vaults`, importing the colour schemes they use by name. One host vault mounts at the app's
+ * root; several each mount at `/<id>`, since host vaults can't share a mount.
+ */
 export function renderConfig(vaults: readonly VaultChoice[]): string {
   const schemes = [...new Set(vaults.flatMap((vault) => vault.scheme ? [exportName(vault.scheme)] : []))];
+  const mounted = vaults.filter((vault) => vault.target.type === "host").length > 1;
   const imports = [
     "import { defineConfig } from '@svartz/config';",
     ...(schemes.length > 0 ? [`import { ${schemes.join(", ")} } from '@svartz/config/schemes';`] : []),
@@ -224,6 +241,7 @@ export function renderConfig(vaults: readonly VaultChoice[]): string {
       `id: ${quote(vault.id)}`,
       `path: ${quote(vault.path)}`,
       `target: ${renderTarget(vault.target)}`,
+      ...(mounted && vault.target.type === "host" ? [`mountPath: ${quote(`/${vault.id}`)}`] : []),
       `theme: ${vault.scheme ? `{ base: ${theme}, tokens: ${exportName(vault.scheme)} }` : theme}`,
       `site: { title: ${quote(vault.title)}${domain ? `, url: ${quote(`https://${domain}`)}` : ""} }`,
     ];

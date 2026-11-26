@@ -55,7 +55,7 @@ import { syncManagedTurboFiles } from "./turbo-sync";
 import { resolveHostApp, shippedApp, type AppLocation } from "./workspace";
 import { writeVaultWranglerConfig } from "./wrangler-config";
 import { commandExecutable, initProject, packageManager } from "./init";
-import { InitCancelledError, SCHEMES, TARGETS, THEMES, vaultsFromFlags, type InitFlags } from "./init-plan";
+import { DEFAULT_SCHEME, InitCancelledError, SCHEMES, TARGETS, THEMES, vaultsFromFlags, type InitFlags } from "./init-plan";
 import { askVaults } from "./init-prompts";
 import { withVaultBuildLock } from "./build-lock";
 
@@ -818,11 +818,11 @@ function createProgram(): Command {
     .option("--id <id>", "The vault's id (default: its folder name)", repeat, [])
     .option("--title <title>", "The site title", repeat, [])
     .option("--theme <name>", `The theme: ${Object.keys(THEMES).join(", ")}`, repeat, [])
-    .option("--scheme <name>", `A colour scheme: ${Object.keys(SCHEMES).join(", ")}`, repeat, [])
+    .option("--scheme <name>", `A colour scheme: ${[DEFAULT_SCHEME, ...Object.keys(SCHEMES)].join(", ")}`, repeat, [])
     .option("--target <type>", `Where it deploys: ${Object.keys(TARGETS).join(", ")}`, repeat, [])
     .option("--worker <name>", "The Cloudflare Worker's name (default: the vault id)", repeat, [])
     .option("--domain <domain>", "The Cloudflare Worker's custom domain", repeat, [])
-    .addHelpText("after", "\nGive a vault flag once to apply it to every --vault, or once per --vault to match them in order.\n--worker and --domain match the cloudflare-workers vaults in order.")
+    .addHelpText("after", "\nGive a vault flag once to apply it to every --vault, or once per --vault to match them in order.\n--worker and --domain match the cloudflare-workers vaults in order. An empty value, like --domain \"\", keeps that vault's default.")
     .action(async ({ install, git, yes, ...flags }: InitFlags & { install: boolean; git: boolean; yes?: boolean }) => {
       const interactive = !yes && process.stdin.isTTY && process.stdout.isTTY &&
         Object.values(flags).every((values) => !values?.length);

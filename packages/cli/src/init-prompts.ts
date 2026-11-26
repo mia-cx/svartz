@@ -5,6 +5,7 @@ import type { Readable, Writable } from "node:stream";
 import { cancel, confirm, intro, isCancel, select, text } from "@clack/prompts";
 import { colorSchemes, type ColorScheme, type ColorSchemeName } from "@svartz/config/schemes";
 import {
+  DEFAULT_SCHEME,
   demoUrl,
   domainProblem,
   idProblem,
@@ -24,9 +25,6 @@ import {
 
 /** Where the questions read keys and draw; a terminal by default. Tests pass their own. */
 export type PromptStreams = { readonly input?: Readable; readonly output?: Writable };
-
-/** The value the scheme question gives Svartz's own palette. */
-const DEFAULT_SCHEME = "svartz";
 
 /** Svartz's own paper, text and accent (`tokens.css`), for its swatch beside the schemes'. */
 const SVARTZ_SWATCH = {

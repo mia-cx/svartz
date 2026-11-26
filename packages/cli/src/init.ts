@@ -183,15 +183,40 @@ const chooseVaults = (
 const newVaults = (root: string, vaults: readonly VaultChoice[]) =>
   vaults.filter((vault) => !existsSync(path.join(root, vault.path)));
 
-/** Vault paths that exist but aren't folders, and files standing where a new vault's folders would go. */
-async function vaultConflicts(root: string, vaults: readonly VaultChoice[]): Promise<string[]> {
-  const files = [];
+/** Whether project-relative `child` lies inside `parent`. */
+const within = (child: string, parent: string) =>
+  parent === "." ? child !== "." && !child.startsWith("../") : child.startsWith(`${parent}/`);
+
+/**
+ * Why `vaults` can't be written beside `files`, the project files init writes, or nothing when they can: a vault
+ * path that is a file, or would be one of init's files; a new vault inside another vault, whose folder init would then
+ * write into; and files standing where a new vault's folders would go.
+ */
+async function vaultConflicts(
+  root: string,
+  vaults: readonly VaultChoice[],
+  files: readonly string[],
+): Promise<InitConflictError | undefined> {
+  const problems: [path: string, problem: string][] = [];
   for (const vault of vaults) {
     const info = await stat(path.join(root, vault.path)).catch(() => undefined);
-    if (info && !info.isDirectory()) files.push(vault.path);
+    if (info && !info.isDirectory()) problems.push([vault.path, `${vault.path} exists and isn't a folder`]);
+    const file = files.find((name) => vault.path === name || within(vault.path, name));
+    if (file) problems.push([vault.path, `the vault ${vault.path} would take the place of ${file}, which init writes`]);
   }
-  const notes = newVaults(root, vaults).map((vault) => path.join(vault.path, STARTER_NOTE));
-  return [...new Set([...files, ...await nonDirectoryAncestors(root, notes)])];
+  const fresh = newVaults(root, vaults);
+  for (const vault of fresh) {
+    const outer = vaults.find((other) => within(vault.path, other.path));
+    if (outer) problems.push([vault.path, `the new vault ${vault.path} would sit inside the vault ${outer.path}`]);
+  }
+  const notes = fresh.map((vault) => path.join(vault.path, STARTER_NOTE));
+  for (const blocked of await nonDirectoryAncestors(root, notes))
+    problems.push([blocked, `${blocked} exists and isn't a folder`]);
+  if (problems.length === 0) return undefined;
+  return new InitConflictError({
+    paths: [...new Set(problems.map(([where]) => where))],
+    message: `Cannot initialize: ${[...new Set(problems.map(([, problem]) => problem))].join("; ")}. No files changed.`,
+  });
 }
 
 /** Each new vault's folder, with the starter note in it. */
@@ -645,12 +670,9 @@ const initProjectEffect = (
         return { kind: "already-configured", packageManager: manager, vaults };
       }
       if (!existingConfig) {
-        const conflicts = yield* operation("inspect vault paths", () => vaultConflicts(root, vaults));
-        if (conflicts.length)
-          return yield* new InitConflictError({
-            paths: conflicts,
-            message: `Cannot initialize: these vault paths exist and aren't folders: ${conflicts.join(", ")}`,
-          });
+        const conflict = yield* operation("inspect vault paths", () =>
+          vaultConflicts(root, vaults, [configName, "package.json"]));
+        if (conflict) return yield* conflict;
         yield* operation("write Svartz config", () =>
           writeNewFile(path.join(root, configName), renderConfig(vaults)),
         );
@@ -741,12 +763,8 @@ const initProjectEffect = (
         message: `Cannot initialize: these files already exist: ${conflicts.join(", ")}`,
       });
     const vaults = yield* chooseVaults(options, { root, host: false, siteName: packageName(root) });
-    const vaultFiles = yield* operation("inspect vault paths", () => vaultConflicts(root, vaults));
-    if (vaultFiles.length)
-      return yield* new InitConflictError({
-        paths: vaultFiles,
-        message: `Cannot initialize: these vault paths exist and aren't folders: ${vaultFiles.join(", ")}`,
-      });
+    const conflict = yield* operation("inspect vault paths", () => vaultConflicts(root, vaults, NEW_PROJECT_FILES));
+    if (conflict) return yield* conflict;
     const gitignore = yield* operation("read gitignore template", () =>
       readFile(path.join(templateRoot, "gitignore"), "utf8"),
     );
