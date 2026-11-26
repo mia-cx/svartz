@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { colorSchemes, type ColorSchemeName } from "@svartz/config/schemes";
 import { Data } from "effect";
@@ -177,6 +178,9 @@ export function vaultsFromFlags(flags: InitFlags, context: InitContext): VaultCh
       ? workerTarget(answer("worker", worker, workerCount) ?? id, answer("domain", worker, workerCount), vaults)
       : { type };
     const where = vaultPath(context.root, folder ?? "vault");
+    // A missing folder outside the project is more likely a mistyped existing vault than a new one.
+    if (where.startsWith("../") && !existsSync(path.resolve(context.root, where)))
+      throw new InitUsageError({ message: `There's no folder at ${folder}. New vaults go inside the project.` });
     if (vaults.some((vault) => vault.path === where))
       throw new InitUsageError({ message: `Two vaults can't share the folder ${where}.` });
     vaults.push({
