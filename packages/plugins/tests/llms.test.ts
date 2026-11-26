@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toString } from "mdast-util-to-string";
+import { parseFragment } from "parse5";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
@@ -305,28 +306,36 @@ describe("Markdown copies for LLM agents", () => {
     const setup = [
       "---\ntitle: Setup\n---",
       "[About](../../../about/), [search](../search/?q=a#results), [step](<next.md#Step One>), [top](#top), [site](https://example.org/x).",
-      "![Diagram](../diagram.png) [Manual][manual] [Next][next]",
+      "![Diagram](../diagram.png) [Manual][manual] [Next][next] [CDN][cdn] <img src=\"../diagram.png\" alt=\"Diagram\">",
+      // Angle brackets around a space, a backslash escape, protocol-relative URLs, and a `)` with a title.
+      "[Two words](<../search/?q=two words>), [escaped](../a\\_b/), ![Logo](//cdn.example.org/logo.png), ![Plot](</docs/charts/run).png> 'Original plot').",
       "",
       "[manual]: ../manual.md",
       "[next]: next.md#step-one",
+      "[cdn]: //cdn.example.org/lib.js \"Library\"",
     ].join("\n");
     const ctx = build([file("guides/setup.md", setup), file("guides/next.md", "---\ntitle: Next\n---\nDone."), file("diagram.png")], { url });
     if (deploymentBase) ctx.meta.set("svartz:deploymentBase", deploymentBase);
     const asset = await emit(ctx);
-    // Each destination in reading order, as a reader fetching the file from `from` reaches it.
+    // Each destination in reading order with its title, as a reader fetching the file from `from` reaches it.
     const destinations = (markdown: string, from: string) => {
       const tree = unified().use(remarkParse).use(remarkGfm).parse(markdown);
-      const definitions = new Map<string, string>();
-      visit(tree, "definition", (node) => void definitions.set(node.identifier, node.url));
-      const urls: string[] = [];
+      const definitions = new Map<string, { url: string; title?: string | null }>();
+      visit(tree, "definition", (node) => void definitions.set(node.identifier, node));
+      const links: { url: string; title?: string | null }[] = [];
       visit(tree, (node) => {
-        if (node.type === "link" || node.type === "image") urls.push(node.url);
-        if (node.type === "linkReference" || node.type === "imageReference") urls.push(definitions.get(node.identifier)!);
+        if (node.type === "link" || node.type === "image") links.push(node);
+        if (node.type === "linkReference" || node.type === "imageReference") links.push(definitions.get(node.identifier)!);
+        if (node.type === "html") {
+          for (const element of parseFragment(node.value).childNodes) {
+            if ("attrs" in element) links.push(...element.attrs.filter((attribute) => attribute.name === "src").map(({ value }) => ({ url: value })));
+          }
+        }
       });
-      return urls.map((href) => new URL(href, from).href);
+      return links.map(({ url, title }) => [new URL(url, from).href, title ?? null]);
     };
     const copy = destinations(asset("guides/setup.md")!, `${origin}/docs/guides/setup.md`);
-    expect(copy).toHaveLength(8);
+    expect(copy).toHaveLength(14);
     // GFM autolinks the bare URL on each page's `Source:` line; that line names the page rather than linking from it.
     const full = asset("llms-full.txt")!.replace(/^Source: .*$/gm, "");
     expect(destinations(full, `${origin}/docs/llms-full.txt`)).toEqual(copy);

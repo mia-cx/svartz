@@ -8,6 +8,7 @@ import matter from "gray-matter";
 import { posix } from "node:path";
 import type { ProcessedFile } from "@svartz/core";
 import remarkGfm from "remark-gfm";
+import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
@@ -173,35 +174,77 @@ export function agentMarkdown(
 }
 
 const gfmParser = unified().use(remarkParse).use(remarkGfm);
-const HAS_SCHEME = /^[a-z][\w+.-]*:/i;
+/** Already absolute: it has a scheme, or names its host (`//cdn.example.org/…`). */
+const isAbsolute = (url: string) => url.startsWith("//") || /^[a-z][\w+.-]*:/i.test(url);
+/** The HTML attributes that hold URLs, and the elements whose copies rewrite them. */
+const URL_ATTRIBUTES = new Set(["href", "src", "poster", "srcset"]);
+const URL_ELEMENTS = new Set(["a", "audio", "iframe", "img", "link", "source", "video"]);
+
+/** A destination as CommonMark reads it back: in `<…>` when it holds spaces, parentheses or angle brackets. */
+const writeDestination = (url: string) => {
+  const escaped = url.replace(/[\\<>]/g, "\\$&");
+  return /[\s()<>]/.test(url) ? `<${escaped}>` : escaped;
+};
+const writeTitle = (title: string | null | undefined) => (title ? ` "${title.replace(/[\\"]/g, "\\$&")}"` : "");
+const writeAttribute = (value: string) => value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+
+/** The offset of the `]` closing the label that opens at `start`, skipping escaped brackets. */
+function labelEnd(markdown: string, start: number): number {
+  for (let at = start + 1; at < markdown.length; at++) {
+    if (markdown[at] === "\\") at++;
+    else if (markdown[at] === "]") return at;
+  }
+  return -1;
+}
+
+type HtmlNode = DefaultTreeAdapterMap["childNode"];
 
 /**
- * `markdown` with every destination resolved against `from`, the URL it was written for, then written by `format`.
- * It reaches the same places from anywhere, so a copy can move into `llms-full.txt` without recomputing a link.
- * Links, images, reference definitions and HTML attributes all move; a destination with a scheme stays as it is.
+ * `markdown` with every path- and root-relative destination resolved against `from`, the URL it was written for, then
+ * written by `format`. It reaches the same places from anywhere, so a copy can move into `llms-full.txt` without
+ * recomputing a link. The Markdown parser finds link, image and definition destinations, and the HTML parser finds
+ * URL attributes; only those source spans are rewritten. Absolute destinations stay as written.
  */
 export function rebaseLinks(markdown: string, from: URL, format: (url: URL) => string): string {
-  const rebase = (target: string) => (HAS_SCHEME.test(target) ? undefined : format(new URL(target, from)));
+  const rebase = (url: string) => (isAbsolute(url) ? undefined : format(new URL(url, from)));
   const replacements: Replacement[] = [];
-  const add = (start: number, end: number, target: string) => {
-    const text = rebase(target);
-    if (text !== undefined) replacements.push({ start, end, text });
-  };
-  for (const { destination } of findLinkSpans(markdown)) {
-    if (destination) add(destination.start, destination.end, markdown.slice(destination.start, destination.end));
-  }
-  for (const { start, end, target } of referenceDefinitionSpans(markdown)) add(start, end, target);
-  visit(markdownParser.parse(markdown), (node) => {
+  visit(gfmParser.parse(markdown), (node) => {
     const start = node.position?.start.offset;
-    if (start === undefined) return;
-    if (node.type === "image") {
+    const end = node.position?.end.offset;
+    if (start === undefined || end === undefined) return;
+    if (node.type === "link" || node.type === "image" || node.type === "definition") {
       const url = rebase(node.url);
-      const title = node.title ? ` "${node.title.replaceAll('"', '\\"')}"` : "";
-      if (url) replacements.push({ start, end: node.position!.end.offset!, text: `![${escapeLabel(node.alt ?? "")}](${url}${title})` });
+      if (url === undefined) return;
+      const target = `${writeDestination(url)}${writeTitle(node.title)}`;
+      if (node.type === "image") {
+        if (markdown.startsWith("![", start)) replacements.push({ start, end, text: `![${escapeLabel(node.alt ?? "")}](${target})` });
+      } else if (node.type === "definition") {
+        const close = labelEnd(markdown, start);
+        if (close > 0 && markdown[close + 1] === ":") replacements.push({ start, end, text: `${markdown.slice(start, close + 1)}: ${target}` });
+      } else {
+        // Only the part after the label changes, so its markup stays as written. Autolinks have no label.
+        const close = node.children.at(-1)?.position?.end.offset ?? start + 1;
+        if (markdown[start] === "[" && markdown[close] === "]" && markdown[close + 1] === "(") replacements.push({ start: close + 1, end, text: `(${target})` });
+      }
     } else if (node.type === "html") {
-      for (const span of htmlAssetSpans(node.value)) {
-        // A tag inside a blockquote or list loses its markers in `value`, so its offsets may not match the source.
-        if (markdown.slice(start + span.start, start + span.end) === span.target) add(start + span.start, start + span.end, span.target);
+      const elements = (nodes: readonly HtmlNode[]): HtmlNode[] =>
+        nodes.flatMap((child) => ("childNodes" in child ? [child, ...elements(child.childNodes)] : [child]));
+      for (const element of elements(parseFragment(node.value, { sourceCodeLocationInfo: true }).childNodes)) {
+        if (!("tagName" in element) || !URL_ELEMENTS.has(element.tagName)) continue;
+        for (const { name, value } of element.attrs.filter((attribute) => URL_ATTRIBUTES.has(attribute.name))) {
+          const location = element.sourceCodeLocation?.attrs?.[name];
+          // A tag inside a blockquote or list loses its markers in `value`, so its offsets may not match the source.
+          if (!location || markdown.slice(start + location.startOffset, start + location.endOffset) !== node.value.slice(location.startOffset, location.endOffset)) continue;
+          const rebased = name === "srcset"
+            ? value.split(",").map((candidate) => {
+              const [url = "", ...descriptors] = candidate.trim().split(/\s+/);
+              return [rebase(url) ?? url, ...descriptors].join(" ");
+            }).join(", ")
+            : rebase(value);
+          if (rebased !== undefined && rebased !== value) {
+            replacements.push({ start: start + location.startOffset, end: start + location.endOffset, text: `${name}="${writeAttribute(rebased)}"` });
+          }
+        }
       }
     }
   });
@@ -214,6 +257,7 @@ export function rebaseLinks(markdown: string, from: URL, format: (url: URL) => s
   }
   return body;
 }
+
 /** A reference or footnote label at the start of its definition: `[doc]:` or `[^1]:`. */
 const DEFINITION_LABEL = /^\[\^?(?:\\.|[^\\\]])+\]/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
