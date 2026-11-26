@@ -27,11 +27,16 @@ export const extensions: readonly ThemeExtension[] = [
 		regions: { header: BlogHeader, pageHead: PostHead, pageFoot: PostFoot, aside: RelatedPosts, footer: BlogFooter },
 		pages: { home: HomePage, tags: TagsPage, tag: TagPage, feed: ArchivePage, folders: FolderListPage, folder: FolderPage },
 		chrome: { breadcrumbs: false, graph: false, backlinks: false, readerMode: false },
-		// A post's byline names its own `author` ahead of the site's.
+		// A post's header shows its `excerpt` and a byline naming its own `author`, ahead of the summary and the site's.
 		structuredData: (article, { entry }) => {
 			if (entry.slug === 'index') return article;
-			const { author } = readPost(entry.properties);
-			return { ...article, '@type': 'BlogPosting', ...(author && { author: { '@type': 'Person', name: author } }) };
+			const { author, excerpt } = readPost(entry.properties, entry.description);
+			return {
+				...article,
+				'@type': 'BlogPosting',
+				description: excerpt,
+				...(author && { author: { '@type': 'Person', name: author } })
+			};
 		}
 	}
 ];

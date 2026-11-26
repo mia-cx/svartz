@@ -19,7 +19,7 @@ Themes describe their own kinds of page:
 | Docs | A symbol's page | `APIReference` |
 | [[themes/api-docs\|API docs]], [[themes/mcp-docs\|MCP docs]] | An operation, tool or schema | `APIReference` |
 | API docs, MCP docs | A guide | `TechArticle` |
-| [[themes/blog\|Blog]] | A post | `BlogPosting`, by the post's own `author` when it names one |
+| [[themes/blog\|Blog]] | A post | `BlogPosting`, described by its `excerpt` and by the post's own `author` when it names them |
 
 The blog and the wiki show no breadcrumbs, so their pages publish none. A page's structured data describes only what a reader sees on it. Svartz adds no `FAQPage`: Google no longer shows FAQ rich results. Check a page with Google's [Rich Results Test](https://search.google.com/test/rich-results).
 

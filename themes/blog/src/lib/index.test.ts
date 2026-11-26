@@ -23,16 +23,31 @@ describe('@svartz/theme-blog manifests', () => {
 });
 
 describe('the blog theme in structured data', () => {
-	it("publishes a post as a blog posting by its byline's author, without the breadcrumbs posts don't show", () => {
-		const post = { slug: 'posts/launch', path: 'posts/launch.md', properties: { author: 'Caelestis' } } as unknown as IndexEntry;
+	it("publishes a post as a blog posting with its header's excerpt and byline, without the breadcrumbs posts don't show", () => {
+		const post = {
+			slug: 'posts/launch',
+			path: 'posts/launch.md',
+			description: 'The first words of the post, as the index summarises it.',
+			properties: { author: 'Caelestis', excerpt: 'Why we built it, in one line.' }
+		} as unknown as IndexEntry;
 		const vault = { entries: [post], folders: [] } as unknown as VaultView;
 		const nodes = {
-			article: { '@type': 'Article', headline: 'Launch', author: { '@type': 'Person', name: 'Site author' } },
+			article: {
+				'@type': 'Article',
+				headline: 'Launch',
+				description: 'The first words of the post, as the index summarises it.',
+				author: { '@type': 'Person', name: 'Site author' }
+			},
 			breadcrumbs: { '@type': 'BreadcrumbList' }
 		};
 
 		expect(createRuntimeTheme().structuredData!(nodes, { entry: post, vault })).toEqual({
-			article: { '@type': 'BlogPosting', headline: 'Launch', author: { '@type': 'Person', name: 'Caelestis' } }
+			article: {
+				'@type': 'BlogPosting',
+				headline: 'Launch',
+				description: 'Why we built it, in one line.',
+				author: { '@type': 'Person', name: 'Caelestis' }
+			}
 		});
 	});
 });
