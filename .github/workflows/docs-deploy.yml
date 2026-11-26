@@ -1,7 +1,8 @@
 name: Docs deploy
 
 # Deploys the docs and the theme demos, each vault in svartz.config.ts its own Worker. A push to main deploys staging
-# (staging.svartz.dev); the Release workflow deploys production (svartz.dev) once a release has published.
+# (staging.svartz.dev) from that commit. A production run (svartz.dev) brings production up to the latest published
+# release: the Release workflow starts one after it publishes, and a manual dispatch can start another.
 
 on:
   push:
@@ -9,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: Staging deploys main; production redeploys the latest release
+        description: Staging deploys main; production deploys the latest release
         type: choice
         options: [staging, production]
         default: staging
@@ -18,76 +19,44 @@ on:
       environment:
         type: string
         required: true
-      sha:
-        type: string
-        required: true
 
 permissions:
   contents: read
+
+concurrency:
+  # One deploy per environment. A newer staging push cancels an older one. Production runs never cancel each other;
+  # whichever runs deploys the latest release as of its turn, so a queued run replacing another changes nothing.
+  group: docs-deploy-${{ inputs.environment || 'staging' }}
+  cancel-in-progress: ${{ (inputs.environment || 'staging') != 'production' }}
 
 defaults:
   run:
     shell: bash
 
-env:
-  TARGET: ${{ inputs.environment || 'staging' }}
-
 jobs:
-  commit:
+  deploy:
     # A manual dispatch can pick any branch; only main deploys.
     if: github.repository == 'mia-cx/svartz' && github.ref == 'refs/heads/main'
-    # Outside the deploy's concurrency group, so a stale production run fails here and never takes a valid run's place
-    # in the queue.
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    outputs:
-      sha: ${{ steps.commit.outputs.sha }}
-    steps:
-      - name: Pick the commit
-        id: commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ inputs.sha }}
-        run: |
-          # Production serves the latest published release: never the branch tip, and never an older release.
-          if [ "$TARGET" != production ]; then echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"; exit; fi
-          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
-          latest=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)
-          if [ -n "$RELEASE_SHA" ] && [ "$RELEASE_SHA" != "$latest" ]; then
-            echo "::error::$RELEASE_SHA isn't the latest release ($tag, $latest), so production keeps its docs."
-            exit 1
-          fi
-          echo "sha=$latest" >> "$GITHUB_OUTPUT"
-
-  deploy:
-    needs: commit
-    # One deploy per environment at a time. A newer staging push replaces an older one; production runs queue and
-    # never cut a rollout short.
-    concurrency:
-      group: docs-deploy-${{ inputs.environment || 'staging' }}
-      cancel-in-progress: ${{ (inputs.environment || 'staging') != 'production' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      SHA: ${{ needs.commit.outputs.sha }}
+      TARGET: ${{ inputs.environment || 'staging' }}
     steps:
-      - name: Check the release is still the latest
-        if: env.TARGET == 'production'
+      - name: Pick the commit
+        id: commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # A newer release may have published while this run waited its turn.
+          # Staging serves the pushed commit; production serves the latest published release, never the branch tip.
+          if [ "$TARGET" != production ]; then echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"; exit; fi
           tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
-          latest=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)
-          if [ "$SHA" != "$latest" ]; then
-            echo "::error::$SHA was superseded by $tag ($latest) while waiting, so production keeps the newer docs."
-            exit 1
-          fi
+          echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)" >> "$GITHUB_OUTPUT"
+          echo "Deploying $tag to production."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.SHA }}
+          ref: ${{ steps.commit.outputs.sha }}
           # Notes without frontmatter dates take theirs from git history.
           fetch-depth: 0
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0

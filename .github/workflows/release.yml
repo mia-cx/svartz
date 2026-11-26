@@ -149,11 +149,10 @@ jobs:
       pull-requests: read
 
   docs:
-    needs: [plan, publish]
-    # Production docs describe what npm serves, so they deploy once a release has published.
+    needs: publish
+    # Production docs describe what npm serves, so they deploy the latest release once one has published.
     if: ${{ !cancelled() && needs.publish.result == 'success' }}
     uses: ./.github/workflows/docs-deploy.yml
     with:
       environment: production
-      sha: ${{ needs.plan.outputs.sha }}
     secrets: inherit
