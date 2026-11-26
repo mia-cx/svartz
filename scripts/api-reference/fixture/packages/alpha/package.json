@@ -1,0 +1,9 @@
+{
+  "name": "@fixture/alpha",
+  "description": "The alpha package.",
+  "exports": {
+    ".": { "types": "./types/index.d.ts", "import": "./index.js" },
+    "./extra": { "types": "./types/extra.d.ts", "import": "./extra.js" },
+    "./style.css": "./style.css"
+  }
+}
