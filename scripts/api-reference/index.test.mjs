@@ -40,6 +40,8 @@ describe('the API reference generator', () => {
 			'alpha/plugin.md',
 			'alpha/themeSettings-function.md',
 			'beta/BetaConfig.md',
+			'beta/BetaSettings.md',
+			'beta/Options.md',
 			'beta/index.md',
 			'index.md'
 		]);
@@ -82,6 +84,16 @@ describe('the API reference generator', () => {
 			{ name: 'theme', signature: 'theme?: [[reference/api/alpha/ThemeSettings-interface|ThemeSettings]]', default: undefined, description: 'A named type keeps its link.' },
 			{ name: 'meta', signature: 'meta?: { readonly [key: string]: string; }', default: undefined, description: 'Extra keys keep their index signature.' },
 			{ name: 'preview', signature: 'preview?: { image: string; } | null', default: undefined, description: '`null` keeps its place beside the object.' }
+		]);
+	});
+
+	// Beta exports its own `Options`, but this field is alpha's: the link follows the declaration, not the name.
+	it('links a derived field to the type it was declared with when two packages share its name', () => {
+		const rows = frontmatter(join(out, 'beta/BetaSettings.md')).symbol.members.map(({ name, signature }) => ({ name, signature }));
+		assert.deepEqual(rows, [
+			{ name: 'alpha', signature: 'alpha?: [[reference/api/alpha/Options|Options]]' },
+			// A required field's `undefined` is an alternative rows of fields couldn't show, so it keeps its type.
+			{ name: 'required', signature: 'required: { enabled: boolean; } | undefined' }
 		]);
 	});
 

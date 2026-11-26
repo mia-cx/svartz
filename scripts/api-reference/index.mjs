@@ -134,12 +134,13 @@ function fieldsOf(checker, type, { asWritten = false, prefix = '', depth = 0 } =
 		const resolved = checker.getTypeOfSymbol(prop);
 		const written = asWritten && node && ts.isPropertySignature(node) && node.type ? node.type.getText() : undefined;
 		// The type text drops only `| undefined`, which `?` already states, so `unknown` stays `unknown` and `null` stays.
-		const nested = written === undefined && depth < MAX_FIELD_DEPTH ? expandable(checker, resolved) : undefined;
+		const nested = written === undefined && depth < MAX_FIELD_DEPTH ? expandable(checker, resolved, optional) : undefined;
 		const row = {
 			name: `${prefix}${prop.name}`,
 			key: prop.name,
 			optional,
 			type: written ?? (nested ? '{ … }' : withoutUndefined(checker.typeToString(resolved, undefined, ts.TypeFormatFlags.NoTruncation), optional)),
+			origins: written === undefined && !nested ? typeOrigins(resolved) : undefined,
 			description: oneLine(ts.displayPartsToString(prop.getDocumentationComment(checker))) || undefined,
 			default: tag ? stripCode(ts.displayPartsToString(tag.text)) || undefined : undefined
 		};
@@ -149,16 +150,35 @@ function fieldsOf(checker, type, { asWritten = false, prefix = '', depth = 0 } =
 
 /**
  * The object a field's rows can list in full, or undefined to keep the field's type as written. Only an anonymous
- * object of named fields qualifies, once `undefined` is set aside: a named type keeps its link, an index signature its
- * extra keys, and `| null` or any other union its alternatives, which rows of fields can't show.
+ * object of named fields qualifies, once an optional field's `undefined` is set aside: a named type keeps its link, an
+ * index signature its extra keys, and `| null`, a required field's `| undefined` or any other union its alternatives,
+ * which rows of fields can't show.
  */
-function expandable(checker, type) {
-	const parts = type.isUnion() ? type.types.filter((part) => !(part.flags & ts.TypeFlags.Undefined)) : [type];
+function expandable(checker, type, optional) {
+	const omitted = (part) => optional && (part.flags & ts.TypeFlags.Undefined) !== 0;
+	const parts = type.isUnion() ? type.types.filter((part) => !omitted(part)) : [type];
 	const [object] = parts;
 	if (parts.length !== 1 || !plainObject(checker, object)) return undefined;
 	const named = object.aliasSymbol || (object.symbol && !['__type', '__object'].includes(object.symbol.name));
 	if (named || checker.getIndexInfosOfType(object).length > 0) return undefined;
 	return checker.getPropertiesOfType(object).length > 0 ? object : undefined;
+}
+
+/** Nested type arguments and union parts searched for named types, past which names link by name alone. */
+const MAX_ORIGIN_DEPTH = 4;
+
+/**
+ * Where each named type in `type` is declared, by name: `{ TargetConfig: ".../core/dist/index.d.ts" }`. The linker
+ * picks the page declared there, since two packages may export types of one name.
+ */
+function typeOrigins(type, origins = {}, depth = 0) {
+	if (depth > MAX_ORIGIN_DEPTH) return origins;
+	const symbol = type.aliasSymbol ?? type.symbol;
+	const file = symbol?.declarations?.[0]?.getSourceFile().fileName;
+	if (symbol && file && !['__type', '__object'].includes(symbol.name)) origins[symbol.name] ??= file;
+	const parts = [...(type.isUnionOrIntersection() ? type.types : []), ...(type.aliasTypeArguments ?? []), ...(type.typeArguments ?? [])];
+	for (const part of parts) typeOrigins(part, origins, depth + 1);
+	return origins;
 }
 
 /** An optional field's type as text, without the `| undefined` its `?` already states. */
@@ -206,10 +226,13 @@ export function buildNotes(entries, { modules, components, aliases = new Map() }
 	// Component props come from the type checker as source text, so their types link by name: to the one page with
 	// that name, or the one in the component's own package.
 	const byName = Map.groupBy([...pages.entries()], ([reflection]) => reflection.name);
-	const linkNames = (text, entry) => text.replace(/(?<![\w$.])[A-Z][\w$]*/g, (name) => {
+	// A name links to the page declared where `origins` says it was, when known (two packages may both export a
+	// `TargetConfig`); else to the only page by that name, or the entry's own package's.
+	const linkNames = (text, entry, origins = {}) => text.replace(/(?<![\w$.])[A-Z][\w$]*/g, (name) => {
 		const candidates = byName.get(name) ?? [];
+		const declared = candidates.filter(([reflection]) => reflection.sources?.[0]?.fullFileName === origins[name]);
 		const own = candidates.filter(([, page]) => page.entry.packageName === entry.packageName);
-		const [match] = candidates.length === 1 ? candidates : own.length === 1 ? own : [];
+		const [match] = declared.length === 1 ? declared : candidates.length === 1 ? candidates : own.length === 1 ? own : [];
 		return match ? `[[${match[1].link}|${name}]]` : name;
 	});
 	const notes = [];
@@ -225,7 +248,7 @@ export function buildNotes(entries, { modules, components, aliases = new Map() }
 			// resolved for it.
 			const fields = components.get(reflection) ??
 				(reflection.kindOf(ReflectionKind.TypeAlias) && objectMembers(reflection.type).length === 0 ? aliases.get(reflection) : undefined);
-			notes.push({ path: `${page.link.slice(dir.length + 1)}.md`, content: symbolNote(reflection, { link, props: fields?.map((prop) => ({ ...prop, type: linkNames(prop.type, entry) })), url: origin?.url, date }) });
+			notes.push({ path: `${page.link.slice(dir.length + 1)}.md`, content: symbolNote(reflection, { link, props: fields?.map((prop) => ({ ...prop, type: linkNames(prop.type, entry, prop.origins) })), url: origin?.url, date }) });
 		}
 	});
 
