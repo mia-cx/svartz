@@ -345,6 +345,27 @@ describe("@svartz/vite plugin", () => {
     }
   });
 
+  // Proves a server that reuses the plugin never replays a change queued for one that closed first.
+  it("drops a closed server's queued change", async () => {
+    vi.useFakeTimers();
+    const plugin = svartz({ config: { ...testConfig, target: { type: "host" } } as ResolvedConfig, env: {}, mode: "test" });
+    await plugin.buildStart?.call({} as never);
+    const previous = devServer();
+    plugin.configureServer?.(previous as never);
+    await vi.advanceTimersByTimeAsync(300);
+    previous.watcher.emit("change", "/tmp/svartz-tests/vaults/docs/note.md");
+    await previous.close();
+
+    const next = devServer();
+    plugin.configureServer?.(next as never);
+    await vi.advanceTimersByTimeAsync(300);
+    next.watcher.emit("add", join(process.cwd(), "static", "robots.txt"));
+    await vi.advanceTimersByTimeAsync(100);
+    await vi.waitFor(() => expect(next.ws.send).toHaveBeenCalledWith({ type: "full-reload" }));
+
+    expect(executeHandleChangeMock).not.toHaveBeenCalled();
+  });
+
   it("keeps a restarted server watching when the old one closes", async () => {
     vi.useFakeTimers();
     const plugin = svartz({ config: testConfig, env: {}, mode: "test" });

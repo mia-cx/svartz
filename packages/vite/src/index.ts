@@ -580,6 +580,8 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
         if (devServer === server) {
           if (rebuildTimer) clearTimeout(rebuildTimer);
           rebuildTimer = undefined;
+          // A server that reuses this plugin must never replay a change queued for this one.
+          pendingChange = undefined;
           devServer = undefined;
         }
         // Each server stops only its own bindings; a replacement's registration survives (serveDevBindings checks).
