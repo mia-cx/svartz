@@ -2,7 +2,8 @@
 	The section bar in the wiki header, built from the vault's folders. Each
 	top-level folder links to its page and drops down its pages; a subfolder in a
 	dropdown opens a flyout. Sections that don't fit the bar's width wait in a
-	More menu at its end, each opening its pages as a flyout. Mouse hover opens
+	More menu at its end, which scrolls when long, each opening its pages below
+	it. Mouse hover opens
 	menus, the chevrons open them by click, tap, or keyboard, and Esc or a tap
 	elsewhere closes them. A panel that would run past the viewport opens the
 	other way. Without JavaScript the folder links still work.
@@ -42,18 +43,22 @@
 		flyout = undefined;
 	});
 
-	/** As many sections as fit, keeping room for More whenever any are left over. */
+	/** Every section when all fit; else as many as fit beside More. */
 	function fit() {
 		if (!nav || !probe) return;
 		const [more, ...sections] = [...probe.children].map((item) => (item as HTMLElement).offsetWidth);
 		const gap = parseFloat(getComputedStyle(probe).columnGap) || 0;
-		let used = 0;
+		const available = nav.clientWidth;
+		const total = sections.reduce((sum, width, index) => sum + width + (index > 0 ? gap : 0), 0);
+		if (total <= available) {
+			shown = sections.length;
+			return;
+		}
+		let used = more!;
 		let count = 0;
-		for (const [index, width] of sections.entries()) {
-			const end = used + (index > 0 ? gap : 0) + width;
-			const rest = index < sections.length - 1 ? gap + more! : 0;
-			if (end + rest > nav.clientWidth) break;
-			used = end;
+		for (const width of sections) {
+			if (used + gap + width > available) break;
+			used += gap + width;
 			count += 1;
 		}
 		shown = count;
@@ -118,18 +123,23 @@
 
 <svelte:window onpointerdown={closeOnOutsidePointer} />
 
-<!-- A folder in a panel that opens its own pages as a flyout: a subfolder in a dropdown, or a section in More. -->
-{#snippet folderItem(folder: MenuFolder, panelId: string)}
+<!--
+	A folder in a panel that shows its own pages: as a flyout beside a dropdown's subfolder, or, in More, inline below
+	the section, since More scrolls when it runs long and a flyout couldn't leave it.
+-->
+{#snippet folderItem(folder: MenuFolder, panelId: string, inline = false)}
 	{@const closeFlyout = () => {
 		if (flyout === folder.id) flyout = undefined;
 	}}
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<li
-		class="item has-flyout"
+		class="item"
+		class:has-flyout={!inline}
+		class:expands={inline}
 		class:current={currentFolders.includes(folder.id)}
-		onpointerenter={(event) => withMouse(event, () => (flyout = folder.id))}
-		onpointerleave={(event) => withMouse(event, closeFlyout)}
-		onfocusout={(event) => closeOnFocusOut(event, closeFlyout)}
+		onpointerenter={(event) => inline || withMouse(event, () => (flyout = folder.id))}
+		onpointerleave={(event) => inline || withMouse(event, closeFlyout)}
+		onfocusout={(event) => inline || closeOnFocusOut(event, closeFlyout)}
 		onkeydown={(event) => closeOnEscape(event, flyout === folder.id, closeFlyout)}
 	>
 		<a href={folder.href} aria-current={current(folder.href)}>{folder.title}</a>
@@ -139,11 +149,11 @@
 			aria-expanded={flyout === folder.id}
 			aria-controls={panelId}
 			aria-label="{folder.title} pages"
-			onclick={(event) => (flyout = toggled(event, folder.id, flyout))}
+			onclick={(event) => (flyout = inline ? (flyout === folder.id ? undefined : folder.id) : toggled(event, folder.id, flyout))}
 		>
-			<ChevronRight aria-hidden="true" />
+			{#if inline}<ChevronDown aria-hidden="true" />{:else}<ChevronRight aria-hidden="true" />{/if}
 		</button>
-		<ul class="panel flyout" id={panelId} hidden={flyout !== folder.id} use:keepInView={flyout === folder.id}>
+		<ul class={inline ? 'sublist' : 'panel flyout'} id={panelId} hidden={flyout !== folder.id} use:keepInView={!inline && flyout === folder.id}>
 			{#each folder.items as leaf (leaf.id)}
 				<li class="item"><a href={leaf.href} aria-current={current(leaf.href)}>{leaf.title}</a></li>
 			{/each}
@@ -211,9 +221,9 @@
 				>
 					More<ChevronDown aria-hidden="true" />
 				</button>
-				<ul class="panel dropdown" id="wiki-sections-more" hidden={open !== MORE} use:keepInView={open === MORE}>
+				<ul class="panel dropdown more-panel" id="wiki-sections-more" hidden={open !== MORE} use:keepInView={open === MORE}>
 					{#each overflow as folder, index (folder.id)}
-						{@render folderItem(folder, `wiki-sections-more-${index}`)}
+						{@render folderItem(folder, `wiki-sections-more-${index}`, true)}
 					{/each}
 				</ul>
 			</li>
@@ -354,6 +364,37 @@
 	.dropdown {
 		inset-block-start: 100%;
 		inset-inline-start: calc(-1 * var(--sv-space-3));
+	}
+
+	/* More holds every section that didn't fit, however many: it scrolls within the viewport below the header. */
+	.more-panel {
+		max-block-size: calc(100dvh - var(--wiki-head, 3.5rem) - var(--sv-space-4));
+		overflow-y: auto;
+		overscroll-behavior: contain;
+	}
+
+	/* A section in More opens its pages below it, indented, rather than beside it. */
+	.expands {
+		flex-wrap: wrap;
+	}
+
+	.expands:is(:hover, :focus-within) {
+		background: none;
+	}
+
+	.expands > a:hover {
+		background: var(--sv-surface);
+	}
+
+	.expands > .toggle[aria-expanded='true'] :global(svg) {
+		rotate: 180deg;
+	}
+
+	.sublist {
+		flex-basis: 100%;
+		margin: 0;
+		padding: 0 0 var(--sv-space-1) var(--sv-space-3);
+		list-style: none;
 	}
 
 	.flyout {
