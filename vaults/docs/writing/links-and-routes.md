@@ -24,6 +24,6 @@ Use `aliases`, `alias`, or `permalink` to keep an old address as a redirect. Red
 
 ## Give a folder a landing page
 
-Create `Guides/index.md`, `Guides/_index.md`, or `Guides/Guides.md` (matching the folder name case-sensitively). Use one folder note per folder. Mixing `index.md` or `_index.md` with a same-named note such as `Guides/Guides.md` fails the build. The folder note lives at `/guides/`. The default folder listing is a separate page at `/folders/guides/`.
+Create `Guides/index.md`, `Guides/_index.md`, or `Guides/Guides.md` (matching the folder name case-sensitively). The folder note lives at `/guides/`, unless another note such as a root `Guides.md` already holds that URL; then the folder note gets a numbered URL. If a folder has more than one folder note, `index.md` comes first, then `_index.md`, then `Guides/Guides.md`. The first present names the folder's listing and sets its `order`. The others publish at numbered URLs such as `/guides-2/`, like any other notes that want the same URL. The default folder listing is a separate page at `/folders/guides/`.
 
 A [[guides/host-vaults|host mount]] prefixes vault routes. A [[start/deploying|deployment base]] applies to the whole app and is separate.
