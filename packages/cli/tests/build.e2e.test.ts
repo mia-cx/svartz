@@ -292,8 +292,9 @@ describe("svartz CLI", () => {
     expect(await readFile(resolve(DIST_ROOT, "robots.txt"), "utf8")).toBe([
       "User-agent: *", "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Allow: /", "",
       "User-agent: GPTBot", "User-agent: ClaudeBot", "User-agent: Google-Extended", "User-agent: Applebot-Extended",
-      "User-agent: CCBot", "User-agent: Meta-ExternalAgent", "User-agent: Bytespider", "Disallow: /", "",
-      "User-agent: Amazonbot", "Disallow: /drafts/", "",
+      "User-agent: CCBot", "User-agent: Meta-ExternalAgent", "User-agent: Bytespider",
+      "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow: /", "",
+      "User-agent: Amazonbot", "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow: /drafts/", "",
       "Sitemap: https://example.test/site/sitemap.xml", "",
     ].join("\n"));
     await access(resolve(DIST_ROOT, "__svartz/social/index.png"));

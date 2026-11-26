@@ -144,8 +144,11 @@ describe("discovery output", () => {
       }, [
         "User-agent: *", "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Allow: /", "",
         "User-agent: GPTBot", "User-agent: ClaudeBot", "User-agent: Google-Extended", "User-agent: Applebot-Extended",
-        "User-agent: CCBot", "User-agent: Meta-ExternalAgent", "User-agent: Bytespider", "Disallow: /", "",
-        "User-agent: Amazonbot", "User-agent: YandexBot", "Allow: /public/", "Disallow: /drafts/", "",
+        "User-agent: CCBot", "User-agent: Meta-ExternalAgent", "User-agent: Bytespider",
+        "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow: /", "",
+        // A crawler with its own group never reads `*`'s, so each group repeats the signals.
+        "User-agent: Amazonbot", "User-agent: YandexBot",
+        "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Allow: /public/", "Disallow: /drafts/", "",
         "Sitemap: https://example.com/site/sitemap.xml", "",
       ]],
       ["admits only search and agent fetchers", { bots: false, search: true, training: false }, [

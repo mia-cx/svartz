@@ -48,7 +48,7 @@ discovery: { robots: { training: false } }             // stay in search and AI 
 discovery: { robots: { bots: false, search: true } }   // admit only search and AI answers
 ```
 
-`rules` adds groups for any other crawler, such as `{ userAgent: "Amazonbot", disallow: ["/drafts/"] }`. `contentSignals` adds Cloudflare's [Content Signals](https://contentsignals.org/), which say how crawled pages may be used: `contentSignals: { search: true, aiInput: true, aiTrain: false }` writes `Content-Signal: search=yes, ai-input=yes, ai-train=no`. They're a stated preference, not a block.
+`rules` adds groups for any other crawler, such as `{ userAgent: "Amazonbot", disallow: ["/drafts/"] }`. `contentSignals` adds Cloudflare's [Content Signals](https://contentsignals.org/), which say how crawled pages may be used: `contentSignals: { search: true, aiInput: true, aiTrain: false }` writes `Content-Signal: search=yes, ai-input=yes, ai-train=no` into every group, since a crawler with a group of its own never reads the `*` group. They're a stated preference, not a block.
 
 A host app's own `robots.txt`, as a route or in `static/`, takes priority. A vault under a `mountPath` writes none, since crawlers read `robots.txt` only at the site root. Set `robots.enabled: false` to write none at all.
 

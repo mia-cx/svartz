@@ -192,12 +192,15 @@ function robots(ctx: PluginContext, base: string | undefined): string {
   const { search, aiInput, aiTrain } = config.contentSignals;
   const signals = Object.entries({ search, "ai-input": aiInput, "ai-train": aiTrain })
     .flatMap(([name, value]) => value === undefined ? [] : [`${name}=${value ? "yes" : "no"}`]);
-  // A crawler obeys only its most specific group, so a preset that matches `*` needs no group of its own.
+  // A crawler obeys only its most specific group, so a preset that matches `*` needs no group of its own, and every
+  // group repeats the content signals: a crawler with its own group never reads `*`'s.
+  const signal = signals.length ? [`Content-Signal: ${signals.join(", ")}`] : [];
   return [
-    group(["*"], [...signals.length ? [`Content-Signal: ${signals.join(", ")}`] : [], crawl(config.bots)]),
-    ...config.search === config.bots ? [] : [group(SEARCH_CRAWLERS, [crawl(config.search)])],
-    ...config.training === config.bots ? [] : [group(TRAINING_CRAWLERS, [crawl(config.training)])],
+    group(["*"], [...signal, crawl(config.bots)]),
+    ...config.search === config.bots ? [] : [group(SEARCH_CRAWLERS, [...signal, crawl(config.search)])],
+    ...config.training === config.bots ? [] : [group(TRAINING_CRAWLERS, [...signal, crawl(config.training)])],
     ...config.rules.map((rule) => group([rule.userAgent].flat(), [
+      ...signal,
       ...(rule.allow ?? []).map((path) => `Allow: ${path}`),
       ...(rule.disallow ?? []).map((path) => `Disallow: ${path}`),
     ])),
