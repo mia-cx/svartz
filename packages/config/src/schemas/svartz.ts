@@ -108,7 +108,9 @@ const SiteConfigSchema = Schema.Struct({
 });
 
 /** A robots.txt product token (RFC 9309), or `*`. */
-const UserAgentSchema = Schema.String.pipe(Schema.pattern(/^(?:\*|[A-Za-z0-9_.-]+)$/));
+// RFC 9309 tokens hold only letters, `-` and `_`. Crawlers ignore anything else, so `Googlebot.1` would match Googlebot
+// while the presets read it as another crawler.
+const UserAgentSchema = Schema.String.pipe(Schema.pattern(/^(?:\*|[A-Za-z_-]+)$/));
 const RobotsPathSchema = Schema.String.pipe(Schema.pattern(/^\/\S*$/));
 
 /** One robots.txt group. RFC 9309 joins a group without rules to the next, so each needs one. */
