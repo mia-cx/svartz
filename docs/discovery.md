@@ -51,7 +51,13 @@ For a combined sitemap, call `renderHostSitemap(vaults, ['journal', 'work'])` in
 
 Each vault writes a Markdown copy of every public note beside its page: `/journal/trip/` has `/journal/trip.md`, and the vault home has `/journal/index.md`. A copy holds the note's published properties as YAML front matter, its title, and the authored Markdown. Links point at other copies, and attachments keep their public URLs. Obsidian `%%comments%%`, HTML comments, and `.svx` `<script>` and `<style>` blocks stay out. Protected notes get no copy, and links to them point at their locked page.
 
-`<mountPath>/llms.txt` lists every copy with its description, in the [llms.txt](https://llmstxt.org/) format. Links are absolute when `site.url` exists, and relative otherwise, so neither file needs a public URL. A manual SvelteKit route at `llms.txt` wins.
+`<mountPath>/llms.txt` lists every copy with its description, in the [llms.txt](https://llmstxt.org/) format. It has a `##` section per top-level folder, in explorer order: folders before notes, each by `order` front matter and then by title, with a folder's own note first. The home page and other root notes share a `Pages` section. A note's description is its `description` front matter, or else its first paragraph, cut at the last whole sentence within 300 characters.
+
+`<mountPath>/llms-full.txt` holds every copy in one file, in the same order, without front matter. Each page starts at its own `#` heading, followed by a `Source:` line with its page URL.
+
+Set `discovery: { llms: { optional: true } }` to add an `## Optional` section to `llms.txt` that lists the tag pages, folder listings, and the feed. Agents with little context can skip it.
+
+Links in both files are absolute when `site.url` exists, and relative otherwise, so neither needs a public URL. A manual SvelteKit route at `llms.txt` or `llms-full.txt` wins.
 
 Every theme shows two buttons on a note: Copy page puts the copy on the clipboard, and View as Markdown opens it. Each page also links its copy with `<link rel="alternate" type="text/markdown">`, so an agent that reads the page finds the copy.
 

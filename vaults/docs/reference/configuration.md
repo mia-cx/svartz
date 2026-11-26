@@ -103,7 +103,8 @@ Use [[writing/frontmatter|frontmatter]] to control comments on a note.
 | `feed.sort` | `"published"` (default) or `"modified"`. |
 | `sitemap.enabled` | Boolean; on when `site.url` exists. |
 | `socialImages.enabled` | Boolean; on when `site.url` exists. |
-| `llms.enabled` | Boolean; on. Controls `llms.txt` and published Markdown copies. |
+| `llms.enabled` | Boolean; on. Controls `llms.txt`, `llms-full.txt`, and published Markdown copies. |
+| `llms.optional` | Boolean; off. Lists tag pages, folder listings, and the feed under Optional in `llms.txt`. |
 | `favicon.enabled` | Boolean; on for standalone targets, off for hosts. |
 | `robots.enabled` | Boolean; on. Writes `robots.txt` for a vault served at the origin root. |
 | `robots.bots` | Boolean; on. Admits every crawler. |

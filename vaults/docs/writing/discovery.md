@@ -54,7 +54,17 @@ A host app's own `robots.txt`, as a route or in `static/`, takes priority. Crawl
 
 ## Markdown copies
 
-By default Svartz emits a `.md` copy beside each public, unprotected note and lists the copies in `llms.txt`. The home copy is `index.md`. Notes link to their copies. The copies omit hidden comments and executable script and style blocks. They use absolute listing links when `site.url` exists, relative links otherwise.
+By default Svartz emits a `.md` copy beside each public, unprotected note, lists the copies in [llms.txt](https://llmstxt.org/), and joins them into `llms-full.txt`. The home copy is `index.md`. Notes link to their copies. The copies omit hidden comments and executable script and style blocks. They use absolute listing links when `site.url` exists, relative links otherwise.
+
+`llms.txt` has a section per top-level folder, in the order the explorer shows them. The home page and other notes at the vault root share a Pages section. Each entry shows the note's `description`, or else its first paragraph, cut at the last whole sentence within 300 characters. `llms-full.txt` holds every page in the same order, each under its own heading and a `Source:` line with its URL.
+
+Tag pages, folder listings, and the feed help people browse but give agents little. To list them in an Optional section that agents can skip, turn it on:
+
+```ts
+discovery: { llms: { optional: true } },
+```
+
+An owned host route at `llms.txt` or `llms-full.txt` takes priority.
 
 Standalone Node, Workers, and Pages targets redirect requests that prefer `text/markdown` to the copy. Static hosting exposes the copy URL without negotiation. A host must use [[plugins/server-plugins|svartzHandle]] and may need the adapter wrapper for prerendered requests.
 
