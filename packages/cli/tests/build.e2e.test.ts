@@ -281,6 +281,8 @@ describe("svartz CLI", () => {
 
   it("builds social images and favicon variants for a static vault", async () => {
     await buildFixture({ target: { type: "static", basePath: "/site" }, site: { title: "Docs", url: "https://example.test/site" } });
+    // Crawlers never fetch /site/robots.txt, so a deployment below the origin root leaves it to the origin.
+    await expect(access(resolve(DIST_ROOT, "robots.txt"))).rejects.toMatchObject({ code: "ENOENT" });
     await access(resolve(DIST_ROOT, "__svartz/social/index.png"));
     await access(resolve(DIST_ROOT, "__svartz/favicon.svg"));
     await access(resolve(DIST_ROOT, "__svartz/favicon-32.png"));
@@ -304,6 +306,26 @@ describe("svartz CLI", () => {
     expect(sitemap).toContain("<loc>https://example.test/site/</loc>");
     expect(sitemap).toContain("<loc>https://example.test/site/tags/guides/</loc>");
     expect(sitemap).not.toContain("404.html");
+  }, 240_000);
+
+  it("writes robots.txt for a vault at the origin root", async () => {
+    await buildFixture({
+      site: { title: "Docs", url: "https://example.test" },
+      discovery: { robots: {
+        training: false,
+        contentSignals: { search: true, aiInput: true, aiTrain: false },
+        rules: [{ userAgent: "Amazonbot", disallow: ["/drafts/"] }],
+      } },
+    });
+    // A static target's output root is the origin root: this file is served as https://example.test/robots.txt.
+    expect(await readFile(resolve(DIST_ROOT, "robots.txt"), "utf8")).toBe([
+      "User-agent: *", "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow:", "",
+      "User-agent: GPTBot", "User-agent: ClaudeBot", "User-agent: Google-Extended", "User-agent: Applebot-Extended",
+      "User-agent: CCBot", "User-agent: Meta-ExternalAgent", "User-agent: Bytespider",
+      "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow: /", "",
+      "User-agent: Amazonbot", "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow:", "Disallow: /drafts/", "",
+      "Sitemap: https://example.test/sitemap.xml", "",
+    ].join("\n"));
   }, 240_000);
 
   it("renders a mounted static vault below a standalone deployment base", async () => {

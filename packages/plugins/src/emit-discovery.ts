@@ -171,6 +171,68 @@ function sitemap(ctx: PluginContext, base: string): string {
   ].join("\n");
 }
 
+/** Search engines plus the AI search and agent fetchers that cite pages in answers. */
+const SEARCH_CRAWLERS = [
+  "Googlebot", "bingbot", "DuckDuckBot", "Applebot",
+  "OAI-SearchBot", "ChatGPT-User", "Claude-SearchBot", "Claude-User", "PerplexityBot", "Perplexity-User",
+];
+
+/** Crawlers, and robots.txt tokens such as Google-Extended, that collect pages to train AI models. */
+const TRAINING_CRAWLERS = [
+  "GPTBot", "ClaudeBot", "Google-Extended", "Applebot-Extended", "CCBot", "Meta-ExternalAgent", "Bytespider",
+];
+
+const group = (agents: readonly string[], lines: readonly string[]): string =>
+  [...agents.map((agent) => `User-agent: ${agent}`), ...lines].join("\n");
+
+/**
+ * An empty `Disallow:` admits everything without a rule of its own. A raw rule for the same agents merges into the
+ * group, and Google prefers `Allow: /` over an equally long `Disallow: /`, so `Allow: /` would cancel a raw block.
+ */
+const crawl = (allowed: boolean): string => allowed ? "Disallow:" : "Disallow: /";
+
+/** Crawlers fetch robots.txt only at the origin root: `/robots.txt`, below any mount or deployment base. */
+function atOriginRoot(ctx: PluginContext, base: string | undefined): boolean {
+  const deploymentBase = (ctx.meta.get("svartz:deploymentBase") as string | undefined) ?? "";
+  const publicPath = base ? new URL(base).pathname.replace(/\/+$/, "") : "";
+  return !ctx.config.mountPath && !deploymentBase && !publicPath;
+}
+
+function robots(ctx: PluginContext, base: string | undefined): string {
+  const { robots: config, sitemap: sitemapConfig } = ctx.config.discovery;
+  const { search, aiInput, aiTrain } = config.contentSignals;
+  const signals = Object.entries({ search, "ai-input": aiInput, "ai-train": aiTrain })
+    .flatMap(([name, value]) => value === undefined ? [] : [`${name}=${value ? "yes" : "no"}`]);
+  // A crawler obeys only its most specific group, so a preset that matches `*` needs no group of its own, and every
+  // group repeats the content signals: a crawler with its own group never reads `*`'s.
+  const signal = signals.length ? [`Content-Signal: ${signals.join(", ")}`] : [];
+  // The preset that covers a crawler, and so the line its own rule starts from. Crawlers match case-insensitively on a
+  // token's leading letters, `-` and `_` (RFC 9309), so `Googlebot.1` is Googlebot.
+  const presetOf = (agent: string) => {
+    const name = /^[A-Za-z_-]*/.exec(agent)![0].toLowerCase();
+    if (SEARCH_CRAWLERS.some((crawler) => crawler.toLowerCase() === name)) return config.search;
+    if (TRAINING_CRAWLERS.some((crawler) => crawler.toLowerCase() === name)) return config.training;
+    return config.bots;
+  };
+  return [
+    group(["*"], [...signal, crawl(config.bots)]),
+    ...config.search === config.bots ? [] : [group(SEARCH_CRAWLERS, [...signal, crawl(config.search)])],
+    ...config.training === config.bots ? [] : [group(TRAINING_CRAWLERS, [...signal, crawl(config.training)])],
+    // A crawler a rule names reads only that rule's group, so the group repeats its preset's line: a rule narrows the
+    // preset instead of replacing it. Its agents split by preset, since a blocked and an admitted one need different lines.
+    ...config.rules.flatMap((rule) => [true, false].flatMap((admitted) => {
+      const agents = [rule.userAgent].flat().filter((agent) => presetOf(agent) === admitted);
+      return agents.length ? [group(agents, [
+        ...signal,
+        crawl(admitted),
+        ...(rule.allow ?? []).map((path) => `Allow: ${path}`),
+        ...(rule.disallow ?? []).map((path) => `Disallow: ${path}`),
+      ])] : [];
+    })),
+    ...sitemapConfig.enabled && base ? [`Sitemap: ${absoluteUrl(base, "/sitemap.xml")}`] : [],
+  ].join("\n\n") + "\n";
+}
+
 export const EMIT_DISCOVERY_ID = "core:emit-discovery" as const;
 
 export const emitDiscovery = definePlugin(() => ({
@@ -178,15 +240,18 @@ export const emitDiscovery = definePlugin(() => ({
   emitArtifacts: {
     async run(ctx) {
       if (!ctx.index) return;
-      const { feed, sitemap: sitemapConfig, llms } = ctx.config.discovery;
+      const { feed, sitemap: sitemapConfig, llms, robots: robotsConfig } = ctx.config.discovery;
       const base = ctx.config.site.url;
       if (llms?.enabled) emitLlms(ctx, base);
+      const reserved = (ctx.meta.get("reservedRoutes") as ReadonlySet<string> | undefined) ?? new Set();
+      if (robotsConfig?.enabled && atOriginRoot(ctx, base) && !reserved.has("robots.txt")) {
+        addAsset(ctx, "robots.txt", robots(ctx, base), "text/plain");
+      }
       if (!feed.enabled && !sitemapConfig.enabled) return;
       if (!base) {
         if (ctx.meta.get("svartz:mode") === "development") return;
         throw new Error(`Vault "${ctx.config.id}" needs site.url to generate RSS or sitemap in production.`);
       }
-      const reserved = (ctx.meta.get("reservedRoutes") as ReadonlySet<string> | undefined) ?? new Set();
       if (feed.enabled && !reserved.has("rss.xml")) addAsset(ctx, "rss.xml", await rss(ctx, base));
       if (sitemapConfig.enabled && !reserved.has("sitemap.xml")) addAsset(ctx, "sitemap.xml", sitemap(ctx, base));
     },

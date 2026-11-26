@@ -15,9 +15,20 @@ describe("static host routes", () => {
       }
       expect([...await staticHostRoutes(root, "/blog")].sort()).toEqual(["about", "contact", "manual", "nested"]);
       expect([...await staticHostRoutes(root, "")].sort()).toEqual(["", "blog/about", "blog/contact", "blog/manual", "blog/nested"]);
-      expect(isHostRouteFile(root, join(root, "src/routes/blog/about/+page.svelte"))).toBe(true);
-      expect(isHostRouteFile(root, join(root, "src/routes/blog/manual/+page@.svelte"))).toBe(true);
-      expect(isHostRouteFile(root, join(root, "vault/about.md"))).toBe(false);
+      await mkdir(join(root, "static/blog/media"), { recursive: true });
+      await writeFile(join(root, "static/robots.txt"), "");
+      await writeFile(join(root, "static/blog/llms.txt"), "");
+      expect(await staticHostRoutes(root, "")).toContain("robots.txt");
+      expect(await staticHostRoutes(root, "/blog")).toContain("llms.txt");
+      expect(await staticHostRoutes(root, "/blog")).not.toContain("media");
+      // The file `static/docs` claims `/docs`, a different URL from a vault at `/docs/guide`.
+      await writeFile(join(root, "static/docs"), "");
+      expect(await staticHostRoutes(root, "/docs/guide")).toEqual(new Set());
+      expect(isHostRouteFile(root, "/blog", join(root, "src/routes/blog/about/+page.svelte"))).toBe(true);
+      expect(isHostRouteFile(root, "/blog", join(root, "src/routes/blog/manual/+page@.svelte"))).toBe(true);
+      expect(isHostRouteFile(root, "", join(root, "static/robots.txt"))).toBe(true);
+      expect(isHostRouteFile(root, "/blog", join(root, "static/robots.txt"))).toBe(false);
+      expect(isHostRouteFile(root, "/blog", join(root, "vault/about.md"))).toBe(false);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

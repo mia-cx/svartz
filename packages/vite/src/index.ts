@@ -306,9 +306,10 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     runnerContext.meta.set("svartz:protectedBridgeImports", new Set<string>());
     // The emitter and host bridge are installed before publication filtering runs.
     runnerContext.meta.set("svartz:protectionReady", true);
+    runnerContext.meta.set("svartz:deploymentBase", deploymentBasePath(context.config, kitBasePath));
     if (reservedRoutes) runnerContext.meta.set("reservedRoutes", reservedRoutes);
 
-    if (changeEvent && !isHostRouteFile(context.root, changeEvent.file)) {
+    if (changeEvent && !isHostRouteFile(context.root, context.config.mountPath, changeEvent.file)) {
       const changeResult = await executeHandleChange(plugins, changeEvent, runnerContext);
       if (changeResult.fatalError) {
         throw changeResult.fatalError;
@@ -411,7 +412,11 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   }
 
   function scheduleVaultRebuild(event: ChangeEvent): void {
-    pendingChange = event;
+    // Every rebuild rereads the host's routes, so a host route or static file never displaces a pending vault change,
+    // whose plugin hooks must still run.
+    const hostOnly = (change: ChangeEvent) =>
+      context.config.target.type === "host" && isHostRouteFile(context.root, context.config.mountPath, change.file);
+    if (!pendingChange || !hostOnly(event) || hostOnly(pendingChange)) pendingChange = event;
 
     if (rebuildTimer) {
       clearTimeout(rebuildTimer);
@@ -545,7 +550,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
             return;
           }
 
-          if (context.config.target.type === "host" && isHostRouteFile(context.root, file)) {
+          if (context.config.target.type === "host" && isHostRouteFile(context.root, context.config.mountPath, file)) {
             scheduleVaultRebuild({ type, file });
             return;
           }
@@ -575,6 +580,8 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
         if (devServer === server) {
           if (rebuildTimer) clearTimeout(rebuildTimer);
           rebuildTimer = undefined;
+          // A server that reuses this plugin must never replay a change queued for this one.
+          pendingChange = undefined;
           devServer = undefined;
         }
         // Each server stops only its own bindings; a replacement's registration survives (serveDevBindings checks).

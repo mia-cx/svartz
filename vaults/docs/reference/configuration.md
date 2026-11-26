@@ -29,7 +29,7 @@ Export the result of `defineConfig()` from `@svartz/config`. The CLI looks for `
 | `theme` | Package name, local module path, or an object with `base` plus options. Default `"@svartz/theme-minimal"`. |
 | `frontmatter` | Object of field names; see below. |
 | `site` | Public site details; see below. |
-| `discovery` | Feed, sitemap, social images, Markdown, favicon, and date source options; see below. |
+| `discovery` | Feed, sitemap, social images, Markdown, favicon, robots.txt, and date source options; see below. |
 | `index.markdown` | Boolean, default `false`. Include each public note's portable Markdown body as `entry.markdown` in the published index. |
 | `analytics` | Provider settings; default off. A vault setting replaces the default object. See [[plugins/analytics\|Analytics]]. |
 | `plugins` | List of plugin objects; default empty. Merge by ID. Add `{ id, disabled: true }` to remove a matching plugin. |
@@ -105,6 +105,12 @@ Use [[writing/frontmatter|frontmatter]] to control comments on a note.
 | `socialImages.enabled` | Boolean; on when `site.url` exists. |
 | `llms.enabled` | Boolean; on. Controls `llms.txt` and published Markdown copies. |
 | `favicon.enabled` | Boolean; on for standalone targets, off for hosts. |
+| `robots.enabled` | Boolean; on. Writes `robots.txt` for a vault served at the origin root. |
+| `robots.bots` | Boolean; on. Admits every crawler. |
+| `robots.search` | Boolean; follows `robots.bots`. Search engines and AI search and agent fetchers. |
+| `robots.training` | Boolean; follows `robots.bots`. AI training crawlers. |
+| `robots.rules` | List of `{ userAgent, allow?, disallow? }`; empty. `userAgent` is a name or a list of names; the paths start with `/`. |
+| `robots.contentSignals` | `{ search?, aiInput?, aiTrain? }` booleans; unset. |
 | `dateSources` | Nonempty list drawn from `"frontmatter"`, `"git"`, and `"filesystem"`, default in that order. |
 
 See [[writing/discovery|Feeds, sitemaps, and llms.txt]] for what each output includes.

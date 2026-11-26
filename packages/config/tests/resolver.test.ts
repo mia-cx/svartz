@@ -352,6 +352,17 @@ describe("resolveConfigPaths", () => {
     expect(vault.discovery.dateSources).toEqual(["git", "filesystem"]);
   });
 
+  it("lets the search and training crawler presets follow bots unless set", async () => {
+    const config: SvartzConfig = {
+      ...minimalConfig,
+      defaults: { discovery: { robots: { contentSignals: { search: true, aiTrain: true } } } },
+      vaults: [{ ...minimalConfig.vaults[0]!, discovery: { robots: { bots: false, search: true, contentSignals: { aiTrain: false } } } }],
+    };
+    expect((await resolveConfig(config, PKG_ROOT)).vaults[0]!.discovery.robots).toEqual({
+      enabled: true, bots: false, search: true, training: false, rules: [], contentSignals: { search: true, aiTrain: false },
+    });
+  });
+
   it("preserves host favicon ownership until a vault opts in", async () => {
     const config: SvartzConfig = {
       ...minimalConfig,

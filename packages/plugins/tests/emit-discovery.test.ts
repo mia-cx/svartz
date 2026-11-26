@@ -116,6 +116,125 @@ describe("discovery output", () => {
     expect(ctx.artifacts.has("assets/sitemap.xml")).toBe(true);
   });
 
+  describe("robots.txt", () => {
+    /** A vault served at the origin root, `https://example.com/`, unless `config` or `meta` say otherwise. */
+    const robotsFor = async (
+      robots: Partial<ResolvedConfig["discovery"]["robots"]>,
+      config: Partial<ResolvedConfig> = {},
+      meta: Record<string, unknown> = {},
+    ) => {
+      const base = context();
+      const ctx = context({
+        mountPath: "",
+        site: { title: "Blog & Work", url: "https://example.com" },
+        discovery: { ...base.config.discovery, robots: {
+          enabled: true, bots: true, search: true, training: true, rules: [], contentSignals: {}, ...robots,
+        } },
+        ...config,
+      });
+      for (const [key, value] of Object.entries(meta)) ctx.meta.set(key, value);
+      await emitDiscovery().emitArtifacts!.run(ctx);
+      return ctx.artifacts.get("assets/robots.txt")?.contents;
+    };
+
+    it.each([
+      ["admits every crawler and names the absolute sitemap", {}, [
+        "User-agent: *", "Disallow:", "", "Sitemap: https://example.com/sitemap.xml", "",
+      ]],
+      ["blocks every crawler", { bots: false, search: false, training: false }, [
+        "User-agent: *", "Disallow: /", "", "Sitemap: https://example.com/sitemap.xml", "",
+      ]],
+      ["keeps search and agents while opting out of training, with content signals and a raw rule", {
+        training: false,
+        contentSignals: { search: true, aiInput: true, aiTrain: false },
+        rules: [{ userAgent: ["Amazonbot", "YandexBot"], allow: ["/public/"], disallow: ["/drafts/"] }],
+      }, [
+        "User-agent: *", "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow:", "",
+        "User-agent: GPTBot", "User-agent: ClaudeBot", "User-agent: Google-Extended", "User-agent: Applebot-Extended",
+        "User-agent: CCBot", "User-agent: Meta-ExternalAgent", "User-agent: Bytespider",
+        "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow: /", "",
+        // A crawler with its own group never reads `*`'s, so each group repeats the signals.
+        "User-agent: Amazonbot", "User-agent: YandexBot",
+        "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow:", "Allow: /public/", "Disallow: /drafts/", "",
+        "Sitemap: https://example.com/sitemap.xml", "",
+      ]],
+      ["admits only search and agent fetchers", { bots: false, search: true, training: false }, [
+        "User-agent: *", "Disallow: /", "",
+        "User-agent: Googlebot", "User-agent: bingbot", "User-agent: DuckDuckBot", "User-agent: Applebot",
+        "User-agent: OAI-SearchBot", "User-agent: ChatGPT-User", "User-agent: Claude-SearchBot", "User-agent: Claude-User",
+        "User-agent: PerplexityBot", "User-agent: Perplexity-User", "Disallow:", "",
+        "Sitemap: https://example.com/sitemap.xml", "",
+      ]],
+      // A raw group merges with the generated group for the same agent. Beside an `Allow: /`, Google would pick the
+      // allow over an equally long `Disallow: /` and crawl on, so an admitting group must hold no rule of its own.
+      ["lets a raw rule block every crawler that bots admits", { rules: [{ userAgent: "*", disallow: ["/"] }] }, [
+        "User-agent: *", "Disallow:", "",
+        "User-agent: *", "Disallow:", "Disallow: /", "",
+        "Sitemap: https://example.com/sitemap.xml", "",
+      ]],
+      // A crawler a rule names reads only that rule's group, so the group keeps its preset's block: the rule narrows
+      // `bots: false` for Googlebot instead of opening the rest of the site to it.
+      ["keeps a blocked crawler blocked outside what its raw rule names", {
+        bots: false, search: false, training: false, rules: [{ userAgent: ["Googlebot", "Amazonbot"], allow: ["/public/"] }],
+      }, [
+        "User-agent: *", "Disallow: /", "",
+        "User-agent: Googlebot", "User-agent: Amazonbot", "Disallow: /", "Allow: /public/", "",
+        "Sitemap: https://example.com/sitemap.xml", "",
+      ]],
+      // Google reads `Googlebot.1` as Googlebot, so its rule keeps the search preset's line rather than blocking it.
+      ["matches a rule's crawler to a preset as crawlers read its token", {
+        bots: false, search: true, training: false, rules: [{ userAgent: "Googlebot.1", disallow: ["/drafts/"] }],
+      }, [
+        "User-agent: *", "Disallow: /", "",
+        "User-agent: Googlebot", "User-agent: bingbot", "User-agent: DuckDuckBot", "User-agent: Applebot",
+        "User-agent: OAI-SearchBot", "User-agent: ChatGPT-User", "User-agent: Claude-SearchBot", "User-agent: Claude-User",
+        "User-agent: PerplexityBot", "User-agent: Perplexity-User", "Disallow:", "",
+        "User-agent: Googlebot.1", "Disallow:", "Disallow: /drafts/", "",
+        "Sitemap: https://example.com/sitemap.xml", "",
+      ]],
+      ["splits a raw rule's crawlers by the preset that covers them", {
+        training: false, rules: [{ userAgent: ["googlebot", "GPTBot"], disallow: ["/drafts/"] }],
+      }, [
+        "User-agent: *", "Disallow:", "",
+        "User-agent: GPTBot", "User-agent: ClaudeBot", "User-agent: Google-Extended", "User-agent: Applebot-Extended",
+        "User-agent: CCBot", "User-agent: Meta-ExternalAgent", "User-agent: Bytespider", "Disallow: /", "",
+        "User-agent: googlebot", "Disallow:", "Disallow: /drafts/", "",
+        "User-agent: GPTBot", "Disallow: /", "Disallow: /drafts/", "",
+        "Sitemap: https://example.com/sitemap.xml", "",
+      ]],
+      ["lets a raw rule block part of a preset that admits its crawler", {
+        bots: false, search: true, training: false, rules: [{ userAgent: "Googlebot", disallow: ["/drafts/"] }],
+      }, [
+        "User-agent: *", "Disallow: /", "",
+        "User-agent: Googlebot", "User-agent: bingbot", "User-agent: DuckDuckBot", "User-agent: Applebot",
+        "User-agent: OAI-SearchBot", "User-agent: ChatGPT-User", "User-agent: Claude-SearchBot", "User-agent: Claude-User",
+        "User-agent: PerplexityBot", "User-agent: Perplexity-User", "Disallow:", "",
+        "User-agent: Googlebot", "Disallow:", "Disallow: /drafts/", "",
+        "Sitemap: https://example.com/sitemap.xml", "",
+      ]],
+    ])("%s", async (_name, robots, lines) => {
+      const output = String(await robotsFor(robots));
+      expect(output).toBe(lines.join("\n"));
+      expect(output).not.toContain("Allow: /\n");
+    });
+
+    it("leaves out the sitemap line without a sitemap", async () => {
+      const base = context().config.discovery;
+      expect(await robotsFor({}, { discovery: { ...base, sitemap: { enabled: false }, robots: {
+        enabled: true, bots: true, search: true, training: true, rules: [], contentSignals: {},
+      } } })).toBe("User-agent: *\nDisallow:\n");
+    });
+
+    it.each([
+      ["a host route", {}, { reservedRoutes: new Set(["robots.txt"]) }],
+      ["a vault mount", { mountPath: "/blog" }, {}],
+      ["a deployment base", {}, { "svartz:deploymentBase": "/site" }],
+      ["a path in the public URL", { site: { title: "Blog", url: "https://example.com/site" } }, {}],
+    ])("writes no robots.txt below the origin root: %s", async (_name, config, meta) => {
+      expect(await robotsFor({}, config, meta)).toBeUndefined();
+    });
+  });
+
   it.each(["rss.xml", "sitemap.xml"])("rejects a vault asset at the generated %s path", async (name) => {
     const ctx = context();
     ctx.files.push({ path: name, slug: name, extension: ".xml", content: "user asset" });

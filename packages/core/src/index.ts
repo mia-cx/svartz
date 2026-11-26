@@ -12,6 +12,7 @@ export type {
   ResolvedSiteConfig,
   ResolvedDiscoveryConfig,
   DateSource,
+  RobotsRule,
   ResolvedThemeConfig,
   ResolvedBuildConfig,
   ResolvedVaultDefaults,

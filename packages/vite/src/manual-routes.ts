@@ -1,17 +1,30 @@
 import { readdir } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 const PAGE_FILE = /^\+(?:page(?:@[^.]*)?|server)(?:\.[^.]+)?\.(?:js|ts|svelte)$/;
 
-export function isHostRouteFile(root: string, file: string): boolean {
+/** Whether `file` is a host file that `staticHostRoutes` reads: a route file, or a static file at the vault's mount. */
+export function isHostRouteFile(root: string, mountPath: string, file: string): boolean {
+  if (dirname(file) === join(root, "static", mountPath)) return true;
   const path = relative(join(root, "src/routes"), file);
   return path !== "" && !path.startsWith("..") && PAGE_FILE.test(path.split(/[\\/]/).at(-1) ?? "");
 }
 
-/** Static host routes outrank generated vault pages in SvelteKit. */
+/**
+ * Static host routes outrank generated vault pages in SvelteKit. The host's own files at the mount, such as
+ * `static/robots.txt`, outrank the vault's generated ones too.
+ */
 export async function staticHostRoutes(root: string, mountPath: string): Promise<Set<string>> {
   const routesRoot = join(root, "src/routes");
   const paths = new Set<string>();
+  try {
+    const files = await readdir(join(root, "static", mountPath), { withFileTypes: true });
+    for (const file of files) if (file.isFile()) paths.add(file.name);
+  } catch (error) {
+    // A missing folder, or a file where a folder on the way would be, holds no static files at the mount.
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT" && code !== "ENOTDIR") throw error;
+  }
 
   const walk = async (directory: string, segments: string[]): Promise<void> => {
     let entries;

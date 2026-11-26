@@ -102,6 +102,22 @@ const mergeSite = (
   };
 };
 
+/** Crawlers admit everyone by default; `search` and `training` follow `bots` unless set. */
+const mergeRobots = (
+  defaults: DiscoveryConfig["robots"],
+  vault: DiscoveryConfig["robots"],
+): ResolvedDiscoveryConfig["robots"] => {
+  const bots = vault?.bots ?? defaults?.bots ?? true;
+  return {
+    enabled: vault?.enabled ?? defaults?.enabled ?? true,
+    bots,
+    search: vault?.search ?? defaults?.search ?? bots,
+    training: vault?.training ?? defaults?.training ?? bots,
+    rules: vault?.rules ?? defaults?.rules ?? [],
+    contentSignals: { ...defaults?.contentSignals, ...vault?.contentSignals },
+  };
+};
+
 const mergeDiscovery = (
   defaults: DiscoveryConfig | undefined,
   vault: DiscoveryConfig | undefined,
@@ -126,6 +142,7 @@ const mergeDiscovery = (
   favicon: {
     enabled: vault?.favicon?.enabled ?? defaults?.favicon?.enabled ?? !isHost,
   },
+  robots: mergeRobots(defaults?.robots, vault?.robots),
   dateSources: vault?.dateSources ?? defaults?.dateSources ?? ["frontmatter", "git", "filesystem"],
 });
 

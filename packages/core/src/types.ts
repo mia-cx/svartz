@@ -69,7 +69,27 @@ interface ResolvedDiscoveryConfig {
   /** A Markdown copy of each public page plus `llms.txt`, for LLM agents. */
   readonly llms: { readonly enabled: boolean };
   readonly favicon: { readonly enabled: boolean };
+  /**
+   * The site's `robots.txt`, written for a vault at the site root. `bots` admits every crawler; `search` (search
+   * engines and AI search and agent fetchers) and `training` (AI training crawlers) default to it.
+   */
+  readonly robots: {
+    readonly enabled: boolean;
+    readonly bots: boolean;
+    readonly search: boolean;
+    readonly training: boolean;
+    readonly rules: readonly RobotsRule[];
+    /** Cloudflare's Content Signals: how crawled content may be used. An unset signal is left out. */
+    readonly contentSignals: { readonly search?: boolean; readonly aiInput?: boolean; readonly aiTrain?: boolean };
+  };
   readonly dateSources: readonly DateSource[];
+}
+
+/** A raw robots.txt group: the paths its user agents may and may not crawl. */
+interface RobotsRule {
+  readonly userAgent: string | readonly string[];
+  readonly allow?: readonly string[];
+  readonly disallow?: readonly string[];
 }
 
 interface ResolvedBuildConfig {
@@ -315,6 +335,7 @@ type Graph = Readonly<Record<string, readonly GraphTarget[]>>;
 export type {
   Artifact,
   DateSource,
+  RobotsRule,
   ResolvedDiscoveryConfig,
   AssetRecord,
   AnalyticsConfig,
