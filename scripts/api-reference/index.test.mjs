@@ -77,7 +77,11 @@ describe('the API reference generator', () => {
 			{ name: 'extra', signature: 'extra?: unknown', default: undefined, description: 'Anything a plugin wants.' },
 			// A nested object lists its fields under their path.
 			{ name: 'social', signature: 'social?: { … }', default: undefined, description: 'Link previews.' },
-			{ name: 'social.image', signature: 'image?: string | null', default: undefined, description: 'The preview image.' }
+			{ name: 'social.image', signature: 'image?: string | null', default: undefined, description: 'The preview image.' },
+			// Rows of fields can't show a named type's link, extra keys or a `null`, so those keep their full type.
+			{ name: 'theme', signature: 'theme?: [[reference/api/alpha/ThemeSettings-interface|ThemeSettings]]', default: undefined, description: 'A named type keeps its link.' },
+			{ name: 'meta', signature: 'meta?: { readonly [key: string]: string; }', default: undefined, description: 'Extra keys keep their index signature.' },
+			{ name: 'preview', signature: 'preview?: { image: string; } | null', default: undefined, description: '`null` keeps its place beside the object.' }
 		]);
 	});
 

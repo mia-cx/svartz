@@ -44,6 +44,12 @@ export type SiteSettings = Derive<{
 		/** The preview image. */
 		image?: string | null;
 	};
+	/** A named type keeps its link. */
+	theme?: ThemeSettings;
+	/** Extra keys keep their index signature. */
+	meta?: { readonly [key: string]: string };
+	/** `null` keeps its place beside the object. */
+	preview?: { image: string } | null;
 }>;
 
 /** Named like the `extra` entry point's folder. */

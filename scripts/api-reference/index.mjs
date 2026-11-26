@@ -133,11 +133,8 @@ function fieldsOf(checker, type, { asWritten = false, prefix = '', depth = 0 } =
 		const optional = (prop.flags & ts.SymbolFlags.Optional) !== 0;
 		const resolved = checker.getTypeOfSymbol(prop);
 		const written = asWritten && node && ts.isPropertySignature(node) && node.type ? node.type.getText() : undefined;
-		// Spotting a nested object looks past an optional field's `undefined`. The type text drops only `| undefined`,
-		// which `?` already states, so `unknown` stays `unknown` and `null` stays.
-		const value = optional ? checker.getNonNullableType(resolved) : resolved;
-		const nested = written === undefined && depth < MAX_FIELD_DEPTH && plainObject(checker, value) &&
-			checker.getPropertiesOfType(value).length > 0 ? value : undefined;
+		// The type text drops only `| undefined`, which `?` already states, so `unknown` stays `unknown` and `null` stays.
+		const nested = written === undefined && depth < MAX_FIELD_DEPTH ? expandable(checker, resolved) : undefined;
 		const row = {
 			name: `${prefix}${prop.name}`,
 			key: prop.name,
@@ -148,6 +145,20 @@ function fieldsOf(checker, type, { asWritten = false, prefix = '', depth = 0 } =
 		};
 		return [row, ...(nested ? fieldsOf(checker, nested, { prefix: `${row.name}.`, depth: depth + 1 }) : [])];
 	});
+}
+
+/**
+ * The object a field's rows can list in full, or undefined to keep the field's type as written. Only an anonymous
+ * object of named fields qualifies, once `undefined` is set aside: a named type keeps its link, an index signature its
+ * extra keys, and `| null` or any other union its alternatives, which rows of fields can't show.
+ */
+function expandable(checker, type) {
+	const parts = type.isUnion() ? type.types.filter((part) => !(part.flags & ts.TypeFlags.Undefined)) : [type];
+	const [object] = parts;
+	if (parts.length !== 1 || !plainObject(checker, object)) return undefined;
+	const named = object.aliasSymbol || (object.symbol && !['__type', '__object'].includes(object.symbol.name));
+	if (named || checker.getIndexInfosOfType(object).length > 0) return undefined;
+	return checker.getPropertiesOfType(object).length > 0 ? object : undefined;
 }
 
 /** An optional field's type as text, without the `| undefined` its `?` already states. */
