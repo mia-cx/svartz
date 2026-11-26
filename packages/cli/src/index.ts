@@ -323,7 +323,8 @@ const loadWorkspace = (configPath?: string): Effect.Effect<WorkspaceContext, Cli
 type AppRun = { readonly location: AppLocation; readonly vaults: readonly ResolvedConfig[] };
 
 /**
- * `vaults`, each followed by the vaults of its older versions, and what their Vite plugins need beyond the config.
+ * `vaults`, each followed by the vaults of its older versions, what their Vite plugins need beyond the config, and the
+ * mount under its own id where each latest version redirects.
  * Building reads the versions from git, so a build runs this under its lock: another build waiting on it can't swap a
  * version's files mid-build.
  */
@@ -333,7 +334,8 @@ const withVersions = (vaults: readonly ResolvedConfig[]) =>
       const expanded = (await settled(vaults.map(versionVaults))).flat();
       return {
         vaults: expanded.map(({ config }) => config),
-        builds: new Map(expanded.map(({ config, ...build }): [string, Omit<VersionVault, "config">] => [config.id, build])),
+        builds: new Map(expanded.map(({ config, versionMount: _, ...build }): [string, Omit<VersionVault, "config" | "versionMount">] => [config.id, build])),
+        versionMounts: new Map(expanded.flatMap(({ config, versionMount }) => (versionMount ? [[config.id, versionMount] as const] : []))),
       };
     },
     catch: (cause) => cause as Error,
@@ -472,7 +474,7 @@ const createAppConfig = (
 ): Effect.Effect<InlineConfig, CliError> =>
   Effect.gen(function* () {
     const { appRoot, projectRoot, hostApp, viteConfigPath } = location;
-    const { vaults, builds } = yield* withVersions(configured);
+    const { vaults, builds, versionMounts } = yield* withVersions(configured);
     const vault = vaults[0]!;
     // A host app, or a vault built with its versions, chains every vault's server handle in one `virtual:svartz/server`.
     const sharedServer = Boolean(hostApp) || vaults.length > 1;
@@ -517,7 +519,7 @@ const createAppConfig = (
           await mkdir(path.dirname(stylesPath), { recursive: true });
           await writeFile(stylesPath, '{"shared":[],"notes":{}}\n');
         }));
-        await writeFile(hostRegistryPath, createHostRegistrySource(vaults));
+        await writeFile(hostRegistryPath, createHostRegistrySource(vaults, undefined, versionMounts));
         await writeFile(hostIndexPath, createHostIndexSource(vaults));
         if (sharedServer) await writeFile(hostServerPath, createHostServerSource(vaults));
         if (!hostApp) await writeFile(standalonePluginPath, [
@@ -592,7 +594,7 @@ const createAppConfig = (
           name: "svartz:host-registry-base",
           async configResolved(resolved) {
             const kitPaths = svelteKitPaths(resolved.define) ?? { base: "", assets: "" };
-            await writeFile(hostRegistryPath, createHostRegistrySource(vaults, kitPaths));
+            await writeFile(hostRegistryPath, createHostRegistrySource(vaults, kitPaths, versionMounts));
             await writeFile(hostIndexPath, createHostIndexSource(vaults, kitPaths.base));
           },
         },

@@ -60,16 +60,22 @@ export function createHostIndexSource(vaults: readonly ResolvedConfig[], kitBase
 
 /**
  * `virtual:svartz/host`: the host eagerly reads route metadata and loads runtime code only for the selected mount.
- * It also exports SvelteKit's `base` and `assets`, which SvelteKit 3's `$app/paths` no longer does.
+ * It also exports SvelteKit's `base` and `assets`, which SvelteKit 3's `$app/paths` no longer does. `versionMounts`
+ * names, by vault id, the mount of a vault's own version id, such as `/v2` for the latest version: each of its URLs
+ * there redirects to the same page at the vault's mount.
  */
-export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitPaths?: SvelteKitPaths): string {
+export function createHostRegistrySource(
+  vaults: readonly ResolvedConfig[],
+  kitPaths?: SvelteKitPaths,
+  versionMounts: ReadonlyMap<string, string> = new Map(),
+): string {
   const imports = vaults.flatMap((vault, index) => [
     `import * as index${index} from ${JSON.stringify(getGeneratedIndexModulePath(vault))};`,
     `import { pluginPages as pages${index} } from ${JSON.stringify(getGeneratedPluginPagesModulePath(vault))};`,
   ]);
   const records = vaults.map((vault, index) => {
     const { favicon: _favicon, ...siteConfig } = vault.site;
-    return `  { id: ${JSON.stringify(vault.id)}, mountPath: ${JSON.stringify(vault.mountPath)}, basePath: ${JSON.stringify(deploymentBasePath(vault, kitPaths?.base))}, pluginPages: pages${index}, artifacts: { index: index${index}.index, siteConfig: ${JSON.stringify(siteConfig)} }, theme: undefined },`;
+    return `  { id: ${JSON.stringify(vault.id)}, mountPath: ${JSON.stringify(vault.mountPath)}, basePath: ${JSON.stringify(deploymentBasePath(vault, kitPaths?.base))}, pluginPages: pages${index}, versionMount: ${JSON.stringify(versionMounts.get(vault.id))}, artifacts: { index: index${index}.index, siteConfig: ${JSON.stringify(siteConfig)} }, theme: undefined },`;
   });
   const loaders = vaults.map((vault) => `  () => Promise.all([import(${JSON.stringify(getGeneratedRuntimeArtifactsModulePath(vault))}), import(${JSON.stringify(getGeneratedRuntimeThemeModulePath(vault))})]),`);
   return [
@@ -81,9 +87,14 @@ export function createHostRegistrySource(vaults: readonly ResolvedConfig[], kitP
     `const runtimeStyles = import.meta.env.SSR ? (() => { try { return JSON.parse(${JSON.stringify(HOST_STYLES_PLACEHOLDER)}); } catch { return []; } })() : [];`,
     `const loadRuntime = [\n${loaders.join("\n")}\n];`,
     "const preparing = new Map();",
+    "// The latest version also answers below its own id, redirecting to the same page: a link to that version keeps working",
+    "// once a newer one ships and the version's own snapshot serves those URLs. Pages prerender, so these are static refresh",
+    "// pages, never a permanent redirect a browser keeps.",
+    "const versionRedirects = Object.fromEntries(vaults.flatMap(({ mountPath, versionMount, artifacts: { index } }) =>",
+    "  versionMount ? index.routes.all.map((route) => [versionMount + route.slice(mountPath.length), index.routes.redirects[route] ?? route]) : []));",
     "export const routes = {",
-    "  all: [...new Set(vaults.flatMap((vault) => vault.artifacts.index.routes.all))],",
-    "  redirects: Object.assign({}, ...vaults.map((vault) => vault.artifacts.index.routes.redirects)),",
+    "  all: [...new Set([...vaults.flatMap((vault) => vault.artifacts.index.routes.all), ...Object.keys(versionRedirects)])],",
+    "  redirects: Object.assign({}, ...vaults.map((vault) => vault.artifacts.index.routes.redirects), versionRedirects),",
     "};",
     "// The plugin page route, `[...mount=svartzMount]/-/[...page=svartzPage]`, matches only a page name a plugin of the",
     "// vault at that mount claims, so any other path, a note in a folder named `-` included, stays a note. Each matcher",

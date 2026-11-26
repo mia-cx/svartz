@@ -193,6 +193,8 @@ describe("svartz CLI", () => {
       const latest = await readFile(resolve(dist, "rest/get-pet/index.html"), "utf8");
       expect(latest).not.toContain("Version one wording.");
       expect(links(latest)).toEqual([["v2", "/rest/get-pet/"], ["v1", "/v1/rest/get-pet/"]]);
+      // The latest version answers under its own id too, so a link to v2 keeps pointing at v2 once v3 ships.
+      expect(await readFile(resolve(dist, "v2/rest/get-pet/index.html"), "utf8")).toMatch(/http-equiv="refresh" content="0;url=\/rest\/get-pet\/"/);
       // An MCP page only v2 has: v1's link lands on v1's home page.
       expect(links(await readFile(resolve(dist, "mcp/set-notification/index.html"), "utf8"))).toEqual([["v2", "/mcp/set-notification/"], ["v1", "/v1/"]]);
       const old = await readFile(resolve(dist, "v1/rest/get-pet/index.html"), "utf8");

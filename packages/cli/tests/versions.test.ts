@@ -44,6 +44,13 @@ it("reads a version again when the vault's folder changes at the same commit", a
   expect(mcp!.snapshot).not.toBe(rest!.snapshot);
 });
 
+// Proves no page or file of the latest version can take a URL under its own id, where it answers its redirects.
+it("reserves the latest version's own id along with every other version's", async () => {
+  const [latest] = await versionVaults(vault("rest"));
+  expect(latest!.nestedMounts).toEqual(["/v2", "/v1"]);
+  expect(latest!.versionMount).toBe("/v2");
+});
+
 // Proves a failed version lets the others finish reading before the build fails and releases its lock, so a retry
 // never writes into a snapshot that's still being extracted.
 it("finishes reading every version before failing on a missing ref", async () => {

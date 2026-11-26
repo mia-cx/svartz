@@ -29,8 +29,13 @@ export interface VersionVault {
   readonly config: ResolvedConfig;
   /** Where a snapshot was read from, `<commit>:<folder>`: its build is cached, since its files never change. */
   readonly snapshot?: string;
-  /** The mounts of the versions built inside this vault's: no page of its own may sit below one. */
+  /** The mounts of every version, the latest's own id included: no page or file of the latest version may sit there. */
   readonly nestedMounts?: readonly string[];
+  /**
+   * The latest version's mount under its own id, `<mount>/<id>`: each of its URLs there redirects to the same page at
+   * the vault's mount, so a link to the version keeps working once a newer one ships.
+   */
+  readonly versionMount?: string;
 }
 
 const STATUSES: readonly VersionStatus[] = ["latest", "supported", "deprecated"];
@@ -190,7 +195,8 @@ export async function versionVaults(vault: ResolvedConfig): Promise<VersionVault
   return [
     {
       config: { ...vault, theme: { ...vault.theme, version: latest.id, versions: listed } },
-      nestedMounts: older.map(mountOf),
+      nestedMounts: versions.map(mountOf),
+      versionMount: mountOf(latest),
     },
     ...snapshots,
   ];

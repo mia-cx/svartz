@@ -63,7 +63,7 @@ theme: {
 },
 ```
 
-The `latest` version is the vault as it stands, at the usual URLs. Every other version is the vault's folder at a git tag or branch, its `ref`, published below its `id`: `/2026-01/pets/get-pet/`. Cut a version by tagging the commit whose docs describe it; the build reads each ref straight from git and never touches your checkout.
+The `latest` version is the vault as it stands, at the usual URLs. Every other version is the vault's folder at a git tag or branch, its `ref`, published below its `id`: `/2026-01/pets/get-pet/`. The latest version's id works too: `/2026-04/pets/get-pet/` redirects to `/pets/get-pet/` until 2026-04 is an older version, and then serves its own page, so a link to a version always means that version. Cut a version by tagging the commit whose docs describe it; the build reads each ref straight from git and never touches your checkout.
 
 - The picker keeps the reader on the page they're reading, or opens that version's home page when it has no such page.
 - A `deprecated` version's pages say so above the page, linking the same page in the latest version.
