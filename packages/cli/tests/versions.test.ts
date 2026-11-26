@@ -66,7 +66,7 @@ it("reports a tar that can't start, with an archive larger than the pipe", async
   // A PATH with git and no tar.
   const bin = join(repo, ".bin");
   await mkdir(bin);
-  await symlink((await exec("git", ["--exec-path"])).stdout.trim() + "/git", join(bin, "git"));
+  await symlink((await exec("sh", ["-c", "command -v git"])).stdout.trim(), join(bin, "git"));
   const original = process.env.PATH;
   process.env.PATH = bin;
   try {
