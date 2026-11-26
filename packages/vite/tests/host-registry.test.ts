@@ -85,6 +85,33 @@ describe("host registry", () => {
     }
   });
 
+  // Proves a page below a vault's version mount renders from that version, though the vault's own mount, listed first,
+  // holds the path too.
+  it("serves a path from the deepest mount that holds it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "svartz-host-registry-"));
+    try {
+      const configs = await Promise.all([["api", ""], ["api@2026-01", "/2026-01"]].map(async ([id, mountPath]) => {
+        const artifacts = join(root, id!, "artifacts");
+        await mkdir(artifacts, { recursive: true });
+        await writeFile(join(artifacts, "index.ts"), "export const index = { routes: { all: [], redirects: {} } };\n");
+        await writeFile(join(artifacts, "plugin-pages.ts"), "export const pluginPages = [];\n");
+        await writeFile(join(artifacts, "runtime-artifacts.ts"), "export const hasNoteArtifact = () => false;\nexport const index = { entries: [] };\n");
+        await writeFile(join(artifacts, "runtime-theme.ts"), "export const ready = Promise.resolve();\nexport const resolveRuntimeRoute = () => undefined;\n");
+        return { ...vault(id!, mountPath!), outDir: join(root, id!, "dist") };
+      }));
+      const registry = join(root, "runtime.ts");
+      await writeFile(registry, createHostRegistrySource(configs));
+      const { prepareHostVault } = await import(registry) as { prepareHostVault: (path: string) => Promise<{ id: string }> };
+
+      expect((await prepareHostVault("/2026-01/pets/")).id).toBe("api@2026-01");
+      expect((await prepareHostVault("/2026-01/")).id).toBe("api@2026-01");
+      expect((await prepareHostVault("/2026-01x/")).id).toBe("api");
+      expect((await prepareHostVault("/pets/")).id).toBe("api");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("publishes each vault's index without importing the page runtime or theme", () => {
     const source = createHostIndexSource([vault("blog", "/blog"), vault("work", "/work")], "/site");
     expect(source).toContain('import { index as index0 } from "/workspace/.svartz/vaults/blog/artifacts/index.ts"');
@@ -105,7 +132,7 @@ describe("host registry", () => {
     expect(deploymentBasePath({ ...vault("blog", "/blog"), site: { title: "Blog" } }, "/site")).toBe("/site");
     const source = createHostRegistrySource([vault("blog", "/site/docs")], { base: "/site", assets: "/site" });
     expect(source).toContain('basePath: "/site"');
-    expect(source).toContain("return pathname === mountPath || pathname.startsWith(`${mountPath}/`);");
+    expect(source).toContain("pathname === mountPath || pathname.startsWith(`${mountPath}/`)");
     expect(source).not.toContain("pathname.slice(basePath.length)");
   });
 

@@ -47,3 +47,27 @@ Give a model its own note with `model: { name: Pet, schema: { type: object } }`.
 [[themes/choosing-and-composing|Combine it]] with [[themes/mcp-docs|MCP docs]] in the same vault.
 
 API reference: [[reference/api/theme-api-docs/ApiDocsThemeConfig|ApiDocsThemeConfig]].
+
+## Versions
+
+To document several API versions at once, as Shopify does with its dated versions, list them in `versions`. It replaces the `version` badge with a picker:
+
+```ts
+theme: {
+  base: "@svartz/theme-api-docs",
+  versions: [
+    { id: "2026-04", status: "latest" },
+    { id: "2026-01", ref: "api/2026-01" },
+    { id: "2025-07", ref: "api/2025-07", status: "deprecated" },
+  ],
+},
+```
+
+The `latest` version is the vault as it stands, at the usual URLs. Every other version is the vault's folder at a git tag or branch, its `ref`, published below its `id`: `/2026-01/pets/get-pet/`. The latest version's id works too: `/2026-04/pets/get-pet/` redirects to `/pets/get-pet/` until 2026-04 is an older version, and then serves its own page, so a link to a version always means that version. Cut a version by tagging the commit whose docs describe it; the build reads each ref straight from git and never touches your checkout.
+
+- The picker keeps the reader on the page they're reading, or opens that version's home page when it has no such page.
+- A `deprecated` version's pages say so above the page, linking the same page in the latest version.
+- Search covers the version being read. Only the latest version is in the sitemap and feed; older pages are reachable by URL and from the picker.
+- Each older version builds once and is reused from `.svartz/vaults/<id>/versions/` until its ref moves or Svartz, the config, a file a plugin reads or the lockfile changes; with password groups, every version builds each time. Keep that folder between CI builds to keep the saving.
+
+`status` defaults to `supported`, and exactly one version is `latest`. A CI checkout must hold the refs, such as with `fetch-depth: 0` or `git fetch --tags`. A note or file of the latest version can't publish below another version's id; the build fails naming it. To retire a version, remove it from `versions`.

@@ -8,7 +8,7 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { getCompilerContributions, type BrowserResource, type PluginContext } from "@svartz/core";
+import { describeValue, getCompilerContributions, type BrowserResource, type PluginContext } from "@svartz/core";
 import { softwareFingerprint } from "./software";
 
 /** Bumped when an entry's shape or what a version's compile means changes: every older entry stops matching. */
@@ -27,26 +27,6 @@ export interface CachedVersion {
 
 const hash = (text: string | Buffer) => createHash("sha256").update(text).digest("hex");
 
-/**
- * `value` as stable text for a key: functions by their source, Maps, Sets and RegExps by their contents, and an
- * object seen before by a marker, so plugin objects that point at themselves still serialize.
- */
-export function describe(value: unknown): string {
-  const seen = new WeakSet<object>();
-  return JSON.stringify(value, (_key, item: unknown) => {
-    if (typeof item === "function") return `ƒ ${String(item)}`;
-    if (typeof item === "bigint" || typeof item === "symbol") return String(item);
-    if (item instanceof RegExp) return `${item}`;
-    if (item instanceof Map) return { map: [...item] };
-    if (item instanceof Set) return { set: [...item] };
-    if (item && typeof item === "object") {
-      if (seen.has(item)) return "[seen]";
-      seen.add(item);
-    }
-    return item;
-  }) ?? "undefined";
-}
-
 /** The nearest lockfile above `folder`, by content: it pins every dependency a compile runs. */
 async function lockfileHash(folder: string): Promise<string> {
   for (let at = resolve(folder); ; at = dirname(at)) {
@@ -64,7 +44,7 @@ async function lockfileHash(folder: string): Promise<string> {
 /** What every version a build compiles reads, beyond the version and the published notes, which keys add per note. */
 export async function buildFingerprint(ctx: PluginContext, extra: unknown): Promise<string> {
   const compiler = getCompilerContributions(ctx);
-  return hash(describe({
+  return hash(describeValue({
     format: FORMAT,
     software: await softwareFingerprint(),
     lockfile: await lockfileHash(ctx.config.path),
@@ -98,7 +78,7 @@ export interface FileFingerprint {
 export function fileFingerprints(ctx: PluginContext): Map<string, FileFingerprint> {
   const bodies = ctx.meta.get("sourceBodies") as ReadonlyMap<string, string> | undefined;
   return new Map(ctx.files.map((file) => [file.path, {
-    target: hash(describe({ path: file.path, slug: file.slug, frontmatter: file.frontmatter, protection: file.protection })),
+    target: hash(describeValue({ path: file.path, slug: file.slug, frontmatter: file.frontmatter, protection: file.protection })),
     body: hash(bodies?.get(file.path) ?? ""),
   }]));
 }
@@ -122,7 +102,7 @@ export function versionKey(
   // The version takes the note's place in its compile, so the note's own file, which each commit changes, isn't read.
   const others = [...files].filter(([path]) => path !== note.path)
     .map(([path, { target, body }]) => `${path}:${target}${version.embeds ? `:${body}` : ""}`).sort();
-  return hash(describe({ build, others: hash(others.join("\n")), note, version }));
+  return hash(describeValue({ build, others: hash(others.join("\n")), note, version }));
 }
 
 /** Compiled versions on disk, in `<vault build>/cache/versions/<key>.json`. */

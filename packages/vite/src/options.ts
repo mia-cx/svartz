@@ -13,6 +13,14 @@ interface SvartzVitePluginOptions {
   readonly wranglerDir?: string;
   /** Disable singleton virtual aliases when several vault plugins share one host. */
   readonly exposeVirtualModules?: boolean;
+  /**
+   * Where a version snapshot's files were read from: its commit and its folder in the repository, such as
+   * `3f2a…:docs/api/`. Those files never change, so its build is cached and later builds reuse it while nothing else
+   * its build reads has changed.
+   */
+  readonly snapshot?: string;
+  /** Mounts of vaults built inside this one's, such as its versions: a page of its own below one fails the build. */
+  readonly nestedMounts?: readonly string[];
 }
 
 export type { SvartzVitePluginOptions };

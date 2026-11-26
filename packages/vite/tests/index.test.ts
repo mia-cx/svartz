@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -430,5 +430,92 @@ describe("@svartz/vite plugin", () => {
 
     await plugin.buildStart?.call({} as never);
     expect(plugin.load?.call({} as never, RESOLVED_ARTIFACTS_VIRTUAL_ID)).not.toContain("math.css");
+  });
+});
+
+describe("@svartz/vite version snapshots", () => {
+  let root: string;
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    root = await mkdtemp(join(tmpdir(), "svartz-snapshot-"));
+    loadThemeModuleMock.mockResolvedValue({ id: "theme-docs", version: "0.0.1", contractVersion: "1.0.0", layouts: {}, routes: [] });
+    resolveRuntimePluginsMock.mockReturnValue([]);
+    createThemeVirtualModuleSourceMock.mockReturnValue("theme-source");
+  });
+
+  /** A snapshot vault in `root`, whose pipeline publishes `asset` (a path below `assets/`) and a page at `/pets/`. */
+  const snapshotConfig = (overrides: Partial<ResolvedConfig> = {}): ResolvedConfig => ({
+    ...testConfig, path: join(root, "vault"), outDir: join(root, "build/dist"), site: { title: "Docs" }, ...overrides,
+  });
+  function publishing(asset = "assets/logo.png") {
+    runStagesMock.mockImplementation(async (_plugins: unknown, ctx: { artifacts: Map<string, Artifact>; index?: unknown }) => {
+      const path = join(root, "build/artifacts", asset);
+      await mkdir(join(path, ".."), { recursive: true });
+      await writeFile(path, "png");
+      ctx.artifacts.set(asset, { key: asset, path, type: "asset", pluginId: "test", contents: new Uint8Array([1]) });
+      ctx.index = { entries: [], routes: { all: ["/pets/"], redirects: {} } };
+    });
+  }
+  /** Builds the snapshot once per call, as a fresh CLI build would, answering how many times its pipeline ran in all. */
+  async function build(config: ResolvedConfig, options: { nestedMounts?: string[]; root?: string } = {}) {
+    // Themes resolve from this package, wherever the host app's root is.
+    const plugin = svartz({ config, env: {}, mode: "test", projectRoot: process.cwd(), snapshot: "c0ffee:docs/", nestedMounts: options.nestedMounts });
+    if (options.root) await plugin.configResolved?.call({} as never, { root: options.root, mode: "test", plugins: [], define: {} } as never);
+    await plugin.buildStart?.call({} as never);
+    return runStagesMock.mock.calls.length;
+  }
+
+  // Proves an unchanged snapshot skips its pipeline on the next build.
+  it("reuses an unchanged snapshot's build", async () => {
+    publishing();
+    expect(await build(snapshotConfig())).toBe(1);
+    expect(await build(snapshotConfig())).toBe(1);
+  });
+
+  // Proves a rotated password re-encrypts: a key can't hold the password, so a vault with password groups isn't cached.
+  it("builds a vault with password groups every time", async () => {
+    publishing();
+    const config = snapshotConfig({ passwordGroups: { members: { env: "SVARTZ_TEST_PASSWORD" } } });
+    expect(await build(config)).toBe(1);
+    expect(await build(config)).toBe(2);
+  });
+
+  // Proves a build that bypasses the cache drops the entry whose files it rewrote, so the next cacheable build runs again.
+  it("forgets a cached build that a build with password groups rewrote", async () => {
+    publishing();
+    expect(await build(snapshotConfig())).toBe(1);
+    expect(await build(snapshotConfig({ passwordGroups: { members: { env: "SVARTZ_TEST_PASSWORD" } } }))).toBe(2);
+    expect(await build(snapshotConfig())).toBe(3);
+  });
+
+  // Proves editing a file a plugin reads, such as a bibliography outside the vault, builds the snapshot again.
+  it("builds again when a file a plugin reads changes", async () => {
+    publishing();
+    const bibliography = join(root, "refs.bib");
+    await writeFile(bibliography, "@book{a}");
+    resolveRuntimePluginsMock.mockReturnValue([{ id: "citations", reads: [bibliography] }]);
+    expect(await build(snapshotConfig())).toBe(1);
+    await writeFile(bibliography, "@book{b}");
+    expect(await build(snapshotConfig())).toBe(2);
+  });
+
+  // Proves a host page added where a snapshot note was builds the snapshot again, so routes allocate as a clean build's.
+  it("builds a host snapshot again when the host's routes change", async () => {
+    publishing();
+    const config = snapshotConfig({ target: { type: "host" }, mountPath: "/v1" });
+    expect(await build(config, { root })).toBe(1);
+    await mkdir(join(root, "src/routes/v1/pets"), { recursive: true });
+    await writeFile(join(root, "src/routes/v1/pets/+page.svelte"), "<h1>Pets</h1>");
+    expect(await build(config, { root })).toBe(2);
+  });
+
+  // Proves the latest version can't publish a public file where one of its versions serves its own.
+  it.each([
+    ["below a version's mount", "assets/v1/logo.png", "/v1/logo.png"],
+    // Static output needs `v1` to be the folder that holds the version's pages.
+    ["at a version's mount", "assets/v1", "/v1"],
+  ])("refuses a public file %s", async (_case, asset, path) => {
+    publishing(asset);
+    await expect(build(snapshotConfig(), { nestedMounts: ["/v1"] })).rejects.toThrow(`publishes ${path}, where version /v1/ is served`);
   });
 });

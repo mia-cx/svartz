@@ -242,6 +242,13 @@ const writeStarterNotes = (root: string, vaults: readonly VaultChoice[]) =>
   });
 
 const PAGE_ROUTE_FILES = ["+page.svelte", "+page.ts", "+page.server.ts"] as const;
+
+/** The catchall's lines for the latest version's own id, which catchalls generated before versioned docs lack. */
+const TEMPORARY_REDIRECTS = [
+  "  // A version's own id leads to the latest version only until a newer one ships, so that redirect is temporary.\n",
+  "  const latest = routes.temporaryRedirects[pathname];\n",
+  "  if (latest) redirect(307, `${base}${latest}`);\n",
+].join("");
 /** Files only SvelteKit 2 hosts get. */
 const kit2TemplateRoot = path.join(templateRoot, "sveltekit-2");
 
@@ -578,8 +585,10 @@ const initProjectEffect = (
       const existingCatchallServer = existsSync(catchallServerPath)
         ? yield* operation("read host catchall server load", () => readFile(catchallServerPath, "utf8"))
         : undefined;
+      // Templates before versioned docs had no temporary redirects for the latest version's own id.
+      const previousRedirectsLoad = catchallLoadTemplate.replace(TEMPORARY_REDIRECTS, "");
       // Templates before SvelteKit 3 support read `base` and `assets` from `$app/paths`, which SvelteKit 3 dropped.
-      const previousAppPathsLoad = catchallLoadTemplate.replace(
+      const previousAppPathsLoad = previousRedirectsLoad.replace(
         "import { decodeRoutePath } from '@svartz/ui/runtime';\nimport { base, prepareHostVault, routes }",
         "import { base } from '$app/paths';\nimport { decodeRoutePath } from '@svartz/ui/runtime';\nimport { prepareHostVault, routes }",
       );
@@ -614,7 +623,7 @@ const initProjectEffect = (
         .replace("import { error } from '@sveltejs/kit';\n", "")
         .replace("decodeRoutePath(base ? url.pathname.slice(base.length) || '/' : url.pathname);\n  if (appPath === undefined) error(404);",
           "base ? url.pathname.slice(base.length) || '/' : url.pathname;");
-      const generatedLoads = [catchallLoadTemplate, previousAppPathsLoad, previousUniversalStylesLoad, previousOrderedCatchallLoad, previousStyledCatchallLoad, previousCatchallLoad];
+      const generatedLoads = [catchallLoadTemplate, previousRedirectsLoad, previousAppPathsLoad, previousUniversalStylesLoad, previousOrderedCatchallLoad, previousStyledCatchallLoad, previousCatchallLoad];
       const generatedServers = [catchallServerTemplate, previousAppPathsServer];
       const compatibleCatchallLoad = existingCatchallLoad !== undefined &&
         [...generatedLoads, ...generatedLoads.map(withoutPathDecoding)].includes(existingCatchallLoad) &&

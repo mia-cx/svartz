@@ -58,6 +58,7 @@ import { commandExecutable, initProject, packageManager } from "./init";
 import { DEFAULT_SCHEME, InitCancelledError, SCHEMES, TARGETS, THEMES, vaultsFromFlags, type InitFlags } from "./init-plan";
 import { askVaults } from "./init-prompts";
 import { withVaultBuildLock } from "./build-lock";
+import { settled, versionVaults, type VersionVault } from "./versions";
 
 class CliAppRootMissing extends Data.TaggedError("CliAppRootMissing")<{
   readonly appRoot: string;
@@ -323,6 +324,25 @@ const loadWorkspace = (configPath?: string): Effect.Effect<WorkspaceContext, Cli
 /** A set of vaults that build or serve together, and the app they run in. */
 type AppRun = { readonly location: AppLocation; readonly vaults: readonly ResolvedConfig[] };
 
+/**
+ * `vaults`, each followed by the vaults of its older versions, what their Vite plugins need beyond the config, and the
+ * mount under its own id where each latest version redirects.
+ * Building reads the versions from git, so a build runs this under its lock: another build waiting on it can't swap a
+ * version's files mid-build.
+ */
+const withVersions = (vaults: readonly ResolvedConfig[]) =>
+  Effect.tryPromise({
+    try: async () => {
+      const expanded = (await settled(vaults.map(versionVaults))).flat();
+      return {
+        vaults: expanded.map(({ config }) => config),
+        builds: new Map(expanded.map(({ config, versionMount: _, ...build }): [string, Omit<VersionVault, "config" | "versionMount">] => [config.id, build])),
+        versionMounts: new Map(expanded.flatMap(({ config, versionMount }) => (versionMount ? [[config.id, versionMount] as const] : []))),
+      };
+    },
+    catch: (cause) => cause as Error,
+  });
+
 /** Every `host` vault, mounted together in the SvelteKit app at the config root. */
 const hostRun = (workspace: WorkspaceContext, vaultId?: string): Effect.Effect<AppRun, CliError> =>
   Effect.gen(function* () {
@@ -449,14 +469,17 @@ const ensureBuildTargetSupported = (
       });
 
 const createAppConfig = (
-  { location, vaults }: AppRun,
+  { location, vaults: configured }: AppRun,
   mode: "development" | "production",
   command: "serve" | "build",
   serverOptions?: Partial<ServerOptions>,
 ): Effect.Effect<InlineConfig, CliError> =>
   Effect.gen(function* () {
     const { appRoot, projectRoot, hostApp, viteConfigPath } = location;
+    const { vaults, builds, versionMounts } = yield* withVersions(configured);
     const vault = vaults[0]!;
+    // A host app, or a vault built with its versions, chains every vault's server handle in one `virtual:svartz/server`.
+    const sharedServer = Boolean(hostApp) || vaults.length > 1;
     yield* Effect.forEach(vaults, (item) => ensureVaultWorkspace(appRoot, item), { concurrency: 1 });
     process.chdir(appRoot);
     if (!hostApp) applyPlatformEnvForVault(vault);
@@ -498,9 +521,9 @@ const createAppConfig = (
           await mkdir(path.dirname(stylesPath), { recursive: true });
           await writeFile(stylesPath, '{"shared":[],"notes":{}}\n');
         }));
-        await writeFile(hostRegistryPath, createHostRegistrySource(vaults));
+        await writeFile(hostRegistryPath, createHostRegistrySource(vaults, undefined, versionMounts));
         await writeFile(hostIndexPath, createHostIndexSource(vaults));
-        if (hostApp) await writeFile(hostServerPath, createHostServerSource(vaults));
+        if (sharedServer) await writeFile(hostServerPath, createHostServerSource(vaults));
         if (!hostApp) await writeFile(standalonePluginPath, [
           `import { hostStylesPlugin, publicAssetsPlugin } from ${JSON.stringify(import.meta.resolve("@svartz/vite/host"))};`,
           `export { withMarkdownNegotiation } from ${JSON.stringify(import.meta.resolve("@svartz/vite/host"))};`,
@@ -514,8 +537,9 @@ const createAppConfig = (
       return root ? [{ id, root }] : [];
     }));
     const themeRoots = themes.map(({ root }) => root);
-    // A lone vault loads its workspace themes from source, so theme edits need no rebuild.
-    const themeSources = vaults.length === 1
+    // A lone vault, or one with its versions, which share its themes, loads workspace themes from source, so theme edits
+    // need no rebuild.
+    const themeSources = !hostApp || vaults.length === 1
       ? Object.fromEntries(themes.flatMap(({ id, root }) => {
           const source = path.join(root, "src", "lib", "index.ts");
           return isLocalWorkspacePackage(root, projectRoot) && existsSync(source) ? [[id, source]] : [];
@@ -524,7 +548,7 @@ const createAppConfig = (
     process.env["SVARTZ_THEME_SOURCES"] = JSON.stringify(themeSources);
 
     process.env["SVARTZ_TAILWIND_SOURCES_PATH"] = yield* Effect.tryPromise({
-      try: () => vaults.length === 1
+      try: () => !hostApp || vaults.length === 1
         ? writeGeneratedTailwindSourcesFile(projectRoot, vault, hostApp)
         : writeGeneratedHostTailwindSourcesFile(projectRoot, projectRoot, vaults),
       catch: (cause) => cause as Error,
@@ -566,12 +590,13 @@ const createAppConfig = (
           projectRoot,
           ...(wranglerConfig ? { wranglerDir: path.dirname(wranglerConfig) } : {}),
           exposeVirtualModules: vaults.length === 1,
+          ...builds.get(item.id),
         }) as never),
         {
           name: "svartz:host-registry-base",
           async configResolved(resolved) {
             const kitPaths = svelteKitPaths(resolved.define) ?? { base: "", assets: "" };
-            await writeFile(hostRegistryPath, createHostRegistrySource(vaults, kitPaths));
+            await writeFile(hostRegistryPath, createHostRegistrySource(vaults, kitPaths, versionMounts));
             await writeFile(hostIndexPath, createHostIndexSource(vaults, kitPaths.base));
           },
         },
@@ -582,8 +607,8 @@ const createAppConfig = (
         alias: {
           "virtual:svartz/host": hostRegistryPath,
           "virtual:svartz/index": hostIndexPath,
-          // The standalone shell's `virtual:svartz/server` is its one vault's module, aliased by the svartz plugin.
-          ...(hostApp ? { "virtual:svartz/server": hostServerPath } : {}),
+          // A lone standalone vault's `virtual:svartz/server` is its own module, aliased by the svartz plugin.
+          ...(sharedServer ? { "virtual:svartz/server": hostServerPath } : {}),
         },
       },
       server: {

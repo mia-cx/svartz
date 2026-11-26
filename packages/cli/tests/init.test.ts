@@ -544,6 +544,25 @@ it("upgrades a catchall that reads $app/paths to the one SvelteKit 3 can build",
   expect(load + server).not.toContain("$app/paths");
 });
 
+// Proves a host generated before versioned docs gets the temporary redirect for the latest version's own id, so
+// `/v2/…` reaches the latest version there instead of 404ing.
+it("upgrades a catchall from before versioned docs to answer the latest version's own id", async () => {
+  const root = await fixture();
+  await mkdir(path.join(root, "src/routes"), { recursive: true });
+  await writeFile(path.join(root, "vite.config.ts"), "export default { plugins: [] };\n");
+  await writeFile(path.join(root, "package.json"), JSON.stringify({
+    name: "host-app", dependencies: { "@sveltejs/kit": "^3.0.0" },
+  }));
+  await initProject({ cwd: root, install: false, git: false });
+  const loadPath = path.join(root, "src/routes/[...slug]/+page.ts");
+  const load = await readFile(loadPath, "utf8");
+  await writeFile(loadPath, load.replace(/  \/\/ A version's own id[^\n]*\n.*temporaryRedirects.*\n.*redirect\(307.*\n/, ""));
+
+  await initProject({ cwd: root, install: false, git: false });
+  expect(await readFile(loadPath, "utf8")).toBe(load);
+  expect(load).toContain("redirect(307");
+});
+
 it("upgrades only the previous Svartz catchall loader", async () => {
   const root = await fixture();
   await mkdir(path.join(root, "src/routes"), { recursive: true });

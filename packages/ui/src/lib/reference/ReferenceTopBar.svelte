@@ -7,7 +7,10 @@
 	import SearchDialog from '../SearchDialog.svelte';
 	import SiteLogo from '../SiteLogo.svelte';
 	import type { SearchOptions } from '../search.js';
+	import { getVaultHomes } from '../site-routes.js';
 	import { themeSettings } from '../theme-settings.js';
+	import VersionPicker from './VersionPicker.svelte';
+	import { versionLinks } from './versions.js';
 
 	let {
 		shell
@@ -16,6 +19,7 @@
 			readonly vault: VaultView;
 			readonly site: ResolvedSiteConfig;
 			readonly homeHref: string;
+			readonly currentHref?: string;
 			readonly themeConfig?: Readonly<Record<string, unknown>>;
 			readonly searchIndex?: unknown;
 			readonly searchOptions?: SearchOptions;
@@ -26,6 +30,10 @@
 
 	const settings = $derived(themeSettings(shell.themeConfig ?? {}));
 	const version = $derived(typeof shell.themeConfig?.version === 'string' ? shell.themeConfig.version : undefined);
+	const homeOf = getVaultHomes();
+	const versions = $derived(
+		versionLinks(shell.themeConfig ?? {}, { homeHref: shell.homeHref, currentHref: shell.currentHref ?? shell.homeHref, homeOf })
+	);
 </script>
 
 <header class="top-bar">
@@ -40,7 +48,7 @@
 		{#if shell.drawer}<X aria-hidden="true" />{:else}<Menu aria-hidden="true" />{/if}
 	</button>
 	<a class="sv-wordmark" href={shell.homeHref}><SiteLogo logo={settings.logo} />{shell.site.title}</a>
-	{#if version}<span class="sv-badge version" data-sv-signal style:--sv-hue="var(--sv-hue-green)">{version}</span>{/if}
+	{#if versions.length > 0}<VersionPicker {versions} />{:else if version}<span class="sv-badge version" data-sv-signal style:--sv-hue="var(--sv-hue-green)">{version}</span>{/if}
 	<div class="search"><SearchDialog documents={shell.vault.search} searchIndex={shell.searchIndex} searchOptions={shell.searchOptions} /></div>
 	{#if settings.navLinks.length > 0}
 		<nav class="top-links" aria-label="Project">

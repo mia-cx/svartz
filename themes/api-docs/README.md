@@ -34,6 +34,33 @@ The theme extends `@svartz/theme-minimal`, so the sidebar is minimal's explorer:
 
 To document HTTP endpoints and MCP tools in one site, compose this theme's `extensions` with `@svartz/theme-mcp-docs`'s. [Reference themes](../../docs/reference-themes.md#compose-them) shows how.
 
+## Versions
+
+`versions` documents several API versions in one site, each from git, and replaces the `version` badge with a picker. It works the same with `@svartz/theme-mcp-docs` composed in.
+
+```ts
+theme: {
+  base: "@svartz/theme-api-docs",
+  versions: [
+    { id: "2026-04", status: "latest" },                      // the vault as it stands, at the usual URLs
+    { id: "2026-01", ref: "api/2026-01" },                     // status defaults to "supported"
+    { id: "2025-07", ref: "api/2025-07", status: "deprecated" },
+  ],
+},
+```
+
+| | |
+| --- | --- |
+| URLs | The latest version at the vault's own URLs; every other below its id, `/2026-01/pets/get-pet/`. The latest version's id redirects there too, so `/2026-04/pets/get-pet/` keeps pointing at 2026-04 after the next version ships. |
+| Source | Each `ref` (tag, branch or commit) is the vault's folder as git holds it, read without touching the checkout. A CI checkout needs the refs: `fetch-depth: 0`, or `git fetch --tags`. |
+| Picker | Keeps the reader on the same page in the version they pick, or opens that version's home page when it lacks the page. |
+| Deprecated | A notice above each page links the same page in the latest version. |
+| Search, sitemap, feed | Search covers the version being read. The sitemap and feed list the latest version only. |
+| Canonical URLs | Each page is canonical at its own URL, so the latest version's are the unversioned ones. |
+| Build cost | Each older version is a vault of its own to the build, cached in `.svartz/vaults/<id>/versions/<version>/` and reused until its ref moves or Svartz, the config, a file a plugin reads or the lockfile changes. A vault with password groups builds every version each time, so a changed password applies to all. The managed Turbo build task is never cached, since a ref can move while its inputs stay the same. Bundling and prerendering still cover every version's pages. |
+
+Exactly one version is `latest`, and it takes no `ref`. A latest page or file whose URL falls below another version's id fails the build, naming it. Retire a version by removing it from the list.
+
 ## Frontmatter
 
 A REST operation:
