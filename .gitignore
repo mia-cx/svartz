@@ -38,3 +38,4 @@ vaults/vault/
 
 # Test scratch directories
 **/.tmp-*
+/.stress-cache/
