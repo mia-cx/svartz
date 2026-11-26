@@ -31,6 +31,7 @@ describe('the API reference generator', () => {
 	it('writes a note per exported symbol of every public typed entry point, and a folder note per entry point', () => {
 		assert.deepEqual(files(out), [
 			'alpha/Options.md',
+			'alpha/SiteSettings.md',
 			'alpha/ThemeSettings-interface.md',
 			'alpha/extra-variable.md',
 			'alpha/extra/Result.md',
@@ -63,6 +64,15 @@ describe('the API reference generator', () => {
 			{ name: 'times', default: '`3`', description: 'How often it runs.' },
 			{ name: 'signIn', default: undefined, description: 'Sign-in settings.' },
 			{ name: 'signIn.required', default: '`false`', description: 'Refuse anonymous readers.' }
+		]);
+	});
+
+	// The config types are `Schema.Schema.Type<typeof …Schema>`: their fields exist only once TypeScript resolves them.
+	it('lists the fields of a type alias derived from another type, with their defaults and descriptions', () => {
+		const rows = frontmatter(join(out, 'alpha/SiteSettings.md')).symbol.members.map(({ name, signature, default: value, description }) => ({ name, signature, default: value, description }));
+		assert.deepEqual(rows, [
+			{ name: 'title', signature: 'title?: string', default: '`"Untitled"`', description: "The site's title." },
+			{ name: 'url', signature: 'url: string', default: undefined, description: 'Where it publishes.' }
 		]);
 	});
 

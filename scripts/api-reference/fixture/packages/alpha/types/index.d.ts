@@ -27,5 +27,17 @@ export interface ThemeSettings {
 	readonly accent: string;
 }
 
+/** Every field read-only, as a schema library derives a type from its schema. Kept private by `export {}` below. */
+type Derive<T> = { readonly [K in keyof T]: T[K] };
+export {};
+
+/** The site settings, derived from their schema. */
+export type SiteSettings = Derive<{
+	/** The site's title. Default: `"Untitled"`. */
+	title?: string;
+	/** Where it publishes. */
+	url: string;
+}>;
+
 /** Named like the `extra` entry point's folder. */
 export declare const extra: number;

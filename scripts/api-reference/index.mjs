@@ -58,10 +58,18 @@ export async function convert(entries, { tsconfig }) {
 	});
 	/** @type {Map<object, ComponentProp[]>} */
 	const components = new Map();
+	/** @type {Map<object, ComponentProp[]>} */
+	const aliases = new Map();
 	app.converter.on(Converter.EVENT_CREATE_DECLARATION, (context, reflection) => {
-		if (!reflection.kindOf(ReflectionKind.Variable)) return;
 		const symbol = context.getSymbolFromReflection(reflection);
-		const props = symbol && componentProps(context.checker, context.checker.getTypeOfSymbol(symbol));
+		if (!symbol) return;
+		if (reflection.kindOf(ReflectionKind.TypeAlias)) {
+			const fields = aliasFields(context.checker, context.checker.getDeclaredTypeOfSymbol(symbol));
+			if (fields) aliases.set(reflection, fields);
+			return;
+		}
+		if (!reflection.kindOf(ReflectionKind.Variable)) return;
+		const props = componentProps(context.checker, context.checker.getTypeOfSymbol(symbol));
 		if (props) components.set(reflection, props);
 	});
 	const project = await app.convert();
@@ -71,6 +79,7 @@ export async function convert(entries, { tsconfig }) {
 	const byFile = new Map(modules.map((module) => [module.sources?.[0]?.fullFileName, module]));
 	return {
 		components,
+		aliases,
 		modules: entries.map((entry) => {
 			const module = entries.length === 1 ? project : byFile.get(entry.types.split(sep).join('/'));
 			if (!module) throw new Error(`TypeDoc produced no module for ${entry.packageName}/${entry.subpath} (${entry.types}).`);
@@ -88,14 +97,38 @@ function componentProps(checker, type) {
 	const declaration = type.symbol?.declarations?.[0];
 	if (type.symbol?.name !== 'Component' || !declaration?.getSourceFile().fileName.includes('/svelte/')) return undefined;
 	const [props] = checker.getTypeArguments(type);
-	if (!props) return undefined;
-	return checker.getPropertiesOfType(props).map((prop) => {
+	return props ? fieldsOf(checker, props, { asWritten: true }) : undefined;
+}
+
+/**
+ * The fields of a type alias that resolves to an object type TypeDoc can't list, such as the config types
+ * `Schema.Schema.Type<typeof VaultConfigSchema>`, or undefined for any other type: unions, functions, arrays and
+ * primitives keep their type expression.
+ */
+function aliasFields(checker, type) {
+	if (!(type.flags & ts.TypeFlags.Object) || checker.isArrayType(type) || checker.isTupleType(type)) return undefined;
+	if (type.getCallSignatures().length > 0 || type.getConstructSignatures().length > 0) return undefined;
+	const fields = fieldsOf(checker, type);
+	return fields.length > 0 ? fields : undefined;
+}
+
+/**
+ * Each property of `type`, with its doc comment and default. Its type is the one written on its declaration when
+ * `asWritten` and there is one (a component's props read as their author wrote them), else the checker's resolved type
+ * (a schema field reads as the value it accepts, `string`, not as `Schema.optional<typeof Schema.String>`).
+ */
+function fieldsOf(checker, type, { asWritten = false } = {}) {
+	return checker.getPropertiesOfType(type).map((prop) => {
 		const node = prop.declarations?.[0];
 		const tag = prop.getJsDocTags(checker).find((item) => item.name === 'default' || item.name === 'defaultValue');
+		const optional = (prop.flags & ts.SymbolFlags.Optional) !== 0;
+		const resolved = checker.getTypeOfSymbol(prop);
 		return {
 			name: prop.name,
-			optional: (prop.flags & ts.SymbolFlags.Optional) !== 0,
-			type: node && ts.isPropertySignature(node) && node.type ? node.type.getText() : checker.typeToString(checker.getTypeOfSymbol(prop)),
+			optional,
+			type: asWritten && node && ts.isPropertySignature(node) && node.type
+				? node.type.getText()
+				: checker.typeToString(optional ? checker.getNonNullableType(resolved) : resolved),
 			description: oneLine(ts.displayPartsToString(prop.getDocumentationComment(checker))) || undefined,
 			default: tag ? stripCode(ts.displayPartsToString(tag.text)) || undefined : undefined
 		};
@@ -113,7 +146,7 @@ function componentProps(checker, type) {
  *   `dir` is the vault-relative folder the notes go in; wikilinks name notes by vault path.
  * @returns {Note[]}
  */
-export function buildNotes(entries, { modules, components }, { dir, source = () => undefined, dates = () => undefined }) {
+export function buildNotes(entries, { modules, components, aliases = new Map() }, { dir, source = () => undefined, dates = () => undefined }) {
 	const folders = entries.map(folderOf);
 	// `index` and a note named after its folder (`auth/auth.md`) would both be the folder's own note.
 	const reserved = new Map(folders.map((folder) => [folder, new Set(['index', folder.split('/').at(-1)])]));
@@ -159,7 +192,11 @@ export function buildNotes(entries, { modules, components }, { dir, source = () 
 			const origin = source(reflection, entry);
 			const date = origin?.file ? dates(origin.file) : undefined;
 			if (date?.updated) updatedOf.set(reflection, date.updated);
-			notes.push({ path: `${page.link.slice(dir.length + 1)}.md`, content: symbolNote(reflection, { link, props: components.get(reflection)?.map((prop) => ({ ...prop, type: linkNames(prop.type, entry) })), url: origin?.url, date }) });
+			// A type alias TypeDoc lists no members for, such as a schema-derived config type, takes the fields the checker
+			// resolved for it.
+			const fields = components.get(reflection) ??
+				(reflection.kindOf(ReflectionKind.TypeAlias) && objectMembers(reflection.type).length === 0 ? aliases.get(reflection) : undefined);
+			notes.push({ path: `${page.link.slice(dir.length + 1)}.md`, content: symbolNote(reflection, { link, props: fields?.map((prop) => ({ ...prop, type: linkNames(prop.type, entry) })), url: origin?.url, date }) });
 		}
 	});
 
