@@ -33,4 +33,10 @@ describe('wikilinkSegments', () => {
 		expect(wikilinkSegments('[[api/foo-bar]]', api)).toEqual([{ text: 'api/foo-bar', href: '/api/foo-bar/' }]);
 		expect(wikilinkSegments('[[api/foo_bar]]', api)).toEqual([{ text: 'api/foo_bar', href: '/api/foo_bar/' }]);
 	});
+
+	it('loosely matches a name whose spaces and underscores run together', () => {
+		const notes = [{ slug: 'notes/foo-bar', title: 'Foo_ Bar', href: '/notes/foo-bar/' }];
+		expect(wikilinkSegments('[[foo-bar]]', notes)).toEqual([{ text: 'foo-bar', href: '/notes/foo-bar/' }]);
+		expect(wikilinkSegments('[[Foo_ Bar]]', notes)).toEqual([{ text: 'Foo_ Bar', href: '/notes/foo-bar/' }]);
+	});
 });

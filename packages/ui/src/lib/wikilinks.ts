@@ -6,8 +6,8 @@ export interface LinkSegment {
 const WIKILINK = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g;
 /** A target as written, case and spaces aside. */
 const exact = (value: string) => value.toLowerCase().replace(/\s+/g, '-');
-/** Looser still: `_` reads as `-`, as in a slug made from `CONTRACT_VERSION`. */
-const loose = (value: string) => exact(value).replace(/_+/g, '-');
+/** Looser still: any run of spaces and `_` reads as one `-`, as in a slug made from `CONTRACT_VERSION` or `Foo_ Bar`. */
+const loose = (value: string) => value.toLowerCase().replace(/[\s_]+/g, '-');
 
 /**
  * Frontmatter isn't run through the Markdown pipeline, so values like

@@ -75,6 +75,9 @@
       ]
     },
     "//#svartz:build:docs": {
+      "dependsOn": [
+        "^build"
+      ],
       "inputs": [
         "packages/cli/app/**",
         "package.json",
@@ -84,7 +87,8 @@
         "vaults/docs/**"
       ],
       "outputs": [
-        ".svartz/vaults/docs/dist/**"
+        ".svartz/vaults/docs/.svelte-kit/cloudflare/**",
+        ".svartz/vaults/docs/wrangler.json"
       ]
     },
     "//#svartz:dev:docs": {
@@ -99,6 +103,9 @@
       "persistent": true
     },
     "//#svartz:build:showcase": {
+      "dependsOn": [
+        "^build"
+      ],
       "inputs": [
         "packages/cli/app/**",
         "package.json",
@@ -108,7 +115,8 @@
         "vaults/showcase/**"
       ],
       "outputs": [
-        ".svartz/vaults/showcase/dist/**"
+        ".svartz/vaults/showcase/.svelte-kit/cloudflare/**",
+        ".svartz/vaults/showcase/wrangler.json"
       ]
     },
     "//#svartz:dev:showcase": {
@@ -123,6 +131,9 @@
       "persistent": true
     },
     "//#svartz:build:showcase-wiki": {
+      "dependsOn": [
+        "^build"
+      ],
       "inputs": [
         "packages/cli/app/**",
         "package.json",
@@ -132,7 +143,8 @@
         "vaults/showcase-wiki/**"
       ],
       "outputs": [
-        ".svartz/vaults/showcase-wiki/dist/**"
+        ".svartz/vaults/showcase-wiki/.svelte-kit/cloudflare/**",
+        ".svartz/vaults/showcase-wiki/wrangler.json"
       ]
     },
     "//#svartz:dev:showcase-wiki": {
@@ -147,6 +159,9 @@
       "persistent": true
     },
     "//#svartz:build:showcase-blog": {
+      "dependsOn": [
+        "^build"
+      ],
       "inputs": [
         "packages/cli/app/**",
         "package.json",
@@ -156,7 +171,8 @@
         "vaults/showcase-blog/**"
       ],
       "outputs": [
-        ".svartz/vaults/showcase-blog/dist/**"
+        ".svartz/vaults/showcase-blog/.svelte-kit/cloudflare/**",
+        ".svartz/vaults/showcase-blog/wrangler.json"
       ]
     },
     "//#svartz:dev:showcase-blog": {
@@ -171,6 +187,9 @@
       "persistent": true
     },
     "//#svartz:build:showcase-docs": {
+      "dependsOn": [
+        "^build"
+      ],
       "inputs": [
         "packages/cli/app/**",
         "package.json",
@@ -180,7 +199,8 @@
         "vaults/showcase-docs/**"
       ],
       "outputs": [
-        ".svartz/vaults/showcase-docs/dist/**"
+        ".svartz/vaults/showcase-docs/.svelte-kit/cloudflare/**",
+        ".svartz/vaults/showcase-docs/wrangler.json"
       ]
     },
     "//#svartz:dev:showcase-docs": {
@@ -195,6 +215,9 @@
       "persistent": true
     },
     "//#svartz:build:showcase-api": {
+      "dependsOn": [
+        "^build"
+      ],
       "inputs": [
         "packages/cli/app/**",
         "package.json",
@@ -204,7 +227,8 @@
         "vaults/showcase-api/**"
       ],
       "outputs": [
-        ".svartz/vaults/showcase-api/dist/**"
+        ".svartz/vaults/showcase-api/.svelte-kit/cloudflare/**",
+        ".svartz/vaults/showcase-api/wrangler.json"
       ]
     },
     "//#svartz:dev:showcase-api": {
@@ -219,6 +243,9 @@
       "persistent": true
     },
     "//#svartz:build:showcase-reference": {
+      "dependsOn": [
+        "^build"
+      ],
       "inputs": [
         "packages/cli/app/**",
         "package.json",
@@ -228,7 +255,8 @@
         "vaults/showcase-reference/**"
       ],
       "outputs": [
-        ".svartz/vaults/showcase-reference/dist/**"
+        ".svartz/vaults/showcase-reference/.svelte-kit/cloudflare/**",
+        ".svartz/vaults/showcase-reference/wrangler.json"
       ]
     },
     "//#svartz:dev:showcase-reference": {

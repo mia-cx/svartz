@@ -134,6 +134,7 @@ describe("managed Turbo sync", () => {
       dependsOn: ["//#svartz:build:docs", "//#svartz:build:obsidian-journal"],
     });
     expect(turboJson.tasks["//#svartz:build:docs"]).toEqual({
+      dependsOn: ["^build"],
       inputs: [
         "packages/cli/app/**",
         "package.json",
@@ -145,6 +146,7 @@ describe("managed Turbo sync", () => {
       outputs: [".svartz/vaults/docs/dist/**"],
     });
     expect(turboJson.tasks["//#svartz:build:obsidian-journal"]).toEqual({
+      dependsOn: ["^build"],
       inputs: [
         "packages/cli/app/**",
         "package.json",

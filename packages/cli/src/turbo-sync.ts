@@ -118,6 +118,9 @@ function createManagedTurboTasks(config: ResolvedConfigSet): Record<string, Turb
         [
           turboTaskName(buildTaskName(vault.id)),
           {
+            // Workspace packages the project depends on build first, and their output is part of this task's hash: a
+            // rebuilt local theme or plugin, or the types a generated reference reads, never restores a stale vault.
+            dependsOn: ["^build"],
             inputs: getBuildTaskInputs(config, vault.id, vault.path),
             outputs: getBuildTaskOutputs(config, vault),
           } satisfies TurboTask,
