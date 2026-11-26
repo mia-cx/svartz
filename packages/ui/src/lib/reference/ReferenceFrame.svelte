@@ -1,7 +1,7 @@
 <!--
 	The reference frame for theme-minimal's shell: a top bar, the explorer in a
-	sidebar, and the page with its right column beside it, wide enough for code
-	examples. Examples drop below the page before the sidebar goes; on phones
+	sidebar, and the page with its right column beside it: as wide as the
+	sidebar for contents, wider for code examples. Examples drop below the page before the sidebar goes; on phones
 	the sidebar becomes a drawer. It only lays out the regions minimal renders.
 -->
 <script lang="ts">
@@ -107,11 +107,18 @@
 	}
 
 	.split {
+		/* Contents match the sidebar's width and sit at the frame's far edge, so the columns balance. */
+		--rail: 16rem;
 		display: grid;
-		/* The right column yields first: a share of the width, clamped, and the page takes the rest. */
-		grid-template-columns: minmax(0, var(--sv-measure)) clamp(20rem, 35%, 34rem);
+		grid-template-columns: minmax(0, var(--sv-measure)) var(--rail);
+		justify-content: space-between;
 		gap: var(--sv-space-7);
 		align-items: start;
+	}
+
+	/* Code examples need room: a share of the width, clamped, and the page takes the rest. */
+	.split:has(> .aside :global(.sv-reference-examples)) {
+		--rail: clamp(20rem, 35%, 34rem);
 	}
 
 	/* Nothing beside the page: it keeps the reading width alone. */
