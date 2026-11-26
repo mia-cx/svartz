@@ -36,7 +36,8 @@ export function pageGraph({ site, vault, theme, entry, crumbs, url, image, absol
 					'@type': 'ListItem',
 					position: index + 1,
 					name: crumb.title,
-					item: absolute(crumb.href)
+					// The trail ends on this page, whose crumb can link elsewhere: a folder listing's links its folder note.
+					item: index === crumbs.length - 1 ? url : absolute(crumb.href)
 				}))
 			}
 		: undefined;

@@ -68,7 +68,7 @@ describe('SvartzRuntimePage structured data', () => {
 		});
 	});
 
-	it('describes a folder page by its breadcrumb trail, with no article', () => {
+	it('describes a folder page by its breadcrumb trail, ending on the listing even when the folder has its own note', () => {
 		expect(structuredData('/folders/guides/')['@graph']).toEqual([
 			website,
 			{
