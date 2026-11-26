@@ -59,7 +59,12 @@
 		gap: var(--sv-space-5);
 		align-self: start;
 		max-block-size: 100dvh;
+		/* A scrolling column clips whatever leaves its box. Room for a focus ring at its edge, given back by the
+		   margin, keeps rings whole and the content where it was. */
+		--ring: calc(var(--sv-focus-width) + var(--sv-focus-offset));
+		margin-inline: calc(-1 * var(--ring));
 		padding-block: var(--top) var(--sv-space-5);
+		padding-inline: var(--ring);
 		overflow-y: auto;
 		overscroll-behavior: contain;
 		scrollbar-width: thin;
