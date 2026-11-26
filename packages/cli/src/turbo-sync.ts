@@ -113,13 +113,17 @@ function createManagedScripts(config: ResolvedConfigSet): Record<string, string>
  * `^build`, since Turbo refuses a graph whose `^build` names no task.
  */
 /**
- * Whether the workspace defines a `build` task a dependency can run: `build` itself, or a package's own (`theme#build`).
- * The root's `//#build` doesn't count, since `^build` only reaches dependencies.
+ * The builds a vault build waits on, so a rebuilt package changes its cache key. A generic `build` task runs in every
+ * dependency that has one, so `^build`. Without it, `^build` would fail on any dependency lacking a build, so only
+ * the packages' own `<package>#build` tasks, by name. The root's `//#build` isn't a dependency's. None: nothing.
  */
-const definesBuild = (tasks: TurboJson["tasks"]): boolean =>
-  Object.keys(tasks ?? {}).some((name) => name === "build" || (name.endsWith("#build") && !name.startsWith("//#")));
+function buildDependencies(tasks: TurboJson["tasks"]): string[] {
+  const names = Object.keys(tasks ?? {});
+  if (names.includes("build")) return ["^build"];
+  return names.filter((name) => name.endsWith("#build") && !name.startsWith("//#"));
+}
 
-function createManagedTurboTasks(config: ResolvedConfigSet, builds: boolean): Record<string, TurboTask> {
+function createManagedTurboTasks(config: ResolvedConfigSet, builds: readonly string[]): Record<string, TurboTask> {
   return {
     [turboTaskName("svartz:build")]: {
       dependsOn: config.vaults.map((vault) => turboTaskName(buildTaskName(vault.id))),
@@ -131,7 +135,7 @@ function createManagedTurboTasks(config: ResolvedConfigSet, builds: boolean): Re
           {
             // Workspace packages the project depends on build first, and their output is part of this task's hash: a
             // rebuilt local theme or plugin, or the types a generated reference reads, never restores a stale vault.
-            ...(builds ? { dependsOn: ["^build"] } : {}),
+            ...(builds.length > 0 ? { dependsOn: [...builds] } : {}),
             inputs: getBuildTaskInputs(config, vault.id, vault.path),
             outputs: getBuildTaskOutputs(config, vault),
           } satisfies TurboTask,
@@ -212,7 +216,7 @@ function createNextTurboJson(
         ? existingTurboJson.$schema
         : TURBO_JSON_SCHEMA,
     ...existingTurboJson,
-    tasks: mergeManagedTurboTasks(existingTurboJson.tasks, createManagedTurboTasks(config, definesBuild(existingTurboJson.tasks))),
+    tasks: mergeManagedTurboTasks(existingTurboJson.tasks, createManagedTurboTasks(config, buildDependencies(existingTurboJson.tasks))),
   };
 }
 

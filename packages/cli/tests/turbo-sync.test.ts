@@ -180,10 +180,12 @@ describe("managed Turbo sync", () => {
     expect(turboJson.tasks["//#svartz:build:docs"]).not.toHaveProperty("dependsOn");
   });
 
+  // `^build` would fail on a dependency without a build, so without a generic `build` only named builds are waited on.
   it.each([
-    [{ "theme#build": {} }, ["^build"]],
+    [{ build: {}, "theme#build": {} }, ["^build"]],
+    [{ "theme#build": {}, "icons#build": {} }, ["theme#build", "icons#build"]],
     [{ "//#build": {} }, undefined],
-  ])("counts a package's own build task, not the root's (%o)", async (tasks, dependsOn) => {
+  ])("waits on the builds the workspace defines (%o)", async (tasks, dependsOn) => {
     const { workspaceRoot } = await createWorkspaceFixture();
     await writeFile(path.join(workspaceRoot, "turbo.json"), JSON.stringify({ tasks }));
     await syncManagedTurboFiles(createResolvedConfig(workspaceRoot, [{ id: "docs" }]));
