@@ -108,7 +108,7 @@ Which pages are published comes from the last build, so a page added since shows
 
 ## How far back
 
-A page's history is GitHub's list of the commits that changed its file, in the order the branch's ancestry gives them, 100 changes at a time; **Older changes** goes back up to 1,100. Past that, **Older changes on GitHub** links to the file's history there. Commit times can tie or be backdated, so neither the list nor the revision a change is compared with follows them.
+A page's history is GitHub's list of the commits that changed its file, in the order the branch's ancestry gives them, 100 changes at a time, `?page=1` to `?page=10`; **Older changes** goes back up to 1,000. Past that, **Older changes on GitHub** links to the file's history there. Commit times can tie or be backdated, so neither the list nor the revision a change is compared with follows them.
 
 Who made each change, and its summary, come from the mirror. It holds the latest 100 commits that changed the vault when it backfilled, and every commit since; an older change shows its git author and no summary. Recent changes reads the mirror alone, newest commit time first. Opening a history page or Recent changes starts the mirror's poll when it is stale; its first run backfills.
 

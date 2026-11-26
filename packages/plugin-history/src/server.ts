@@ -43,7 +43,7 @@ import {
 } from "./pages";
 import { REVERT } from "./permissions";
 
-/** Pages of a file's history readers may page back through; older ones are on GitHub. */
+/** The last page of a file's history readers may page back to, counting from 1: its latest 1,000 changes. Older ones are on GitHub. */
 export const MAX_HISTORY_PAGE = 10;
 /** The longest reason a revert takes, which its commit message carries. */
 export const MAX_REASON_LENGTH = 500;
@@ -53,7 +53,7 @@ const MAX_FORM_BYTES = 16 * 1024;
 const SECTION_CHANGES = 5;
 const SECTION_PAGES = 10;
 const SHA = /^[0-9a-f]{40}$/;
-const PAGE_NUMBER = /^(?:0|[1-9]\d?)$/;
+const PAGE_NUMBER = /^[1-9]\d?$/;
 const CONTRIBUTIONS = /^contributions\/([^/]+)\/$/;
 const revisionDay = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" });
 
@@ -195,7 +195,7 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
     const changes = await changesOf(commits, context);
     const github = `https://github.com/${repo}/commits/${encodeURIComponent(branch ?? "HEAD")}/${encodeURI(repoPath(note.path))}`;
     // Reverting reaches as far back as the newest page of changes, which names the page's head too.
-    const head = page === 0 ? changes[0]?.sha : undefined;
+    const head = page === 1 ? changes[0]?.sha : undefined;
     const reverts = head !== undefined && await mayRevert(request, note, context);
     return historyPage({
       title: note.title,
@@ -208,7 +208,7 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
         page: link.page(note),
         history: link.history(note),
         changes: link.changes(),
-        ...(page > 0 ? { newer: link.history(note, page > 1 ? { page: String(page - 1) } : undefined) } : {}),
+        ...(page > 1 ? { newer: link.history(note, page > 2 ? { page: String(page - 1) } : undefined) } : {}),
         ...(more && page < MAX_HISTORY_PAGE ? { older: link.history(note, { page: String(page + 1) }) } : {}),
         ...(more && page >= MAX_HISTORY_PAGE ? { beyond: github } : {}),
       },
@@ -246,7 +246,7 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
     const link = urls(context);
     let commits: readonly Commit[];
     try {
-      ({ commits } = await reader.history(note.path, 0));
+      ({ commits } = await reader.history(note.path, 1));
     } catch (error) {
       if (!(error instanceof CommitsUnavailable)) throw error;
       return undefined;
@@ -324,7 +324,7 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
     const reader = read(context);
     const writer = restore.forRequest(context);
     try {
-      const { commits } = await reader.history(note.path, 0);
+      const { commits } = await reader.history(note.path, 1);
       if (commits[0]?.sha !== head) return back("changed");
       const index = commits.findIndex(({ sha }) => sha === revision);
       if (index === 0) return back("unchanged");
@@ -472,7 +472,7 @@ const history: ServerModuleFactory<unknown, HistoryData> = (_options, data) => {
         if (!SHA.test(to) || (from !== null && !SHA.test(from))) return undefined;
         return diff(request, note, to, from, reader, context);
       }
-      const page = query.get("page") ?? "0";
+      const page = query.get("page") ?? "1";
       if (!PAGE_NUMBER.test(page) || Number(page) > MAX_HISTORY_PAGE) return undefined;
       return listPage(request, note, Number(page), reader, context);
     },

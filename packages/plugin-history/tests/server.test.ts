@@ -69,7 +69,8 @@ describe("/-/history/<page>", () => {
     await site.settle();
     expect(github.pending).toEqual([]);
     replayGitHub([historyExchange(GUIDE_PATH, [older], { page: 2 })], INSTALLATION_TOKEN);
-    const back = await site.page(`${HISTORY}?page=1`);
+    // Pages count from 1, as GitHub's do: the first is the history page itself, and `?page=2` the next.
+    const back = await site.page(`${HISTORY}?page=2`);
 
     expect(first?.title).toBe("History of Guide");
     expect(rows(first)).toEqual([
@@ -99,11 +100,28 @@ describe("/-/history/<page>", () => {
     ], INSTALLATION_TOKEN);
 
     expect(rows(await site.page(HISTORY))).toEqual(["19 Nov 2026, 10:00 UTC Grace Hopper grace on GitHub"]);
-    const paused = await site.page(`${HISTORY}?page=1`);
+    const paused = await site.page(`${HISTORY}?page=2`);
     await site.settle();
 
     expect(text(paused!.html)).toContain("GitHub isn't answering right now, so this page's changes can't be shown.");
     expect(github.requests).toHaveLength(2);
+  });
+
+  // Proves the last page reaches change 1,000 and no further: a full page 10 links to GitHub for older changes.
+  it("sends readers to GitHub after the tenth page", async () => {
+    const site = await createSite();
+    const commits = Array.from({ length: 100 }, (_, index): TestCommit => ({
+      sha: (index + 1).toString(16).padStart(40, "0"), message: "Edit the guide", at: -index, author: GRACE, committer: GITHUB_WEB, files: [GUIDE_PATH],
+    }));
+    replayGitHub([firstToken, historyExchange(GUIDE_PATH, commits, { page: 10 })], INSTALLATION_TOKEN);
+
+    const last = await site.page(`${HISTORY}?page=10`);
+    await site.settle();
+
+    expect(rows(last)).toHaveLength(100);
+    expect(last?.html).toContain(">Older changes on GitHub<");
+    expect(last?.html).not.toContain("page=11");
+    expect(last?.html).toContain(`href="${HISTORY}?page=9">Newer changes`);
   });
 
   // Proves a revision parameter reaches only commits on the content branch, and a page parameter only published pages.
@@ -112,6 +130,7 @@ describe("/-/history/<page>", () => {
     ["a page that isn't published", "/wiki/-/history/nowhere/"],
     ["a revision that isn't a commit id", `${HISTORY}?to=HEAD~1`],
     ["a page number past the cap", `${HISTORY}?page=11`],
+    ["page 0, since pages count from 1", `${HISTORY}?page=0`],
     ["a commit GitHub doesn't hold on the branch, as a fork's", `${HISTORY}?to=${"f".repeat(40)}`],
   ])("answers 404 for %s", async (_case, path) => {
     const site = await createSite();

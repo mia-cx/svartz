@@ -93,8 +93,8 @@ export class CommitsUnavailable extends Error {
 /** Reads one request's worth of commits. Make one per request with {@link commitReader}. */
 export interface CommitReader {
   /**
-   * The commits that changed `path`, a page of {@link GITHUB_PAGE_SIZE} at a time, in the branch's order: GitHub's
-   * list for the file, which walks the branch's ancestry, with what the mirror knows of each. The mirror can't order
+   * The commits that changed `path`, a page of {@link GITHUB_PAGE_SIZE} at a time counting from 1, in the branch's
+   * order: GitHub's list for the file, which walks the branch's ancestry, with what the mirror knows of each. The mirror can't order
    * them itself: commit times tie and can be backdated, and push deliveries don't name a commit's parents. `more` says
    * whether GitHub may hold older ones. Renames aren't followed: the history of a moved file starts at the move.
    */
@@ -384,7 +384,7 @@ export function commitReader(source: CommitSource, token = sourceToken(source)):
 
     const reader: CommitReader = {
       async history(path, page) {
-        const commits = await githubList(path, await branch(), page + 1);
+        const commits = await githubList(path, await branch(), page);
         return { commits, more: commits.length === GITHUB_PAGE_SIZE };
       },
 
