@@ -209,6 +209,22 @@ describe("managed Turbo sync", () => {
     ]);
   });
 
+  // Proves a versioned vault always builds: Turbo's inputs can't see a version's ref move, so a cache hit would restore
+  // the old version's docs. The snapshot cache inside the build still skips unchanged versions.
+  it("never caches the build of a vault with versions", async () => {
+    const { workspaceRoot } = await createWorkspaceFixture();
+    const config = createResolvedConfig(workspaceRoot, [{ id: "docs" }, { id: "vault" }]);
+    const docs = config.vaults[0]!;
+    const versions = [{ id: "v2", status: "latest" }, { id: "v1", ref: "docs/v1" }];
+    await syncManagedTurboFiles({ ...config, vaults: [{ ...docs, theme: { ...docs.theme, versions } }, config.vaults[1]!] });
+
+    const turboJson = JSON.parse(await readFile(path.join(workspaceRoot, "turbo.json"), "utf8")) as {
+      tasks: Record<string, Record<string, unknown>>;
+    };
+    expect(turboJson.tasks["//#svartz:build:docs"]!.cache).toBe(false);
+    expect(turboJson.tasks["//#svartz:build:vault"]!.cache).toBeUndefined();
+  });
+
   it("prunes stale managed entries while preserving unmanaged ones", async () => {
     const { workspaceRoot } = await createWorkspaceFixture();
     await writeFile(

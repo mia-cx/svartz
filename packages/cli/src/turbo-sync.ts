@@ -134,6 +134,9 @@ function createManagedTurboTasks(config: ResolvedConfigSet, builds: readonly str
             ...(builds.length > 0 ? { dependsOn: [...builds] } : {}),
             inputs: getBuildTaskInputs(config, vault.id, vault.path),
             outputs: getBuildTaskOutputs(config, vault),
+            // A version's docs come from a git ref, which can move while every input stays the same, so a versioned vault
+            // always builds; its snapshot cache still skips the versions whose ref didn't move.
+            ...(vault.theme["versions"] !== undefined ? { cache: false } : {}),
           } satisfies TurboTask,
         ],
         [
