@@ -71,11 +71,12 @@ The release uses the `svartz@<version>` tag and combines matching package change
 ## The docs site
 
 `docs-deploy.yml` builds every vault in `svartz.config.ts` and deploys each as its own Worker.
-Every push to `main` deploys staging: the docs at `staging.svartz.dev` and the theme demos at `<theme>.demo.staging.svartz.dev`.
-Staging responses carry `X-Robots-Tag: noindex`, so search engines leave them out.
-Once a release publishes, Release starts a production deploy: the docs at `svartz.dev` (and `svartz.com` and `svartz.app`) and the demos at `<theme>.demo.svartz.dev`.
-A production deploy always builds the latest GitHub release as of its turn, so production documents what npm serves, and a late or repeated run deploys the same release.
-Dispatch Docs deploy on `main` with `production` to redeploy it.
+A deploy brings its environment up to date as of its turn, whatever started it, so a late, queued or repeated run deploys the same thing:
+
+- Staging, started by every push to `main`, deploys `main`'s latest commit: the docs at `staging.svartz.dev` and the theme demos at `<theme>.demo.staging.svartz.dev`. Its responses carry `X-Robots-Tag: noindex`, so search engines leave them out.
+- Production, started by Release once a release publishes, deploys the latest GitHub release, so it documents what npm serves: the docs at `svartz.dev` (and `svartz.com` and `svartz.app`) and the demos at `<theme>.demo.svartz.dev`.
+
+Dispatch Docs deploy on `main` to redeploy either one.
 It uses the organization's `CLOUDFLARE_API_TOKEN` secret and `CLOUDFLARE_ACCOUNT_ID` variable.
 
 ## One-time setup

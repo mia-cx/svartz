@@ -1,8 +1,8 @@
 name: Docs deploy
 
-# Deploys the docs and the theme demos, each vault in svartz.config.ts its own Worker. A push to main deploys staging
-# (staging.svartz.dev) from that commit. A production run (svartz.dev) brings production up to the latest published
-# release: the Release workflow starts one after it publishes, and a manual dispatch can start another.
+# Deploys the docs and the theme demos, each vault in svartz.config.ts its own Worker. A deploy brings its environment
+# up to date as of its turn: staging (staging.svartz.dev) to the latest commit on main, which every push triggers, and
+# production (svartz.dev) to the latest published release, which the Release workflow triggers after publishing.
 
 on:
   push:
@@ -24,8 +24,9 @@ permissions:
   contents: read
 
 concurrency:
-  # One deploy per environment. A newer staging push cancels an older one. Production runs never cancel each other;
-  # whichever runs deploys the latest release as of its turn, so a queued run replacing another changes nothing.
+  # One deploy per environment. Every run deploys the latest commit or release as of its turn, so a queued run
+  # replacing another, a late run or a re-run changes nothing. A newer staging push cancels an older one; production
+  # runs never cut a rollout short.
   group: docs-deploy-${{ inputs.environment || 'staging' }}
   cancel-in-progress: ${{ (inputs.environment || 'staging') != 'production' }}
 
@@ -49,11 +50,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Staging serves the pushed commit; production serves the latest published release, never the branch tip.
-          if [ "$TARGET" != production ]; then echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"; exit; fi
-          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
-          echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)" >> "$GITHUB_OUTPUT"
-          echo "Deploying $tag to production."
+          # Staging serves main's latest commit; production serves the latest published release, never main's tip.
+          ref=main
+          if [ "$TARGET" = production ]; then
+            ref=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          fi
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$ref" --jq .sha)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying $ref ($sha) to $TARGET."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.commit.outputs.sha }}
