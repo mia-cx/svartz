@@ -108,7 +108,11 @@ function createManagedScripts(config: ResolvedConfigSet): Record<string, string>
   };
 }
 
-function createManagedTurboTasks(config: ResolvedConfigSet): Record<string, TurboTask> {
+/**
+ * The managed tasks. `builds` says whether the workspace defines a `build` task: only then do vault builds depend on
+ * `^build`, since Turbo refuses a graph whose `^build` names no task.
+ */
+function createManagedTurboTasks(config: ResolvedConfigSet, builds: boolean): Record<string, TurboTask> {
   return {
     [turboTaskName("svartz:build")]: {
       dependsOn: config.vaults.map((vault) => turboTaskName(buildTaskName(vault.id))),
@@ -120,7 +124,7 @@ function createManagedTurboTasks(config: ResolvedConfigSet): Record<string, Turb
           {
             // Workspace packages the project depends on build first, and their output is part of this task's hash: a
             // rebuilt local theme or plugin, or the types a generated reference reads, never restores a stale vault.
-            dependsOn: ["^build"],
+            ...(builds ? { dependsOn: ["^build"] } : {}),
             inputs: getBuildTaskInputs(config, vault.id, vault.path),
             outputs: getBuildTaskOutputs(config, vault),
           } satisfies TurboTask,
@@ -201,7 +205,7 @@ function createNextTurboJson(
         ? existingTurboJson.$schema
         : TURBO_JSON_SCHEMA,
     ...existingTurboJson,
-    tasks: mergeManagedTurboTasks(existingTurboJson.tasks, createManagedTurboTasks(config)),
+    tasks: mergeManagedTurboTasks(existingTurboJson.tasks, createManagedTurboTasks(config, Boolean(existingTurboJson.tasks?.build))),
   };
 }
 

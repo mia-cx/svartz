@@ -168,6 +168,18 @@ describe("managed Turbo sync", () => {
     });
   });
 
+  // Turbo refuses a graph whose `^build` names no task, so a workspace without one keeps vault builds independent.
+  it("makes vault builds depend on ^build only when the workspace has a build task", async () => {
+    const { workspaceRoot } = await createWorkspaceFixture();
+    await writeFile(path.join(workspaceRoot, "turbo.json"), JSON.stringify({ tasks: { lint: {} } }));
+    await syncManagedTurboFiles(createResolvedConfig(workspaceRoot, [{ id: "docs" }]));
+
+    const turboJson = JSON.parse(await readFile(path.join(workspaceRoot, "turbo.json"), "utf8")) as {
+      tasks: Record<string, Record<string, unknown>>;
+    };
+    expect(turboJson.tasks["//#svartz:build:docs"]).not.toHaveProperty("dependsOn");
+  });
+
   it("caches a Worker vault's bundle and Wrangler config, which its deploy reads", async () => {
     const { workspaceRoot } = await createWorkspaceFixture();
     await syncManagedTurboFiles(createResolvedConfig(workspaceRoot, [{ id: "docs", target: "cloudflare-workers" }]));
