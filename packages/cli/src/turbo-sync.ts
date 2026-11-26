@@ -112,6 +112,13 @@ function createManagedScripts(config: ResolvedConfigSet): Record<string, string>
  * The managed tasks. `builds` says whether the workspace defines a `build` task: only then do vault builds depend on
  * `^build`, since Turbo refuses a graph whose `^build` names no task.
  */
+/**
+ * Whether the workspace defines a `build` task a dependency can run: `build` itself, or a package's own (`theme#build`).
+ * The root's `//#build` doesn't count, since `^build` only reaches dependencies.
+ */
+const definesBuild = (tasks: TurboJson["tasks"]): boolean =>
+  Object.keys(tasks ?? {}).some((name) => name === "build" || (name.endsWith("#build") && !name.startsWith("//#")));
+
 function createManagedTurboTasks(config: ResolvedConfigSet, builds: boolean): Record<string, TurboTask> {
   return {
     [turboTaskName("svartz:build")]: {
@@ -205,7 +212,7 @@ function createNextTurboJson(
         ? existingTurboJson.$schema
         : TURBO_JSON_SCHEMA,
     ...existingTurboJson,
-    tasks: mergeManagedTurboTasks(existingTurboJson.tasks, createManagedTurboTasks(config, Boolean(existingTurboJson.tasks?.build))),
+    tasks: mergeManagedTurboTasks(existingTurboJson.tasks, createManagedTurboTasks(config, definesBuild(existingTurboJson.tasks))),
   };
 }
 

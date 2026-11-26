@@ -180,6 +180,20 @@ describe("managed Turbo sync", () => {
     expect(turboJson.tasks["//#svartz:build:docs"]).not.toHaveProperty("dependsOn");
   });
 
+  it.each([
+    [{ "theme#build": {} }, ["^build"]],
+    [{ "//#build": {} }, undefined],
+  ])("counts a package's own build task, not the root's (%o)", async (tasks, dependsOn) => {
+    const { workspaceRoot } = await createWorkspaceFixture();
+    await writeFile(path.join(workspaceRoot, "turbo.json"), JSON.stringify({ tasks }));
+    await syncManagedTurboFiles(createResolvedConfig(workspaceRoot, [{ id: "docs" }]));
+
+    const turboJson = JSON.parse(await readFile(path.join(workspaceRoot, "turbo.json"), "utf8")) as {
+      tasks: Record<string, Record<string, unknown>>;
+    };
+    expect(turboJson.tasks["//#svartz:build:docs"]!.dependsOn).toEqual(dependsOn);
+  });
+
   it("caches a Worker vault's bundle and Wrangler config, which its deploy reads", async () => {
     const { workspaceRoot } = await createWorkspaceFixture();
     await syncManagedTurboFiles(createResolvedConfig(workspaceRoot, [{ id: "docs", target: "cloudflare-workers" }]));
