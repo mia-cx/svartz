@@ -209,8 +209,10 @@ function emitLlms(ctx: PluginContext, base: string | undefined): void {
   }
 
   if (!reserved.has("llms-full.txt")) {
-    // Every link is absolute, or root-relative without `site.url`, since a page's own location is gone here.
-    const url = (href: string) => (base ? absoluteUrl(base, href) : href);
+    // Every link is absolute, or root-relative below the deployment base without `site.url`, since a page's own
+    // location is gone here.
+    const deploymentBase = (ctx.meta.get("svartz:deploymentBase") as string | undefined) ?? "";
+    const url = (href: string) => (base ? absoluteUrl(base, href) : `${deploymentBase}${href}`);
     // A host route may own a page's `.md` URL; the page is still public, so its content belongs here.
     const pages = reading.flatMap((section) => section.entries)
       .filter((entry) => !entry.locked && !entry.properties.encrypted && !entry.properties.hidden)

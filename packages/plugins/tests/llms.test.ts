@@ -298,10 +298,27 @@ describe("Markdown copies for LLM agents", () => {
     expect(full).toContain("]: /docs/reference/api.md");
   });
 
+  it("keeps the deployment base in llms-full.txt links without site.url", async () => {
+    const ctx = build([
+      file("guides/setup.md", "---\ntitle: Setup\n---\nSee [more](../tags/?sort=new#top) and [[next]]."),
+      file("guides/next.md", "---\ntitle: Next\n---\nDone."),
+    ]);
+    ctx.meta.set("svartz:deploymentBase", "/project");
+    const full = (await emit(ctx))("llms-full.txt")!;
+    expect(full).toContain("# Setup\n\nSource: /project/docs/guides/setup/\n\nSee [more](/project/docs/tags/?sort=new#top) and [next](/project/docs/guides/next.md).");
+  });
+
+  it("turns a link to an unpublished note into its label in llms-full.txt, as in the page's copy", async () => {
+    const asset = await emit(build([file("guides/setup.md", "---\ntitle: Setup\n---\nSee [the API](../reference/api.md).")]));
+    expect(asset("guides/setup.md")).toContain("See the API.");
+    expect(asset("llms-full.txt")).toContain("See the API.");
+  });
+
   it("keeps each page's references and fences to itself in llms-full.txt", async () => {
     const full = (await emit(build([
       file("a.md", "---\ntitle: A\n---\nRead [doc] and [more][doc].[^1]\n\n[doc]: https://a.example\n[^1]: A's note.\n\n```js\nconst open = true;"),
-      file("b.md", "---\ntitle: B\n---\nRead [the doc][doc].[^1]\n\n[doc]: https://b.example\n[^1]: B's note."),
+      // An escaped bracket inside a label is part of the label.
+      file("b.md", "---\ntitle: B\n---\nRead [the doc][doc] and [Docs][some\\[key].[^1]\n\n[doc]: https://b.example\n[some\\[key]: https://b.example/key\n[^1]: B's note."),
     ])))("llms-full.txt")!;
     // Read the file as one document, the way an agent's Markdown parser would.
     const tree = unified().use(remarkParse).use(remarkGfm).parse(full);
@@ -318,7 +335,7 @@ describe("Markdown copies for LLM agents", () => {
     expect(pages).toEqual([
       { title: "Docs", links: [], notes: [] },
       { title: "A", links: ["https://a.example", "https://a.example"], notes: ["A's note."] },
-      { title: "B", links: ["https://b.example"], notes: ["B's note."] },
+      { title: "B", links: ["https://b.example", "https://b.example/key"], notes: ["B's note."] },
     ]);
   });
 

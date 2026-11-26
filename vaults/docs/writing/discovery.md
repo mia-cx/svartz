@@ -56,7 +56,7 @@ A host app's own `robots.txt`, as a route or in `static/`, takes priority. Crawl
 
 By default Svartz emits a `.md` copy beside each public, unprotected note, lists the copies in [llms.txt](https://llmstxt.org/), and joins them into `llms-full.txt`. The home copy is `index.md`. Notes link to their copies. The copies omit hidden comments and executable script and style blocks. They use absolute listing links when `site.url` exists, relative links otherwise.
 
-`llms.txt` has a section per top-level folder, in the order the explorer shows them. The home page and other notes at the vault root share a Pages section. Each entry shows the note's `description`, or else its first paragraph, cut at the last whole sentence within 300 characters. `llms-full.txt` holds every public page in the same order, each under its own heading and a `Source:` line with its URL. Its links are absolute, or start at the site root without `site.url`, and each page keeps its own reference links and footnotes.
+`llms.txt` has a section per top-level folder, in the order the explorer shows them. The home page and other notes at the vault root share a Pages section. Each entry shows the note's `description`, or else its first paragraph, cut at the last whole sentence within 300 characters. `llms-full.txt` holds every public page in the same order, each under its own heading and a `Source:` line with its URL. Its links are absolute, or start at the deployment base without `site.url`, and each page keeps its own reference links and footnotes.
 
 Tag pages, folder listings, and the feed help people browse but give agents little. To list them in an Optional section that agents can skip, turn it on. A folder named Optional is listed as Optional (folder), so agents still read it.
 

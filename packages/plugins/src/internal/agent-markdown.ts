@@ -56,7 +56,9 @@ function definitionUrl(target: string, links: AgentMarkdownLinks): string | unde
   if (asset) return asset;
   const [path = "", section] = target.split("#");
   const url = links.note({ target: path, section: section || undefined, type: "markdown" });
-  return url ? `${url}${anchor(section)}` : links.path?.(target);
+  if (url) return `${url}${anchor(section)}`;
+  // A definition naming a note that isn't public stays as authored, like the page's own copy.
+  return NOTE_FILE.test(path) ? undefined : links.path?.(target);
 }
 
 function embedReplacements(source: string, links: AgentMarkdownLinks): Replacement[] {
@@ -131,11 +133,12 @@ export function portableMarkdown(file: ProcessedFile, source: string, links: Age
       const url = asset ?? (note && `${note}${anchor(link.section)}`);
       // A Markdown link swaps only its destination, keeping its label markup and title.
       if (link.destination && url) return [{ ...link.destination, text: url }];
-      const path = link.destination && links.path?.(link.section ? `${link.target}#${link.section}` : link.target);
-      if (link.destination && path) return [{ ...link.destination, text: path }];
       // A Markdown link to another path, such as a host route, stays as authored. One to a note that
       // isn't public becomes its label, like a wikilink, rather than a link to a file that isn't published.
-      if (link.destination && !NOTE_FILE.test(link.target)) return [];
+      if (link.destination && !NOTE_FILE.test(link.target)) {
+        const path = links.path?.(link.section ? `${link.target}#${link.section}` : link.target);
+        return path ? [{ ...link.destination, text: path }] : [];
+      }
       // An unresolved wikilink becomes its label, as on the page.
       return [{ start: link.start, end: link.end, text: noteLink(url, label) }];
     }),
@@ -181,6 +184,16 @@ const gfmParser = unified().use(remarkParse).use(remarkGfm);
 const DEFINITION_LABEL = /^\[\^?(?:\\.|[^\\\]])+\]/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 
+/** Where the `[label]` ending at `end` opens: its last `[` that no backslash escapes, since a label holds no other. */
+function labelStart(markdown: string, end: number): number {
+  for (let at = markdown.lastIndexOf("[", end - 1); at >= 0; at = markdown.lastIndexOf("[", at - 1)) {
+    let backslashes = 0;
+    while (markdown[at - 1 - backslashes] === "\\") backslashes++;
+    if (backslashes % 2 === 0) return at;
+  }
+  return end;
+}
+
 /**
  * A copy that still means the same once joined with others into one document, as in `llms-full.txt`. Each reference
  * and footnote label gets the `scope` prefix, so a definition binds only the page that wrote it, and a fence the page
@@ -196,7 +209,7 @@ export function selfContained(markdown: string, scope: string): string {
     if (start === undefined || end === undefined) return;
     if (node.type === "linkReference" || node.type === "imageReference") {
       // Only the label after the text changes: `[text][doc]`, `[text][]`, and the shortcut `[doc]` all become `[text][scope:doc]`.
-      const from = node.referenceType === "full" ? markdown.lastIndexOf("[", end - 1) : node.referenceType === "collapsed" ? end - 2 : end;
+      const from = node.referenceType === "full" ? labelStart(markdown, end) : node.referenceType === "collapsed" ? end - 2 : end;
       replacements.push({ start: from, end, text: `[${label(node.identifier)}]` });
     } else if (node.type === "footnoteReference") {
       replacements.push({ start, end, text: `[^${label(node.identifier)}]` });

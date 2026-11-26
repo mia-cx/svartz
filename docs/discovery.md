@@ -57,7 +57,7 @@ Each vault writes a Markdown copy of every public note beside its page: `/journa
 
 Set `discovery: { llms: { optional: true } }` to add an `## Optional` section to `llms.txt` that lists the tag pages, folder listings, and the feed. Agents with little context can skip it. A folder named Optional gets an `## Optional (folder)` section instead, so it is never skipped.
 
-Links in `llms.txt` and the copies are absolute when `site.url` exists, and relative otherwise, so none of them needs a public URL. `llms-full.txt` has no single location for its pages' relative links to resolve from, so every link in it is absolute, or root-relative (`/docs/tags/`) without `site.url`. A manual SvelteKit route at `llms.txt` or `llms-full.txt` wins.
+Links in `llms.txt` and the copies are absolute when `site.url` exists, and relative otherwise, so none of them needs a public URL. `llms-full.txt` has no single location for its pages' relative links to resolve from, so every link in it is absolute, or root-relative below the deployment base (`/project/docs/tags/`) without `site.url`. A link to a note that isn't public becomes its label, as in the page's own copy. A manual SvelteKit route at `llms.txt` or `llms-full.txt` wins.
 
 Every theme shows two buttons on a note: Copy page puts the copy on the clipboard, and View as Markdown opens it. Each page also links its copy with `<link rel="alternate" type="text/markdown">`, so an agent that reads the page finds the copy.
 
