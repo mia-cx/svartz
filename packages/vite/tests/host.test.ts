@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { ConfigEnv, UserConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { hostStylesPlugin, withSvartzHost } from "../src/host";
-import { clearPublicAssets, publicAssetsPlugin, recordPublicAssets } from "../src/public-assets";
+import { clearPublicAssets, getMarkdownRoutes, getPublicFileNames, publicAssetsPlugin, recordMarkdownRoutes, recordPublicAssets } from "../src/public-assets";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -91,6 +91,17 @@ it("lets the build spawn processes after recording a large vault's files", () =>
   recordPublicAssets("large", Array.from({ length: 2000 }, (_, index) => ({ fileName: `large/reference/api/notes/note-${index}.md`, path: `/tmp/note-${index}.md` })));
   try {
     expect(spawnSync(process.execPath, ["-e", ""]).error).toBeUndefined();
+  } finally {
+    clearPublicAssets();
+  }
+});
+
+it("records a vault whatever its id, `__proto__` included", () => {
+  recordPublicAssets("__proto__", [{ fileName: "proto/a.md", path: "/tmp/a.md" }]);
+  recordMarkdownRoutes("__proto__", { "/proto/": "/proto.md" });
+  try {
+    expect(getPublicFileNames()).toEqual(["proto/a.md"]);
+    expect(getMarkdownRoutes()).toEqual({ "/proto/": "/proto.md" });
   } finally {
     clearPublicAssets();
   }

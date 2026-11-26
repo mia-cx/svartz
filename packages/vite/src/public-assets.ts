@@ -27,7 +27,8 @@ interface Recorded {
 
 const KEY = Symbol.for("svartz.public-assets");
 const store = globalThis as typeof globalThis & { [KEY]?: Recorded };
-const recorded = (): Recorded => (store[KEY] ??= { assets: {}, markdown: {} });
+// Null prototypes, so any vault id, `__proto__` included, is an ordinary key.
+const recorded = (): Recorded => (store[KEY] ??= { assets: Object.create(null), markdown: Object.create(null) });
 
 /** Record one vault's public files for the client build. */
 export function recordPublicAssets(vaultId: string, assets: readonly PublicAsset[]): void {

@@ -10,7 +10,7 @@
   },
   "scripts": {
     "svartz": "svartz",
-    "build": "turbo build && pnpm docs:api",
+    "build": "turbo build",
     "docs:api": "node scripts/api-reference/index.mjs",
     "dev": "turbo dev",
     "lint": "turbo lint",

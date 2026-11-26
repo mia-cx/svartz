@@ -24,4 +24,13 @@ describe('wikilinkSegments', () => {
 			{ text: 'CONTRACT_VERSION', href: '/reference/api/core/contract_version/' }
 		]);
 	});
+
+	it('prefers the note a path names exactly over one it only matches loosely', () => {
+		const api = [
+			{ slug: 'api/foo_bar', title: 'foo_bar', href: '/api/foo_bar/' },
+			{ slug: 'api/foo-bar', title: 'foo-bar', href: '/api/foo-bar/' }
+		];
+		expect(wikilinkSegments('[[api/foo-bar]]', api)).toEqual([{ text: 'api/foo-bar', href: '/api/foo-bar/' }]);
+		expect(wikilinkSegments('[[api/foo_bar]]', api)).toEqual([{ text: 'api/foo_bar', href: '/api/foo_bar/' }]);
+	});
 });

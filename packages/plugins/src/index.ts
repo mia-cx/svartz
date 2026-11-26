@@ -64,6 +64,9 @@ import { oxHugoFlavoredMarkdown } from "./oxhugo-flavored-markdown";
 import { citations } from "./citations";
 import { presentation } from "./presentation";
 export type { PresentationOptions } from "./presentation";
+export type { CitationOptions } from "./citations";
+export type { OxHugoOptions } from "./oxhugo-flavored-markdown";
+export type { RoamOptions } from "./roam-flavored-markdown";
 
 export const CORE_PLUGIN_IDS = [
   DISCOVER_FILES_ID,

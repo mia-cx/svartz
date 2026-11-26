@@ -1,6 +1,26 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "@svartz/config";
 import { presentation } from "@svartz/plugins";
 import cli from "./packages/cli/package.json" with { type: "json" };
+
+/**
+ * Writes the docs' API reference (`vaults/docs/reference/api/`, gitignored) from the packages' built types before the
+ * docs vault's files are discovered, however its build was started. Once per process: a dev server's rebuilds, which
+ * the written notes themselves trigger, reuse it. A failure fails the build rather than publishing docs without their
+ * reference.
+ */
+let apiReferenceGenerated: Promise<unknown> | undefined;
+const apiReference = () => ({
+  id: "docs:api-reference",
+  discoverFiles: {
+    async run() {
+      apiReferenceGenerated ??= import("./scripts/api-reference/index.mjs").then(({ generate }) =>
+        generate({ root: fileURLToPath(new URL(".", import.meta.url)), vault: "vaults/docs", dir: "reference/api" }));
+      await apiReferenceGenerated;
+    },
+    options: { enforce: "pre" as const, fatal: true },
+  },
+});
 
 /** Svartz's own docs, and one demo per first-party theme, each a Worker on its own domain. */
 const DOCS_DOMAIN = "svartz.dev";
@@ -51,6 +71,7 @@ export default defineConfig({
       id: "docs",
       path: "vaults/docs",
       target: worker("svartz-docs", DOCS_DOMAIN, ...DOCS_MIRRORS),
+      plugins: [apiReference()],
       theme: {
         base: "@svartz/theme-docs",
         version: cli.version,
