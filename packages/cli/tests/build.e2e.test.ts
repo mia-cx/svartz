@@ -323,7 +323,7 @@ describe("svartz CLI", () => {
       "User-agent: GPTBot", "User-agent: ClaudeBot", "User-agent: Google-Extended", "User-agent: Applebot-Extended",
       "User-agent: CCBot", "User-agent: Meta-ExternalAgent", "User-agent: Bytespider",
       "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow: /", "",
-      "User-agent: Amazonbot", "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow: /drafts/", "",
+      "User-agent: Amazonbot", "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow:", "Disallow: /drafts/", "",
       "Sitemap: https://example.test/sitemap.xml", "",
     ].join("\n"));
   }, 240_000);

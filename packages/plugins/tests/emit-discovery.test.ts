@@ -155,7 +155,7 @@ describe("discovery output", () => {
         "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow: /", "",
         // A crawler with its own group never reads `*`'s, so each group repeats the signals.
         "User-agent: Amazonbot", "User-agent: YandexBot",
-        "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Allow: /public/", "Disallow: /drafts/", "",
+        "Content-Signal: search=yes, ai-input=yes, ai-train=no", "Disallow:", "Allow: /public/", "Disallow: /drafts/", "",
         "Sitemap: https://example.com/sitemap.xml", "",
       ]],
       ["admits only search and agent fetchers", { bots: false, search: true, training: false }, [
@@ -169,7 +169,26 @@ describe("discovery output", () => {
       // allow over an equally long `Disallow: /` and crawl on, so an admitting group must hold no rule of its own.
       ["lets a raw rule block every crawler that bots admits", { rules: [{ userAgent: "*", disallow: ["/"] }] }, [
         "User-agent: *", "Disallow:", "",
+        "User-agent: *", "Disallow:", "Disallow: /", "",
+        "Sitemap: https://example.com/sitemap.xml", "",
+      ]],
+      // A crawler a rule names reads only that rule's group, so the group keeps its preset's block: the rule narrows
+      // `bots: false` for Googlebot instead of opening the rest of the site to it.
+      ["keeps a blocked crawler blocked outside what its raw rule names", {
+        bots: false, search: false, training: false, rules: [{ userAgent: ["Googlebot", "Amazonbot"], allow: ["/public/"] }],
+      }, [
         "User-agent: *", "Disallow: /", "",
+        "User-agent: Googlebot", "User-agent: Amazonbot", "Disallow: /", "Allow: /public/", "",
+        "Sitemap: https://example.com/sitemap.xml", "",
+      ]],
+      ["splits a raw rule's crawlers by the preset that covers them", {
+        training: false, rules: [{ userAgent: ["googlebot", "GPTBot"], disallow: ["/drafts/"] }],
+      }, [
+        "User-agent: *", "Disallow:", "",
+        "User-agent: GPTBot", "User-agent: ClaudeBot", "User-agent: Google-Extended", "User-agent: Applebot-Extended",
+        "User-agent: CCBot", "User-agent: Meta-ExternalAgent", "User-agent: Bytespider", "Disallow: /", "",
+        "User-agent: googlebot", "Disallow:", "Disallow: /drafts/", "",
+        "User-agent: GPTBot", "Disallow: /", "Disallow: /drafts/", "",
         "Sitemap: https://example.com/sitemap.xml", "",
       ]],
       ["lets a raw rule block part of a preset that admits its crawler", {
@@ -179,7 +198,7 @@ describe("discovery output", () => {
         "User-agent: Googlebot", "User-agent: bingbot", "User-agent: DuckDuckBot", "User-agent: Applebot",
         "User-agent: OAI-SearchBot", "User-agent: ChatGPT-User", "User-agent: Claude-SearchBot", "User-agent: Claude-User",
         "User-agent: PerplexityBot", "User-agent: Perplexity-User", "Disallow:", "",
-        "User-agent: Googlebot", "Disallow: /drafts/", "",
+        "User-agent: Googlebot", "Disallow:", "Disallow: /drafts/", "",
         "Sitemap: https://example.com/sitemap.xml", "",
       ]],
     ])("%s", async (_name, robots, lines) => {
