@@ -68,6 +68,6 @@ The `latest` version is the vault as it stands, at the usual URLs. Every other v
 - The picker keeps the reader on the page they're reading, or opens that version's home page when it has no such page.
 - A `deprecated` version's pages say so above the page, linking the same page in the latest version.
 - Search covers the version being read. Only the latest version is in the sitemap and feed; older pages are reachable by URL and from the picker.
-- Each older version builds once and is reused from `.svartz/vaults/<id>/versions/` until its ref moves or Svartz, the config or the lockfile changes. Keep that folder between CI builds to keep the saving.
+- Each older version builds once and is reused from `.svartz/vaults/<id>/versions/` until its ref moves or Svartz, the config, a file a plugin reads or the lockfile changes; with password groups, every version builds each time. Keep that folder between CI builds to keep the saving.
 
-`status` defaults to `supported`, and exactly one version is `latest`. A CI checkout must hold the refs, such as with `fetch-depth: 0` or `git fetch --tags`. A note of the latest version can't publish below another version's id; the build fails naming the note. To retire a version, remove it from `versions`.
+`status` defaults to `supported`, and exactly one version is `latest`. A CI checkout must hold the refs, such as with `fetch-depth: 0` or `git fetch --tags`. A note or file of the latest version can't publish below another version's id; the build fails naming it. To retire a version, remove it from `versions`.

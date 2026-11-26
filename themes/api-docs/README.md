@@ -57,9 +57,9 @@ theme: {
 | Deprecated | A notice above each page links the same page in the latest version. |
 | Search, sitemap, feed | Search covers the version being read. The sitemap and feed list the latest version only. |
 | Canonical URLs | Each page is canonical at its own URL, so the latest version's are the unversioned ones. |
-| Build cost | Each older version is a vault of its own to the build, cached in `.svartz/vaults/<id>/versions/<version>/` and reused until its ref moves or Svartz, the config or the lockfile changes. Bundling and prerendering still cover every version's pages. |
+| Build cost | Each older version is a vault of its own to the build, cached in `.svartz/vaults/<id>/versions/<version>/` and reused until its ref moves or Svartz, the config, a file a plugin reads or the lockfile changes. A vault with password groups builds every version each time, so a changed password applies to all. Bundling and prerendering still cover every version's pages. |
 
-Exactly one version is `latest`, and it takes no `ref`. A latest page whose URL falls below another version's id fails the build, naming it. Retire a version by removing it from the list.
+Exactly one version is `latest`, and it takes no `ref`. A latest page or file whose URL falls below another version's id fails the build, naming it. Retire a version by removing it from the list.
 
 ## Frontmatter
 

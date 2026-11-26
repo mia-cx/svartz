@@ -1,12 +1,13 @@
 /**
  * The build cache of a version snapshot (`SvartzVitePluginOptions.snapshot`). A snapshot's files never change, so once
  * its pipeline has run, the files it wrote (page modules, index, search, public files, runtime modules) stay valid
- * while nothing else it read changes: the commit, the vault's config and plugins, the theme, Svartz's own code and the
- * lockfile. The entry records what the build needs from that run beyond those files, beside them in the vault's build
- * root, so deleting the build root deletes both.
+ * while nothing else it read changes: the commit and folder it came from, the vault's config and plugins, the files
+ * they read, the theme, host routes, Svartz's own code and the lockfile. Vaults with password groups are never cached.
+ * The entry records what the build needs from that run beyond those files, beside them in the vault's build root, so
+ * deleting the build root deletes both.
  */
 import { createHash } from "node:crypto";
-import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describeValue, type ResolvedConfig } from "@svartz/core";
@@ -68,16 +69,28 @@ function softwareHash(): Promise<string> {
   })();
 }
 
-/** The key of a snapshot's build: its commit, and everything else its pipeline and generated modules read. */
-export async function snapshotKey(config: ResolvedConfig, commit: string, inputs: unknown): Promise<string> {
-  const favicon = config.site.favicon ? await readFile(config.site.favicon).then(hash, () => "unreadable") : "none";
+/**
+ * Whether a snapshot's build may be cached. A vault with password groups never is: its build checks and encrypts with
+ * the passwords' current values, which a key must not hold, so a rotated password could leave the old one working.
+ */
+export const snapshotCacheable = (config: ResolvedConfig) => Object.keys(config.passwordGroups ?? {}).length === 0;
+
+/** `file`, resolved against the vault, by content. */
+const fileHash = (vault: string, file: string) => readFile(resolve(vault, file)).then(hash, () => "unreadable");
+
+/**
+ * The key of a snapshot's build: its source (commit and folder), the files its plugins read (`reads`) by content, and
+ * everything else its pipeline and generated modules read.
+ */
+export async function snapshotKey(config: ResolvedConfig, source: string, inputs: unknown, reads: readonly string[]): Promise<string> {
   return hash(describeValue({
     format: FORMAT,
-    commit,
+    source,
     software: await softwareHash(),
     lockfile: await lockfileHash(config.path),
     config,
-    favicon,
+    favicon: config.site.favicon ? await fileHash(config.path, config.site.favicon) : "none",
+    reads: await Promise.all(reads.map(async (file) => [file, await fileHash(config.path, file)])),
     inputs,
   }));
 }
@@ -98,6 +111,7 @@ export async function readSnapshotBuild(config: ResolvedConfig, key: string): Pr
 export async function writeSnapshotBuild(config: ResolvedConfig, key: string, build: SnapshotBuild): Promise<void> {
   const path = entryPath(config);
   const temporary = `${path}.${process.pid}.tmp`;
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(temporary, JSON.stringify({ key, build }));
   await rename(temporary, path);
 }

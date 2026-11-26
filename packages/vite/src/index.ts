@@ -84,7 +84,7 @@ import { emitProtectedGroupArtifacts } from "./protected-payload";
 import { clearPublicAssets, recordMarkdownRoutes, recordPublicAssets } from "./public-assets";
 import { writeProtectedBridgeModules, type ProtectedBridgeModule } from "./protected-bridge";
 import { themeSourceAliases } from "./theme-aliases";
-import { clearSnapshotBuild, readSnapshotBuild, snapshotKey, writeSnapshotBuild, type SnapshotBuild } from "./snapshot-cache";
+import { clearSnapshotBuild, readSnapshotBuild, snapshotCacheable, snapshotKey, writeSnapshotBuild, type SnapshotBuild } from "./snapshot-cache";
 
 const PIPELINE_STAGES: readonly StageName[] = [
   "discoverFiles",
@@ -282,10 +282,15 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
       (id) => import(id), context.config, projectRoot(), selectedThemeSources(context.config),
     );
     plugins = resolveRuntimePlugins(context.config, theme, hostAdapter);
-    const snapshot = options.snapshot
+    // Host routes take URLs from notes when routes are allocated, so the cache key reads them before the lookup.
+    const reservedRoutes = context.config.target.type === "host"
+      ? await staticHostRoutes(context.root, context.config.mountPath)
+      : undefined;
+    const snapshot = options.snapshot && snapshotCacheable(context.config)
       ? await snapshotKey(context.config, options.snapshot, {
           mode: context.mode, theme, plugins, themeImport, base: deploymentBasePath(context.config, kitBasePath), runtime: serverRuntime(),
-        })
+          reservedRoutes: reservedRoutes && [...reservedRoutes].sort(),
+        }, plugins.flatMap(({ reads = [] }) => reads))
       : undefined;
     const cached = snapshot && await readSnapshotBuild(context.config, snapshot);
     if (cached) {
@@ -300,9 +305,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     runnerContext.meta.set("svartz:protectedBridgeImports", new Set<string>());
     // The emitter and host bridge are installed before publication filtering runs.
     runnerContext.meta.set("svartz:protectionReady", true);
-    if (context.config.target.type === "host") {
-      runnerContext.meta.set("reservedRoutes", await staticHostRoutes(context.root, context.config.mountPath));
-    }
+    if (reservedRoutes) runnerContext.meta.set("reservedRoutes", reservedRoutes);
 
     if (changeEvent && !isHostRouteFile(context.root, changeEvent.file)) {
       const changeResult = await executeHandleChange(plugins, changeEvent, runnerContext);
@@ -315,7 +318,6 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
 
     await runStages(plugins, runnerContext, PIPELINE_STAGES);
     assertNoNotesUnderPages(context.config, plugins, runnerContext.index?.routes.all ?? []);
-    assertNoRoutesUnderNestedMounts(runnerContext.index?.routes);
     await emitProtectedGroupArtifacts(runnerContext, context.root);
     protectedBridgeModules = await writeProtectedBridgeModules(runnerContext);
     runnerMeta = runnerContext.meta;
@@ -328,6 +330,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     emittedAssets = new Map(emittedArtifacts
       .filter((artifact) => artifact.type === "asset" && artifact.key.startsWith("assets/"))
       .map((artifact) => [assetOutputPath(artifact), artifact]));
+    assertNothingUnderNestedMounts(runnerContext.index?.routes, [...emittedAssets.keys()]);
     recordPublicAssets(context.config.id, [...emittedAssets].map(([fileName, artifact]) => ({ fileName, path: artifact.path })));
     const base = deploymentBasePath(context.config, kitBasePath);
     markdownRoutes = Object.fromEntries((runnerContext.index?.entries ?? []).flatMap((entry) =>
@@ -391,13 +394,17 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     recordMarkdownRoutes(context.config.id, markdownRoutes);
   }
 
-  /** A version's pages are served below its mount, so the vault it's built inside can't publish there too. */
-  function assertNoRoutesUnderNestedMounts(routes: RouteIndex | undefined): void {
-    if (!routes || !options.nestedMounts?.length) return;
-    for (const route of [...routes.all, ...Object.keys(routes.redirects)]) {
-      const mount = options.nestedMounts.find((nested) => route.startsWith(`${nested}/`));
+  /**
+   * A version's pages and public files are served below its mount, so the vault it's built inside can publish neither
+   * there. `files` are public file names below the client root, as `assetOutputPath` gives them.
+   */
+  function assertNothingUnderNestedMounts(routes: RouteIndex | undefined, files: readonly string[]): void {
+    if (!options.nestedMounts?.length) return;
+    const published = [...(routes?.all ?? []), ...Object.keys(routes?.redirects ?? {}), ...files.map((file) => `/${file}`)];
+    for (const path of published) {
+      const mount = options.nestedMounts.find((nested) => path.startsWith(`${nested}/`));
       if (!mount) continue;
-      throw new Error(`Vault "${context.config.id}" publishes ${route}, below ${mount}/, where one of its versions is served. Rename the note or its folder, or the version.`);
+      throw new Error(`Vault "${context.config.id}" publishes ${path}, below ${mount}/, where one of its versions is served. Rename the note, file or folder, or the version.`);
     }
   }
 
