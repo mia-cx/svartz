@@ -1,8 +1,8 @@
 import type { SvartzPlugin } from "../plugin/types";
 
 /**
- * Current contract version. Themes and plugins declare a contractVersion;
- * the runner checks that semver major matches this constant.
+ * Current contract version. Themes must declare a contractVersion and plugins may; `defineTheme` and plugin
+ * normalization fail one whose semver major differs from this constant.
  */
 const CONTRACT_VERSION = "1.0.0" as const;
 

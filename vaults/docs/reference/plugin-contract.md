@@ -5,6 +5,8 @@ description: "Look up plugin fields, pipeline stages, and compiler contributions
 
 A `SvartzPlugin` has a unique `id` and an optional `contractVersion` string. Use `definePlugin(factory)` to type a plugin factory.
 
+Set `contractVersion` to the plugin contract your release was written for, as a literal such as `"1.0.0"`. Svartz compares its major with `CONTRACT_VERSION` from `@svartz/core` (currently `1.0.0`). A plugin whose major differs fails the build before any hook runs, naming the plugin, its version and the contract. Don't import `CONTRACT_VERSION` into the plugin: it reports the contract of whichever core the host resolves, so it would always match. A plugin without `contractVersion` always loads.
+
 | Optional field | Use |
 | --- | --- |
 | `disabled` | Remove this ID from the merged pipeline. |
