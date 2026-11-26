@@ -185,7 +185,18 @@ const TRAINING_CRAWLERS = [
 const group = (agents: readonly string[], lines: readonly string[]): string =>
   [...agents.map((agent) => `User-agent: ${agent}`), ...lines].join("\n");
 
-const crawl = (allowed: boolean): string => allowed ? "Allow: /" : "Disallow: /";
+/**
+ * An empty `Disallow:` admits everything without a rule of its own. A raw rule for the same agents merges into the
+ * group, and Google prefers `Allow: /` over an equally long `Disallow: /`, so `Allow: /` would cancel a raw block.
+ */
+const crawl = (allowed: boolean): string => allowed ? "Disallow:" : "Disallow: /";
+
+/** Crawlers fetch robots.txt only at the origin root: `/robots.txt`, below any mount or deployment base. */
+function atOriginRoot(ctx: PluginContext, base: string | undefined): boolean {
+  const deploymentBase = (ctx.meta.get("svartz:deploymentBase") as string | undefined) ?? "";
+  const publicPath = base ? new URL(base).pathname.replace(/\/+$/, "") : "";
+  return !ctx.config.mountPath && !deploymentBase && !publicPath;
+}
 
 function robots(ctx: PluginContext, base: string | undefined): string {
   const { robots: config, sitemap: sitemapConfig } = ctx.config.discovery;
@@ -219,8 +230,7 @@ export const emitDiscovery = definePlugin(() => ({
       const base = ctx.config.site.url;
       if (llms?.enabled) emitLlms(ctx, base);
       const reserved = (ctx.meta.get("reservedRoutes") as ReadonlySet<string> | undefined) ?? new Set();
-      // Crawlers read robots.txt only at the site root, so a mounted vault leaves it to the host.
-      if (robotsConfig?.enabled && !ctx.config.mountPath && !reserved.has("robots.txt")) {
+      if (robotsConfig?.enabled && atOriginRoot(ctx, base) && !reserved.has("robots.txt")) {
         addAsset(ctx, "robots.txt", robots(ctx, base), "text/plain");
       }
       if (!feed.enabled && !sitemapConfig.enabled) return;

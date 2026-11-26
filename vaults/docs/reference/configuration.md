@@ -105,7 +105,7 @@ Use [[writing/frontmatter|frontmatter]] to control comments on a note.
 | `socialImages.enabled` | Boolean; on when `site.url` exists. |
 | `llms.enabled` | Boolean; on. Controls `llms.txt` and published Markdown copies. |
 | `favicon.enabled` | Boolean; on for standalone targets, off for hosts. |
-| `robots.enabled` | Boolean; on. Writes `robots.txt` for a vault at the site root. |
+| `robots.enabled` | Boolean; on. Writes `robots.txt` for a vault served at the origin root. |
 | `robots.bots` | Boolean; on. Admits every crawler. |
 | `robots.search` | Boolean; follows `robots.bots`. Search engines and AI search and agent fetchers. |
 | `robots.training` | Boolean; follows `robots.bots`. AI training crawlers. |

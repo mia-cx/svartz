@@ -306,9 +306,10 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
     runnerContext.meta.set("svartz:protectedBridgeImports", new Set<string>());
     // The emitter and host bridge are installed before publication filtering runs.
     runnerContext.meta.set("svartz:protectionReady", true);
+    runnerContext.meta.set("svartz:deploymentBase", deploymentBasePath(context.config, kitBasePath));
     if (reservedRoutes) runnerContext.meta.set("reservedRoutes", reservedRoutes);
 
-    if (changeEvent && !isHostRouteFile(context.root, changeEvent.file)) {
+    if (changeEvent && !isHostRouteFile(context.root, context.config.mountPath, changeEvent.file)) {
       const changeResult = await executeHandleChange(plugins, changeEvent, runnerContext);
       if (changeResult.fatalError) {
         throw changeResult.fatalError;
@@ -545,7 +546,7 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
             return;
           }
 
-          if (context.config.target.type === "host" && isHostRouteFile(context.root, file)) {
+          if (context.config.target.type === "host" && isHostRouteFile(context.root, context.config.mountPath, file)) {
             scheduleVaultRebuild({ type, file });
             return;
           }

@@ -31,11 +31,11 @@ Svartz tries the date sources in order. A frontmatter date without an offset use
 
 ## robots.txt
 
-A vault at the site root writes `robots.txt`. By default it admits every crawler and, when the sitemap is on, names the sitemap's absolute URL:
+A vault served at the origin root, such as `https://notes.example.com/`, writes `robots.txt`. By default it admits every crawler and, when the sitemap is on, names the sitemap's absolute URL:
 
 ```txt
 User-agent: *
-Allow: /
+Disallow:
 
 Sitemap: https://notes.example.com/sitemap.xml
 ```
@@ -48,9 +48,9 @@ discovery: { robots: { training: false } }             // stay in search and AI 
 discovery: { robots: { bots: false, search: true } }   // admit only search and AI answers
 ```
 
-`rules` adds groups for any other crawler, such as `{ userAgent: "Amazonbot", disallow: ["/drafts/"] }`. `contentSignals` adds Cloudflare's [Content Signals](https://contentsignals.org/), which say how crawled pages may be used: `contentSignals: { search: true, aiInput: true, aiTrain: false }` writes `Content-Signal: search=yes, ai-input=yes, ai-train=no` into every group, since a crawler with a group of its own never reads the `*` group. They're a stated preference, not a block.
+`rules` adds groups for any other crawler, such as `{ userAgent: "Amazonbot", disallow: ["/drafts/"] }`. A crawler that a preset admits gets an empty `Disallow:`, never `Allow: /`, so a rule for the same crawler, `*` included, blocks what it names. A crawler named in a rule reads only the groups that name it, not the `*` group, so when `bots: false` should still apply to it, give its rule `disallow: ["/"]` too. `contentSignals` adds Cloudflare's [Content Signals](https://contentsignals.org/), which say how crawled pages may be used: `contentSignals: { search: true, aiInput: true, aiTrain: false }` writes `Content-Signal: search=yes, ai-input=yes, ai-train=no` into every group, since a crawler with a group of its own never reads the `*` group. They're a stated preference, not a block.
 
-A host app's own `robots.txt`, as a route or in `static/`, takes priority. A vault under a `mountPath` writes none, since crawlers read `robots.txt` only at the site root. Set `robots.enabled: false` to write none at all.
+A host app's own `robots.txt`, as a route or in `static/`, takes priority. Crawlers fetch `robots.txt` only from the origin root, `/robots.txt`, so a vault under a `mountPath` or a deployment base (`target.basePath`, the host's SvelteKit `paths.base`, or a path in `site.url`) writes none: put the rules in the origin's own `robots.txt`. Set `robots.enabled: false` to write none at all.
 
 ## Markdown copies
 
