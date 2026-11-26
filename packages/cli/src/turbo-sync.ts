@@ -109,20 +109,16 @@ function createManagedScripts(config: ResolvedConfigSet): Record<string, string>
 }
 
 /**
- * The managed tasks. `builds` says whether the workspace defines a `build` task: only then do vault builds depend on
- * `^build`, since Turbo refuses a graph whose `^build` names no task.
- */
-/**
- * The builds a vault build waits on, so a rebuilt package changes its cache key. A generic `build` task runs in every
- * dependency that has one, so `^build`. Without it, `^build` would fail on any dependency lacking a build, so only
- * the packages' own `<package>#build` tasks, by name. The root's `//#build` isn't a dependency's. None: nothing.
+ * The builds a vault build waits on, so a rebuilt package changes its cache key: `^build` when the workspace has a
+ * generic `build` task, which Turbo runs in each dependency that has one. Otherwise none, as before: `^build` would
+ * fail on a dependency without a build, and naming package builds (`theme#build`) can pull in unrelated ones, even
+ * one that consumes the vault and so closes a cycle. Such a workspace keeps independent vault builds.
  */
 function buildDependencies(tasks: TurboJson["tasks"]): string[] {
-  const names = Object.keys(tasks ?? {});
-  if (names.includes("build")) return ["^build"];
-  return names.filter((name) => name.endsWith("#build") && !name.startsWith("//#"));
+  return tasks && "build" in tasks ? ["^build"] : [];
 }
 
+/** The managed tasks; each vault build depends on `builds` ({@link buildDependencies}). */
 function createManagedTurboTasks(config: ResolvedConfigSet, builds: readonly string[]): Record<string, TurboTask> {
   return {
     [turboTaskName("svartz:build")]: {

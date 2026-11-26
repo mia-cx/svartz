@@ -2,4 +2,4 @@
 "svartz": patch
 ---
 
-The managed Turbo task that builds a vault (`svartz:build:<id>`) now waits on the workspace's package builds, and their output counts toward its cache key, so rebuilding a local theme or plugin no longer brings back a stale cached vault build. With a generic `build` task in `turbo.json`, it depends on `^build`. With only package-specific tasks such as `theme#build`, it depends on those by name, since `^build` would fail on a dependency without a build. With neither, vault builds stay independent.
+In a workspace whose `turbo.json` has a generic `build` task, the managed Turbo task that builds a vault (`svartz:build:<id>`) now depends on `^build`. The project's workspace packages build first, and their output counts toward the task's cache key, so rebuilding a local theme or plugin no longer brings back a stale cached vault build. Other workspaces keep independent vault builds: `^build` would fail on a dependency without a build, and naming package builds such as `theme#build` could pull in unrelated ones or close a cycle.
