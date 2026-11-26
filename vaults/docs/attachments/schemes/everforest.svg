@@ -2,7 +2,7 @@
 <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
 <rect x="0" width="280" height="128" rx="10" fill="oklch(0.974 0.026 90.1)"/>
 <text x="20" y="40" font-size="26" font-weight="700" fill="oklch(0.415 0.021 232.9)">Aa</text>
-<circle cx="70" cy="31" r="7" fill="oklch(0.57 0.156 118.2)"/>
+<circle cx="70" cy="31" r="7" fill="oklch(0.545 0.156 118.2)"/>
 <text x="260" y="28" font-size="11" text-anchor="end" fill="oklch(0.52 0.029 143.5)">Everforest · light</text>
 <text x="20" y="66" font-size="14" fill="oklch(0.515 0.021 232.9)">Body text with a <tspan fill="oklch(0.49 0.156 118.2)" text-decoration="underline">link</tspan></text>
 <rect x="20" y="77" width="56" height="18" rx="2" fill="oklch(0.747 0.155 80.3 / 0.15)"/>

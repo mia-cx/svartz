@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { colorSchemes, type ColorToken } from "../src/schemes";
 
-type Palette = Partial<Record<ColorToken, { light: string; dark: string }>>;
+/** A scheme's tokens plus `on-accent`, the label colour on accent fills, which schemes inherit from the defaults. */
+type Token = ColorToken | "on-accent";
+type Palette = Partial<Record<Token, { light: string; dark: string }>>;
 
 /**
  * Svartz's default palette, read from the tokens every theme imports, so the schemes answer to the same bar. Its
@@ -63,7 +65,7 @@ function contrast(a: [number, number, number], b: [number, number, number]): num
 /** WCAG AA: 4.5:1 for text, 3:1 for the accent as a focus ring and graphic. */
 const TEXT = 4.5;
 const GRAPHIC = 3;
-const PAIRS: readonly [ColorToken, ColorToken, number][] = [
+const PAIRS: readonly [Token, Token, number][] = [
   ["text", "paper", TEXT],
   ["text", "surface", TEXT],
   ["text", "sunken", TEXT],
@@ -74,12 +76,15 @@ const PAIRS: readonly [ColorToken, ColorToken, number][] = [
   ["accent-text", "paper", TEXT],
   ["accent-text", "surface", TEXT],
   ["accent", "paper", GRAPHIC],
+  // Primary buttons fill with the accent and label it in on-accent.
+  ["on-accent", "accent", TEXT],
 ];
 
-/** Every pair below its threshold, as `mode: fg on bg ratio`. */
+/** Every pair below its threshold, as `mode: fg on bg ratio`. A token the palette leaves out keeps its default. */
 function failures(palette: Palette): string[] {
+  const defaults = defaultPalette();
   return (["light", "dark"] as const).flatMap((mode) => {
-    const token = (name: ColorToken) => palette[name]![mode];
+    const token = (name: Token) => (palette[name] ?? defaults[name])![mode];
     const checks = PAIRS.map(([fg, bg, min]) =>
       [`${fg} on ${bg}`, contrast(srgb(token(fg)).rgb, srgb(token(bg)).rgb), min] as const);
     // ==Highlighted== text sits on the translucent mark over the paper.

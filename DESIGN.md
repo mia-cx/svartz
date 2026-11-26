@@ -23,8 +23,9 @@ All colours are OKLCH. Each is a `light-dark()` pair, so `color-scheme` switches
 | `--sv-muted` | Secondary text | `0.52` (5.3:1) | `0.67` (6.6:1) |
 | `--sv-text` | Body text | `0.3` (13:1) | `0.86` (12.7:1) |
 | `--sv-ink` | Headings, strong UI | `0.17` (18:1) | `0.965` |
-| `--sv-accent` | Focus ring, marks, graphics | `oklch(0.6 0.2 33)` | `oklch(0.7 0.17 36)` |
-| `--sv-accent-text` | Accent as text | `oklch(0.5 0.18 33)` (6.3:1) | `oklch(0.76 0.15 40)` (8.6:1) |
+| `--sv-accent` | Focus ring, marks, graphics, button fills | `oklch(0.58 0.2 33)` | `oklch(0.7 0.17 36)` |
+| `--sv-on-accent` | Text on an accent fill | `oklch(0.99 0.004 80)` (4.6:1 on the accent) | `oklch(0.155 0.005 80)` |
+| `--sv-accent-text` | Accent as text | `oklch(0.48 0.18 33)` (6.8:1) | `oklch(0.76 0.15 40)` (8.6:1) |
 | `--sv-mark` | `==highlight==` | yellow marker at 75% | at 45% |
 
 Contrast ratios are measured against `--sv-paper`. The neutrals share hue 80 with very low chroma, which reads as warm paper, never as beige.

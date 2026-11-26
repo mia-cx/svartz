@@ -32,7 +32,7 @@ const DEFAULT_SCHEME = "svartz";
 const SVARTZ_SWATCH = {
   paper: { light: "oklch(0.985 0.004 80)", dark: "oklch(0.155 0.005 80)" },
   text: { light: "oklch(0.3 0.01 80)", dark: "oklch(0.86 0.008 80)" },
-  accent: { light: "oklch(0.6 0.2 33)", dark: "oklch(0.7 0.17 36)" },
+  accent: { light: "oklch(0.58 0.2 33)", dark: "oklch(0.7 0.17 36)" },
 } satisfies Partial<ColorScheme>;
 
 /** An OKLCH colour as 8-bit sRGB `r;g;b`, the form terminal truecolor escapes take. */

@@ -55,7 +55,7 @@ export const rosePine = {
   muted: { light: "oklch(0.507 0.046 291)", dark: "oklch(0.654 0.044 291.2)" }, // subtle #797593 darkened / #908caa
   text: { light: "oklch(0.396 0.052 289.7)", dark: "oklch(0.909 0.03 290)" }, // text #464261 / #e0def4
   ink: { light: "oklch(0.396 0.052 289.7)", dark: "oklch(0.909 0.03 290)" }, // text #464261 / #e0def4
-  accent: { light: "oklch(0.617 0.074 305.7)", dark: "oklch(0.776 0.095 305)" }, // iris #907aa9 / #c4a7e7
+  accent: { light: "oklch(0.56 0.074 305.7)", dark: "oklch(0.776 0.095 305)" }, // iris #907aa9 darkened / #c4a7e7
   "accent-text": { light: "oklch(0.517 0.074 305.7)", dark: "oklch(0.776 0.095 305)" }, // iris #907aa9 darkened / #c4a7e7
   mark: { light: "oklch(0.755 0.146 69.7 / 0.3)", dark: "oklch(0.843 0.11 74.6 / 0.2)" }, // gold #ea9d34 / #f6c177
 } satisfies ColorScheme;
@@ -70,7 +70,7 @@ export const nord = {
   muted: { light: "oklch(0.452 0.035 264.1)", dark: "oklch(0.749 0.016 262.7)" }, // nord3 #4c566a / nord4 darkened
   text: { light: "oklch(0.379 0.029 266.5)", dark: "oklch(0.899 0.016 262.7)" }, // nord1 #3b4252 / nord4 #d8dee9
   ink: { light: "oklch(0.324 0.023 264.2)", dark: "oklch(0.951 0.007 260.7)" }, // nord0 #2e3440 / nord6 #eceff4
-  accent: { light: "oklch(0.594 0.077 254)", dark: "oklch(0.775 0.062 217.5)" }, // nord10 #5e81ac / nord8 #88c0d0
+  accent: { light: "oklch(0.55 0.077 254)", dark: "oklch(0.775 0.062 217.5)" }, // nord10 darkened / nord8 #88c0d0
   "accent-text": { light: "oklch(0.514 0.077 254)", dark: "oklch(0.775 0.062 217.5)" }, // nord10 darkened / nord8 #88c0d0
   mark: { light: "oklch(0.855 0.089 84.1 / 0.5)", dark: "oklch(0.855 0.089 84.1 / 0.2)" }, // nord13 #ebcb8b
 } satisfies ColorScheme;
@@ -133,7 +133,7 @@ export const solarized = {
   muted: { light: "oklch(0.473 0.028 219.1)", dark: "oklch(0.694 0.02 205.3)" }, // base01 darkened / base0 #839496 lightened
   text: { light: "oklch(0.309 0.052 219.7)", dark: "oklch(0.698 0.016 196.8)" }, // base02 #073642 / base1 #93a1a1
   ink: { light: "oklch(0.267 0.049 219.8)", dark: "oklch(0.931 0.026 92.4)" }, // base03 #002b36 / base2 #eee8d5
-  accent: { light: "oklch(0.615 0.139 244.9)", dark: "oklch(0.615 0.139 244.9)" }, // blue #268bd2
+  accent: { light: "oklch(0.555 0.139 244.9)", dark: "oklch(0.615 0.139 244.9)" }, // blue #268bd2 darkened / #268bd2
   "accent-text": { light: "oklch(0.515 0.139 244.9)", dark: "oklch(0.695 0.139 244.9)" }, // blue darkened / lightened
   mark: { light: "oklch(0.654 0.134 85.7 / 0.25)", dark: "oklch(0.654 0.134 85.7 / 0.15)" }, // yellow #b58900
 } satisfies ColorScheme;
@@ -148,7 +148,7 @@ export const everforest = {
   muted: { light: "oklch(0.52 0.029 143.5)", dark: "oklch(0.743 0.019 153.4)" }, // grey2 #829181 darkened / #9da9a0 lightened
   text: { light: "oklch(0.515 0.021 232.9)", dark: "oklch(0.83 0.041 86.1)" }, // fg #5c6a72 / #d3c6aa
   ink: { light: "oklch(0.415 0.021 232.9)", dark: "oklch(0.89 0.041 86.1)" }, // fg darkened / lightened
-  accent: { light: "oklch(0.57 0.156 118.2)", dark: "oklch(0.773 0.091 125.8)" }, // green #8da101 darkened / #a7c080
+  accent: { light: "oklch(0.545 0.156 118.2)", dark: "oklch(0.773 0.091 125.8)" }, // green #8da101 darkened / #a7c080
   "accent-text": { light: "oklch(0.49 0.156 118.2)", dark: "oklch(0.773 0.091 125.8)" }, // green darkened / #a7c080
   mark: { light: "oklch(0.747 0.155 80.3 / 0.15)", dark: "oklch(0.808 0.086 83.7 / 0.15)" }, // yellow #dfa000 / #dbbc7f
 } satisfies ColorScheme;

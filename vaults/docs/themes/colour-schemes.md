@@ -54,7 +54,7 @@ A scheme sets every colour token for light and dark mode, so the colour-mode tog
 
 ## Contrast
 
-Body text, muted text, links and highlights meet WCAG AA against their backgrounds in both modes, and the accent meets the 3:1 rule for focus rings and graphics, as the default palette does. To get there, a few source colours are darker or lighter than the original, and Solarized's body text is one step stronger than Solarized's own. Signal colours (callouts, HTTP methods) and code highlighting keep Svartz's defaults.
+Body text, muted text, links and highlights meet WCAG AA against their backgrounds in both modes, the accent meets the 3:1 rule for focus rings and graphics, and button labels on an accent fill meet 4.5:1, as the default palette does. To get there, a few source colours are darker or lighter than the original, and Solarized's body text is one step stronger than Solarized's own. Signal colours (callouts, HTTP methods) and code highlighting keep Svartz's defaults.
 
 ## Change a colour
 
