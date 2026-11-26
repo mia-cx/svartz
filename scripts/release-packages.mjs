@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-export const BASE_BRANCH = 'sveltekit-rewrite';
+export const BASE_BRANCH = 'main';
 /**
  * The major version Svartz releases ship on. Raising it is the deliberate step
  * a major release takes: changesets may declare `major` only to reach this line.

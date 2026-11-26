@@ -32,7 +32,7 @@ for (const target of ['@svartz/core', '@svartz/theme-wiki']) {
       await cp(join(root, file), join(fixture, file));
     }
     const run = (file, args) => execFileSync(file, args, { cwd: fixture, encoding: 'utf8' });
-    run('git', ['init', '-b', 'sveltekit-rewrite']);
+    run('git', ['init', '-b', 'main']);
     run('git', ['add', '.']);
     run('git', ['-c', 'user.name=Release test', '-c', 'user.email=release@example.test',
       '-c', 'commit.gpgsign=false', 'commit', '-m', 'fixture']);
@@ -67,8 +67,8 @@ for (const target of ['@svartz/core', '@svartz/theme-wiki']) {
     const sha = run('git', ['rev-parse', 'HEAD']).trim();
     const releasePr = {
       merged_at: '2026-10-14T00:00:00Z', merge_commit_sha: sha,
-      base: { ref: 'sveltekit-rewrite', repo: { full_name: 'mia-cx/svartz' } },
-      head: { ref: 'changeset-release/sveltekit-rewrite', repo: { full_name: 'mia-cx/svartz' } },
+      base: { ref: 'main', repo: { full_name: 'mia-cx/svartz' } },
+      head: { ref: 'changeset-release/main', repo: { full_name: 'mia-cx/svartz' } },
     };
     // A dispatch sees newer pending notes. Resolve its input SHA before reading release metadata.
     await writeFile(join(fixture, '.changeset/later.md'), '---\n"svartz": patch\n---\n\nLater change.\n');
@@ -76,9 +76,9 @@ for (const target of ['@svartz/core', '@svartz/theme-wiki']) {
     run('git', ['-c', 'user.name=Release test', '-c', 'user.email=release@example.test',
       '-c', 'commit.gpgsign=false', 'commit', '-m', 'later work']);
     const runnerSha = run('git', ['rev-parse', 'HEAD']).trim();
-    run('git', ['update-ref', 'refs/remotes/origin/sveltekit-rewrite', runnerSha]);
+    run('git', ['update-ref', 'refs/remotes/origin/main', runnerSha]);
     run('git', ['checkout', '--detach', runnerSha]);
-    run('git', ['branch', '-D', 'sveltekit-rewrite']);
+    run('git', ['branch', '-D', 'main']);
     const workflow = await readFile(join(root, '.github/workflows/release.yml'), 'utf8');
     const resolveStep = workflow.match(
       /name: Resolve the release commit\n[\s\S]*? {8}run: \|\n((?: {10}[^\n]*(?:\n|$)|\n)*)/

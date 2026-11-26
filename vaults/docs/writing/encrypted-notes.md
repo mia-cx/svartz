@@ -21,4 +21,4 @@ The public page shows a title and password prompt. Svartz encrypts the body and 
 
 This is shared-password publication, not account access. Anyone with the password and payload can decrypt it. Change the password and rebuild to rotate access; this cannot revoke a copy someone already has. Keep client imports browser-safe. Svartz rejects server-only imports and imports of unpublished notes or notes in another group.
 
-A host with a Content Security Policy must permit blob module imports and any blob resources its unlocked notes use. See [the host CSP example](https://github.com/mia-cx/svartz/blob/sveltekit-rewrite/docs/encrypted-notes.md) before enabling encrypted notes in an existing app.
+A host with a Content Security Policy must permit blob module imports and any blob resources its unlocked notes use. See [the host CSP example](https://github.com/mia-cx/svartz/blob/main/docs/encrypted-notes.md) before enabling encrypted notes in an existing app.

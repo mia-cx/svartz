@@ -9,7 +9,7 @@ Private workspace packages are ignored.
 CI requires a changeset for public package source, theme source, and the CLI template.
 Use the `no changeset` label when a change needs no release note.
 
-The bot collects notes in `changeset-release/sveltekit-rewrite`.
+The bot collects notes in `changeset-release/main`.
 Review and merge that PR to validate, publish, tag, and create the combined GitHub release.
 The action only creates the PR. Publication runs separately through npm trusted publishing.
 

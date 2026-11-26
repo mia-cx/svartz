@@ -1,6 +1,6 @@
 # Next steps for v1
 
-The backend stack #16 through #70 and the theme stack #168 through #172 are merged into `sveltekit-rewrite`.
+The backend stack #16 through #70 and the theme stack #168 through #172 are merged into `main`.
 
 1. Finish [#173](https://github.com/mia-cx/svartz/issues/173), which makes the slug property control note URLs.
 2. Finish [#174](https://github.com/mia-cx/svartz/issues/174), which embeds a note body in a host-owned page.

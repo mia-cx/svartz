@@ -8,10 +8,10 @@ import test from 'node:test';
 import { isReleaseMerge, releasePlan, releasePullRequest, releaseValidated, requireCurrentVersion, versionIncreased } from './release-plan.mjs';
 
 const context = { sha: 'a'.repeat(40), repository: 'mia-cx/svartz',
-  event: 'push', ref: 'refs/heads/sveltekit-rewrite' };
+  event: 'push', ref: 'refs/heads/main' };
 const merged = { merged_at: '2026-10-14T00:00:00Z', merge_commit_sha: context.sha,
-  base: { ref: 'sveltekit-rewrite', repo: { full_name: context.repository } },
-  head: { ref: 'changeset-release/sveltekit-rewrite', repo: { full_name: context.repository } } };
+  base: { ref: 'main', repo: { full_name: context.repository } },
+  head: { ref: 'changeset-release/main', repo: { full_name: context.repository } } };
 const versions = { '@svartz/core': ['1.0.0', '1.0.1'], svartz: ['1.0.0', '1.0.1'] };
 
 test('reuse requires this release PR head to pass the exact validation workflow', () => {
@@ -25,7 +25,7 @@ test('reuse requires this release PR head to pass the exact validation workflow'
   };
   assert.equal(releasePullRequest([pr], context), pr);
   assert.equal(releaseValidated([run], pr), true);
-  assert.equal(releaseValidated([{ ...run, path: `${run.path}@refs/heads/sveltekit-rewrite` }], pr), true);
+  assert.equal(releaseValidated([{ ...run, path: `${run.path}@refs/heads/main` }], pr), true);
   for (const change of [
     { event: 'push' },
     { head_branch: 'feature' },
@@ -48,7 +48,7 @@ test('only the exact same-repository release merge authorizes publication', () =
     { ...merged, merge_commit_sha: 'b'.repeat(40) },
     { ...merged, head: { ...merged.head, ref: 'feature' } },
     { ...merged, head: { ...merged.head, repo: { full_name: 'fork/svartz' } } },
-    { ...merged, base: { ...merged.base, ref: 'main' } },
+    { ...merged, base: { ...merged.base, ref: 'quartz-preact' } },
     { ...merged, base: { ...merged.base, repo: { full_name: 'fork/svartz' } } },
   ]) {
     assert.equal(isReleaseMerge([pr], context), false);
@@ -102,7 +102,7 @@ test('validated CLI reuses a squash-merged tree and falls back on missing eviden
   const git = (cwd, ...args) => execFileSync('git', args, {
     cwd, encoding: 'utf8', env: gitEnv, stdio: 'pipe',
   }).trim();
-  git(origin, 'init', '-b', 'sveltekit-rewrite');
+  git(origin, 'init', '-b', 'main');
   await writeFile(join(origin, 'content'), 'before release');
   git(origin, 'add', '.');
   git(origin, '-c', 'commit.gpgsign=false', 'commit', '-m', 'base');
@@ -113,8 +113,8 @@ test('validated CLI reuses a squash-merged tree and falls back on missing eviden
   const head = git(origin, 'rev-parse', 'HEAD');
   git(origin, 'update-ref', 'refs/pull/244/head', head);
   const sha = git(origin, 'commit-tree', `${head}^{tree}`, '-p', base, '-m', 'squash merge');
-  git(origin, 'update-ref', 'refs/heads/sveltekit-rewrite', sha);
-  git(fixture, 'clone', '--no-local', '--single-branch', '--branch', 'sveltekit-rewrite', origin, checkout);
+  git(origin, 'update-ref', 'refs/heads/main', sha);
+  git(fixture, 'clone', '--no-local', '--single-branch', '--branch', 'main', origin, checkout);
   assert.throws(() => git(checkout, 'cat-file', '-e', `${head}^{commit}`));
 
   const pr = { ...merged, number: 244, merge_commit_sha: sha, head: { ...merged.head, sha: head } };

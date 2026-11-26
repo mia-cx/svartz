@@ -35,7 +35,7 @@ The workflow caches npm's package cache through `setup-node`. It installs depend
 ## This repository's pnpm workspace
 
 The Svartz source repo uses the real [Workspace CI workflow](../.github/workflows/ci.yml).
-It runs on PRs and pushes to `sveltekit-rewrite`.
+It runs on PRs and pushes to `main`.
 Its actions are pinned to commit SHAs.
 Node reads `24.20.0` from `.node-version`.
 pnpm reads its version from the root `packageManager` field.

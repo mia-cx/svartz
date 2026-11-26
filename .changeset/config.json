@@ -25,7 +25,7 @@
   ],
   "linked": [],
   "access": "public",
-  "baseBranch": "sveltekit-rewrite",
+  "baseBranch": "main",
   "updateInternalDependencies": "patch",
   "ignore": [
     "svartz-monorepo",

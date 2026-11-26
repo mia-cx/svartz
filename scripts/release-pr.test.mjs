@@ -11,7 +11,7 @@ test('notes too long for a pull request give way to versions and changelog links
   assert.match(releasePrBody('# @svartz/core@2.4.0\n\nShort.', packages), /Short\./);
   const long = releasePrBody(`# @svartz/core@2.4.0\n\n${'x'.repeat(MAX_BODY)}`, packages);
   assert.ok(long.length <= MAX_BODY);
-  assert.match(long, /- @svartz\/core@2\.4\.0: \[changelog\]\(https:\/\/github\.com\/mia-cx\/svartz\/blob\/changeset-release\/sveltekit-rewrite\/packages\/core\/CHANGELOG\.md\)/);
+  assert.match(long, /- @svartz\/core@2\.4\.0: \[changelog\]\(https:\/\/github\.com\/mia-cx\/svartz\/blob\/changeset-release\/main\/packages\/core\/CHANGELOG\.md\)/);
 });
 
 test('the release pull request lists only packages with a section for their new version', async (t) => {

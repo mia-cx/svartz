@@ -46,5 +46,5 @@ test('bootstrap requires a clean checkout on the merged base head', () => {
   assert.throws(() => requireCleanReleaseCheckout(git(' M packages/core/src/index.ts')),
     /clean working tree/);
   assert.throws(() => requireCleanReleaseCheckout(git('', sha, 'b'.repeat(40))),
-    /origin\/sveltekit-rewrite/);
+    /origin\/main/);
 });

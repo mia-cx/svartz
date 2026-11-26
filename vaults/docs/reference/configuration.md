@@ -53,7 +53,7 @@ See [[start/deploying|Deploy a vault]] for output locations and commands.
 
 The shorthand `theme: "@svartz/theme-wiki"` sets `base`. In object form, `base` is a string or a nonempty list of strings, with the first selecting the composed site's frame and styles. Other settings pass through to the selected theme. See [[themes|Themes]] for their options and [[themes/choosing-and-composing|composition]] for renderer routing.
 
-The schema also accepts `recentNotes` (`enabled?: boolean`, `limit?: positive integer`, `showTags?: boolean`, `linkToMore?: string`) and record-shaped Tailwind [scale keys](https://github.com/mia-cx/svartz/blob/sveltekit-rewrite/packages/core/src/tailwind/schema.ts) such as `colors` and `fontFamily` for custom themes that read them. First-party themes style through `tokens` and do not read `recentNotes` or Tailwind scale keys.
+The schema also accepts `recentNotes` (`enabled?: boolean`, `limit?: positive integer`, `showTags?: boolean`, `linkToMore?: string`) and record-shaped Tailwind [scale keys](https://github.com/mia-cx/svartz/blob/main/packages/core/src/tailwind/schema.ts) such as `colors` and `fontFamily` for custom themes that read them. First-party themes style through `tokens` and do not read `recentNotes` or Tailwind scale keys.
 
 `theme.comments` enables the Giscus integration. Supply strings `repo`, `repoId`, `category`, and `categoryId` from [Giscus](https://giscus.app/). The repository needs GitHub Discussions and the Giscus app.
 

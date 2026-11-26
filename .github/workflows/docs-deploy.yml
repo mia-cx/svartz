@@ -1,19 +1,35 @@
 name: Docs deploy
 
-# Deploys svartz.mia.cx and the theme demos from the default branch. Each vault in svartz.config.ts is its own Worker.
+# Deploys the docs and the theme demos, each vault in svartz.config.ts its own Worker. A deploy brings its environment
+# up to date as of its turn: staging (staging.svartz.dev) to the latest commit on main, which every push triggers, and
+# production (svartz.dev) to the latest published release, which the Release workflow triggers after publishing.
 
 on:
   push:
-    branches: [sveltekit-rewrite]
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Staging deploys main; production deploys the latest release
+        type: choice
+        options: [staging, production]
+        default: staging
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
 
 permissions:
   contents: read
 
 concurrency:
-  # Per ref, so a skipped dispatch from another branch never cancels a production deploy.
-  group: docs-deploy-${{ github.ref }}
-  cancel-in-progress: true
+  # One deploy per environment. Every run deploys the latest commit or release as of its turn, so a queued run
+  # replacing another, a late run or a re-run changes nothing. A newer staging push cancels an older one; production
+  # runs never cut a rollout short. The ref keeps a dispatch from another branch, which deploys nothing, out of main's
+  # group.
+  group: docs-deploy-${{ github.ref }}-${{ inputs.environment || 'staging' }}
+  cancel-in-progress: ${{ (inputs.environment || 'staging') != 'production' }}
 
 defaults:
   run:
@@ -21,16 +37,31 @@ defaults:
 
 jobs:
   deploy:
-    # A manual dispatch can pick any branch; only the default branch deploys.
-    if: github.repository == 'mia-cx/svartz' && github.ref == 'refs/heads/sveltekit-rewrite'
+    # A manual dispatch can pick any branch; only main deploys.
+    if: github.repository == 'mia-cx/svartz' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      TARGET: ${{ inputs.environment || 'staging' }}
     steps:
+      - name: Pick the commit
+        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Staging serves main's latest commit; production serves the latest published release, never main's tip.
+          ref=main
+          if [ "$TARGET" = production ]; then
+            ref=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          fi
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$ref" --jq .sha)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying $ref ($sha) to $TARGET."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ steps.commit.outputs.sha }}
           # Notes without frontmatter dates take theirs from git history.
           fetch-depth: 0
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -42,8 +73,26 @@ jobs:
       - run: pnpm build
       # On a clean install the CLI isn't built when pnpm links bins, so run its entry directly.
       - run: node packages/cli/dist/index.js build:all
+      - name: Check there are Workers to deploy
+        run: |
+          shopt -s nullglob
+          configs=("$GITHUB_WORKSPACE"/.svartz/vaults/*/wrangler.json)
+          if [ ${#configs[@]} -eq 0 ]; then
+            echo "::error::This commit builds no cloudflare-workers vaults, so there is nothing to deploy. Releases up to svartz@2.5.0 predate the Worker docs; production first deploys from the release after them."
+            exit 1
+          fi
+      - name: Keep staging out of search engines
+        if: env.TARGET != 'production'
+        run: |
+          # Every static response, prerendered pages included, carries noindex. Production builds never get the rule.
+          for config in "$GITHUB_WORKSPACE"/.svartz/vaults/*/wrangler.json; do
+            printf '\n/*\n  X-Robots-Tag: noindex\n' >> "$(dirname "$config")/$(jq -r .assets.directory "$config")/_headers"
+          done
       - name: Deploy each vault's Worker
         run: |
+          # Production is each Worker's top-level config; staging is its `staging` environment.
+          flags=()
+          [ "$TARGET" = production ] || flags=(--env staging)
           for config in "$GITHUB_WORKSPACE"/.svartz/vaults/*/wrangler.json; do
-            pnpm --filter svartz exec wrangler deploy --config "$config"
+            pnpm --filter svartz exec wrangler deploy --config "$config" "${flags[@]}"
           done

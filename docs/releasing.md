@@ -29,7 +29,7 @@ Changesets is pinned to `3.0.3`.
 
 ## Release PR and publication
 
-Implementation merges into `sveltekit-rewrite` update the bot's `changeset-release/sveltekit-rewrite` PR.
+Implementation merges into `main` update the bot's `changeset-release/main` PR.
 Its title and commit message are `chore(release): version packages`.
 The Changesets action only opens or updates that PR.
 It never publishes, tags, or creates GitHub releases.
@@ -68,6 +68,17 @@ Network errors and different archives fail the release.
 Publication creates `<name>@<version>` tags and one GitHub release titled `Svartz <version>`.
 The release uses the `svartz@<version>` tag and combines matching package changelog sections.
 
+## The docs site
+
+`docs-deploy.yml` builds every vault in `svartz.config.ts` and deploys each as its own Worker.
+A deploy brings its environment up to date as of its turn, whatever started it, so a late, queued or repeated run deploys the same thing:
+
+- Staging, started by every push to `main`, deploys `main`'s latest commit: the docs at `staging.svartz.dev` and the theme demos at `<theme>.demo.staging.svartz.dev`. Its responses carry `X-Robots-Tag: noindex`, so search engines leave them out.
+- Production, started by Release once a release publishes, deploys the latest GitHub release, so it documents what npm serves: the docs at `svartz.dev` (and `svartz.com` and `svartz.app`) and the demos at `<theme>.demo.svartz.dev`.
+
+Dispatch Docs deploy on `main` to redeploy either one.
+It uses the organization's `CLOUDFLARE_API_TOKEN` secret and `CLOUDFLARE_ACCOUNT_ID` variable.
+
 ## One-time setup
 
 npm requires a package to exist before you can configure its trusted publisher.
@@ -79,7 +90,7 @@ Before merging the first version PR, Mia must complete these steps:
 
 1. Confirm npm ownership of `svartz` and publishing access to the `@svartz` scope.
 2. From a clean, merged `1.0.0` checkout, log in with `npm login` and run the bootstrap below.
-3. Create the GitHub `npm-publish` environment. Allow `sveltekit-rewrite` and choose its approval rules.
+3. Create the GitHub `npm-publish` environment. Allow `main` and choose its approval rules.
 4. Configure a GitHub Actions trusted publisher for each public package.
 5. Allow GitHub Actions to create pull requests in the repository's Actions settings.
 
@@ -97,7 +108,7 @@ pnpm release:bootstrap
 ```
 
 Bootstrap requires every public version to be `1.0.0`.
-It refuses a dirty working tree or a checkout whose HEAD is not the merged `sveltekit-rewrite` head.
+It refuses a dirty working tree or a checkout whose HEAD is not the merged `main` head.
 It runs `release:check`, packs with pnpm, and publishes through the maintainer's npm login.
 It skips identical published versions, so an interrupted bootstrap can resume.
 It creates no tags or GitHub releases.
@@ -134,7 +145,7 @@ It never publishes.
 Use `SVARTZ_RELEASE_VERBOSE=1` for consumer output.
 Use `SVARTZ_RELEASE_KEEP_TEMP=1` to retain temporary fixtures.
 
-To retry, dispatch Release on `sveltekit-rewrite`.
+To retry, dispatch Release on `main`.
 Set `retry_release_commit` to the full 40-character release merge SHA.
 The workflow checks ancestry, release PR identity, pending notes, and current package versions.
 It validates again before publishing.

@@ -2,7 +2,7 @@
 
 The backend stack from [#16](https://github.com/mia-cx/svartz/pull/16) through [#70](https://github.com/mia-cx/svartz/pull/70) is merged.
 The theme stack from [#168](https://github.com/mia-cx/svartz/pull/168) through [#172](https://github.com/mia-cx/svartz/pull/172) is merged.
-Both are integrated into `sveltekit-rewrite`.
+Both are integrated into `main`.
 
 The backend includes publication filtering, Markdown plugins, canonical routes, multi-vault hosts, and `npx svartz init`.
 It includes discovery outputs, content overrides, analytics, encrypted SVX, and lazy theme pages.
