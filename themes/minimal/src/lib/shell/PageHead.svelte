@@ -15,7 +15,7 @@
 	const date = $derived(entry ? (entry.modifiedAt ?? entry.publishedAt ?? entry.createdAt) : undefined);
 </script>
 
-{#if crumbs.length > 0}
+{#if shell.chrome.breadcrumbs && crumbs.length > 0}
 	<nav class="crumbs" aria-label="Breadcrumbs">
 		<ol>
 			{#each crumbs as crumb, index (crumb.href)}

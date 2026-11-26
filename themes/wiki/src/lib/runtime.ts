@@ -35,7 +35,7 @@ export const extensions: readonly ThemeExtension[] = [
 			folder: FolderPage
 		},
 		// The rail's contents and the article foot's "What links here" stand in for these.
-		chrome: { graph: false, backlinks: false, dates: false, readerMode: false, pageNav: false }
+		chrome: { breadcrumbs: false, graph: false, backlinks: false, dates: false, readerMode: false, pageNav: false }
 	}
 ];
 

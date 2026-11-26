@@ -1,4 +1,4 @@
-import type { IndexEntry, NoteStructuredData, SvartzPlugin, ThemeRenderCapabilities, TocEntry, VaultView } from '@svartz/core';
+import type { IndexEntry, JsonLdNode, SvartzPlugin, ThemeRenderCapabilities, TocEntry, VaultView } from '@svartz/core';
 import type { ExplorerItem, ExplorerNode, ThemePageProps } from '@svartz/ui';
 import type { Component, Snippet } from 'svelte';
 
@@ -111,6 +111,8 @@ export const definePageRenderer = <T>(renderer: PageRenderer<T>): PageRenderer =
 
 /** Minimal's optional furniture. */
 export interface ThemeChrome {
+	/** Breadcrumbs above each page, and the `BreadcrumbList` in its structured data. */
+	readonly breadcrumbs?: boolean;
 	readonly graph?: boolean;
 	readonly backlinks?: boolean;
 	/** Dates and reading time under the title. */
@@ -154,14 +156,14 @@ export interface ThemeExtension {
 	/** Content components (`callout`, `codeBlock`, …) this theme overrides. */
 	readonly components?: Readonly<Record<string, Component>>;
 	/**
-	 * Maps the JSON-LD of the notes this theme renders to its own page kinds. `page` says which of its
-	 * renderers claimed the note, if any. Plain notes go to the primary theme's.
+	 * Maps the JSON-LD `Article` of a note this theme renders to its own page kind. `page` names the note
+	 * and which of the theme's renderers claimed it, if any. Plain notes go to the primary theme's.
 	 *
 	 * ```ts
-	 * structuredData: (nodes) => ({ ...nodes, article: { ...nodes.article, '@type': 'TechArticle' } })
+	 * structuredData: (article, { renderer }) => ({ ...article, '@type': renderer ? 'APIReference' : 'TechArticle' })
 	 * ```
 	 */
-	readonly structuredData?: (nodes: NoteStructuredData, page: PageChoice & { readonly entry: IndexEntry }) => NoteStructuredData;
+	readonly structuredData?: (article: JsonLdNode, page: PageChoice & { readonly entry: IndexEntry }) => JsonLdNode;
 }
 
 /** The Node-safe part of an extension, for the build: no components. */

@@ -26,12 +26,12 @@ export const extensions: readonly ThemeExtension[] = [
 		frame: BlogFrame,
 		regions: { header: BlogHeader, pageHead: PostHead, pageFoot: PostFoot, aside: RelatedPosts, footer: BlogFooter },
 		pages: { home: HomePage, tags: TagsPage, tag: TagPage, feed: ArchivePage, folders: FolderListPage, folder: FolderPage },
-		chrome: { graph: false, backlinks: false, readerMode: false },
-		// Posts show no breadcrumbs, and their byline names the post's own `author` ahead of the site's.
-		structuredData: ({ article }, { entry }) => {
-			if (entry.slug === 'index') return { article };
+		chrome: { breadcrumbs: false, graph: false, backlinks: false, readerMode: false },
+		// A post's byline names its own `author` ahead of the site's.
+		structuredData: (article, { entry }) => {
+			if (entry.slug === 'index') return article;
 			const { author } = readPost(entry.properties);
-			return { article: { ...article, '@type': 'BlogPosting', ...(author && { author: { '@type': 'Person', name: author } }) } };
+			return { ...article, '@type': 'BlogPosting', ...(author && { author: { '@type': 'Person', name: author } }) };
 		}
 	}
 ];

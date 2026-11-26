@@ -9,7 +9,7 @@ With `site.url` set, every page carries one JSON-LD script in its head, built fr
 | --- | --- |
 | Every page | `WebSite`: the site's title, description and home URL. |
 | A note | `Article`: its title as `headline`, description, publication and modification dates, URL, `site.author` as `author`, and its social image. |
-| A note or folder page with breadcrumbs | `BreadcrumbList`: the trail the page shows, from Home down to the page. |
+| A page with breadcrumbs | `BreadcrumbList`: the trail the page shows, from Home down to the page. |
 
 Themes describe their own kinds of page:
 
@@ -19,22 +19,21 @@ Themes describe their own kinds of page:
 | Docs | A symbol's page | `APIReference` |
 | [[themes/api-docs\|API docs]], [[themes/mcp-docs\|MCP docs]] | An operation, tool or schema | `APIReference` |
 | API docs, MCP docs | A guide | `TechArticle` |
-| [[themes/blog\|Blog]] | A post | `BlogPosting`, by the post's own `author` when it names one. Posts show no breadcrumbs, so they publish none. |
+| [[themes/blog\|Blog]] | A post | `BlogPosting`, by the post's own `author` when it names one |
 
-A page's structured data describes only what a reader sees on it. Svartz adds no `FAQPage`: Google no longer shows FAQ rich results. Check a page with Google's [Rich Results Test](https://search.google.com/test/rich-results).
+The blog and the wiki show no breadcrumbs, so their pages publish none. A page's structured data describes only what a reader sees on it. Svartz adds no `FAQPage`: Google no longer shows FAQ rich results. Check a page with Google's [Rich Results Test](https://search.google.com/test/rich-results).
 
 ## In your own theme
 
-An extension maps the notes it renders through `structuredData`. It gets the note's nodes and the page, with the renderer that claimed it, and returns the nodes to publish:
+An extension maps the article of each note it renders through `structuredData`. It gets the `Article` node and the page, with the renderer that claimed it, and returns the node to publish:
 
 ```ts
 export const extensions: ThemeExtension[] = [{
   id: "@example/theme-recipes",
   renderers: [recipeRenderer],
   // A recipe page is a Recipe; the theme's other notes stay articles.
-  structuredData: (nodes, { renderer }) =>
-    renderer ? { ...nodes, article: { ...nodes.article, "@type": "Recipe" } } : nodes,
+  structuredData: (article, { renderer }) => (renderer ? { ...article, "@type": "Recipe" } : article),
 }];
 ```
 
-Return `{ article }` without `breadcrumbs` when your theme hides the trail. Plain notes go to the primary theme's mapping, and a note that names another theme with `theme:` goes to that theme's.
+Plain notes go to the primary theme's mapping, and a note that names another theme with `theme:` goes to that theme's. Breadcrumbs belong to the shell: the primary theme's `chrome.breadcrumbs` hides them on the page and in its structured data. Set it to `false` when your theme replaces the page head with one that shows no trail.

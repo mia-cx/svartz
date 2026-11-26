@@ -4,7 +4,7 @@ import Backlinks from './components/Backlinks.svelte';
 import Graph from './components/Graph.svelte';
 import Toc from './components/Toc.svelte';
 import { compositionOf, composeRuntimeTheme, minimalExtension, type ThemeIdentity } from './compose.js';
-import { noteStructuredData } from './shell.js';
+import { pageStructuredData } from './shell.js';
 import type { ThemeExtension } from './extension.js';
 import SiteLayout from './layouts/SiteLayout.svelte';
 import type { MinimalThemeConfig, MinimalThemeModules } from './manifest.js';
@@ -49,7 +49,7 @@ const modules: MinimalThemeModules = {
 export function composeThemes(extensions: readonly ThemeExtension[], config?: MinimalThemeConfig, identity?: ThemeIdentity) {
 	const theme = composeRuntimeTheme(modules, extensions, config, identity);
 	// Kept out of `compose.ts`, which the Node build imports: it reads the vault through `@svartz/ui`.
-	return { ...theme, structuredData: noteStructuredData(compositionOf(theme)) };
+	return { ...theme, structuredData: pageStructuredData(compositionOf(theme)) };
 }
 
 /** Minimal's own extension: the base every theme extends. */

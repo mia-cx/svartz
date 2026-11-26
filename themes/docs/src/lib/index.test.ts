@@ -50,7 +50,7 @@ describe('the docs theme in structured data', () => {
 		const symbol = note('reference/define-theme', { symbol: { kind: 'function', name: 'defineTheme' } });
 		const vault = { entries: [guide, symbol], folders: [] } as unknown as VaultView;
 		const typeOf = (entry: IndexEntry) =>
-			createRuntimeTheme().structuredData!({ article: { '@type': 'Article' } }, { entry, vault }).article['@type'];
+			createRuntimeTheme().structuredData!({ article: { '@type': 'Article' } }, { entry, vault }).article?.['@type'];
 
 		expect(typeOf(guide)).toBe('TechArticle');
 		expect(typeOf(symbol)).toBe('APIReference');

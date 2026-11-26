@@ -1,4 +1,4 @@
-import type { IndexEntry, NoteStructuredData } from '@svartz/core';
+import type { IndexEntry, PageStructuredData } from '@svartz/core';
 import StubLayout from './StubLayout.svelte';
 import StubPage from './StubPage.svelte';
 import StubNotFoundPage from './StubNotFoundPage.svelte';
@@ -20,8 +20,8 @@ export const theme = {
 		return { ...route, component: { default: StubPage } };
 	}),
 	// A theme page kind: notes with `kind: guide` are tech articles.
-	structuredData: (nodes: NoteStructuredData, { entry }: { entry: IndexEntry }) =>
-		entry.properties.kind === 'guide' ? { ...nodes, article: { ...nodes.article, '@type': 'TechArticle' } } : nodes
+	structuredData: (nodes: PageStructuredData, { entry }: { entry?: IndexEntry }) =>
+		entry?.properties.kind === 'guide' ? { ...nodes, article: { ...nodes.article!, '@type': 'TechArticle' } } : nodes
 };
 
 export const routes = theme.routes;

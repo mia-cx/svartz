@@ -41,6 +41,7 @@
 	const { children } = $derived(props);
 
 	const MINIMAL_CHROME: Required<ThemeChrome> = {
+		breadcrumbs: true,
 		graph: true,
 		backlinks: true,
 		dates: true,

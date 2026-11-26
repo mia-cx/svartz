@@ -134,10 +134,10 @@ interface JsonLdNode {
   readonly [property: string]: unknown;
 }
 
-/** A note page's JSON-LD beside the site's `WebSite`: the note, and its breadcrumb trail when the page shows one. */
-interface NoteStructuredData {
-  /** `Article` by default, with headline, description, dates, URL, author and image. */
-  readonly article: JsonLdNode;
+/** A page's JSON-LD beside the site's `WebSite`: the note it renders, and its breadcrumb trail. */
+interface PageStructuredData {
+  /** A note's `Article`, with headline, description, dates, URL, author and image. List pages have none. */
+  readonly article?: JsonLdNode;
   readonly breadcrumbs?: JsonLdNode;
 }
 
@@ -165,14 +165,14 @@ interface SvartzTheme {
   /** Return a complete SVG document; Svartz rasterizes it at build time. */
   readonly socialImage?: (metadata: SocialImageMetadata) => string;
   /**
-   * Maps a note page's JSON-LD to the theme's own page kinds: `TechArticle` for a guide, `BlogPosting` for a
-   * post. It returns the nodes to publish, so it can retype the article, add what the page shows, or drop
-   * breadcrumbs the page doesn't show.
+   * Maps each page's JSON-LD to what the theme shows: `TechArticle` for a guide, `BlogPosting` for a post.
+   * It returns the nodes to publish, so it can retype the article, add what the page shows, or drop
+   * breadcrumbs the theme doesn't show. `entry` is the note the page renders, absent on list pages.
    */
   readonly structuredData?: (
-    nodes: NoteStructuredData,
-    page: { readonly entry: IndexEntry; readonly vault: VaultView },
-  ) => NoteStructuredData;
+    nodes: PageStructuredData,
+    page: { readonly entry?: IndexEntry; readonly vault: VaultView },
+  ) => PageStructuredData;
   /** Default scalable favicon when no vault source is configured. */
   readonly faviconSvg?: string;
   readonly defaults?: Record<string, unknown>;
@@ -191,6 +191,6 @@ export type {
   ThemePluginPreset,
   SocialImageMetadata,
   JsonLdNode,
-  NoteStructuredData,
+  PageStructuredData,
   SvartzTheme,
 };

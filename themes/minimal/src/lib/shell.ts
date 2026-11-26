@@ -92,18 +92,22 @@ export function folderNotes<T>(layout: FolderLayout<T>, folder: string | undefin
 }
 
 /**
- * A composed theme's `structuredData`: each note's JSON-LD goes to the theme
- * that renders it, chosen as the shell chooses, with the renderer that
- * claimed it. Plain notes go to the primary theme.
+ * A composed theme's `structuredData`. The shell is the primary theme's, so its
+ * `chrome.breadcrumbs` decides whether pages publish their trail. A note's
+ * article goes to the theme that renders it, chosen as the shell chooses, with
+ * the renderer that claimed it; plain notes go to the primary theme.
  */
-export const noteStructuredData =
+export const pageStructuredData =
 	(composition: Composition): NonNullable<SvartzTheme['structuredData']> =>
-	(nodes, { entry, vault }) => {
+	({ article, breadcrumbs }, { entry, vault }) => {
+		const { primary } = composition;
+		const shown = primary.chrome?.breadcrumbs === false ? undefined : breadcrumbs;
+		if (!entry || !article) return { article, breadcrumbs: shown };
 		const layout = folderLayout(vault.entries, vault.folders);
 		const folder = layout.folderOf(entry.slug) ?? physicalFolder(entry, vault.entries, layout.folderOf);
 		const choice = choosePage(composition, entry, folderNotes(layout, folder, entry));
-		const theme = choice?.theme ?? composition.primary;
-		return theme.structuredData?.(nodes, { ...choice, theme, entry }) ?? nodes;
+		const theme = choice?.theme ?? primary;
+		return { article: theme.structuredData?.(article, { ...choice, theme, entry }) ?? article, breadcrumbs: shown };
 	};
 
 /** Every note in the tree, in order. */

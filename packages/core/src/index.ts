@@ -146,7 +146,7 @@ export type {
 } from "./theme/types";
 export { CONTRACT_VERSION, THEME_FEATURE_STAGES } from "./theme/types";
 export { decodeRoutePath } from "./route-path";
-export type { JsonLdNode, NoteStructuredData, SocialImageMetadata, ThemeRequiredFeature } from "./theme/types";
+export type { JsonLdNode, PageStructuredData, SocialImageMetadata, ThemeRequiredFeature } from "./theme/types";
 export {
   matchThemeRoute,
   normalizePathname,

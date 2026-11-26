@@ -1,4 +1,4 @@
-import type { IndexEntry, JsonLdNode, NoteStructuredData, ResolvedSiteConfig, SvartzTheme, VaultView } from '@svartz/core';
+import type { IndexEntry, JsonLdNode, PageStructuredData, ResolvedSiteConfig, SvartzTheme, VaultView } from '@svartz/core';
 import { isoDate } from '../format.js';
 import type { Breadcrumb } from '../navigation.js';
 
@@ -18,8 +18,9 @@ export interface PageGraphInput {
 }
 
 /**
- * A page's JSON-LD graph, from what the page shows: the site's `WebSite` on every page, a note's `Article`
- * as the theme maps it, and the page's breadcrumb trail. Properties the page has no value for are left out.
+ * A page's JSON-LD graph, from what the page shows: the site's `WebSite` on every page, then a note's
+ * `Article` and the page's breadcrumb trail as the theme maps them. Properties the page has no value for
+ * are left out.
  */
 export function pageGraph({ site, vault, theme, entry, crumbs, url, image, absolute }: PageGraphInput): JsonLdNode[] {
 	const website: JsonLdNode = {
@@ -39,23 +40,19 @@ export function pageGraph({ site, vault, theme, entry, crumbs, url, image, absol
 				}))
 			}
 		: undefined;
-	if (!entry) return breadcrumbs ? [website, breadcrumbs] : [website];
-
-	const defaults: NoteStructuredData = {
-		article: {
-			'@type': 'Article',
-			headline: entry.title,
-			description: entry.description,
-			datePublished: isoDate(entry.publishedAt ?? entry.createdAt),
-			dateModified: isoDate(entry.modifiedAt),
-			url,
-			author: site.author ? { '@type': 'Person', name: site.author } : undefined,
-			image
-		},
-		breadcrumbs
+	const article: JsonLdNode | undefined = entry && {
+		'@type': 'Article',
+		headline: entry.title,
+		description: entry.description,
+		datePublished: isoDate(entry.publishedAt ?? entry.createdAt),
+		dateModified: isoDate(entry.modifiedAt),
+		url,
+		author: site.author ? { '@type': 'Person', name: site.author } : undefined,
+		image
 	};
-	const note = theme.structuredData?.(defaults, { entry, vault }) ?? defaults;
-	return note.breadcrumbs ? [website, note.article, note.breadcrumbs] : [website, note.article];
+	const defaults: PageStructuredData = { article, breadcrumbs };
+	const nodes = theme.structuredData?.(defaults, { entry, vault }) ?? defaults;
+	return [website, nodes.article, nodes.breadcrumbs].filter((node) => node !== undefined);
 }
 
 /** The graph as one `application/ld+json` script. `<` is escaped so note text can never close the tag. */
