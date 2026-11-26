@@ -19,6 +19,15 @@
 	--sv-ratio: 1.2;
 	--sv-measure: 42rem;
 
+	/*
+	 * Frame: every first-party theme with sidebars (minimal, docs, wiki, reference) shares one
+	 * page width and sidebar width, and Quartz's two breakpoints. Media queries can't read custom
+	 * properties, so those are written out: 75rem moves a right column under the page, and
+	 * 50rem turns the explorer into a drawer.
+	 */
+	--sv-frame-width: 92rem;
+	--sv-side-width: 16rem;
+
 	/* Type: Archivo everywhere; weight and width carry hierarchy. Code is Monaspace Argon. */
 	--sv-font-sans: 'Archivo Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
 	--sv-font-mono: 'Monaspace Argon', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;

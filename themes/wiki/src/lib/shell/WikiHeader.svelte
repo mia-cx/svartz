@@ -42,11 +42,11 @@
 	/* Same columns as the page below: the name over the rail, the sections over the article. */
 	.header-inner {
 		display: grid;
-		grid-template-columns: 14rem minmax(0, 1fr) auto;
+		grid-template-columns: var(--sv-side-width) minmax(0, 1fr) auto;
 		align-items: center;
 		block-size: 100%;
 		column-gap: var(--sv-space-7);
-		max-inline-size: 84rem;
+		max-inline-size: var(--sv-frame-width);
 		margin-inline: auto;
 		padding-inline: var(--sv-space-5);
 	}
@@ -81,7 +81,7 @@
 		display: none;
 	}
 
-	@media (max-width: 56rem) {
+	@media (max-width: 50rem) {
 		.menu {
 			display: inline-grid;
 		}

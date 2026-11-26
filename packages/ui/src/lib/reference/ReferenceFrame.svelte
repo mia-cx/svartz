@@ -75,7 +75,7 @@
 		--sv-ratio: 1.15;
 		--sv-measure: 44rem;
 		/* The right column's narrowest width, which the top bar also reserves so search spans the page column. */
-		--sv-rail-min: 16rem;
+		--sv-rail-min: var(--sv-side-width);
 	}
 
 	:global(:root:has(.sv-reference-examples)) {
@@ -84,9 +84,9 @@
 
 	.frame {
 		display: grid;
-		grid-template-columns: 16rem minmax(0, 1fr);
+		grid-template-columns: var(--sv-side-width) minmax(0, 1fr);
 		column-gap: var(--sv-space-7);
-		max-inline-size: 100rem;
+		max-inline-size: var(--sv-frame-width);
 		margin-inline: auto;
 		padding-inline: var(--sv-space-5);
 	}
@@ -154,7 +154,7 @@
 		margin-block-start: var(--sv-space-8);
 	}
 
-	@media (max-width: 72rem) {
+	@media (max-width: 75rem) {
 		.split {
 			grid-template-columns: minmax(0, var(--sv-measure));
 		}
@@ -170,7 +170,7 @@
 		}
 	}
 
-	@media (max-width: 52rem) {
+	@media (max-width: 50rem) {
 		.frame {
 			grid-template-columns: minmax(0, 1fr);
 			padding-inline: var(--sv-space-4);

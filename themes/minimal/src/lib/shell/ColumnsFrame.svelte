@@ -34,7 +34,7 @@
 
 <style>
 	.minimal {
-		--side: 16rem;
+		--side: var(--sv-side-width);
 		/* Quartz's top spacing: all three columns start 6rem down. */
 		--top: 6rem;
 		display: grid;
@@ -44,7 +44,7 @@
 			'left footer right';
 		grid-template-rows: 1fr auto;
 		column-gap: clamp(var(--sv-space-5), 3vw, var(--sv-space-7));
-		max-inline-size: 92rem;
+		max-inline-size: var(--sv-frame-width);
 		min-block-size: 100dvh;
 		margin-inline: auto;
 		padding-inline: var(--sv-space-5);
@@ -112,7 +112,6 @@
 	/* Tablet: the right column moves under the note; contents hide, as in Quartz. */
 	@media (max-width: 75rem) {
 		.minimal {
-			--side: 15rem;
 			grid-template-columns: var(--side) minmax(0, 1fr);
 			grid-template-areas:
 				'left center'

@@ -137,7 +137,7 @@
 	}
 
 	/* On phones the picker sits near the bar's end, so the list opens leftward and stays on screen. */
-	@media (max-width: 52rem) {
+	@media (max-width: 50rem) {
 		.versions {
 			inset-inline: auto 0;
 		}

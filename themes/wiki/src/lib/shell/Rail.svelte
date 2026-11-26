@@ -119,7 +119,7 @@
 		font-weight: 600;
 	}
 
-	@media (max-width: 56rem) {
+	@media (max-width: 50rem) {
 		.drawer-only {
 			display: block;
 		}

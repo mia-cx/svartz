@@ -74,12 +74,12 @@
 		z-index: var(--sv-z-sticky);
 		/* ReferenceFrame's columns, so search spans the page column: sidebar, page, right column. */
 		display: grid;
-		grid-template-columns: minmax(16rem, max-content) minmax(0, var(--sv-measure)) minmax(var(--sv-rail-min, max-content), 1fr);
+		grid-template-columns: minmax(var(--sv-side-width), max-content) minmax(0, var(--sv-measure)) minmax(var(--sv-rail-min, max-content), 1fr);
 		align-items: center;
 		column-gap: var(--sv-space-7);
 		block-size: 3.5rem;
 		/* Edges line up with the centred page below on wide screens. */
-		padding-inline: max(var(--sv-space-5), (100% - 100rem) / 2 + var(--sv-space-5));
+		padding-inline: max(var(--sv-space-5), (100% - var(--sv-frame-width)) / 2 + var(--sv-space-5));
 		border-block-end: var(--sv-rule-width) solid var(--sv-rule);
 		background: var(--sv-paper);
 	}
@@ -134,13 +134,13 @@
 	}
 
 	/* The right column drops under the page, so the bar's last column only needs its links. */
-	@media (max-width: 72rem) {
+	@media (max-width: 75rem) {
 		.top-bar {
-			grid-template-columns: minmax(16rem, max-content) minmax(0, var(--sv-measure)) minmax(max-content, 1fr);
+			grid-template-columns: minmax(var(--sv-side-width), max-content) minmax(0, var(--sv-measure)) minmax(max-content, 1fr);
 		}
 	}
 
-	@media (max-width: 52rem) {
+	@media (max-width: 50rem) {
 		.menu {
 			display: inline-grid;
 		}

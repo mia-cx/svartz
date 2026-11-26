@@ -69,7 +69,7 @@
 		display: none;
 	}
 
-	@media (max-width: 52rem) {
+	@media (max-width: 50rem) {
 		.menu {
 			display: inline-grid;
 		}
