@@ -9,6 +9,9 @@ export const load = async ({ url }) => {
   const pathname = appPath.endsWith('/') ? appPath : `${appPath}/`;
   const destination = routes.redirects[pathname];
   if (destination) redirect(308, `${base}${destination}`);
+  // A version's own id leads to the latest version only until a newer one ships, so that redirect is temporary.
+  const latest = routes.temporaryRedirects[pathname];
+  if (latest) redirect(307, `${base}${latest}`);
   await prepareHostVault(pathname);
   if (!routes.all.includes(pathname)) error(404);
   return { svartzStylesheets: hostStylesheets(pathname).map((file) => `${assets}/${file}`) };

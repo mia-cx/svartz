@@ -159,9 +159,9 @@ describe("svartz CLI", () => {
     const configPath = resolve(ROOT, ".svartz-versions-e2e.config.ts");
     const dist = resolve(ROOT, ".svartz/vaults/versions-e2e/dist");
     const git = (...args: string[]) => execFileAsync("git", ["-C", repo, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", ...args]);
-    const build = (versions: unknown) => writeFile(configPath, `export default ${JSON.stringify({
+    const build = (versions: unknown, target = "static") => writeFile(configPath, `export default ${JSON.stringify({
       version: "1.0.0",
-      vaults: [{ id: "versions-e2e", path: resolve(repo, "docs"), target: { type: "static" }, site: { title: "Versions" },
+      vaults: [{ id: "versions-e2e", path: resolve(repo, "docs"), target: { type: target }, site: { title: "Versions" },
         theme: { base: ["@svartz/theme-api-docs", "@svartz/theme-mcp-docs"], routes: { folders: "reference" }, versions } }],
     })};\n`).then(() => run(process.execPath, ["packages/cli/dist/index.js", "build", "--config", configPath]));
     const versions = [{ id: "v2", status: "latest" }, { id: "v1", ref: "docs-v1", status: "deprecated" }];
@@ -177,6 +177,8 @@ describe("svartz CLI", () => {
       await git("tag", "docs-v1");
       await rm(resolve(repo, "docs"), { recursive: true });
       await cp(resolve(ROOT, "vaults/showcase-reference"), resolve(repo, "docs"), { recursive: true });
+      // v2 gives get-pet an alias, an ordinary permanent redirect.
+      await writeFile(getPet, (await readFile(getPet, "utf8")).replace("---\n", "---\naliases: [rest/fetch-pet]\n"));
 
       // A build waiting on another's lock reads no version yet, so it can't swap files out from under that build.
       const snapshots = resolve(ROOT, ".svartz/vaults/versions-e2e/versions");
@@ -204,6 +206,13 @@ describe("svartz CLI", () => {
 
       expect(await build(versions)).toContain('vault "versions-e2e@v1": reused its build from the cache');
       await expect(build([...versions, { id: "v0", ref: "no-such-ref" }])).rejects.toThrow('git has no ref "no-such-ref"');
+
+      // Cloudflare Pages takes the catch-all's prerendered redirects into `_redirects` with their status: an alias stays
+      // permanent, and v2's own id is temporary, so no browser keeps sending /v2/ to the latest version once v3 ships.
+      await build(versions, "cloudflare-pages");
+      const redirects = await readFile(resolve(ROOT, ".svartz/vaults/versions-e2e/.svelte-kit/cloudflare/_redirects"), "utf8");
+      expect(redirects).toContain("/rest/fetch-pet/ /rest/get-pet/ 308");
+      expect(redirects).toContain("/v2/rest/get-pet/ /rest/get-pet/ 307");
     } finally {
       await rm(configPath, { force: true });
       await rm(repo, { recursive: true, force: true });

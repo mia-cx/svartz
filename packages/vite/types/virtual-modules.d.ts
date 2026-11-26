@@ -96,6 +96,8 @@ declare module "virtual:svartz/host" {
   export const routes: {
     readonly all: readonly string[];
     readonly redirects: Readonly<Record<string, string>>;
+    /** The latest version's own id to its pages, `/v2/pets/` to `/pets/`: answer these with a temporary redirect. */
+    readonly temporaryRedirects: Readonly<Record<string, string>>;
   };
   export function resolveHostVault(pathname: string): PreparedHostVault | undefined;
   export function prepareHostVault(pathname: string): Promise<PreparedHostVault | undefined>;

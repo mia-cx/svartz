@@ -4,7 +4,7 @@ import * as theme from './runtime-theme';
 export const base = '';
 export const assets = '';
 export const vaults = [{ id: 'test', mountPath: '', artifacts, theme }];
-export const routes = { all: artifacts.routes.all, redirects: artifacts.routes.redirects };
+export const routes = { all: artifacts.routes.all, redirects: artifacts.routes.redirects, temporaryRedirects: {} };
 export function hostStylesheets(_pathname: string): string[] { return []; }
 export const isPluginPageMount = (_param: string): boolean => false;
 export const isPluginPageName = (_param: string): boolean => false;

@@ -181,7 +181,8 @@ export const vaults = [{ id: 'work', mountPath: '/work', basePath: '', artifacts
 
 export const routes = {
 	all: index.routes.all,
-	redirects: index.routes.redirects
+	redirects: index.routes.redirects,
+	temporaryRedirects: {}
 };
 
 const noteStyles: Record<string, string[]> = {
