@@ -45,3 +45,5 @@ A REST operation shows parameters, request and response schemas, and examples in
 Give a model its own note with `model: { name: Pet, schema: { type: object } }`. A schema's `$ref` names that model. Guides have neither `operation` nor `model`. See the [metadata examples](https://github.com/mia-cx/svartz/blob/main/themes/api-docs/README.md#frontmatter) for the request, response, and schema fields. The theme renders documentation and examples; it does not serve the API.
 
 [[themes/choosing-and-composing|Combine it]] with [[themes/mcp-docs|MCP docs]] in the same vault.
+
+API reference: [[reference/api/theme-api-docs/ApiDocsThemeConfig|ApiDocsThemeConfig]].

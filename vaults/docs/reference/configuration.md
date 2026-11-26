@@ -108,3 +108,5 @@ Use [[writing/frontmatter|frontmatter]] to control comments on a note.
 | `dateSources` | Nonempty list drawn from `"frontmatter"`, `"git"`, and `"filesystem"`, default in that order. |
 
 See [[writing/discovery|Feeds, sitemaps, and llms.txt]] for what each output includes.
+
+API reference: [[reference/api/config/defineConfig|defineConfig]], [[reference/api/config/SvartzConfig|SvartzConfig]], [[reference/api/config/VaultConfig|VaultConfig]], and the rest of [[reference/api/config/index|@svartz/config]].

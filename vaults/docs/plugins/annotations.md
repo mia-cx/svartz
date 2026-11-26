@@ -48,3 +48,5 @@ Use Workers, Pages, or a Cloudflare SvelteKit host; the plugin needs D1 and crea
 Anyone can read comments. Signed-in readers can select text, comment, agree with a comment, and delete their own. Light edits can keep an annotation anchored; if its passage is gone the comment moves to a separate list below the note. Comments are keyed by slug, so changing it leaves the existing comments under the old one.
 
 Selections can be up to 1,000 characters and comments up to 2,000. There is no frontmatter to add. Protected notes and listing pages do not show annotations. A custom theme needs to mark the note body, or a host can use `SvartzNoteContent` or `attach` from `@svartz/plugin-annotations/browser`. To hide comments through [[plugins/moderation|moderation]], use the accounts database `SVARTZ_DB` for annotations too.
+
+API reference: [[reference/api/plugin-annotations/annotations|annotations]] and [[reference/api/plugin-annotations/AnnotationsOptions|AnnotationsOptions]].

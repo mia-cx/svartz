@@ -35,3 +35,5 @@ featured: true
 `excerpt` falls back to the note description. The post date uses the publication date, then creation date, then modification date. If no post is featured, the newest leads the grid. Put site introduction prose in the root `index.md`.
 
 Blog extends [[themes/minimal|minimal]]. It uses its own post layout, not a metadata-specific renderer, and retains search, the mobile drawer, and navigation between notes. `nav` is a map of labels to URLs; it defaults to Archive and Tags. The shared [[themes/minimal|minimal settings]] still apply.
+
+API reference: [[reference/api/theme-blog/BlogThemeConfig|BlogThemeConfig]].

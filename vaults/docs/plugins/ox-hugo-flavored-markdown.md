@@ -35,3 +35,5 @@ All options are optional booleans and default to `true`:
 | `replaceOrgLatex` | Normalize exported Org math |
 
 For example, `oxHugoFlavoredMarkdown({ removePredefinedAnchor: false })` retains the exported anchors. The plugin does not run Hugo or execute shortcodes. It leaves executable `.svx` source and code examples alone.
+
+API reference: [[reference/api/plugins/oxHugoFlavoredMarkdown|oxHugoFlavoredMarkdown]].

@@ -53,3 +53,5 @@ Sync mirrors activity in D1 and lets editors follow a save until it goes live. U
 3. Copy the webhook secret into the server secret named by `sync.webhookSecret`. Bind the D1 database named by `sync.database`; it can share `SVARTZ_DB` with auth.
 
 With a token instead of an App, use the same repository permissions and add a repository webhook with the same URL, events, and secret. Set the webhook content type to `application/json`. Two vaults can sync different folders in one repository, but cannot sync the same folder.
+
+API reference: [[reference/api/plugin-submissions/submissions|submissions]] and [[reference/api/plugin-submissions/SubmissionsOptions|SubmissionsOptions]].

@@ -45,3 +45,5 @@ operation:
 A tool page shows the endpoint, auth, schemas, and annotations, with adjacent JSON-RPC examples. Tool errors and JSON-RPC errors have separate labels. Use `outputSchema` for the result shape. Put shared schemas in `model` notes and refer to them by `$ref`. Other notes stay guides.
 
 The package exports the TypeScript types `McpTool`, `McpToolExample`, and `McpToolResult`. The theme documents a server; it does not implement one. See [[themes/choosing-and-composing|theme composition]] to include [[themes/api-docs|API docs]].
+
+API reference: [[reference/api/theme-mcp-docs/McpDocsThemeConfig|McpDocsThemeConfig]] and the [[reference/api/theme-mcp-docs/index|@svartz/theme-mcp-docs]] types.

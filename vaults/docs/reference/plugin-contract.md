@@ -36,3 +36,5 @@ A hook receives `config`, the resolved vault; `plugins`, the active normalized p
 `getCompilerContributions(ctx)` initializes the contributions if needed. It exposes `remarkPlugins`, `rehypePlugins`, late `svxSourceTransforms`, `browserResources`, and `serverData`. Browser resources have `id`, `kind: "css" | "script" | "asset"`, `importId`, and optional JSON-serializable `options`. Scripts export `mount(pathname, options, context)` and can return a disposer. `context.base` is the deployment base; `pathname` already includes it. Pass the vault's mount as an option if the script needs to call a plugin route.
 
 See [[guides/create-plugin|Create a plugin]] for an example and the [source types](https://github.com/mia-cx/svartz/tree/main/packages/core/src/plugin) for runtime signatures.
+
+API reference: [[reference/api/core/definePlugin|definePlugin]], [[reference/api/core/SvartzPlugin|SvartzPlugin]], and [[reference/api/core/PluginContext|PluginContext]].

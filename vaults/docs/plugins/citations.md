@@ -32,3 +32,5 @@ Put `bibliography.bib` in the vault root and cite an entry with `[@sensor2026]`.
 | `suppressBibliography` | Boolean | `false` |
 
 For example, `citations({ bibliographyFile: "references/sensors.bib", linkCitations: true })` links citations to their entries. The build fails if a bibliography is missing. A note's bibliography lists only entries that note cites.
+
+API reference: [[reference/api/plugins/citations|citations]].
