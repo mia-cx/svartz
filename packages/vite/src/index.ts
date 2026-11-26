@@ -412,7 +412,11 @@ function svartz(options: SvartzVitePluginOptions): Plugin {
   }
 
   function scheduleVaultRebuild(event: ChangeEvent): void {
-    pendingChange = event;
+    // Every rebuild rereads the host's routes, so a host route or static file never displaces a pending vault change,
+    // whose plugin hooks must still run.
+    const hostOnly = (change: ChangeEvent) =>
+      context.config.target.type === "host" && isHostRouteFile(context.root, context.config.mountPath, change.file);
+    if (!pendingChange || !hostOnly(event) || hostOnly(pendingChange)) pendingChange = event;
 
     if (rebuildTimer) {
       clearTimeout(rebuildTimer);

@@ -273,6 +273,27 @@ describe("@svartz/vite plugin", () => {
     expect(runStagesMock).toHaveBeenCalledTimes(3);
   });
 
+  // Proves a host static-file event in the same debounce window doesn't displace a vault change, whose plugin hooks
+  // must still run: every rebuild rereads the host's routes anyway.
+  it("keeps a pending vault change when a host static file changes right after it", async () => {
+    vi.useFakeTimers();
+    const plugin = svartz({ config: { ...testConfig, target: { type: "host" } } as ResolvedConfig, env: {}, mode: "test" });
+    await plugin.buildStart?.call({} as never);
+    const server = devServer();
+    const postHook = plugin.configureServer?.(server as never);
+    if (typeof postHook === "function") postHook();
+
+    await vi.advanceTimersByTimeAsync(300);
+    server.watcher.emit("change", "/tmp/svartz-tests/vaults/docs/note.md");
+    server.watcher.emit("add", join(process.cwd(), "static", "robots.txt"));
+    await vi.advanceTimersByTimeAsync(100);
+
+    // A host rebuild reads the real static folder first, so the hook runs after that I/O.
+    await vi.waitFor(() => expect(executeHandleChangeMock).toHaveBeenCalledWith(
+      [], expect.objectContaining({ relativeFile: "note.md" }), expect.anything(),
+    ));
+  });
+
   const devServer = (watcher = Object.assign(new EventEmitter(), { add: vi.fn() })) => ({
     watcher,
     // Middleware mode: no HTTP server to listen on.
