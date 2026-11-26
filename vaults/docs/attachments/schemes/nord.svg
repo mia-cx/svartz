@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="568" height="128" viewBox="0 0 568 128">
+<g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<rect x="0" width="280" height="128" rx="10" fill="oklch(0.951 0.007 260.7)"/>
+<text x="20" y="40" font-size="26" font-weight="700" fill="oklch(0.324 0.023 264.2)">Aa</text>
+<circle cx="70" cy="31" r="7" fill="oklch(0.594 0.077 254)"/>
+<text x="260" y="28" font-size="11" text-anchor="end" fill="oklch(0.452 0.035 264.1)">Nord · light</text>
+<text x="20" y="66" font-size="14" fill="oklch(0.379 0.029 266.5)">Body text with a <tspan fill="oklch(0.514 0.077 254)" text-decoration="underline">link</tspan></text>
+<rect x="20" y="77" width="56" height="18" rx="2" fill="oklch(0.855 0.089 84.1 / 0.5)"/>
+<text x="24" y="90" font-size="13" fill="oklch(0.379 0.029 266.5)">marked</text>
+<text x="84" y="90" font-size="13" fill="oklch(0.452 0.035 264.1)">and muted text</text>
+<rect x="20" y="104" width="16" height="10" rx="2" fill="oklch(0.933 0.01 261.8)"/><rect x="42" y="104" width="16" height="10" rx="2" fill="oklch(0.899 0.016 262.7)"/><rect x="64" y="104" width="16" height="10" rx="2" fill="oklch(0.899 0.016 262.7)"/><rect x="86" y="104" width="16" height="10" rx="2" fill="oklch(0.819 0.016 262.7)"/>
+</g>
+<g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<rect x="288" width="280" height="128" rx="10" fill="oklch(0.324 0.023 264.2)"/>
+<text x="308" y="40" font-size="26" font-weight="700" fill="oklch(0.951 0.007 260.7)">Aa</text>
+<circle cx="358" cy="31" r="7" fill="oklch(0.775 0.062 217.5)"/>
+<text x="548" y="28" font-size="11" text-anchor="end" fill="oklch(0.749 0.016 262.7)">Nord · dark</text>
+<text x="308" y="66" font-size="14" fill="oklch(0.899 0.016 262.7)">Body text with a <tspan fill="oklch(0.775 0.062 217.5)" text-decoration="underline">link</tspan></text>
+<rect x="308" y="77" width="56" height="18" rx="2" fill="oklch(0.855 0.089 84.1 / 0.2)"/>
+<text x="312" y="90" font-size="13" fill="oklch(0.899 0.016 262.7)">marked</text>
+<text x="372" y="90" font-size="13" fill="oklch(0.749 0.016 262.7)">and muted text</text>
+<rect x="308" y="104" width="16" height="10" rx="2" fill="oklch(0.379 0.029 266.5)"/><rect x="330" y="104" width="16" height="10" rx="2" fill="oklch(0.294 0.023 264.2)"/><rect x="352" y="104" width="16" height="10" rx="2" fill="oklch(0.416 0.032 264.1)"/><rect x="374" y="104" width="16" height="10" rx="2" fill="oklch(0.452 0.035 264.1)"/>
+</g>
+</svg>

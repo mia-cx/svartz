@@ -7,7 +7,7 @@ Run these commands through your project's package manager, for example `npx svar
 
 | Command | Flags | What it does |
 | --- | --- | --- |
-| `init` | `--no-install`, `--no-git` | Scaffold the current directory or integrate the current SvelteKit app. |
+| `init` | `--no-install`, `--no-git`, `--yes`, and [[reference/cli#init\|the vault flags]] | Scaffold the current directory or integrate the current SvelteKit app. |
 | `build` | `--config <path>`, `--vault <id>` | Build all configured vaults, or select one standalone vault or the combined host. |
 | `build:all` | `--config <path>` | Build all configured vaults. |
 | `dev` | `--config <path>`, `--vault <id>`, `--host <host>`, `--port <port>` | Serve and rebuild content as it changes. |
@@ -15,9 +15,33 @@ Run these commands through your project's package manager, for example `npx svar
 
 Use `svartz --help` or `svartz <command> --help` for flags. Without `--vault`, dev and preview use the combined host if configured, otherwise the first vault. With `--vault <host-id>`, all host vaults still share the same app and output. A standalone vault builds into its own directory.
 
+## init
+
+In a terminal, `init` asks for each vault: a new one or an existing folder, its theme, its [[themes/colour-schemes|colour scheme]], and where it deploys. Each answer is also a flag. With any of these flags, or `--yes`, or without a terminal, init asks nothing and fills in the rest with defaults.
+
+| Flag | Default |
+| --- | --- |
+| `--vault <path>` | `vault`. A folder that exists is published as it is, wherever it is. A new one, inside the project, gets a starter note. Repeat for more vaults. |
+| `--id <id>` | The folder's name, or `notes` for the default `vault` folder. |
+| `--title <title>` | The project's name for one vault, or each folder's name. |
+| `--theme <name>` | `minimal`. Also `wiki`, `blog`, `docs`, `api-docs` and `mcp-docs`. |
+| `--scheme <name>` | Svartz's own colours. Also `catppuccin`, `rose-pine`, `nord`, `gruvbox`, `tokyo-night`, `dracula`, `solarized` and `everforest`. |
+| `--target <type>` | `static`, or `host` in a SvelteKit app. Also `node`, `cloudflare-workers` and `cloudflare-pages`. |
+| `--worker <name>` | The vault's id. For `cloudflare-workers` vaults. |
+| `--domain <domain>` | None, so the Worker answers on workers.dev. For `cloudflare-workers` vaults. |
+
+Give a flag once to apply it to every vault, or once per `--vault` to match them in order. `--worker` and `--domain` match the `cloudflare-workers` vaults in order. This publishes an existing Obsidian vault as a wiki on a Worker, beside a new blog:
+
+```sh
+npx svartz init --vault ~/Obsidian/Lore --vault blog \
+  --theme wiki --theme blog --scheme gruvbox \
+  --target cloudflare-workers --target static \
+  --worker lore --domain lore.example.com
+```
+
 ## What init writes
 
-A standalone project gets a config, starter vault, `.gitignore`, and `dev`, `build`, and `preview` scripts. An already configured standalone project is left alone. In an existing SvelteKit app, init keeps your routes and adapter and adds the Vite wrapper, type reference, Svartz scripts, and any applicable missing generated routes. See [[guides/host-vaults|the host guide]].
+A standalone project gets a config, a starter note in each new vault, `.gitignore`, `dev`, `build`, and `preview` scripts, and the theme packages its vaults use. An already configured standalone project is left alone. In an existing SvelteKit app, init keeps your routes and adapter and adds the Vite wrapper, type reference, Svartz scripts, and any applicable missing generated routes. See [[guides/host-vaults|the host guide]].
 
 If the config root has `turbo.json` and no host app, Svartz syncs the managed `svartz:*` scripts and `//#svartz:*` tasks. It leaves the rest of those files alone. `dev:runner` and `run-managed-task` are internal commands.
 
