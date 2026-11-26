@@ -47,12 +47,13 @@ symbol:
   implements: []
   members:              # for classes and interfaces
     - { name: load, kind: method, signature: "load(): Promise<void>", description: …, static: false }
+    - { name: mode, kind: property, signature: "mode?: [[Mode]]", description: …, default: '`"light"`' }
   source: https://github.com/…/define-theme.ts
   since: 1.0.0
   deprecated: Use `[[VaultView]]`.
 ```
 
-`[[Name]]` in types and descriptions links to that symbol's note; backticks render as code. The schema is exported as `DocSymbol`. A TypeDoc plugin should emit exactly this shape.
+`[[Name]]` in signatures, types, defaults and descriptions links to that symbol's note, by name or by vault path (`[[reference/api/core/SvartzTheme|SvartzTheme]]`); backticks in descriptions and defaults render as code. The schema is exported as `DocSymbol`. Svartz's own API reference is generated in this shape from the packages' types by `scripts/api-reference` in the Svartz repository.
 
 ## Develop
 

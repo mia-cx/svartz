@@ -22,7 +22,7 @@ export function wikilinkSegments(
 		if (match.index > last) segments.push({ text: value.slice(last, match.index) });
 		const target = normalize(match[1]!.trim());
 		const note = entries.find(
-			(entry) => normalize(entry.title) === target || entry.slug.split('/').at(-1) === target || entry.slug === target
+			(entry) => normalize(entry.title) === target || normalize(entry.slug.split('/').at(-1)!) === target || normalize(entry.slug) === target
 		);
 		const text = match[2]?.trim() ?? match[1]!.trim();
 		segments.push(note ? { text, href: note.href } : { text });

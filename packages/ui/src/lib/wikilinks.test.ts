@@ -17,4 +17,11 @@ describe('wikilinkSegments', () => {
 		]);
 		expect(wikilinkSegments('[[Nowhere]]', entries)).toEqual([{ text: 'Nowhere' }]);
 	});
+
+	it('links a vault path whose file name has an underscore', () => {
+		const api = [{ slug: 'reference/api/core/contract_version', title: 'CONTRACT_VERSION', href: '/reference/api/core/contract_version/' }];
+		expect(wikilinkSegments('[[reference/api/core/CONTRACT_VERSION|CONTRACT_VERSION]]', api)).toEqual([
+			{ text: 'CONTRACT_VERSION', href: '/reference/api/core/contract_version/' }
+		]);
+	});
 });
