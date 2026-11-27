@@ -1,5 +1,23 @@
 # @svartz/plugins
 
+## 2.7.0
+
+### Minor Changes
+
+- 0b7e0ca: `llms.txt` follows [llmstxt.org](https://llmstxt.org/) more closely. It has a `##` section per top-level folder, in explorer order, instead of one flat Pages list, and links `llms-full.txt`, a new file that holds every page's Markdown in the same order. Set `discovery: { llms: { optional: true } }` to list tag pages, folder listings and the feed under `## Optional`, which agents can skip. Every link in `llms-full.txt` is absolute, or root-relative below the deployment base without `site.url`. Each page keeps its own reference links and footnotes, and a code fence left open at the end of a page closes there. A host route at `llms-full.txt` wins, as one at `llms.txt` already did. A page whose `.md` URL a host route owns still appears in `llms-full.txt`.
+
+  A note without a `description` now takes its first paragraph, cut at the last whole sentence within 300 characters, so a description never ends mid-sentence. A hard break counts as a space, and a note that is only an embed gets no description. This applies wherever descriptions show, including page metadata, search and RSS. Inline code and hyphenated words stay in it, and embeds stay out.
+
+- 38c347c: Each vault served at the origin root writes its own `robots.txt`, beside `sitemap.xml`. It names the sitemap's absolute URL whenever the sitemap is on, and still admits every crawler by default. `discovery.robots` chooses who comes in: `bots: false` blocks every crawler, `training: false` keeps search engines and AI search and agent fetchers while blocking AI training crawlers such as GPTBot, ClaudeBot and Google-Extended, and `bots: false, search: true` admits only search. `rules` adds groups for any other crawler, such as `{ userAgent: "Amazonbot", disallow: ["/drafts/"] }`, and `contentSignals: { search: true, aiInput: true, aiTrain: false }` adds Cloudflare's `Content-Signal` line. A vault below the origin root, under a mount or a deployment base, writes none, since crawlers fetch only `/robots.txt`. A host app's own `robots.txt` takes priority, whether it's a route or a file in `static/`; any other file in the host's `static/` folder at the vault's mount likewise takes priority over a generated discovery file of the same name, and `svartz dev` notices one as it's added or removed.
+
+### Patch Changes
+
+- Updated dependencies [a766950]
+- Updated dependencies [0b7e0ca]
+- Updated dependencies [38c347c]
+- Updated dependencies [5411016]
+  - @svartz/core@2.7.0
+
 ## 2.6.0
 
 ### Minor Changes

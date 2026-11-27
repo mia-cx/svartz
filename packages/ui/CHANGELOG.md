@@ -1,5 +1,32 @@
 # @svartz/ui
 
+## 2.7.0
+
+### Minor Changes
+
+- a766950: The API and MCP docs themes document several API versions in one site. List them in `theme.versions`, such as `[{ id: "2026-04", status: "latest" }, { id: "2026-01", ref: "api/2026-01" }, { id: "2025-07", ref: "api/2025-07", status: "deprecated" }]`, and the `version` badge becomes a picker. The latest version is the vault as it stands, at its usual URLs. Every other version is the vault's folder at its git `ref`, published below its id, `/2026-01/pets/get-pet/`, and read from git without touching the checkout. The latest version's own id redirects to its pages, `/2026-04/pets/get-pet/` to `/pets/get-pet/`, so a link to a version keeps meaning that version after the next one ships. Those redirects are temporary (307) wherever a target emits one, such as Cloudflare Pages' `_redirects`, while note aliases stay permanent (308); `virtual:svartz/host` lists them apart as `routes.temporaryRedirects`, and `svartz init` adds them to a host app's generated catchall. A versioned vault's managed Turbo build is never cached, since a ref can move while its inputs stay the same.
+
+  The picker keeps the reader on the page they're reading, or opens the version's home page when it lacks the page. A deprecated version's pages link the same page in the latest version. Search covers the version being read, and the sitemap and feed list the latest version only. Each older version's build is cached in `.svartz/vaults/<id>/versions/` and reused until its ref moves or Svartz, the config, a file a plugin reads or the lockfile changes. A vault with password groups builds every version each time, so a changed password applies to all of them.
+
+  Several vaults in one standalone app now share one `virtual:svartz/server`, and a path is served by the vault with the deepest mount holding it. `@svartz/core` exports `describeValue`, the stable text the build caches key on.
+
+- 5411016: Every page describes itself in JSON-LD when the vault sets `site.url`. Each page carries the site's `WebSite`, a note adds its `Article` (title, description, dates, URL, `site.author` and social image), and a page that shows breadcrumbs adds its `BreadcrumbList`. The docs theme publishes guides as `TechArticle` and symbol pages as `APIReference`; the API and MCP docs themes publish operations, tools and schemas as `APIReference`; the blog publishes posts as `BlogPosting`, described by the post's `excerpt` and by its own `author` when it names them. The blog and the wiki show no breadcrumbs, so they publish none. `<` is escaped in the script, so note text can't close it.
+
+  A theme maps its own page kinds with `structuredData`: on a theme-minimal extension it maps the article of each note the theme renders, and learns which renderer claimed it. The new `chrome.breadcrumbs` flag hides minimal's breadcrumbs and their structured data together.
+
+### Patch Changes
+
+- a55dc75: The light-mode accent is a shade darker, `oklch(0.58 0.2 33)`, so the label on a primary button, such as Sign in, meets WCAG AA's 4.5:1 against the accent fill. Links derived from the accent darken with it.
+- 323d965: API and MCP reference sites line up their columns. A guide's contents column is as wide as the explorer (16rem) and sits at the frame's right edge. Request and response examples fill the space beside the page up to that edge. The top bar uses the same columns, so search spans the page column. Below 75rem the project links move from the top bar to the top of the sidebar, which leaves search room to keep that width.
+- 7e8955a: Every first-party theme with sidebars (minimal, docs, wiki, API and MCP docs) shares one frame: at most `--sv-frame-width` (92rem) wide, `--sv-side-width` (16rem) sidebars, and Quartz's breakpoints. At 75rem a right column moves under the page, and at 50rem the explorer becomes a drawer. Docs' contents column grows from 13rem to 16rem, wiki's sidebar from 14rem to 16rem, and API docs narrow from 100rem to 92rem.
+- 768e229: The default favicon, the `.sv-mark` class and the corner of the default social image now show Svelte's logo, exactly as `sv create` ships it for a new app's favicon. It's a placeholder until Svartz has a mark of its own. A site with its own `site.favicon` is unaffected.
+- Updated dependencies [a766950]
+- Updated dependencies [0b7e0ca]
+- Updated dependencies [38c347c]
+- Updated dependencies [5411016]
+  - @svartz/core@2.7.0
+  - @svartz/plugins@2.7.0
+
 ## 2.6.0
 
 ### Patch Changes

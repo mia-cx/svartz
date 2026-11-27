@@ -1,5 +1,28 @@
 # @svartz/theme-docs
 
+## 2.7.0
+
+### Minor Changes
+
+- 5411016: Every page describes itself in JSON-LD when the vault sets `site.url`. Each page carries the site's `WebSite`, a note adds its `Article` (title, description, dates, URL, `site.author` and social image), and a page that shows breadcrumbs adds its `BreadcrumbList`. The docs theme publishes guides as `TechArticle` and symbol pages as `APIReference`; the API and MCP docs themes publish operations, tools and schemas as `APIReference`; the blog publishes posts as `BlogPosting`, described by the post's `excerpt` and by its own `author` when it names them. The blog and the wiki show no breadcrumbs, so they publish none. `<` is escaped in the script, so note text can't close it.
+
+  A theme maps its own page kinds with `structuredData`: on a theme-minimal extension it maps the article of each note the theme renders, and learns which renderer claimed it. The new `chrome.breadcrumbs` flag hides minimal's breadcrumbs and their structured data together.
+
+### Patch Changes
+
+- 7e8955a: Every first-party theme with sidebars (minimal, docs, wiki, API and MCP docs) shares one frame: at most `--sv-frame-width` (92rem) wide, `--sv-side-width` (16rem) sidebars, and Quartz's breakpoints. At 75rem a right column moves under the page, and at 50rem the explorer becomes a drawer. Docs' contents column grows from 13rem to 16rem, wiki's sidebar from 14rem to 16rem, and API docs narrow from 100rem to 92rem.
+- Updated dependencies [a55dc75]
+- Updated dependencies [a766950]
+- Updated dependencies [323d965]
+- Updated dependencies [0b7e0ca]
+- Updated dependencies [38c347c]
+- Updated dependencies [7e8955a]
+- Updated dependencies [5411016]
+- Updated dependencies [768e229]
+  - @svartz/ui@2.7.0
+  - @svartz/core@2.7.0
+  - @svartz/theme-minimal@2.7.0
+
 ## 2.6.0
 
 ### Minor Changes
