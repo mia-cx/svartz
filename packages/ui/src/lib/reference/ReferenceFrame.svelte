@@ -1,8 +1,9 @@
 <!--
 	The reference frame for theme-minimal's shell: a top bar, the explorer in a
-	sidebar, and the page with its right column beside it, wide enough for code
-	examples. Examples drop below the page before the sidebar goes; on phones
-	the sidebar becomes a drawer. It only lays out the regions minimal renders.
+	sidebar, and the page with its right column beside it: as wide as the
+	sidebar for contents, wider for code examples. Below 75rem the right column drops under the page and the project
+	links move from the top bar to the sidebar; on phones the sidebar becomes a drawer. It only lays out the regions
+	minimal renders.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
@@ -47,9 +48,9 @@
 
 <div class="frame">
 	<aside class="sidebar" id="explorer-panel" aria-label="Pages" data-open={shell.drawer ? '' : undefined}>
-		<!-- The top bar's project links, which phones hide there, lead the drawer. -->
+		<!-- The top bar's project links, which it hides below 75rem, lead the sidebar. -->
 		{#if navLinks.length > 0}
-			<nav class="drawer-links" aria-label="Project">
+			<nav class="side-links" aria-label="Project">
 				{#each navLinks as link (link.label)}<a href={link.href}>{link.label}</a>{/each}
 			</nav>
 		{/if}
@@ -74,13 +75,19 @@
 		--sv-density: 0.85;
 		--sv-ratio: 1.15;
 		--sv-measure: 44rem;
+		/* The right column's narrowest width, which the top bar also reserves so search spans the page column. */
+		--sv-rail-min: var(--sv-side-width);
+	}
+
+	:global(:root:has(.sv-reference-examples)) {
+		--sv-rail-min: 20rem;
 	}
 
 	.frame {
 		display: grid;
-		grid-template-columns: 16rem minmax(0, 1fr);
+		grid-template-columns: var(--sv-side-width) minmax(0, 1fr);
 		column-gap: var(--sv-space-7);
-		max-inline-size: 100rem;
+		max-inline-size: var(--sv-frame-width);
 		margin-inline: auto;
 		padding-inline: var(--sv-space-5);
 	}
@@ -96,8 +103,23 @@
 		scrollbar-width: thin;
 	}
 
-	.drawer-links {
+	.side-links {
 		display: none;
+		flex-wrap: wrap;
+		gap: var(--sv-space-2) var(--sv-space-4);
+		margin-block-end: var(--sv-space-5);
+		padding-block-end: var(--sv-space-4);
+		border-block-end: var(--sv-rule-width) solid var(--sv-rule);
+		font-weight: 600;
+	}
+
+	.side-links a {
+		color: var(--sv-text);
+		text-decoration: none;
+	}
+
+	.side-links a:hover {
+		color: var(--sv-ink);
 	}
 
 	.main {
@@ -107,11 +129,18 @@
 	}
 
 	.split {
+		/* Contents match the sidebar's width and sit at the frame's far edge, so the columns balance. */
+		--rail: var(--sv-rail-min);
 		display: grid;
-		/* The right column yields first: a share of the width, clamped, and the page takes the rest. */
-		grid-template-columns: minmax(0, var(--sv-measure)) clamp(20rem, 35%, 34rem);
+		grid-template-columns: minmax(0, var(--sv-measure)) var(--rail);
+		justify-content: space-between;
 		gap: var(--sv-space-7);
 		align-items: start;
+	}
+
+	/* Code examples need room: the page keeps its reading width, and they fill the rest up to the frame's edge. */
+	.split:has(> .aside :global(.sv-reference-examples)) {
+		--rail: minmax(var(--sv-rail-min), 1fr);
 	}
 
 	/* Nothing beside the page: it keeps the reading width alone. */
@@ -141,7 +170,7 @@
 		margin-block-start: var(--sv-space-8);
 	}
 
-	@media (max-width: 72rem) {
+	@media (max-width: 75rem) {
 		.split {
 			grid-template-columns: minmax(0, var(--sv-measure));
 		}
@@ -155,9 +184,14 @@
 		.aside :global(.toc) {
 			display: none;
 		}
+
+		/* The top bar keeps search as wide as the page by handing its project links to the sidebar. */
+		.side-links {
+			display: flex;
+		}
 	}
 
-	@media (max-width: 52rem) {
+	@media (max-width: 50rem) {
 		.frame {
 			grid-template-columns: minmax(0, 1fr);
 			padding-inline: var(--sv-space-4);
@@ -182,25 +216,6 @@
 			translate: 0 0;
 			visibility: visible;
 			transition: translate var(--sv-duration-slow) var(--sv-ease);
-		}
-
-		.drawer-links {
-			display: flex;
-			flex-wrap: wrap;
-			gap: var(--sv-space-2) var(--sv-space-4);
-			margin-block-end: var(--sv-space-5);
-			padding-block-end: var(--sv-space-4);
-			border-block-end: var(--sv-rule-width) solid var(--sv-rule);
-			font-weight: 600;
-		}
-
-		.drawer-links a {
-			color: var(--sv-text);
-			text-decoration: none;
-		}
-
-		.drawer-links a:hover {
-			color: var(--sv-ink);
 		}
 	}
 </style>

@@ -56,6 +56,7 @@ Both are self-hosted through Fontsource, so no page requests a font CDN.
 - **Depth:** mostly flat, separated by 1px hairlines. Only overlays (modals, popovers, drawers) get `--sv-shadow`.
 - **Focus:** a 2px vermilion outline, offset 2px, on every focusable element.
 - **Motion:** `--sv-duration-fast` 120ms for hovers, `--sv-duration` 200ms for reveals, `--sv-duration-slow` 320ms for drawers, all on one ease-out curve. Reduced motion sets all three to 0.
+- **Frame:** every theme with sidebars (minimal, wiki, docs, api-docs) is at most `--sv-frame-width` (92rem) wide, with `--sv-side-width` (16rem) sidebars, and switches at Quartz's breakpoints: at 75rem a right column moves under the page, and at 50rem the explorer becomes a drawer. Blog has no sidebars and sets its own width.
 
 ## Shared primitives
 

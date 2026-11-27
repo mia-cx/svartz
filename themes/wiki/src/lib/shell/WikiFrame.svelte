@@ -53,9 +53,9 @@
 
 	.wiki {
 		display: grid;
-		grid-template-columns: 14rem minmax(0, 1fr);
+		grid-template-columns: var(--sv-side-width) minmax(0, 1fr);
 		column-gap: var(--sv-space-7);
-		max-inline-size: 84rem;
+		max-inline-size: var(--sv-frame-width);
 		margin-inline: auto;
 		padding-inline: var(--sv-space-5);
 	}
@@ -91,7 +91,7 @@
 	}
 
 	/* Phone and tablet: the rail becomes a drawer under the header. */
-	@media (max-width: 56rem) {
+	@media (max-width: 50rem) {
 		.wiki {
 			grid-template-columns: minmax(0, 1fr);
 			padding-inline: var(--sv-space-4);

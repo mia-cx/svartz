@@ -47,16 +47,16 @@
 		gap: var(--sv-space-3);
 		block-size: 3.5rem;
 		/* Edges line up with the centred page below on wide screens. */
-		padding-inline: max(var(--sv-space-5), (100% - 90rem) / 2 + var(--sv-space-5));
+		padding-inline: max(var(--sv-space-5), (100% - var(--sv-frame-width)) / 2 + var(--sv-space-5));
 		border-block-end: var(--sv-rule-width) solid var(--sv-rule);
 		background: var(--sv-paper);
 	}
 
 	.docs {
 		display: grid;
-		grid-template-columns: 16rem minmax(0, 1fr) 13rem;
+		grid-template-columns: var(--sv-side-width) minmax(0, 1fr) var(--sv-side-width);
 		column-gap: var(--sv-space-7);
-		max-inline-size: 90rem;
+		max-inline-size: var(--sv-frame-width);
 		margin-inline: auto;
 		padding-inline: var(--sv-space-5);
 	}
@@ -90,9 +90,9 @@
 		border-block-start: var(--sv-rule-width) solid var(--sv-rule);
 	}
 
-	@media (max-width: 72rem) {
+	@media (max-width: 75rem) {
 		.docs {
-			grid-template-columns: 15rem minmax(0, 1fr);
+			grid-template-columns: var(--sv-side-width) minmax(0, 1fr);
 		}
 
 		/* The rail drops under the page; contents hide, but another theme's examples stay readable. */
@@ -108,7 +108,7 @@
 		}
 	}
 
-	@media (max-width: 52rem) {
+	@media (max-width: 50rem) {
 		.top-bar {
 			padding-inline: var(--sv-space-3);
 		}
