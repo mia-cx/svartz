@@ -1,5 +1,36 @@
 # svartz
 
+## 2.7.0
+
+### Minor Changes
+
+- a766950: The API and MCP docs themes document several API versions in one site. List them in `theme.versions`, such as `[{ id: "2026-04", status: "latest" }, { id: "2026-01", ref: "api/2026-01" }, { id: "2025-07", ref: "api/2025-07", status: "deprecated" }]`, and the `version` badge becomes a picker. The latest version is the vault as it stands, at its usual URLs. Every other version is the vault's folder at its git `ref`, published below its id, `/2026-01/pets/get-pet/`, and read from git without touching the checkout. The latest version's own id redirects to its pages, `/2026-04/pets/get-pet/` to `/pets/get-pet/`, so a link to a version keeps meaning that version after the next one ships. Those redirects are temporary (307) wherever a target emits one, such as Cloudflare Pages' `_redirects`, while note aliases stay permanent (308); `virtual:svartz/host` lists them apart as `routes.temporaryRedirects`, and `svartz init` adds them to a host app's generated catchall. A versioned vault's managed Turbo build is never cached, since a ref can move while its inputs stay the same.
+
+  The picker keeps the reader on the page they're reading, or opens the version's home page when it lacks the page. A deprecated version's pages link the same page in the latest version. Search covers the version being read, and the sitemap and feed list the latest version only. Each older version's build is cached in `.svartz/vaults/<id>/versions/` and reused until its ref moves or Svartz, the config, a file a plugin reads or the lockfile changes. A vault with password groups builds every version each time, so a changed password applies to all of them.
+
+  Several vaults in one standalone app now share one `virtual:svartz/server`, and a path is served by the vault with the deepest mount holding it. `@svartz/core` exports `describeValue`, the stable text the build caches key on.
+
+- e4f759c: `svartz init` asks how to set up the site when it runs in a terminal. Create any number of vaults, or publish folders you already have, such as an Obsidian vault, without changing them. For each vault, pick a theme (each option says what it's for and links its live demo), a colour scheme, shown as swatches, and where it deploys, with the Worker name and domain for Cloudflare Workers. The config imports the chosen schemes from `@svartz/config/schemes`, and `package.json` lists the theme packages the vaults use.
+
+  Every answer is also a flag, so init runs unattended: `--vault`, `--id`, `--title`, `--theme`, `--scheme`, `--target`, `--worker` and `--domain`. Give one once to apply it to every vault, or once per `--vault` to match them in order; `--worker` and `--domain` match the `cloudflare-workers` vaults. An empty value keeps a vault's default, and `--scheme svartz` names Svartz's own colours. `--yes` skips the questions. In a SvelteKit app, several host vaults each mount at `/<id>`. Without a terminal or any of these flags, init writes the one `vault` folder it always has.
+
+- 38c347c: Each vault served at the origin root writes its own `robots.txt`, beside `sitemap.xml`. It names the sitemap's absolute URL whenever the sitemap is on, and still admits every crawler by default. `discovery.robots` chooses who comes in: `bots: false` blocks every crawler, `training: false` keeps search engines and AI search and agent fetchers while blocking AI training crawlers such as GPTBot, ClaudeBot and Google-Extended, and `bots: false, search: true` admits only search. `rules` adds groups for any other crawler, such as `{ userAgent: "Amazonbot", disallow: ["/drafts/"] }`, and `contentSignals: { search: true, aiInput: true, aiTrain: false }` adds Cloudflare's `Content-Signal` line. A vault below the origin root, under a mount or a deployment base, writes none, since crawlers fetch only `/robots.txt`. A host app's own `robots.txt` takes priority, whether it's a route or a file in `static/`; any other file in the host's `static/` folder at the vault's mount likewise takes priority over a generated discovery file of the same name, and `svartz dev` notices one as it's added or removed.
+
+### Patch Changes
+
+- Updated dependencies [a55dc75]
+- Updated dependencies [a766950]
+- Updated dependencies [323d965]
+- Updated dependencies [e9359b2]
+- Updated dependencies [0b7e0ca]
+- Updated dependencies [38c347c]
+- Updated dependencies [7e8955a]
+- Updated dependencies [5411016]
+- Updated dependencies [768e229]
+  - @svartz/ui@2.7.0
+  - @svartz/vite@2.7.0
+  - @svartz/config@2.7.0
+
 ## 2.6.0
 
 ### Minor Changes
