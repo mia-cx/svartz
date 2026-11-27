@@ -79,6 +79,9 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
-    ]
+    ],
+    "patchedDependencies": {
+      "miniflare@4.20260305.0": "patches/miniflare@4.20260305.0.patch"
+    }
   }
 }
