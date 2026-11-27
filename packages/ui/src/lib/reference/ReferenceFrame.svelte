@@ -1,8 +1,9 @@
 <!--
 	The reference frame for theme-minimal's shell: a top bar, the explorer in a
 	sidebar, and the page with its right column beside it: as wide as the
-	sidebar for contents, wider for code examples. Examples drop below the page before the sidebar goes; on phones
-	the sidebar becomes a drawer. It only lays out the regions minimal renders.
+	sidebar for contents, wider for code examples. Below 75rem the right column drops under the page and the project
+	links move from the top bar to the sidebar; on phones the sidebar becomes a drawer. It only lays out the regions
+	minimal renders.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
@@ -47,9 +48,9 @@
 
 <div class="frame">
 	<aside class="sidebar" id="explorer-panel" aria-label="Pages" data-open={shell.drawer ? '' : undefined}>
-		<!-- The top bar's project links, which phones hide there, lead the drawer. -->
+		<!-- The top bar's project links, which it hides below 75rem, lead the sidebar. -->
 		{#if navLinks.length > 0}
-			<nav class="drawer-links" aria-label="Project">
+			<nav class="side-links" aria-label="Project">
 				{#each navLinks as link (link.label)}<a href={link.href}>{link.label}</a>{/each}
 			</nav>
 		{/if}
@@ -102,8 +103,23 @@
 		scrollbar-width: thin;
 	}
 
-	.drawer-links {
+	.side-links {
 		display: none;
+		flex-wrap: wrap;
+		gap: var(--sv-space-2) var(--sv-space-4);
+		margin-block-end: var(--sv-space-5);
+		padding-block-end: var(--sv-space-4);
+		border-block-end: var(--sv-rule-width) solid var(--sv-rule);
+		font-weight: 600;
+	}
+
+	.side-links a {
+		color: var(--sv-text);
+		text-decoration: none;
+	}
+
+	.side-links a:hover {
+		color: var(--sv-ink);
 	}
 
 	.main {
@@ -168,6 +184,11 @@
 		.aside :global(.toc) {
 			display: none;
 		}
+
+		/* The top bar keeps search as wide as the page by handing its project links to the sidebar. */
+		.side-links {
+			display: flex;
+		}
 	}
 
 	@media (max-width: 50rem) {
@@ -195,25 +216,6 @@
 			translate: 0 0;
 			visibility: visible;
 			transition: translate var(--sv-duration-slow) var(--sv-ease);
-		}
-
-		.drawer-links {
-			display: flex;
-			flex-wrap: wrap;
-			gap: var(--sv-space-2) var(--sv-space-4);
-			margin-block-end: var(--sv-space-5);
-			padding-block-end: var(--sv-space-4);
-			border-block-end: var(--sv-rule-width) solid var(--sv-rule);
-			font-weight: 600;
-		}
-
-		.drawer-links a {
-			color: var(--sv-text);
-			text-decoration: none;
-		}
-
-		.drawer-links a:hover {
-			color: var(--sv-ink);
 		}
 	}
 </style>

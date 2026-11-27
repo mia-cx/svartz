@@ -133,10 +133,15 @@
 		display: none;
 	}
 
-	/* The right column drops under the page, so the bar's last column only needs its links. */
+	/* The right column drops under the page and the project links move to the sidebar (ReferenceFrame), so the bar's
+	   last column only holds the color toggle and search keeps the page's width. */
 	@media (max-width: 75rem) {
 		.top-bar {
 			grid-template-columns: minmax(var(--sv-side-width), max-content) minmax(0, var(--sv-measure)) minmax(max-content, 1fr);
+		}
+
+		.top-links {
+			display: none;
 		}
 	}
 
@@ -151,8 +156,7 @@
 			padding-inline: var(--sv-space-3);
 		}
 
-		.version,
-		.top-links {
+		.version {
 			display: none;
 		}
 
