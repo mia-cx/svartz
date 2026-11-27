@@ -24,8 +24,8 @@ const apiReference = () => ({
 
 /** Svartz's own docs, and one demo per first-party theme, each a Worker on its own domain. */
 const DOCS_DOMAIN = "svartz.dev";
-/** The docs also answer here. Their canonical URLs name {@link DOCS_DOMAIN}, so search engines index one copy. */
-const DOCS_MIRRORS = ["svartz.com", "svartz.app"];
+/** The docs' apex domains. Their canonical URLs name {@link DOCS_DOMAIN}, so search engines index one copy. */
+const DOCS_APEX_DOMAINS = [DOCS_DOMAIN, "svartz.com", "svartz.app"];
 const GITHUB = "https://github.com/mia-cx/svartz";
 
 /**
@@ -70,7 +70,10 @@ export default defineConfig({
       // Svartz's documentation, built with Svartz.
       id: "docs",
       path: "vaults/docs",
-      target: worker("svartz-docs", DOCS_DOMAIN, ...DOCS_MIRRORS),
+      target: {
+        ...worker("svartz-docs", ...DOCS_APEX_DOMAINS.flatMap((domain) => [domain, `www.${domain}`])),
+        vars: { SVARTZ_WWW_REDIRECT_HOSTS: DOCS_APEX_DOMAINS },
+      },
       plugins: [apiReference()],
       theme: {
         base: "@svartz/theme-docs",

@@ -33,7 +33,7 @@ async function nodeHandlerModule(directory: string): Promise<{ file: string; nam
   return reexport ? { file: reexport[2]!, name: reexport[1]! } : { file: "handler.js", name: "handler" };
 }
 
-/** Run the shared Svartz handle ahead of the standalone adapters' static-file handlers. */
+/** Run Worker host redirects and the shared Svartz handle ahead of the adapters' static-file handlers. */
 export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: string, outDir: string): T {
   if (target === "static") return adapter;
   return {
@@ -41,24 +41,26 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
     async adapt(builder: MarkdownBuilder) {
       await adapter.adapt(builder);
       const markdown = getMarkdownRoutes();
+      const worker = target === "cloudflare-workers";
       // The shell's Workers config runs the worker ahead of every asset, and adapter-cloudflare's worker serves only
       // SvelteKit's own, so this one serves Svartz's: the Markdown copies negotiation redirects to, and attachments.
-      const publicFiles = target === "cloudflare-workers" ? getPublicFileNames().map((name) => `/${name}`) : [];
-      if (Object.keys(markdown).length === 0 && publicFiles.length === 0) return;
+      const publicFiles = worker ? getPublicFileNames().map((name) => `/${name}`) : [];
+      const hasContentRoutes = Object.keys(markdown).length > 0 || publicFiles.length > 0;
+      if (!worker && !hasContentRoutes) return;
       const node = target === "node";
       const directory = node ? nodeServerDirectory(outDir) : builder.getBuildDirectory("cloudflare");
       const { file: entry, name: handlerExport } = node
         ? await nodeHandlerModule(directory)
         : { file: "_worker.js", name: "default" };
       const original = `svartz-${entry}`;
-      const common = `
+      const common = hasContentRoutes ? `
         import { createServerHandle, decodeRoutePath, markdownCopyFor } from ${JSON.stringify(import.meta.resolve("@svartz/core"))};
         const markdown = ${JSON.stringify(markdown)};
         const handle = createServerHandle({
           basePath: "", vault: { id: "", mountPath: "", site: {} }, servers: [],
           markdown,
         }, { building: false, dev: false, privateEnv: {} });
-      `;
+      ` : "";
       const source = node ? `${common}
         import { ${handlerExport} as original } from "./${original}";
         // Other chunks may import more of the handler's chunk than the handler; this module's own export wins.
@@ -118,12 +120,20 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
           } catch (error) { next(error); }
         }
       ` : `${common}
-        import original from "./${original}";
-        const publicFiles = new Set(${JSON.stringify(publicFiles)});
+        import original from "./${original}";${hasContentRoutes ? `
+        const publicFiles = new Set(${JSON.stringify(publicFiles)});` : ""}
         export default {
           ...original,
           fetch(request, env, ctx) {
-            const url = new URL(request.url);
+            const url = new URL(request.url);${worker ? `
+            const roots = env.SVARTZ_WWW_REDIRECT_HOSTS;
+            if (url.hostname.startsWith("www.") && Array.isArray(roots) && roots.includes(url.hostname.slice(4))) {
+              url.hostname = url.hostname.slice(4);
+              url.protocol = "https:";
+              url.port = "";
+              return Response.redirect(url, 301);
+            }` : ""}${!hasContentRoutes ? `
+            return original.fetch(request, env, ctx);` : `
             const pathname = decodeRoutePath(url.pathname);
             if (pathname === undefined) return new Response(null, { status: 404 });
             // \`ASSETS\` is the binding the shell's wrangler.jsonc names.
@@ -136,7 +146,7 @@ export function withMarkdownNegotiation<T extends Adapter>(adapter: T, target: s
                 getClientAddress: () => request.headers.get("cf-connecting-ip"),
               },
               resolve: () => original.fetch(request, env, ctx),
-            });
+            });`}
           },
         };
       `;

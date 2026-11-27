@@ -7,6 +7,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import svartzConfig from "../../../svartz.config";
 import { runBuild } from "./helpers/build-process";
 
 const execFileAsync = promisify(execFile);
@@ -21,6 +22,7 @@ const roots: string[] = [];
 interface DevWorker {
   readonly address: string;
   readonly port: number;
+  fetch(input: string, init?: RequestInit): Promise<Response>;
   stop(): Promise<void>;
 }
 
@@ -130,6 +132,52 @@ describe("standalone Cloudflare builds", () => {
     ]);
     // The deploy docs/server-plugins.md describes.
     if (type === "cloudflare-workers") await bundle(path.join(vaultRoot, "wrangler.json"), path.join(root, "deploy"));
+  }, BUILD_TIMEOUT);
+
+  // Proves production docs redirect each www alias before serving pages or matching assets, without redirecting the apex.
+  it("redirects the production docs' www domains to their own apex before serving assets", async () => {
+    const root = await tempRoot("www-redirect");
+    const docs = svartzConfig.vaults.find(({ id }) => id === "docs")!;
+    await writeConfig(root, { site: docs.site, target: docs.target });
+    await runBuild([cli, "build", "--config", path.join(root, "svartz.config.ts")], { cwd: root, timeout: BUILD_TIMEOUT - 30_000 });
+
+    const vaultRoot = path.join(root, ".svartz/vaults/site");
+    const config = path.join(vaultRoot, "wrangler.json");
+    const generated = JSON.parse(await readFile(config, "utf8"));
+    await bundle(config, path.join(root, "deploy"));
+    // Wrangler dev infers one upstream from routes and rewrites all request hosts to it.
+    const localConfig = path.join(vaultRoot, "run-wrangler.json");
+    await writeFile(localConfig, JSON.stringify({ ...generated, routes: [] }));
+    vi.stubEnv("WRANGLER_SEND_METRICS", "false");
+    const worker = await unstable_dev(path.join(vaultRoot, ".svelte-kit/cloudflare/_worker.js"), {
+      config: localConfig,
+      ip: "127.0.0.1",
+      logLevel: "error",
+      experimental: { disableExperimentalWarning: true },
+    });
+    try {
+      for (const [www, apex, pathAndQuery] of [
+        ["www.svartz.dev", "svartz.dev", "/other/?q=a%2Fb&tag=a&tag=b"],
+        ["www.svartz.com", "svartz.com", "/other.md?raw=1"],
+        ["www.svartz.app", "svartz.app", "/robots.txt?mode=all"],
+      ]) {
+        const response = await worker.fetch(`https://${www}${pathAndQuery}`, { redirect: "manual" });
+        expect(response.status).toBe(301);
+        expect(response.headers.get("location")).toBe(`https://${apex}${pathAndQuery}`);
+      }
+      const asset = await worker.fetch("https://svartz.app/robots.txt", { redirect: "manual" });
+      expect(asset.status).toBe(200);
+      expect(await asset.text()).toContain("User-agent:");
+    } finally {
+      await worker.stop();
+    }
+
+    expect(generated).toMatchObject({
+      routes: ["svartz.dev", "www.svartz.dev", "svartz.com", "www.svartz.com", "svartz.app", "www.svartz.app"]
+        .map((pattern) => ({ pattern, custom_domain: true })),
+      assets: { run_worker_first: true },
+      env: { staging: { routes: [{ pattern: "staging.svartz.dev", custom_domain: true }] } },
+    });
   }, BUILD_TIMEOUT);
 
   // Proves one config deploys two sites: each vault gets its own Worker, domain, bindings and theme.
