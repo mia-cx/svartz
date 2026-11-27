@@ -1,8 +1,8 @@
 diff --git a/dist/src/index.js b/dist/src/index.js
-index f1963bacf0a2f7bf65a18706bbf52423d36cac77..bfcd8e989e6c975e16d190ea9d5fb7c4ec29c4e0 100644
+index f1963bacf0a2f7bf65a18706bbf52423d36cac77..4ffccbd7ad988ecdaec4e374850f836ca79938d4 100644
 --- a/dist/src/index.js
 +++ b/dist/src/index.js
-@@ -71057,10 +71057,20 @@ var SynchronousFetcher = class {
+@@ -71057,10 +71057,21 @@ var SynchronousFetcher = class {
        /* value */
        0
      );
@@ -11,9 +11,10 @@ index f1963bacf0a2f7bf65a18706bbf52423d36cac77..bfcd8e989e6c975e16d190ea9d5fb7c4
 -    )?.message;
 -    (0, import_node_assert14.default)(message?.id === id);
 +    // Patched for cloudflare/workers-sdk#16445: a wake can find this call's reply not yet receivable, and a reply
-+    // that lands after its own call gave up would answer every later call. Skip stale replies and poll for this one.
-+    const deadline = Date.now() + 3e4;
++    // that lands after its own call gave up would answer every later call. Skip stale replies and poll for this one,
++    // for at least 30 s of 1 ms pauses. Counted pauses, not Date.now(), so suites that fake the clock still time out.
 +    const pause = new Int32Array(new SharedArrayBuffer(4));
++    let pauses = 3e4;
 +    let message;
 +    for (;;) {
 +      message = (0, import_node_worker_threads.receiveMessageOnPort)(
@@ -21,7 +22,7 @@ index f1963bacf0a2f7bf65a18706bbf52423d36cac77..bfcd8e989e6c975e16d190ea9d5fb7c4
 +      )?.message;
 +      if (message?.id === id) break;
 +      if (message !== void 0 && message.id < id) continue;
-+      (0, import_node_assert14.default)(message === void 0 && Date.now() < deadline, `No reply to synchronous call ${id}`);
++      (0, import_node_assert14.default)(message === void 0 && pauses-- > 0, `No reply to synchronous call ${id}`);
 +      Atomics.wait(pause, 0, 0, 1);
 +    }
      if ("response" in message) {
