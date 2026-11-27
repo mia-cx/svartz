@@ -1,0 +1,29 @@
+diff --git a/dist/src/index.js b/dist/src/index.js
+index f1963bacf0a2f7bf65a18706bbf52423d36cac77..bfcd8e989e6c975e16d190ea9d5fb7c4ec29c4e0 100644
+--- a/dist/src/index.js
++++ b/dist/src/index.js
+@@ -71057,10 +71057,20 @@ var SynchronousFetcher = class {
+       /* value */
+       0
+     );
+-    const message = (0, import_node_worker_threads.receiveMessageOnPort)(
+-      this.#channel.port1
+-    )?.message;
+-    (0, import_node_assert14.default)(message?.id === id);
++    // Patched for cloudflare/workers-sdk#16445: a wake can find this call's reply not yet receivable, and a reply
++    // that lands after its own call gave up would answer every later call. Skip stale replies and poll for this one.
++    const deadline = Date.now() + 3e4;
++    const pause = new Int32Array(new SharedArrayBuffer(4));
++    let message;
++    for (;;) {
++      message = (0, import_node_worker_threads.receiveMessageOnPort)(
++        this.#channel.port1
++      )?.message;
++      if (message?.id === id) break;
++      if (message !== void 0 && message.id < id) continue;
++      (0, import_node_assert14.default)(message === void 0 && Date.now() < deadline, `No reply to synchronous call ${id}`);
++      Atomics.wait(pause, 0, 0, 1);
++    }
+     if ("response" in message) {
+       const { status: status2, headers: rawHeaders, body } = message.response;
+       const headers = new import_undici4.Headers(rawHeaders);
