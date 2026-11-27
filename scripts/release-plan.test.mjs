@@ -168,6 +168,18 @@ process.stdout.write(process.env.SVARTZ_TEST_RUNS);
   await validate(false, { warning: true });
 });
 
+test('release PR updates dispatch validation on the versioned head', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
+  const releasePr = workflow.split('\n  release-pr:\n')[1].split('\n  validation:')[0];
+  assert.match(releasePr, /actions: write/);
+  assert.match(releasePr, /id: version[\s\S]*echo "sha=\$\(git rev-parse HEAD\)" >> "\$GITHUB_OUTPUT"/);
+  assert.match(releasePr, /run: node scripts\/release-pr\.mjs[\s\S]*RELEASE_HEAD: \$\{\{ steps\.version\.outputs\.sha \}\}[\s\S]*gh workflow run release-validation\.yml --ref changeset-release\/main -f sha="\$RELEASE_HEAD"/);
+  const validation = await readFile(new URL('../.github/workflows/release-validation.yml', import.meta.url), 'utf8');
+  assert.match(validation, /workflow_dispatch:\n\s+inputs:\n\s+sha:/);
+  assert.match(validation, /ref: \$\{\{ inputs\.sha \|\| github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(validation, /run: pnpm release:check/);
+});
+
 test('release publishing accepts reused validation and preserves its artifact build', async () => {
   const workflow = await readFile(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
   const plan = workflow.split('  plan:\n')[1].split('\n  release-pr:')[0];

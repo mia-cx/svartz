@@ -37,6 +37,9 @@ jobs:
       - run: pnpm test:release
       - run: pnpm build
       - run: pnpm test
+      - name: Validate packed tarballs
+        if: github.event_name == 'pull_request' && (github.head_ref != 'changeset-release/main' || github.event.pull_request.head.repo.full_name != github.repository)
+        run: node scripts/check-release.mjs
 
   changeset:
     name: Changeset
